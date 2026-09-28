@@ -1,0 +1,15 @@
+set_project("tile-npu-sim")
+set_languages("c++20")
+add_rules("mode.debug", "mode.release")
+
+target("tile_npu_sim")
+    set_kind("static")
+    add_files("src/*.cpp")
+    add_includedirs("include", {public = true})
+
+target("sim_tests")
+    set_kind("binary")
+    set_default(false)
+    add_deps("tile_npu_sim")
+    add_files("tests/*.cpp")
+    add_tests("core")
