@@ -1,5 +1,6 @@
 set_project("tile-npu-sim")
 set_languages("c++20")
+set_config("ccachedir", path.join(os.projectdir(), ".cache", "ccache"))
 add_rules("mode.debug", "mode.release")
 
 target("tile_npu_sim")
