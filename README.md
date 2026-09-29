@@ -2,15 +2,21 @@
 
 This is the initial C++ simulator library. It defines the architectural register
 state, bound configuration and memory-descriptor slots, a byte-addressed memory
-interface, and a single-step entry point. The decoder and executor are separate:
-the decoder recognizes RV64I `add` and Tile `tadd`; other instruction families
-are not implemented yet. Fetch assembles four instruction bytes in little-endian
-order. Tile arrays use row-major indexing for the current canonical layout.
-`decode_not_implemented` does not assert that an unrecognized encoding is legal.
-`src/encoding.h` owns bit positions and parses the RV R-type and NPU R3 layouts.
-`src/decode.cpp` dispatches by `q`, then opcode or `major4`, then the instruction
-family's selector and function fields. Execution semantics remain in
-`src/execute.cpp`.
+interface, and a single-step entry point. The decoder recognizes the 32-bit
+RV64IM integer encodings and Tile `tadd`; execution currently implements only
+`add` and `tadd`. Fetch assembles four instruction bytes in little-endian order.
+Tile arrays use row-major indexing for the current canonical layout.
+`decode_not_implemented` does not assert that an unrecognized encoding is legal;
+`execution_not_implemented` means that decoding succeeded but execution is not
+available yet.
+
+`src/encoding.h` owns bit positions and parses the RISC-V R/I/S/B/U/J and NPU R3
+layouts. `src/decode.cpp` dispatches by `q`, then NPU `major4` or the RV64IM
+decoder in `src/decode_rv64im.cpp`. RV64IM decoding dispatches by opcode and then
+by the instruction family's function fields. `DecodedInstruction::immediate`
+holds a sign-extended I/S/B/U/J immediate, a shift amount for shift-immediate
+instructions, or the raw 12-bit FENCE control field. Execution semantics remain
+in `src/execute.cpp`.
 
 `Simulator::reset(entry_pc)` clears the simulator state and sets the PC, but does
 not clear memory. This is a deterministic simulator initialization convention;
@@ -26,6 +32,8 @@ Build and test from this directory:
 xmake
 xmake test
 ```
+
+Xmake stores its compiler cache in the ignored local `.cache/ccache` directory.
 
 Regenerate the compilation database for clangd from the current xmake
 configuration:
