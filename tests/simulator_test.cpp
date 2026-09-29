@@ -245,10 +245,13 @@ void test_failed_execution_is_non_mutating() {
 
 } // namespace
 
+void test_rv64im_decode();
+
 int main() {
   try {
     test_state();
     test_decode();
+    test_rv64im_decode();
     test_memory_and_step();
     test_add_execution();
     test_tadd_execution();
