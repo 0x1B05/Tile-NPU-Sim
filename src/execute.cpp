@@ -1,6 +1,7 @@
 #include "execute.h"
 
 #include "execute_rv64i.h"
+#include "execute_rv64m.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -66,6 +67,20 @@ ExecuteResult execute(const DecodedInstruction &instruction, State &state,
     return {execute_tadd(registers, state) ? ExecuteStatus::retired
                                            : ExecuteStatus::invalid_configuration,
             state.scalar.pc + 4};
+  case Operation::mul:
+  case Operation::mulh:
+  case Operation::mulhsu:
+  case Operation::mulhu:
+  case Operation::div:
+  case Operation::divu:
+  case Operation::rem:
+  case Operation::remu:
+  case Operation::mulw:
+  case Operation::divw:
+  case Operation::divuw:
+  case Operation::remw:
+  case Operation::remuw:
+    return execute_rv64m(instruction, state.scalar);
   default:
     return execute_rv64i(instruction, state.scalar, memory);
   }
