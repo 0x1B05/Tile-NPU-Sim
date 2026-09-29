@@ -247,6 +247,7 @@ void test_failed_execution_is_non_mutating() {
 
 void test_rv64im_decode();
 void test_rv64im_execute();
+void test_rv64im_program();
 
 int main() {
   try {
@@ -254,6 +255,7 @@ int main() {
     test_decode();
     test_rv64im_decode();
     test_rv64im_execute();
+    test_rv64im_program();
     test_memory_and_step();
     test_add_execution();
     test_tadd_execution();
