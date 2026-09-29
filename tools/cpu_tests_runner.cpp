@@ -78,8 +78,8 @@ bool run_image(const char *path) {
     }
     std::cerr << "FAIL " << path << ": " << status_name(result.status)
               << " at pc=0x" << std::hex << result.pc;
-    if (result.instruction) {
-      std::cerr << " instruction=0x" << *result.instruction;
+    if (result.instr) {
+      std::cerr << " instruction=0x" << *result.instr;
     }
     if (result.fault_address) {
       std::cerr << " address=0x" << *result.fault_address;

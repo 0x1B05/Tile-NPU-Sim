@@ -13,7 +13,7 @@ available yet.
 `src/encoding.h` owns bit positions and parses the RISC-V R/I/S/B/U/J and NPU R3
 layouts. `src/decode.cpp` dispatches by `q`, then NPU `major4` or the RV64IM
 decoder in `src/decode_rv64im.cpp`. RV64IM decoding dispatches by opcode and then
-by the instruction family's function fields. `DecodedInstruction::immediate`
+by the instruction family's function fields. `DecodedInstr::imm`
 holds a sign-extended I/S/B/U/J immediate, a shift amount for shift-immediate
 instructions, or the raw 12-bit FENCE control field. `src/execute.cpp` dispatches
 to the RV64I and RV64M executors or the Tile executor. The scalar executor uses

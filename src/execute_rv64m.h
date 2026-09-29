@@ -4,7 +4,7 @@
 
 namespace tile_npu {
 
-ExecuteResult execute_rv64m(const DecodedInstruction &instruction,
+ExecuteResult execute_rv64m(const DecodedInstr &instr,
                             ScalarState &scalar);
 
 } // namespace tile_npu

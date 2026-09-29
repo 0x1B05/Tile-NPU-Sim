@@ -60,9 +60,9 @@ std::uint32_t remainder_signed_word(std::uint32_t lhs, std::uint32_t rhs) {
 
 } // namespace
 
-ExecuteResult execute_rv64m(const DecodedInstruction &instruction,
+ExecuteResult execute_rv64m(const DecodedInstr &instr,
                             ScalarState &scalar) {
-  const auto &r = instruction.registers;
+  const auto &r = instr.regs;
   const auto lhs = scalar.read_x(r.src1);
   const auto rhs = scalar.read_x(r.src2);
   const auto signed_lhs = std::bit_cast<std::int64_t>(lhs);
@@ -71,31 +71,31 @@ ExecuteResult execute_rv64m(const DecodedInstruction &instruction,
   const auto rhs_word = static_cast<std::uint32_t>(rhs);
   std::uint64_t result = 0;
 
-  switch (instruction.operation) {
-  case Operation::mul: result = lhs * rhs; break;
-  case Operation::mulhu: result = multiply_high_unsigned(lhs, rhs); break;
-  case Operation::mulh:
+  switch (instr.op) {
+  case ScalarOp::mul: result = lhs * rhs; break;
+  case ScalarOp::mulhu: result = multiply_high_unsigned(lhs, rhs); break;
+  case ScalarOp::mulh:
     result = multiply_high_unsigned(lhs, rhs) -
              (signed_lhs < 0 ? rhs : 0) - (signed_rhs < 0 ? lhs : 0);
     break;
-  case Operation::mulhsu:
+  case ScalarOp::mulhsu:
     result = multiply_high_unsigned(lhs, rhs) - (signed_lhs < 0 ? rhs : 0);
     break;
-  case Operation::div: result = divide_signed(lhs, rhs); break;
-  case Operation::divu: result = rhs == 0 ? UINT64_MAX : lhs / rhs; break;
-  case Operation::rem: result = remainder_signed(lhs, rhs); break;
-  case Operation::remu: result = rhs == 0 ? lhs : lhs % rhs; break;
-  case Operation::mulw: result = signed_word(lhs_word * rhs_word); break;
-  case Operation::divw:
+  case ScalarOp::div: result = divide_signed(lhs, rhs); break;
+  case ScalarOp::divu: result = rhs == 0 ? UINT64_MAX : lhs / rhs; break;
+  case ScalarOp::rem: result = remainder_signed(lhs, rhs); break;
+  case ScalarOp::remu: result = rhs == 0 ? lhs : lhs % rhs; break;
+  case ScalarOp::mulw: result = signed_word(lhs_word * rhs_word); break;
+  case ScalarOp::divw:
     result = signed_word(divide_signed_word(lhs_word, rhs_word));
     break;
-  case Operation::divuw:
+  case ScalarOp::divuw:
     result = signed_word(rhs_word == 0 ? UINT32_MAX : lhs_word / rhs_word);
     break;
-  case Operation::remw:
+  case ScalarOp::remw:
     result = signed_word(remainder_signed_word(lhs_word, rhs_word));
     break;
-  case Operation::remuw:
+  case ScalarOp::remuw:
     result = signed_word(rhs_word == 0 ? lhs_word : lhs_word % rhs_word);
     break;
   default: return {ExecuteStatus::not_implemented, scalar.pc};

@@ -49,8 +49,8 @@ DecodeResult decode_binary_add(const encoding::NpuR3 &fields,
         fields.src2 >= kTileRegisters) {
       return DecodeError::illegal;
     }
-    return DecodedInstruction{Operation::tadd,
-                              {fields.dest, fields.src1, fields.src2}};
+    return DecodedNpuInstr{NpuOp::tadd,
+                                 {fields.dest, fields.src1, fields.src2}};
   case Domain::acc:
   case Domain::vec32:
     return DecodeError::not_implemented;

@@ -29,7 +29,9 @@ struct ExecuteResult {
 };
 
 // An unsuccessful execution leaves architectural state unchanged.
-ExecuteResult execute(const DecodedInstruction &instruction, State &state,
+ExecuteResult execute(const DecodedInstr &instr, State &state,
+                      Memory &memory);
+ExecuteResult execute(const DecodedNpuInstr &instr, State &state,
                       Memory &memory);
 
 } // namespace tile_npu

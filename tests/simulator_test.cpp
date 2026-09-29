@@ -35,24 +35,25 @@ bool decode_error(std::uint32_t word, tile_npu::DecodeError expected) {
 
 void test_decode() {
   const auto add = tile_npu::decode(0x002081b3u); // add x3, x1, x2
-  const auto *add_instruction = std::get_if<tile_npu::DecodedInstruction>(&add);
-  check(add_instruction && add_instruction->operation == tile_npu::Operation::add &&
-            add_instruction->registers.dest == 3 &&
-            add_instruction->registers.src1 == 1 &&
-            add_instruction->registers.src2 == 2,
+  const auto *add_instr = std::get_if<tile_npu::DecodedInstr>(&add);
+  check(add_instr && add_instr->op == tile_npu::ScalarOp::add &&
+            add_instr->regs.dest == 3 &&
+            add_instr->regs.src1 == 1 &&
+            add_instr->regs.src2 == 2,
         "decode RV64I add");
 
   const auto tadd = tile_npu::decode(0x00002080u); // tadd t0, t1, t2
-  const auto *tadd_instruction = std::get_if<tile_npu::DecodedInstruction>(&tadd);
-  check(tadd_instruction &&
-            tadd_instruction->operation == tile_npu::Operation::tadd &&
-            tadd_instruction->registers.dest == 0 &&
-            tadd_instruction->registers.src1 == 1 &&
-            tadd_instruction->registers.src2 == 2,
+  const auto *tadd_instr =
+      std::get_if<tile_npu::DecodedNpuInstr>(&tadd);
+  check(tadd_instr &&
+            tadd_instr->op == tile_npu::NpuOp::tadd &&
+            tadd_instr->regs.dest == 0 &&
+            tadd_instr->regs.src1 == 1 &&
+            tadd_instr->regs.src2 == 2,
         "decode Tile tadd");
   const auto sub = tile_npu::decode(0x402081b3u);
-  const auto *sub_instruction = std::get_if<tile_npu::DecodedInstruction>(&sub);
-  check(sub_instruction && sub_instruction->operation == tile_npu::Operation::sub,
+  const auto *sub_instr = std::get_if<tile_npu::DecodedInstr>(&sub);
+  check(sub_instr && sub_instr->op == tile_npu::ScalarOp::sub,
         "decode RV64I sub separately from add");
   check(decode_error(0x02002080u, tile_npu::DecodeError::not_implemented),
         "taddx is not mistaken for tadd");
@@ -117,7 +118,7 @@ void test_memory_and_step() {
   sim.state().scalar.write_x(1, 9);
   const auto result = sim.step();
   check(result.status == tile_npu::StepStatus::retired &&
-            result.pc == 0x1000 && result.instruction == 0x00000013u,
+            result.pc == 0x1000 && result.instr == 0x00000013u,
         "fetch a little-endian 32-bit instruction");
   check(sim.state().scalar.pc == 0x1004 &&
             sim.state().scalar.read_x(1) == 9,
@@ -126,18 +127,18 @@ void test_memory_and_step() {
   sim.reset(0x1004);
   const auto npu_result = sim.step();
   check(npu_result.status == tile_npu::StepStatus::decode_not_implemented &&
-            npu_result.instruction == 0xf0000000u,
+            npu_result.instr == 0xf0000000u,
         "NPU-space opcode is still fetched as 32 bits");
 
   sim.reset(0x1008);
   const auto fault = sim.step();
   check(fault.status == tile_npu::StepStatus::fetch_fault &&
-            !fault.instruction && sim.state().scalar.pc == 0x1008,
+            !fault.instr && sim.state().scalar.pc == 0x1008,
         "failed fetch leaves PC unchanged");
   sim.reset(0x1002);
   const auto misaligned = sim.step();
   check(misaligned.status == tile_npu::StepStatus::misaligned_pc &&
-            !misaligned.instruction && sim.state().scalar.pc == 0x1002,
+            !misaligned.instr && sim.state().scalar.pc == 0x1002,
         "unaligned PC is rejected before fetch");
   check(sim.state().scalar.read_x(1) == 0, "reset clears simulator state");
 }

@@ -50,23 +50,26 @@ StepResult Simulator::step() {
     return {StepStatus::fetch_fault, pc, std::nullopt};
   }
 
-  std::uint32_t instruction = 0;
+  std::uint32_t instr = 0;
   for (std::size_t i = 0; i < bytes.size(); ++i) {
-    instruction |= std::uint32_t(std::to_integer<unsigned>(bytes[i])) << (8 * i);
+    instr |= std::uint32_t(std::to_integer<unsigned>(bytes[i])) << (8 * i);
   }
 
-  const auto decoded = decode(instruction);
+  const auto decoded = decode(instr);
   if (const auto *error = std::get_if<DecodeError>(&decoded)) {
     return {*error == DecodeError::illegal ? StepStatus::illegal_instruction
                                            : StepStatus::decode_not_implemented,
-            pc, instruction};
+            pc, instr};
   }
-  const auto execution =
-      execute(std::get<DecodedInstruction>(decoded), state_, memory_);
+  const auto *scalar_instr = std::get_if<DecodedInstr>(&decoded);
+  const auto execution = scalar_instr
+                             ? execute(*scalar_instr, state_, memory_)
+                             : execute(std::get<DecodedNpuInstr>(decoded),
+                                       state_, memory_);
   if (execution.status == ExecuteStatus::retired) {
     state_.scalar.pc = execution.next_pc;
   }
-  return {step_status(execution.status), pc, instruction,
+  return {step_status(execution.status), pc, instr,
           execution.fault_address};
 }
 

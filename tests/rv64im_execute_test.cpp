@@ -35,34 +35,34 @@ constexpr std::uint32_t r(std::uint32_t opcode, std::uint32_t funct3,
 }
 
 constexpr std::uint32_t i(std::uint32_t opcode, std::uint32_t funct3,
-                          std::int32_t immediate, std::uint32_t rd = 3,
+                          std::int32_t imm, std::uint32_t rd = 3,
                           std::uint32_t rs1 = 1) {
-  return ((static_cast<std::uint32_t>(immediate) & 0xfffu) << 20) |
+  return ((static_cast<std::uint32_t>(imm) & 0xfffu) << 20) |
          (rs1 << 15) | (funct3 << 12) | (rd << 7) | opcode;
 }
 
-constexpr std::uint32_t s(std::uint32_t funct3, std::int32_t immediate,
+constexpr std::uint32_t s(std::uint32_t funct3, std::int32_t imm,
                           std::uint32_t rs1 = 1, std::uint32_t rs2 = 2) {
-  const auto bits = static_cast<std::uint32_t>(immediate) & 0xfffu;
+  const auto bits = static_cast<std::uint32_t>(imm) & 0xfffu;
   return ((bits >> 5) << 25) | (rs2 << 20) | (rs1 << 15) |
          (funct3 << 12) | ((bits & 0x1fu) << 7) | 0x23u;
 }
 
-constexpr std::uint32_t b(std::uint32_t funct3, std::int32_t immediate,
+constexpr std::uint32_t b(std::uint32_t funct3, std::int32_t imm,
                           std::uint32_t rs1 = 1, std::uint32_t rs2 = 2) {
-  const auto bits = static_cast<std::uint32_t>(immediate) & 0x1fffu;
+  const auto bits = static_cast<std::uint32_t>(imm) & 0x1fffu;
   return (((bits >> 12) & 1u) << 31) | (((bits >> 5) & 0x3fu) << 25) |
          (rs2 << 20) | (rs1 << 15) | (funct3 << 12) |
          (((bits >> 1) & 0xfu) << 8) | (((bits >> 11) & 1u) << 7) | 0x63u;
 }
 
-constexpr std::uint32_t u(std::uint32_t opcode, std::uint32_t immediate,
+constexpr std::uint32_t u(std::uint32_t opcode, std::uint32_t imm,
                           std::uint32_t rd = 3) {
-  return (immediate & 0xfffff000u) | (rd << 7) | opcode;
+  return (imm & 0xfffff000u) | (rd << 7) | opcode;
 }
 
-constexpr std::uint32_t j(std::int32_t immediate, std::uint32_t rd = 3) {
-  const auto bits = static_cast<std::uint32_t>(immediate) & 0x1fffffu;
+constexpr std::uint32_t j(std::int32_t imm, std::uint32_t rd = 3) {
+  const auto bits = static_cast<std::uint32_t>(imm) & 0x1fffffu;
   return (((bits >> 20) & 1u) << 31) | (((bits >> 1) & 0x3ffu) << 21) |
          (((bits >> 11) & 1u) << 20) | (((bits >> 12) & 0xffu) << 12) |
          (rd << 7) | 0x6fu;
@@ -81,7 +81,7 @@ void expect_step(const StepResult &result, StepStatus status,
                  std::uint32_t word,
                  std::optional<std::uint64_t> fault_address = std::nullopt) {
   check(result.status == status && result.pc == kCode &&
-            result.instruction == word &&
+            result.instr == word &&
             result.fault_address == fault_address,
         "step status, instruction, or fault address");
 }
@@ -104,7 +104,7 @@ void check_register_case(const RegisterCase &test) {
   sim.state().scalar.write_x(3, 0xdeadbeef);
   const auto result = sim.step();
   if (result.status != StepStatus::retired || result.pc != kCode ||
-      result.instruction != test.word || result.fault_address ||
+      result.instr != test.word || result.fault_address ||
       sim.state().scalar.read_x(3) != test.expected ||
       sim.state().scalar.pc != kCode + 4) {
     throw std::runtime_error(std::string("execute ") + test.name);
@@ -125,7 +125,7 @@ void test_integer_arithmetic() {
       RegisterCase{"and", r(0x33, 7, 0), 0xf0, 0x0f, 0},
       RegisterCase{"addi wrap", i(0x13, 0, 1), UINT64_MAX, 0, 0},
       RegisterCase{"slti", i(0x13, 2, 0), UINT64_MAX, 0, 1},
-      RegisterCase{"sltiu sign-extended imm", i(0x13, 3, -1), 0, 0, 1},
+      RegisterCase{"sltiu sign-extended immediate", i(0x13, 3, -1), 0, 0, 1},
       RegisterCase{"xori", i(0x13, 4, -1), 0xf0, 0, ~std::uint64_t{0xf0}},
       RegisterCase{"ori", i(0x13, 6, 0xf0), 0x0f, 0, 0xff},
       RegisterCase{"andi", i(0x13, 7, 0x0f), 0xff, 0, 0x0f},

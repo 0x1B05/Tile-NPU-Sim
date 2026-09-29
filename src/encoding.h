@@ -44,7 +44,7 @@ struct RiscvI {
   std::uint8_t dest;
   std::uint8_t funct3;
   std::uint8_t src1;
-  std::int32_t immediate;
+  std::int32_t imm;
 
   static constexpr RiscvI from(std::uint32_t word) {
     return {static_cast<std::uint8_t>(field<11, 7>(word)),
@@ -58,14 +58,14 @@ struct RiscvS {
   std::uint8_t funct3;
   std::uint8_t src1;
   std::uint8_t src2;
-  std::int32_t immediate;
+  std::int32_t imm;
 
   static constexpr RiscvS from(std::uint32_t word) {
-    const auto immediate = (field<31, 25>(word) << 5) | field<11, 7>(word);
+    const auto imm = (field<31, 25>(word) << 5) | field<11, 7>(word);
     return {static_cast<std::uint8_t>(field<14, 12>(word)),
             static_cast<std::uint8_t>(field<19, 15>(word)),
             static_cast<std::uint8_t>(field<24, 20>(word)),
-            sign_extend(immediate, 12)};
+            sign_extend(imm, 12)};
   }
 };
 
@@ -73,23 +73,23 @@ struct RiscvB {
   std::uint8_t funct3;
   std::uint8_t src1;
   std::uint8_t src2;
-  std::int32_t immediate;
+  std::int32_t imm;
 
   static constexpr RiscvB from(std::uint32_t word) {
-    const auto immediate = (field<31, 31>(word) << 12) |
+    const auto imm = (field<31, 31>(word) << 12) |
                            (field<7, 7>(word) << 11) |
                            (field<30, 25>(word) << 5) |
                            (field<11, 8>(word) << 1);
     return {static_cast<std::uint8_t>(field<14, 12>(word)),
             static_cast<std::uint8_t>(field<19, 15>(word)),
             static_cast<std::uint8_t>(field<24, 20>(word)),
-            sign_extend(immediate, 13)};
+            sign_extend(imm, 13)};
   }
 };
 
 struct RiscvU {
   std::uint8_t dest;
-  std::int32_t immediate;
+  std::int32_t imm;
 
   static constexpr RiscvU from(std::uint32_t word) {
     return {static_cast<std::uint8_t>(field<11, 7>(word)),
@@ -99,15 +99,15 @@ struct RiscvU {
 
 struct RiscvJ {
   std::uint8_t dest;
-  std::int32_t immediate;
+  std::int32_t imm;
 
   static constexpr RiscvJ from(std::uint32_t word) {
-    const auto immediate = (field<31, 31>(word) << 20) |
+    const auto imm = (field<31, 31>(word) << 20) |
                            (field<19, 12>(word) << 12) |
                            (field<20, 20>(word) << 11) |
                            (field<30, 21>(word) << 1);
     return {static_cast<std::uint8_t>(field<11, 7>(word)),
-            sign_extend(immediate, 21)};
+            sign_extend(imm, 21)};
   }
 };
 
