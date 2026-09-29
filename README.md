@@ -37,19 +37,18 @@ xmake
 xmake test
 ```
 
-To run existing AM/NEMU `cpu-tests` raw images, build the optional runner and
-pass one or more `.bin` files:
+To run a flat `.bin` image, build the runner and pass the image path:
 
 ```sh
-xmake build sim_cpu_tests
-xmake run sim_cpu_tests path/to/test-riscv64-nemu.bin
+xmake build sim_run
+xmake run sim_run path/to/program.bin
 ```
 
-The runner loads each image at `0x80000000` into 128 MiB of RAM, starts there,
-and treats EBREAK with `a0 == 0` as success. This is a test harness convention,
-not an architectural reset or syscall contract. It has no UART/MMIO, virtual
-memory, or sign-extended address aliases. The external images are not build
-dependencies and are not copied into this repository.
+The runner loads the raw image at `0x80000000` into 128 MiB of RAM and starts
+execution at that address. An EBREAK with `a0 == 0` reports success; other stop
+conditions report failure. This is a runner convention, not an architectural
+reset or syscall contract. There is no ELF loader, UART/MMIO, virtual memory,
+or sign-extended address aliases. Image files are not build dependencies.
 
 Xmake stores its compiler cache in the ignored local `.cache/ccache` directory.
 

@@ -95,7 +95,7 @@ bool run_image(const char *path) {
 
 int main(int argc, char **argv) {
   if (argc < 2) {
-    std::cerr << "usage: sim_cpu_tests image.bin [image.bin ...]\n";
+    std::cerr << "usage: sim_run image.bin [image.bin ...]\n";
     return 2;
   }
   bool passed = true;
