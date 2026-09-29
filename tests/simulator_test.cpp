@@ -116,12 +116,12 @@ void test_memory_and_step() {
   sim.reset(0x1000);
   sim.state().scalar.write_x(1, 9);
   const auto result = sim.step();
-  check(result.status == tile_npu::StepStatus::execution_not_implemented &&
+  check(result.status == tile_npu::StepStatus::retired &&
             result.pc == 0x1000 && result.instruction == 0x00000013u,
         "fetch a little-endian 32-bit instruction");
-  check(sim.state().scalar.pc == 0x1000 &&
+  check(sim.state().scalar.pc == 0x1004 &&
             sim.state().scalar.read_x(1) == 9,
-        "decoded but unimplemented step leaves architectural state unchanged");
+        "addi x0, x0, 0 advances PC without changing registers");
 
   sim.reset(0x1004);
   const auto npu_result = sim.step();

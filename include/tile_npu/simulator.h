@@ -15,13 +15,21 @@ enum class StepStatus {
   illegal_instruction,
   invalid_configuration,
   misaligned_pc,
-  fetch_fault
+  fetch_fault,
+  instruction_address_misaligned,
+  load_address_misaligned,
+  store_address_misaligned,
+  load_fault,
+  store_fault,
+  environment_call,
+  breakpoint,
 };
 
 struct StepResult {
   StepStatus status;
   std::uint64_t pc;
   std::optional<std::uint32_t> instruction;
+  std::optional<std::uint64_t> fault_address = std::nullopt;
 };
 
 class Simulator {

@@ -11,6 +11,7 @@ class Memory {
 public:
   virtual ~Memory() = default;
 
+  // A failed read/write must not partially change the buffer or memory.
   virtual bool read(std::uint64_t address, std::span<std::byte> bytes) const = 0;
   virtual bool write(std::uint64_t address,
                      std::span<const std::byte> bytes) = 0;
