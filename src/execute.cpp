@@ -56,19 +56,21 @@ bool execute_tadd(const RegisterOperands &registers, State &state) {
 
 } // namespace
 
-bool execute(const DecodedInstruction &instruction, State &state) {
+ExecuteStatus execute(const DecodedInstruction &instruction, State &state) {
   const auto &registers = instruction.registers;
   switch (instruction.operation) {
   case Operation::add: {
     const auto left = state.scalar.read_x(registers.src1);
     const auto right = state.scalar.read_x(registers.src2);
     state.scalar.write_x(registers.dest, left + right);
-    return true;
+    return ExecuteStatus::retired;
   }
   case Operation::tadd:
-    return execute_tadd(registers, state);
+    return execute_tadd(registers, state) ? ExecuteStatus::retired
+                                          : ExecuteStatus::invalid_configuration;
+  default:
+    return ExecuteStatus::not_implemented;
   }
-  return false;
 }
 
 } // namespace tile_npu

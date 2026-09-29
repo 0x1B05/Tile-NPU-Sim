@@ -1,5 +1,6 @@
 #include "tile_npu/decode.h"
 
+#include "decode_rv64im.h"
 #include "encoding.h"
 #include "tile_npu/state.h"
 
@@ -15,7 +16,6 @@ enum class Quadrant : std::uint8_t {
   scalar = 0b11,
 };
 
-enum class ScalarOpcode : std::uint8_t { op = 0b0110011 };
 enum class ElementwiseMajor : std::uint8_t { binary = 0b0000 };
 enum class Domain : std::uint8_t {
   tile = 0b00,
@@ -37,24 +37,6 @@ enum class BinaryFunction : std::uint8_t {
   shr = 0b1100,
   sra = 0b1101,
 };
-
-DecodeResult decode_scalar_op(const encoding::RiscvR &fields) {
-  // ADD is the only implemented member of the RV64IM OP family.
-  if (fields.funct3 != 0 || fields.funct7 != 0) {
-    return DecodeError::not_implemented;
-  }
-  return DecodedInstruction{Operation::add,
-                            {fields.dest, fields.src1, fields.src2}};
-}
-
-DecodeResult decode_scalar(std::uint32_t word) {
-  switch (static_cast<ScalarOpcode>(encoding::field<6, 0>(word))) {
-  case ScalarOpcode::op:
-    return decode_scalar_op(encoding::RiscvR::from(word));
-  default:
-    return DecodeError::not_implemented;
-  }
-}
 
 DecodeResult decode_binary_add(const encoding::NpuR3 &fields,
                                const encoding::BinarySelector &selector) {
@@ -120,7 +102,7 @@ DecodeResult decode_elementwise(std::uint32_t word) {
 DecodeResult decode(std::uint32_t word) {
   switch (static_cast<Quadrant>(encoding::field<1, 0>(word))) {
   case Quadrant::scalar:
-    return decode_scalar(word);
+    return decode_rv64im(word);
   case Quadrant::elementwise:
     return decode_elementwise(word);
   case Quadrant::data_movement:

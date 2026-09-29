@@ -5,7 +5,9 @@
 
 namespace tile_npu {
 
-// Returns false for an invalid current configuration, without changing state.
-bool execute(const DecodedInstruction &instruction, State &state);
+enum class ExecuteStatus { retired, not_implemented, invalid_configuration };
+
+// An unsuccessful execution leaves architectural state unchanged.
+ExecuteStatus execute(const DecodedInstruction &instruction, State &state);
 
 } // namespace tile_npu

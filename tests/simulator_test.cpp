@@ -50,8 +50,10 @@ void test_decode() {
             tadd_instruction->registers.src1 == 1 &&
             tadd_instruction->registers.src2 == 2,
         "decode Tile tadd");
-  check(decode_error(0x402081b3u, tile_npu::DecodeError::not_implemented),
-        "RV64I sub is not mistaken for add");
+  const auto sub = tile_npu::decode(0x402081b3u);
+  const auto *sub_instruction = std::get_if<tile_npu::DecodedInstruction>(&sub);
+  check(sub_instruction && sub_instruction->operation == tile_npu::Operation::sub,
+        "decode RV64I sub separately from add");
   check(decode_error(0x02002080u, tile_npu::DecodeError::not_implemented),
         "taddx is not mistaken for tadd");
   check(decode_error(0x00022080u, tile_npu::DecodeError::illegal),
@@ -114,12 +116,12 @@ void test_memory_and_step() {
   sim.reset(0x1000);
   sim.state().scalar.write_x(1, 9);
   const auto result = sim.step();
-  check(result.status == tile_npu::StepStatus::decode_not_implemented &&
+  check(result.status == tile_npu::StepStatus::execution_not_implemented &&
             result.pc == 0x1000 && result.instruction == 0x00000013u,
         "fetch a little-endian 32-bit instruction");
   check(sim.state().scalar.pc == 0x1000 &&
             sim.state().scalar.read_x(1) == 9,
-        "unimplemented step leaves architectural state unchanged");
+        "decoded but unimplemented step leaves architectural state unchanged");
 
   sim.reset(0x1004);
   const auto npu_result = sim.step();

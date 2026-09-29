@@ -11,6 +11,7 @@ namespace tile_npu {
 enum class StepStatus {
   retired,
   decode_not_implemented,
+  execution_not_implemented,
   illegal_instruction,
   invalid_configuration,
   misaligned_pc,

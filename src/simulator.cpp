@@ -37,7 +37,11 @@ StepResult Simulator::step() {
                                            : StepStatus::decode_not_implemented,
             pc, instruction};
   }
-  if (!execute(std::get<DecodedInstruction>(decoded), state_)) {
+  const auto execution = execute(std::get<DecodedInstruction>(decoded), state_);
+  if (execution == ExecuteStatus::not_implemented) {
+    return {StepStatus::execution_not_implemented, pc, instruction};
+  }
+  if (execution == ExecuteStatus::invalid_configuration) {
     return {StepStatus::invalid_configuration, pc, instruction};
   }
   state_.scalar.pc = pc + 4;

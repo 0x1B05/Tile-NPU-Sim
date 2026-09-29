@@ -12,6 +12,16 @@ constexpr std::uint32_t field(std::uint32_t word) {
          static_cast<std::uint32_t>((std::uint64_t{1} << width) - 1);
 }
 
+constexpr std::int32_t sign_extend(std::uint32_t value, unsigned width) {
+  const auto mask = (std::uint64_t{1} << width) - 1;
+  const auto sign = std::uint64_t{1} << (width - 1);
+  auto extended = static_cast<std::int64_t>(value & mask);
+  if (static_cast<std::uint64_t>(extended) & sign) {
+    extended -= static_cast<std::int64_t>(std::uint64_t{1} << width);
+  }
+  return static_cast<std::int32_t>(extended);
+}
+
 struct RiscvR {
   std::uint8_t opcode;
   std::uint8_t dest;
@@ -27,6 +37,77 @@ struct RiscvR {
             static_cast<std::uint8_t>(field<19, 15>(word)),
             static_cast<std::uint8_t>(field<24, 20>(word)),
             static_cast<std::uint8_t>(field<31, 25>(word))};
+  }
+};
+
+struct RiscvI {
+  std::uint8_t dest;
+  std::uint8_t funct3;
+  std::uint8_t src1;
+  std::int32_t immediate;
+
+  static constexpr RiscvI from(std::uint32_t word) {
+    return {static_cast<std::uint8_t>(field<11, 7>(word)),
+            static_cast<std::uint8_t>(field<14, 12>(word)),
+            static_cast<std::uint8_t>(field<19, 15>(word)),
+            sign_extend(field<31, 20>(word), 12)};
+  }
+};
+
+struct RiscvS {
+  std::uint8_t funct3;
+  std::uint8_t src1;
+  std::uint8_t src2;
+  std::int32_t immediate;
+
+  static constexpr RiscvS from(std::uint32_t word) {
+    const auto immediate = (field<31, 25>(word) << 5) | field<11, 7>(word);
+    return {static_cast<std::uint8_t>(field<14, 12>(word)),
+            static_cast<std::uint8_t>(field<19, 15>(word)),
+            static_cast<std::uint8_t>(field<24, 20>(word)),
+            sign_extend(immediate, 12)};
+  }
+};
+
+struct RiscvB {
+  std::uint8_t funct3;
+  std::uint8_t src1;
+  std::uint8_t src2;
+  std::int32_t immediate;
+
+  static constexpr RiscvB from(std::uint32_t word) {
+    const auto immediate = (field<31, 31>(word) << 12) |
+                           (field<7, 7>(word) << 11) |
+                           (field<30, 25>(word) << 5) |
+                           (field<11, 8>(word) << 1);
+    return {static_cast<std::uint8_t>(field<14, 12>(word)),
+            static_cast<std::uint8_t>(field<19, 15>(word)),
+            static_cast<std::uint8_t>(field<24, 20>(word)),
+            sign_extend(immediate, 13)};
+  }
+};
+
+struct RiscvU {
+  std::uint8_t dest;
+  std::int32_t immediate;
+
+  static constexpr RiscvU from(std::uint32_t word) {
+    return {static_cast<std::uint8_t>(field<11, 7>(word)),
+            sign_extend(field<31, 12>(word) << 12, 32)};
+  }
+};
+
+struct RiscvJ {
+  std::uint8_t dest;
+  std::int32_t immediate;
+
+  static constexpr RiscvJ from(std::uint32_t word) {
+    const auto immediate = (field<31, 31>(word) << 20) |
+                           (field<19, 12>(word) << 12) |
+                           (field<20, 20>(word) << 11) |
+                           (field<30, 21>(word) << 1);
+    return {static_cast<std::uint8_t>(field<11, 7>(word)),
+            sign_extend(immediate, 21)};
   }
 };
 
