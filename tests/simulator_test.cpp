@@ -249,6 +249,7 @@ void test_rv64im_decode();
 void test_rv64im_execute();
 void test_rv64im_program();
 void test_matrix_view();
+void test_descriptor_view();
 
 int main() {
   try {
@@ -258,6 +259,7 @@ int main() {
     test_rv64im_execute();
     test_rv64im_program();
     test_matrix_view();
+    test_descriptor_view();
     test_memory_and_step();
     test_add_execution();
     test_tadd_execution();
