@@ -2,6 +2,7 @@
 
 #include "execute_rv64i.h"
 #include "execute_rv64m.h"
+#include "tile_npu/matrix_view.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -51,25 +52,32 @@ bool execute_tadd(const ElementwiseBinaryInstruction &instr, State &state) {
     return false;
   }
 
-  auto &dst = state.t[dst_index];
-  const auto &lhs = state.t[lhs_index];
-  const auto &rhs = state.t[rhs_index];
+  MatrixView<std::uint8_t> dst(std::span<std::uint8_t>(state.t[dst_index]),
+                               dst_config.rows, dst_config.cols,
+                               dst_config.layout);
+  MatrixView<const std::uint8_t> lhs(
+      std::span<const std::uint8_t>(state.t[lhs_index]), lhs_config.rows,
+      lhs_config.cols, lhs_config.layout);
+  MatrixView<const std::uint8_t> rhs(
+      std::span<const std::uint8_t>(state.t[rhs_index]), rhs_config.rows,
+      rhs_config.cols, rhs_config.layout);
+  if (!dst.valid() || !lhs.valid() || !rhs.valid())
+    return false;
+
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
-      const auto index = row * kMatrixExtent + col;
-      int left = lhs[index];
-      int right = rhs[index];
+      int left = lhs.at(row, col);
+      int right = rhs.at(row, col);
       if (dst_config.dtype == DType::i8) {
         left = left < 128 ? left : left - 256;
         right = right < 128 ? right : right - 256;
       }
       int result = left + right;
       if (dst_config.arith_mode == ArithMode::sat) {
-        result = dst_config.dtype == DType::i8
-                     ? std::clamp(result, -128, 127)
-                     : std::clamp(result, 0, 255);
+        result = dst_config.dtype == DType::i8 ? std::clamp(result, -128, 127)
+                                               : std::clamp(result, 0, 255);
       }
-      dst[index] = static_cast<std::uint8_t>(result);
+      dst.at(row, col) = static_cast<std::uint8_t>(result);
     }
   }
   return true;
@@ -77,8 +85,7 @@ bool execute_tadd(const ElementwiseBinaryInstruction &instr, State &state) {
 
 } // namespace
 
-ExecuteResult execute(const DecodedInstr &instr, State &state,
-                      Memory &memory) {
+ExecuteResult execute(const DecodedInstr &instr, State &state, Memory &memory) {
   switch (instr.op) {
   case ScalarOp::mul:
   case ScalarOp::mulh:
