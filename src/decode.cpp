@@ -17,31 +17,10 @@ enum class Quadrant : std::uint8_t {
 };
 
 enum class ElementwiseMajor : std::uint8_t { binary = 0b0000 };
-enum class Domain : std::uint8_t {
-  tile = 0b00,
-  acc = 0b01,
-  vec8 = 0b10,
-  vec32 = 0b11,
-};
-enum class BinaryFunction : std::uint8_t {
-  add = 0b0000,
-  sub = 0b0001,
-  mul = 0b0010,
-  div = 0b0011,
-  min = 0b0100,
-  max = 0b0101,
-  bit_and = 0b1000,
-  bit_or = 0b1001,
-  bit_xor = 0b1010,
-  shl = 0b1011,
-  shr = 0b1100,
-  sra = 0b1101,
-};
-
 DecodeResult decode_binary_add(const encoding::NpuR3 &fields,
                                const encoding::BinarySelector &selector) {
-  switch (static_cast<Domain>(selector.domain)) {
-  case Domain::tile:
+  switch (static_cast<NpuDomain>(selector.domain)) {
+  case NpuDomain::tile:
     if (selector.scalar_source) {
       return DecodeError::not_implemented; // taddx
     }
@@ -49,12 +28,15 @@ DecodeResult decode_binary_add(const encoding::NpuR3 &fields,
         fields.src2 >= kTileRegisters) {
       return DecodeError::illegal;
     }
-    return DecodedNpuInstr{NpuOp::tadd,
-                                 {fields.dest, fields.src1, fields.src2}};
-  case Domain::acc:
-  case Domain::vec32:
+    return ElementwiseBinaryInstruction{
+        ElementwiseBinaryOp::add,
+        {NpuDomain::tile, fields.dest},
+        {NpuDomain::tile, fields.src1},
+        NpuRegister{NpuDomain::tile, fields.src2}};
+  case NpuDomain::acc:
+  case NpuDomain::vec32:
     return DecodeError::not_implemented;
-  case Domain::vec8:
+  case NpuDomain::vec8:
     return DecodeError::illegal;
   }
   return DecodeError::illegal;
@@ -64,24 +46,24 @@ DecodeResult decode_binary(std::uint32_t word) {
   const auto fields = encoding::NpuR3::from(word);
   const auto selector = encoding::BinarySelector::from(fields.sel3);
   if (fields.reserved4 != 0 ||
-      selector.domain == static_cast<std::uint8_t>(Domain::vec8)) {
+      selector.domain == static_cast<std::uint8_t>(NpuDomain::vec8)) {
     return DecodeError::illegal;
   }
 
-  switch (static_cast<BinaryFunction>(fields.funct4)) {
-  case BinaryFunction::add:
+  switch (static_cast<ElementwiseBinaryOp>(fields.funct4)) {
+  case ElementwiseBinaryOp::add:
     return decode_binary_add(fields, selector);
-  case BinaryFunction::sub:
-  case BinaryFunction::mul:
-  case BinaryFunction::div:
-  case BinaryFunction::min:
-  case BinaryFunction::max:
-  case BinaryFunction::bit_and:
-  case BinaryFunction::bit_or:
-  case BinaryFunction::bit_xor:
-  case BinaryFunction::shl:
-  case BinaryFunction::shr:
-  case BinaryFunction::sra:
+  case ElementwiseBinaryOp::sub:
+  case ElementwiseBinaryOp::mul:
+  case ElementwiseBinaryOp::div:
+  case ElementwiseBinaryOp::min:
+  case ElementwiseBinaryOp::max:
+  case ElementwiseBinaryOp::bit_and:
+  case ElementwiseBinaryOp::bit_or:
+  case ElementwiseBinaryOp::bit_xor:
+  case ElementwiseBinaryOp::shl:
+  case ElementwiseBinaryOp::shr:
+  case ElementwiseBinaryOp::sra:
     return DecodeError::not_implemented;
   default:
     return DecodeError::illegal;

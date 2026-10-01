@@ -16,10 +16,28 @@ bool valid_tile_config(const TileConfig &config) {
          config.layout == 0;
 }
 
-bool execute_tadd(const RegOperands &regs, State &state) {
-  const auto &dst_config = state.tc[regs.dest];
-  const auto &lhs_config = state.tc[regs.src1];
-  const auto &rhs_config = state.tc[regs.src2];
+bool execute_tadd(const ElementwiseBinaryInstruction &instr, State &state) {
+  if (instr.op != ElementwiseBinaryOp::add ||
+      instr.dest.domain != NpuDomain::tile ||
+      instr.src1.domain != NpuDomain::tile) {
+    return false;
+  }
+  const auto *rhs_register = std::get_if<NpuRegister>(&instr.src2);
+  if (rhs_register == nullptr || rhs_register->domain != NpuDomain::tile) {
+    return false;
+  }
+
+  const auto dst_index = instr.dest.index;
+  const auto lhs_index = instr.src1.index;
+  const auto rhs_index = rhs_register->index;
+  if (dst_index >= kTileRegisters || lhs_index >= kTileRegisters ||
+      rhs_index >= kTileRegisters) {
+    return false;
+  }
+
+  const auto &dst_config = state.tc[dst_index];
+  const auto &lhs_config = state.tc[lhs_index];
+  const auto &rhs_config = state.tc[rhs_index];
   if (!valid_tile_config(dst_config) || !valid_tile_config(lhs_config) ||
       !valid_tile_config(rhs_config) ||
       (dst_config.arith_mode != ArithMode::wrap &&
@@ -33,9 +51,9 @@ bool execute_tadd(const RegOperands &regs, State &state) {
     return false;
   }
 
-  auto &dst = state.t[regs.dest];
-  const auto &lhs = state.t[regs.src1];
-  const auto &rhs = state.t[regs.src2];
+  auto &dst = state.t[dst_index];
+  const auto &lhs = state.t[lhs_index];
+  const auto &rhs = state.t[rhs_index];
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
       const auto index = row * kMatrixExtent + col;
@@ -81,16 +99,11 @@ ExecuteResult execute(const DecodedInstr &instr, State &state,
   }
 }
 
-ExecuteResult execute(const DecodedNpuInstr &instr, State &state,
-                      Memory &) {
-  switch (instr.op) {
-  case NpuOp::tadd:
-    return {execute_tadd(instr.regs, state)
-                ? ExecuteStatus::retired
-                : ExecuteStatus::invalid_configuration,
-            state.scalar.pc + 4};
+ExecuteResult execute(const DecodedNpuInstr &instr, State &state, Memory &) {
+  if (execute_tadd(instr, state)) {
+    return {ExecuteStatus::retired, state.scalar.pc + 4};
   }
-  return {ExecuteStatus::not_implemented, state.scalar.pc};
+  return {ExecuteStatus::invalid_configuration, state.scalar.pc + 4};
 }
 
 } // namespace tile_npu
