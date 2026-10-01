@@ -30,7 +30,11 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | ---- | ---- |
 | `include/tile_npu/state.h` | 架构状态: 五个数据域的寄存器堆 (Tile/Acc/Vec8/Vec32/Scalar), 计算配置 (TC/AC/BC/VC) 与访存描述符 (TM/AM/BM/VM), 物理尺寸常量 |
 | `include/tile_npu/memory.h` | 字节寻址内存接口; `FlatMemory` 为平坦 RAM 实现 |
-| `include/tile_npu/decode.h` | 译码结果类型: `ScalarOp`/`NpuOp` 枚举, `DecodedInstr`/`DecodedNpuInstr`, `DecodeError`, `DecodeResult` |
+| `include/tile_npu/instruction.h` | typed instruction IR: scalar operands, NPU domains/registers, and elementwise operation types |
+| `include/tile_npu/decode.h` | 译码结果类型: typed scalar/NPU instructions, `DecodeError`, `DecodeResult` |
+| `include/tile_npu/config.h`, `src/config.cpp` | 统一配置/描述符字段访问、字段编号映射与写入校验 |
+| `include/tile_npu/matrix_view.h` | 逻辑矩阵坐标到物理寄存器存储的 view, 当前实现 canonical layout |
+| `include/tile_npu/descriptor_view.h` | TM/AM/BM/VM 地址计算、保留位校验与访存后 `base_addr` 自增 |
 | `include/tile_npu/simulator.h` | `Simulator` 单步 API: `reset(entry_pc)`, `step()` → `StepResult`/`StepStatus` |
 | `src/encoding.h` | 位段提取 (`field<Hi,Lo>`) 与 RISC-V R/I/S/B/U/J, NPU 各格式的字段解析 |
 | `src/decode.cpp` | 按 `q[1:0]` 分派: `11` → RV64IM 译码, 其余 → NPU `major4` 译码 |
@@ -44,7 +48,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 ## 建模约定 (修改前必读)
 
 - 取指固定 32-bit 小端拼字; 不启用 RVC。`[1:0] = 11` 为 RV64IM 标量指令, 其余 quadrant 为 NPU 指令。
-- 配置字段以 C++ 值存储 (如 `DType` 枚举), 不是打包的寄存器位型; 位打包与配置写入校验是后续工作。
+- 配置字段以 C++ 值存储 (如 `DType` 枚举), 不是打包的寄存器位型; 与指令编码间的位打包映射是后续工作。
 - Tile 按行主序存储, 对应 canonical layout。
 - 标量执行: 64-bit 回绕算术, 小端访存, load/store 要求自然对齐; 非对齐访问只报告状态, 不改变架构状态。
 - 单 hart 模型下 `FENCE` 为 no-op; `ECALL`/`EBREAK` 使 `step()` 停在当前 PC, 交给调用方处理。
@@ -63,7 +67,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 ## 新增指令的实现流程
 
 1. `src/encoding.h` 补充字段提取 (若无对应格式)。
-2. 译码: `include/tile_npu/decode.h` 加 `NpuOp`/`ScalarOp` 枚举值, `src/decode.cpp` (或 `decode_rv64im.cpp`) 加合法编码分派; 保留编码必须报 `illegal`。
+2. 译码: `include/tile_npu/instruction.h` 增加带数据域和 typed operand 的指令类型, `src/decode.cpp` (或 `decode_rv64im.cpp`) 加合法编码分派; 保留编码必须报 `illegal`。
 3. 执行: `src/execute.cpp` 分派到对应执行器, 语义严格按手册伪代码; 未实现的执行报 `execution_not_implemented`, 不要留静默路径。
 4. 测试: 每新增操作必须补三类用例 — 合法编码, 保留/非法编码, 边界值 (立即数边界, 寄存器编号边界, 有效 shape 边界)。
 
@@ -79,6 +83,13 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 - 遵循现有代码: 2 空格缩进, `#pragma once`, `snake_case` 函数/变量, `enum class` 强类型枚举, 尽可能 `constexpr`。
 - 位段一律通过 `encoding::field<Hi,Lo>` 提取, 不在别处散落魔数移位。
 - 注释为英文, 只写"为什么/哪一层约定", 不复述代码。
+
+## 架构扩展约定
+
+- 译码结果必须表达语义操作数的域和类型; 不要为新指令复用一个含义不明确的 `dest/src1/src2` 三元组。
+- 矩阵执行通过 `MatrixView` 访问逻辑坐标, 描述符访存通过 `DescriptorView` 计算地址与提交 `base_addr` 自增; 不在具体指令中散落行主序索引或描述符位标志解释。
+- 配置指令通过 `read_config_field`/`write_config_field` 和 `config_field_from_code` 访问字段, 不在各个执行器中复制字段编号与范围检查。
+- 写入校验的拒绝规则有手册依据: `ConfigAccessError` 对应手册中 `cfg.seti`/`cfg.setx` 校验失败时的 `CFG_ERROR`; 手册未定义 `CFG_ERROR` 的后续架构行为, 模拟器以错误状态上报属于模拟器约定。`invalid_configuration` 仍是模拟器诊断, 具体 ISA trap 行为以手册为准。
 
 ## Git 工作流
 
