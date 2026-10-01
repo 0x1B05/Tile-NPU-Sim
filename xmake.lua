@@ -1,5 +1,6 @@
 set_project("tile-npu-sim")
 set_languages("c++20")
+set_config("ccachedir", path.join(os.projectdir(), ".cache", "ccache"))
 add_rules("mode.debug", "mode.release")
 
 target("tile_npu_sim")
@@ -13,3 +14,9 @@ target("sim_tests")
     add_deps("tile_npu_sim")
     add_files("tests/*.cpp")
     add_tests("core")
+
+target("sim_run")
+    set_kind("binary")
+    set_default(false)
+    add_deps("tile_npu_sim")
+    add_files("tools/bin_runner.cpp")

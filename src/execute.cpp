@@ -1,5 +1,8 @@
 #include "execute.h"
 
+#include "execute_rv64i.h"
+#include "execute_rv64m.h"
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -13,10 +16,10 @@ bool valid_tile_config(const TileConfig &config) {
          config.layout == 0;
 }
 
-bool execute_tadd(const RegisterOperands &registers, State &state) {
-  const auto &dst_config = state.tc[registers.dest];
-  const auto &lhs_config = state.tc[registers.src1];
-  const auto &rhs_config = state.tc[registers.src2];
+bool execute_tadd(const RegOperands &regs, State &state) {
+  const auto &dst_config = state.tc[regs.dest];
+  const auto &lhs_config = state.tc[regs.src1];
+  const auto &rhs_config = state.tc[regs.src2];
   if (!valid_tile_config(dst_config) || !valid_tile_config(lhs_config) ||
       !valid_tile_config(rhs_config) ||
       (dst_config.arith_mode != ArithMode::wrap &&
@@ -30,9 +33,9 @@ bool execute_tadd(const RegisterOperands &registers, State &state) {
     return false;
   }
 
-  auto &dst = state.t[registers.dest];
-  const auto &lhs = state.t[registers.src1];
-  const auto &rhs = state.t[registers.src2];
+  auto &dst = state.t[regs.dest];
+  const auto &lhs = state.t[regs.src1];
+  const auto &rhs = state.t[regs.src2];
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
       const auto index = row * kMatrixExtent + col;
@@ -56,19 +59,38 @@ bool execute_tadd(const RegisterOperands &registers, State &state) {
 
 } // namespace
 
-bool execute(const DecodedInstruction &instruction, State &state) {
-  const auto &registers = instruction.registers;
-  switch (instruction.operation) {
-  case Operation::add: {
-    const auto left = state.scalar.read_x(registers.src1);
-    const auto right = state.scalar.read_x(registers.src2);
-    state.scalar.write_x(registers.dest, left + right);
-    return true;
+ExecuteResult execute(const DecodedInstr &instr, State &state,
+                      Memory &memory) {
+  switch (instr.op) {
+  case ScalarOp::mul:
+  case ScalarOp::mulh:
+  case ScalarOp::mulhsu:
+  case ScalarOp::mulhu:
+  case ScalarOp::div:
+  case ScalarOp::divu:
+  case ScalarOp::rem:
+  case ScalarOp::remu:
+  case ScalarOp::mulw:
+  case ScalarOp::divw:
+  case ScalarOp::divuw:
+  case ScalarOp::remw:
+  case ScalarOp::remuw:
+    return execute_rv64m(instr, state.scalar);
+  default:
+    return execute_rv64i(instr, state.scalar, memory);
   }
-  case Operation::tadd:
-    return execute_tadd(registers, state);
+}
+
+ExecuteResult execute(const DecodedNpuInstr &instr, State &state,
+                      Memory &) {
+  switch (instr.op) {
+  case NpuOp::tadd:
+    return {execute_tadd(instr.regs, state)
+                ? ExecuteStatus::retired
+                : ExecuteStatus::invalid_configuration,
+            state.scalar.pc + 4};
   }
-  return false;
+  return {ExecuteStatus::not_implemented, state.scalar.pc};
 }
 
 } // namespace tile_npu
