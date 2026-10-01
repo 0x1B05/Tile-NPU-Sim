@@ -46,6 +46,10 @@ using ConfigReadResult =
 ConfigReadResult read_config_field(const State &state, ConfigBank bank,
                                    std::uint8_t index, ConfigField field);
 
+ConfigAccessError write_config_field(State &state, ConfigBank bank,
+                                     std::uint8_t index, ConfigField field,
+                                     const ConfigFieldValue &value);
+
 // Convert a decoded field code to its semantic field. The mapping is bank
 // dependent because the same field3 value means `rows` for a matrix config
 // and `len` for a vector config.
