@@ -6,18 +6,18 @@
 
 namespace tile_npu {
 
-inline constexpr std::size_t kMatrixExtent = 32;
-inline constexpr std::size_t kMatrixElements = kMatrixExtent * kMatrixExtent;
-inline constexpr std::size_t kVectorLanes = 32;
-inline constexpr std::size_t kTileRegisters = 16;
-inline constexpr std::size_t kAccRegisters = 12;
-inline constexpr std::size_t kVectorRegisters = 32;
-inline constexpr std::size_t kScalarRegisters = 32;
+inline constexpr std::size_t MATRIX_EXTENT = 32;
+inline constexpr std::size_t MATRIX_ELEMENTS = MATRIX_EXTENT * MATRIX_EXTENT;
+inline constexpr std::size_t VECTOR_LANES = 32;
+inline constexpr std::size_t TILE_REGISTERS = 16;
+inline constexpr std::size_t ACC_REGISTERS = 12;
+inline constexpr std::size_t VECTOR_REGISTERS = 32;
+inline constexpr std::size_t SCALAR_REGISTERS = 32;
 
-using Tile = std::array<std::uint8_t, kMatrixElements>;
-using Acc = std::array<std::uint32_t, kMatrixElements>;
-using Vec8 = std::array<std::uint8_t, kVectorLanes>;
-using Vec32 = std::array<std::uint32_t, kVectorLanes>;
+using Tile = std::array<std::uint8_t, MATRIX_ELEMENTS>;
+using Acc = std::array<std::uint32_t, MATRIX_ELEMENTS>;
+using Vec8 = std::array<std::uint8_t, VECTOR_LANES>;
+using Vec32 = std::array<std::uint32_t, VECTOR_LANES>;
 
 // The numeric values match the dtype codes in the ISA configuration registers.
 enum class DType : std::uint8_t { i8 = 0, u8 = 1, i32 = 2, u32 = 3, f32 = 4 };
@@ -77,26 +77,26 @@ public:
   }
 
 private:
-  std::array<std::uint64_t, kScalarRegisters> x_{};
+  std::array<std::uint64_t, SCALAR_REGISTERS> x_{};
 };
 
 struct State {
   ScalarState scalar{};
 
-  std::array<Tile, kTileRegisters> t{};
-  std::array<Acc, kAccRegisters> a{};
-  std::array<Vec8, kVectorRegisters> b{};
-  std::array<Vec32, kVectorRegisters> v{};
+  std::array<Tile, TILE_REGISTERS> t{};
+  std::array<Acc, ACC_REGISTERS> a{};
+  std::array<Vec8, VECTOR_REGISTERS> b{};
+  std::array<Vec32, VECTOR_REGISTERS> v{};
 
-  std::array<TileConfig, kTileRegisters> tc{};
-  std::array<AccConfig, kAccRegisters> ac{};
-  std::array<Vec8Config, kVectorRegisters> bc{};
-  std::array<Vec32Config, kVectorRegisters> vc{};
+  std::array<TileConfig, TILE_REGISTERS> tc{};
+  std::array<AccConfig, ACC_REGISTERS> ac{};
+  std::array<Vec8Config, VECTOR_REGISTERS> bc{};
+  std::array<Vec32Config, VECTOR_REGISTERS> vc{};
 
-  std::array<MatrixDescriptor, kTileRegisters> tm{};
-  std::array<MatrixDescriptor, kAccRegisters> am{};
-  std::array<VectorDescriptor, kVectorRegisters> bm{};
-  std::array<VectorDescriptor, kVectorRegisters> vm{};
+  std::array<MatrixDescriptor, TILE_REGISTERS> tm{};
+  std::array<MatrixDescriptor, ACC_REGISTERS> am{};
+  std::array<VectorDescriptor, VECTOR_REGISTERS> bm{};
+  std::array<VectorDescriptor, VECTOR_REGISTERS> vm{};
 };
 
 } // namespace tile_npu

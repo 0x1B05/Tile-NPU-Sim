@@ -12,9 +12,9 @@
 
 namespace {
 
-constexpr std::uint64_t kMemoryBase = 0x80000000;
-constexpr std::size_t kMemorySize = 128 * 1024 * 1024;
-constexpr std::uint64_t kStepLimit = 10'000'000;
+constexpr std::uint64_t MEMORY_BASE = 0x80000000;
+constexpr std::size_t MEMORY_SIZE = 128 * 1024 * 1024;
+constexpr std::uint64_t STEP_LIMIT = 10'000'000;
 
 std::string_view status_name(tile_npu::StepStatus status) {
   using tile_npu::StepStatus;
@@ -45,7 +45,7 @@ bool run_image(const char *path) {
     return false;
   }
   const auto end = input.tellg();
-  if (end <= 0 || static_cast<std::uint64_t>(end) > kMemorySize) {
+  if (end <= 0 || static_cast<std::uint64_t>(end) > MEMORY_SIZE) {
     std::cerr << "FAIL " << path << ": invalid image size\n";
     return false;
   }
@@ -57,14 +57,14 @@ bool run_image(const char *path) {
     return false;
   }
 
-  tile_npu::FlatMemory memory(kMemoryBase, kMemorySize);
-  if (!memory.write(kMemoryBase, std::span<const std::byte>(image))) {
+  tile_npu::FlatMemory memory(MEMORY_BASE, MEMORY_SIZE);
+  if (!memory.write(MEMORY_BASE, std::span<const std::byte>(image))) {
     std::cerr << "FAIL " << path << ": cannot load image\n";
     return false;
   }
   tile_npu::Simulator sim(memory);
-  sim.reset(kMemoryBase);
-  for (std::uint64_t steps = 0; steps < kStepLimit; ++steps) {
+  sim.reset(MEMORY_BASE);
+  for (std::uint64_t steps = 0; steps < STEP_LIMIT; ++steps) {
     const auto result = sim.step();
     if (result.status == tile_npu::StepStatus::retired) {
       continue;

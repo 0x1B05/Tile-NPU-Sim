@@ -24,8 +24,8 @@ DecodeResult decode_binary_add(const encoding::NpuR3 &fields,
     if (selector.scalar_source) {
       return DecodeError::not_implemented; // taddx
     }
-    if (fields.dest >= kTileRegisters || fields.src1 >= kTileRegisters ||
-        fields.src2 >= kTileRegisters) {
+    if (fields.dest >= TILE_REGISTERS || fields.src1 >= TILE_REGISTERS ||
+        fields.src2 >= TILE_REGISTERS) {
       return DecodeError::illegal;
     }
     return ElementwiseBinaryInstruction{

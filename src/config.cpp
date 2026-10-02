@@ -28,15 +28,15 @@ constexpr bool valid_register(ConfigBank bank, std::uint8_t index) {
   switch (bank) {
   case ConfigBank::tc:
   case ConfigBank::tm:
-    return index < kTileRegisters;
+    return index < TILE_REGISTERS;
   case ConfigBank::ac:
   case ConfigBank::am:
-    return index < kAccRegisters;
+    return index < ACC_REGISTERS;
   case ConfigBank::bc:
   case ConfigBank::vc:
   case ConfigBank::bm:
   case ConfigBank::vm:
-    return index < kVectorRegisters;
+    return index < VECTOR_REGISTERS;
   }
   return false;
 }
@@ -122,7 +122,7 @@ template <typename Config>
 ConfigAccessError write_matrix_shape(Config &config, ConfigField field,
                                      const ConfigFieldValue &value) {
   std::uint8_t raw;
-  if (!scalar_as(value, raw) || raw > kMatrixExtent ||
+  if (!scalar_as(value, raw) || raw > MATRIX_EXTENT ||
       (field == ConfigField::layout && raw != 0)) {
     return ConfigAccessError::invalid_value;
   }
@@ -138,7 +138,7 @@ ConfigAccessError write_matrix_shape(Config &config, ConfigField field,
 ConfigAccessError write_vector_len(std::uint8_t &target,
                                    const ConfigFieldValue &value) {
   std::uint8_t raw;
-  return scalar_as(value, raw) && raw <= kVectorLanes
+  return scalar_as(value, raw) && raw <= VECTOR_LANES
              ? (target = raw, ConfigAccessError::none)
              : ConfigAccessError::invalid_value;
 }

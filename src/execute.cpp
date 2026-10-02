@@ -13,7 +13,7 @@ namespace {
 
 bool valid_tile_config(const TileConfig &config) {
   return (config.dtype == DType::i8 || config.dtype == DType::u8) &&
-         config.rows <= kMatrixExtent && config.cols <= kMatrixExtent &&
+         config.rows <= MATRIX_EXTENT && config.cols <= MATRIX_EXTENT &&
          config.layout == 0;
 }
 
@@ -31,8 +31,8 @@ bool execute_tadd(const ElementwiseBinaryInstruction &instr, State &state) {
   const auto dst_index = instr.dest.index;
   const auto lhs_index = instr.src1.index;
   const auto rhs_index = rhs_register->index;
-  if (dst_index >= kTileRegisters || lhs_index >= kTileRegisters ||
-      rhs_index >= kTileRegisters) {
+  if (dst_index >= TILE_REGISTERS || lhs_index >= TILE_REGISTERS ||
+      rhs_index >= TILE_REGISTERS) {
     return false;
   }
 

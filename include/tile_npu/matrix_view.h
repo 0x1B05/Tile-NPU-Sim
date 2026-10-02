@@ -18,8 +18,8 @@ public:
       : storage_(storage), rows_(rows), cols_(cols), layout_(layout) {}
 
   bool valid() const {
-    return storage_.size() >= kMatrixElements && rows_ <= kMatrixExtent &&
-           cols_ <= kMatrixExtent && layout_ == 0;
+    return storage_.size() >= MATRIX_ELEMENTS && rows_ <= MATRIX_EXTENT &&
+           cols_ <= MATRIX_EXTENT && layout_ == 0;
   }
 
   bool contains(std::size_t row, std::size_t col) const {
@@ -31,7 +31,7 @@ public:
   std::uint8_t layout() const { return layout_; }
 
   std::size_t physical_index(std::size_t row, std::size_t col) const {
-    return row * kMatrixExtent + col;
+    return row * MATRIX_EXTENT + col;
   }
 
   Element &at(std::size_t row, std::size_t col) const {

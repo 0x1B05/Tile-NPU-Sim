@@ -16,8 +16,8 @@ using tile_npu::Simulator;
 using tile_npu::StepResult;
 using tile_npu::StepStatus;
 
-constexpr std::uint64_t kCode = 0x1000;
-constexpr std::uint64_t kData = 0x1040;
+constexpr std::uint64_t CODE = 0x1000;
+constexpr std::uint64_t DATA = 0x1040;
 constexpr std::uint64_t kSign32 = 0xffffffff80000000ull;
 constexpr std::uint64_t kSign64 = 0x8000000000000000ull;
 
@@ -80,7 +80,7 @@ void write_word(FlatMemory &memory, std::uint64_t address,
 void expect_step(const StepResult &result, StepStatus status,
                  std::uint32_t word,
                  std::optional<std::uint64_t> fault_address = std::nullopt) {
-  check(result.status == status && result.pc == kCode &&
+  check(result.status == status && result.pc == CODE &&
             result.instr == word &&
             result.fault_address == fault_address,
         "step status, instruction, or fault address");
@@ -95,18 +95,18 @@ struct RegisterCase {
 };
 
 void check_register_case(const RegisterCase &test) {
-  FlatMemory memory(kCode, 4);
-  write_word(memory, kCode, test.word);
+  FlatMemory memory(CODE, 4);
+  write_word(memory, CODE, test.word);
   Simulator sim(memory);
-  sim.reset(kCode);
+  sim.reset(CODE);
   sim.state().scalar.write_x(1, test.lhs);
   sim.state().scalar.write_x(2, test.rhs);
   sim.state().scalar.write_x(3, 0xdeadbeef);
   const auto result = sim.step();
-  if (result.status != StepStatus::retired || result.pc != kCode ||
+  if (result.status != StepStatus::retired || result.pc != CODE ||
       result.instr != test.word || result.fault_address ||
       sim.state().scalar.read_x(3) != test.expected ||
-      sim.state().scalar.pc != kCode + 4) {
+      sim.state().scalar.pc != CODE + 4) {
     throw std::runtime_error(std::string("execute ") + test.name);
   }
 }
@@ -146,27 +146,27 @@ void test_integer_arithmetic() {
     check_register_case(test);
   }
 
-  FlatMemory memory(kCode, 4);
-  write_word(memory, kCode, 0x00208033u); // add x0, x1, x2
+  FlatMemory memory(CODE, 4);
+  write_word(memory, CODE, 0x00208033u); // add x0, x1, x2
   Simulator sim(memory);
-  sim.reset(kCode);
+  sim.reset(CODE);
   sim.state().scalar.write_x(1, 4);
   sim.state().scalar.write_x(2, 5);
   expect_step(sim.step(), StepStatus::retired, 0x00208033u);
   check(sim.state().scalar.read_x(0) == 0 &&
-            sim.state().scalar.pc == kCode + 4,
+            sim.state().scalar.pc == CODE + 4,
         "write to x0 is discarded");
 }
 
 void test_control_flow() {
-  FlatMemory memory(kCode, 4);
+  FlatMemory memory(CODE, 4);
   Simulator sim(memory);
 
   const auto run = [&](std::uint32_t word, std::uint64_t lhs,
                        std::uint64_t rhs, std::uint64_t expected_pc,
                        std::uint64_t expected_rd = 0xface) {
-    write_word(memory, kCode, word);
-    sim.reset(kCode);
+    write_word(memory, CODE, word);
+    sim.reset(CODE);
     sim.state().scalar.write_x(1, lhs);
     sim.state().scalar.write_x(2, rhs);
     sim.state().scalar.write_x(3, 0xface);
@@ -176,53 +176,53 @@ void test_control_flow() {
           "control-flow result");
   };
 
-  run(u(0x37, 0x80000000u), 0, 0, kCode + 4, kSign32);
-  run(u(0x17, 0xfffff000u), 0, 0, kCode + 4, 0);
-  run(j(8), 0, 0, kCode + 8, kCode + 4);
-  run(b(0, 8), 7, 7, kCode + 8);                 // beq
-  run(b(1, 8), 7, 8, kCode + 8);                 // bne
-  run(b(4, 8), UINT64_MAX, 1, kCode + 8);       // blt
-  run(b(5, 8), 1, UINT64_MAX, kCode + 8);       // bge
-  run(b(6, 8), 1, UINT64_MAX, kCode + 8);       // bltu
-  run(b(7, 8), UINT64_MAX, 1, kCode + 8);       // bgeu
-  run(b(0, 2), 1, 2, kCode + 4);                 // Untaken: no target trap.
+  run(u(0x37, 0x80000000u), 0, 0, CODE + 4, kSign32);
+  run(u(0x17, 0xfffff000u), 0, 0, CODE + 4, 0);
+  run(j(8), 0, 0, CODE + 8, CODE + 4);
+  run(b(0, 8), 7, 7, CODE + 8);                 // beq
+  run(b(1, 8), 7, 8, CODE + 8);                 // bne
+  run(b(4, 8), UINT64_MAX, 1, CODE + 8);       // blt
+  run(b(5, 8), 1, UINT64_MAX, CODE + 8);       // bge
+  run(b(6, 8), 1, UINT64_MAX, CODE + 8);       // bltu
+  run(b(7, 8), UINT64_MAX, 1, CODE + 8);       // bgeu
+  run(b(0, 2), 1, 2, CODE + 4);                 // Untaken: no target trap.
 
   const auto jalr_same_reg = i(0x67, 0, 0, 1, 1);
-  write_word(memory, kCode, jalr_same_reg);
-  sim.reset(kCode);
+  write_word(memory, CODE, jalr_same_reg);
+  sim.reset(CODE);
   sim.state().scalar.write_x(1, 0x1015);
   expect_step(sim.step(), StepStatus::retired, jalr_same_reg);
   check(sim.state().scalar.pc == 0x1014 &&
-            sim.state().scalar.read_x(1) == kCode + 4,
+            sim.state().scalar.read_x(1) == CODE + 4,
         "jalr reads old rs1, clears bit zero, then writes rd");
 
   const auto jal_misaligned = j(2);
-  write_word(memory, kCode, jal_misaligned);
-  sim.reset(kCode);
+  write_word(memory, CODE, jal_misaligned);
+  sim.reset(CODE);
   sim.state().scalar.write_x(3, 0xface);
   expect_step(sim.step(), StepStatus::instruction_address_misaligned,
-              jal_misaligned, kCode + 2);
-  check(sim.state().scalar.pc == kCode &&
+              jal_misaligned, CODE + 2);
+  check(sim.state().scalar.pc == CODE &&
             sim.state().scalar.read_x(3) == 0xface,
         "misaligned jal does not write link register");
 
   const auto branch_misaligned = b(0, 2);
-  write_word(memory, kCode, branch_misaligned);
-  sim.reset(kCode);
+  write_word(memory, CODE, branch_misaligned);
+  sim.reset(CODE);
   sim.state().scalar.write_x(1, 7);
   sim.state().scalar.write_x(2, 7);
   expect_step(sim.step(), StepStatus::instruction_address_misaligned,
-              branch_misaligned, kCode + 2);
-  check(sim.state().scalar.pc == kCode,
+              branch_misaligned, CODE + 2);
+  check(sim.state().scalar.pc == CODE,
         "taken branch reports misaligned target at branch");
 
   const auto jalr_misaligned = i(0x67, 0, 0, 1, 1);
-  write_word(memory, kCode, jalr_misaligned);
-  sim.reset(kCode);
+  write_word(memory, CODE, jalr_misaligned);
+  sim.reset(CODE);
   sim.state().scalar.write_x(1, 0x1013);
   expect_step(sim.step(), StepStatus::instruction_address_misaligned,
               jalr_misaligned, 0x1012);
-  check(sim.state().scalar.pc == kCode &&
+  check(sim.state().scalar.pc == CODE &&
             sim.state().scalar.read_x(1) == 0x1013,
         "misaligned jalr preserves aliased link/source register");
 }
@@ -232,86 +232,86 @@ void test_loads() {
       std::byte{0x80}, std::byte{0xff}, std::byte{0xff}, std::byte{0xff},
       std::byte{0x44}, std::byte{0x33}, std::byte{0x22}, std::byte{0x11}};
   constexpr std::array cases{
-      RegisterCase{"lb sign", i(0x03, 0, 0), kData, 0,
+      RegisterCase{"lb sign", i(0x03, 0, 0), DATA, 0,
                    0xffffffffffffff80ull},
-      RegisterCase{"lh sign", i(0x03, 1, 0), kData, 0,
+      RegisterCase{"lh sign", i(0x03, 1, 0), DATA, 0,
                    0xffffffffffffff80ull},
-      RegisterCase{"lw sign", i(0x03, 2, 0), kData, 0,
+      RegisterCase{"lw sign", i(0x03, 2, 0), DATA, 0,
                    0xffffffffffffff80ull},
-      RegisterCase{"ld little endian", i(0x03, 3, 0), kData, 0,
+      RegisterCase{"ld little endian", i(0x03, 3, 0), DATA, 0,
                    0x11223344ffffff80ull},
-      RegisterCase{"lbu zero", i(0x03, 4, 0), kData, 0, 0x80},
-      RegisterCase{"lhu zero", i(0x03, 5, 0), kData, 0, 0xff80},
-      RegisterCase{"lwu zero", i(0x03, 6, 0), kData, 0, 0xffffff80},
-      RegisterCase{"negative offset", i(0x03, 3, -1), kData + 1, 0,
+      RegisterCase{"lbu zero", i(0x03, 4, 0), DATA, 0, 0x80},
+      RegisterCase{"lhu zero", i(0x03, 5, 0), DATA, 0, 0xff80},
+      RegisterCase{"lwu zero", i(0x03, 6, 0), DATA, 0, 0xffffff80},
+      RegisterCase{"negative offset", i(0x03, 3, -1), DATA + 1, 0,
                    0x11223344ffffff80ull},
   };
   for (const auto &test : cases) {
-    FlatMemory memory(kCode, 0x50);
-    write_word(memory, kCode, test.word);
-    check(memory.write(kData, data), "initialize load data");
+    FlatMemory memory(CODE, 0x50);
+    write_word(memory, CODE, test.word);
+    check(memory.write(DATA, data), "initialize load data");
     Simulator sim(memory);
-    sim.reset(kCode);
+    sim.reset(CODE);
     sim.state().scalar.write_x(1, test.lhs);
     expect_step(sim.step(), StepStatus::retired, test.word);
     if (sim.state().scalar.read_x(3) != test.expected ||
-        sim.state().scalar.pc != kCode + 4) {
+        sim.state().scalar.pc != CODE + 4) {
       throw std::runtime_error(std::string("execute ") + test.name);
     }
   }
 
-  FlatMemory memory(kCode, 0x50);
+  FlatMemory memory(CODE, 0x50);
   const auto load_x0 = i(0x03, 2, 0, 0);
-  write_word(memory, kCode, load_x0);
+  write_word(memory, CODE, load_x0);
   Simulator sim(memory);
-  sim.reset(kCode);
-  sim.state().scalar.write_x(1, kCode + 0x50);
-  expect_step(sim.step(), StepStatus::load_fault, load_x0, kCode + 0x50);
-  check(sim.state().scalar.pc == kCode &&
+  sim.reset(CODE);
+  sim.state().scalar.write_x(1, CODE + 0x50);
+  expect_step(sim.step(), StepStatus::load_fault, load_x0, CODE + 0x50);
+  check(sim.state().scalar.pc == CODE &&
             sim.state().scalar.read_x(0) == 0,
         "load into x0 still accesses memory and can fault");
 
   const auto misaligned = i(0x03, 1, 1);
-  write_word(memory, kCode, misaligned);
-  sim.reset(kCode);
-  sim.state().scalar.write_x(1, kData);
+  write_word(memory, CODE, misaligned);
+  sim.reset(CODE);
+  sim.state().scalar.write_x(1, DATA);
   sim.state().scalar.write_x(3, 0xface);
   expect_step(sim.step(), StepStatus::load_address_misaligned,
-              misaligned, kData + 1);
-  check(sim.state().scalar.pc == kCode &&
+              misaligned, DATA + 1);
+  check(sim.state().scalar.pc == CODE &&
             sim.state().scalar.read_x(3) == 0xface,
         "misaligned load preserves destination and pc");
 
   const auto fault = i(0x03, 3, 0);
-  write_word(memory, kCode, fault);
-  sim.reset(kCode);
-  sim.state().scalar.write_x(1, kCode + 0x50);
+  write_word(memory, CODE, fault);
+  sim.reset(CODE);
+  sim.state().scalar.write_x(1, CODE + 0x50);
   sim.state().scalar.write_x(3, 0xface);
-  expect_step(sim.step(), StepStatus::load_fault, fault, kCode + 0x50);
-  check(sim.state().scalar.pc == kCode &&
+  expect_step(sim.step(), StepStatus::load_fault, fault, CODE + 0x50);
+  check(sim.state().scalar.pc == CODE &&
             sim.state().scalar.read_x(3) == 0xface,
         "failed load preserves destination and pc");
 }
 
 void test_stores() {
   constexpr std::array cases{
-      RegisterCase{"sb", s(0, 0), kData, 0x8877665544332211ull, 1},
-      RegisterCase{"sh", s(1, 0), kData, 0x8877665544332211ull, 2},
-      RegisterCase{"sw", s(2, 0), kData, 0x8877665544332211ull, 4},
-      RegisterCase{"sd", s(3, 0), kData, 0x8877665544332211ull, 8},
-      RegisterCase{"negative offset", s(3, -8), kData + 8,
+      RegisterCase{"sb", s(0, 0), DATA, 0x8877665544332211ull, 1},
+      RegisterCase{"sh", s(1, 0), DATA, 0x8877665544332211ull, 2},
+      RegisterCase{"sw", s(2, 0), DATA, 0x8877665544332211ull, 4},
+      RegisterCase{"sd", s(3, 0), DATA, 0x8877665544332211ull, 8},
+      RegisterCase{"negative offset", s(3, -8), DATA + 8,
                    0x8877665544332211ull, 8},
   };
   for (const auto &test : cases) {
-    FlatMemory memory(kCode, 0x50);
-    write_word(memory, kCode, test.word);
+    FlatMemory memory(CODE, 0x50);
+    write_word(memory, CODE, test.word);
     Simulator sim(memory);
-    sim.reset(kCode);
+    sim.reset(CODE);
     sim.state().scalar.write_x(1, test.lhs);
     sim.state().scalar.write_x(2, test.rhs);
     expect_step(sim.step(), StepStatus::retired, test.word);
     std::array<std::byte, 8> bytes{};
-    check(memory.read(kData, bytes), "read stored bytes");
+    check(memory.read(DATA, bytes), "read stored bytes");
     for (std::size_t index = 0; index < bytes.size(); ++index) {
       const auto expected = index < test.expected
                                 ? static_cast<std::byte>((test.rhs >>
@@ -321,33 +321,33 @@ void test_stores() {
         throw std::runtime_error(std::string("execute ") + test.name);
       }
     }
-    check(sim.state().scalar.pc == kCode + 4, "store advances pc");
+    check(sim.state().scalar.pc == CODE + 4, "store advances pc");
   }
 
-  FlatMemory memory(kCode, 0x44);
+  FlatMemory memory(CODE, 0x44);
   const auto misaligned = s(2, 1);
-  write_word(memory, kCode, misaligned);
+  write_word(memory, CODE, misaligned);
   Simulator sim(memory);
-  sim.reset(kCode);
-  sim.state().scalar.write_x(1, kData);
+  sim.reset(CODE);
+  sim.state().scalar.write_x(1, DATA);
   sim.state().scalar.write_x(2, 0x12345678);
   expect_step(sim.step(), StepStatus::store_address_misaligned,
-              misaligned, kData + 1);
-  check(sim.state().scalar.pc == kCode,
+              misaligned, DATA + 1);
+  check(sim.state().scalar.pc == CODE,
         "misaligned store preserves pc");
 
   const auto crossing = s(3, 0);
-  write_word(memory, kCode, crossing);
+  write_word(memory, CODE, crossing);
   constexpr std::array<std::byte, 4> marker{
       std::byte{0xaa}, std::byte{0xbb}, std::byte{0xcc}, std::byte{0xdd}};
-  check(memory.write(kData, marker), "initialize final memory bytes");
-  sim.reset(kCode);
-  sim.state().scalar.write_x(1, kData);
+  check(memory.write(DATA, marker), "initialize final memory bytes");
+  sim.reset(CODE);
+  sim.state().scalar.write_x(1, DATA);
   sim.state().scalar.write_x(2, 0x8877665544332211ull);
-  expect_step(sim.step(), StepStatus::store_fault, crossing, kData);
+  expect_step(sim.step(), StepStatus::store_fault, crossing, DATA);
   std::array<std::byte, 4> after{};
-  check(memory.read(kData, after), "read memory after store fault");
-  check(after == marker && sim.state().scalar.pc == kCode &&
+  check(memory.read(DATA, after), "read memory after store fault");
+  check(after == marker && sim.state().scalar.pc == CODE &&
             sim.state().scalar.read_x(2) == 0x8877665544332211ull,
         "crossing store fails atomically and preserves state");
 }
@@ -418,27 +418,27 @@ void test_m_extension() {
 }
 
 void test_environment_boundary() {
-  FlatMemory memory(kCode, 4);
+  FlatMemory memory(CODE, 4);
   Simulator sim(memory);
   constexpr std::array cases{
       std::pair{0x00000073u, StepStatus::environment_call},
       std::pair{0x00100073u, StepStatus::breakpoint},
   };
   for (const auto &[word, status] : cases) {
-    write_word(memory, kCode, word);
-    sim.reset(kCode);
+    write_word(memory, CODE, word);
+    sim.reset(CODE);
     sim.state().scalar.write_x(10, 0xfeed);
     expect_step(sim.step(), status, word);
-    check(sim.state().scalar.pc == kCode &&
+    check(sim.state().scalar.pc == CODE &&
               sim.state().scalar.read_x(10) == 0xfeed,
           "environment boundary preserves architectural state");
   }
 
   constexpr std::uint32_t fence = 0x0ff0000fu;
-  write_word(memory, kCode, fence);
-  sim.reset(kCode);
+  write_word(memory, CODE, fence);
+  sim.reset(CODE);
   expect_step(sim.step(), StepStatus::retired, fence);
-  check(sim.state().scalar.pc == kCode + 4,
+  check(sim.state().scalar.pc == CODE + 4,
         "fence retires with synchronous memory");
 }
 
