@@ -61,8 +61,7 @@ bool execute_tadd(const ElementwiseBinaryInstruction &instr, State &state) {
   MatrixView<const std::uint8_t> rhs(
       std::span<const std::uint8_t>(state.t[rhs_index]), rhs_config.rows,
       rhs_config.cols, rhs_config.layout);
-  if (!dst.valid() || !lhs.valid() || !rhs.valid())
-    return false;
+  if (!dst.valid() || !lhs.valid() || !rhs.valid()) return false;
 
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
@@ -99,10 +98,8 @@ ExecuteResult execute(const DecodedInstr &instr, State &state, Memory &memory) {
   case ScalarOp::divw:
   case ScalarOp::divuw:
   case ScalarOp::remw:
-  case ScalarOp::remuw:
-    return execute_rv64m(instr, state.scalar);
-  default:
-    return execute_rv64i(instr, state.scalar, memory);
+  case ScalarOp::remuw: return execute_rv64m(instr, state.scalar);
+  default: return execute_rv64i(instr, state.scalar, memory);
   }
 }
 

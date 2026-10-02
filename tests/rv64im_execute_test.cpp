@@ -33,15 +33,15 @@ constexpr std::uint32_t r(std::uint32_t opcode, std::uint32_t funct3,
 constexpr std::uint32_t i(std::uint32_t opcode, std::uint32_t funct3,
                           std::int32_t imm, std::uint32_t rd = 3,
                           std::uint32_t rs1 = 1) {
-  return ((static_cast<std::uint32_t>(imm) & 0xfffu) << 20) |
-         (rs1 << 15) | (funct3 << 12) | (rd << 7) | opcode;
+  return ((static_cast<std::uint32_t>(imm) & 0xfffu) << 20) | (rs1 << 15) |
+         (funct3 << 12) | (rd << 7) | opcode;
 }
 
 constexpr std::uint32_t s(std::uint32_t funct3, std::int32_t imm,
                           std::uint32_t rs1 = 1, std::uint32_t rs2 = 2) {
   const auto bits = static_cast<std::uint32_t>(imm) & 0xfffu;
-  return ((bits >> 5) << 25) | (rs2 << 20) | (rs1 << 15) |
-         (funct3 << 12) | ((bits & 0x1fu) << 7) | 0x23u;
+  return ((bits >> 5) << 25) | (rs2 << 20) | (rs1 << 15) | (funct3 << 12) |
+         ((bits & 0x1fu) << 7) | 0x23u;
 }
 
 constexpr std::uint32_t b(std::uint32_t funct3, std::int32_t imm,
@@ -67,8 +67,7 @@ constexpr std::uint32_t j(std::int32_t imm, std::uint32_t rd = 3) {
 void expect_step(const StepResult &result, StepStatus status,
                  std::uint32_t word,
                  std::optional<std::uint64_t> fault_address = std::nullopt) {
-  check(result.status == status && result.pc == CODE &&
-            result.instr == word &&
+  check(result.status == status && result.pc == CODE && result.instr == word &&
             result.fault_address == fault_address,
         "step status, instruction, or fault address");
 }
@@ -140,8 +139,7 @@ void test_integer_arithmetic() {
   sim.state().scalar.write_x(1, 4);
   sim.state().scalar.write_x(2, 5);
   expect_step(sim.step(), StepStatus::retired, 0x00208033u);
-  check(sim.state().scalar.read_x(0) == 0 &&
-            sim.state().scalar.pc == CODE + 4,
+  check(sim.state().scalar.read_x(0) == 0 && sim.state().scalar.pc == CODE + 4,
         "write to x0 is discarded");
 }
 
@@ -149,8 +147,8 @@ void test_control_flow() {
   FlatMemory memory(CODE, 4);
   Simulator sim(memory);
 
-  const auto run = [&](std::uint32_t word, std::uint64_t lhs,
-                       std::uint64_t rhs, std::uint64_t expected_pc,
+  const auto run = [&](std::uint32_t word, std::uint64_t lhs, std::uint64_t rhs,
+                       std::uint64_t expected_pc,
                        std::uint64_t expected_rd = 0xface) {
     write_word(memory, CODE, word);
     sim.reset(CODE);
@@ -166,13 +164,13 @@ void test_control_flow() {
   run(u(0x37, 0x80000000u), 0, 0, CODE + 4, SIGN32);
   run(u(0x17, 0xfffff000u), 0, 0, CODE + 4, 0);
   run(j(8), 0, 0, CODE + 8, CODE + 4);
-  run(b(0, 8), 7, 7, CODE + 8);                 // beq
-  run(b(1, 8), 7, 8, CODE + 8);                 // bne
-  run(b(4, 8), UINT64_MAX, 1, CODE + 8);       // blt
-  run(b(5, 8), 1, UINT64_MAX, CODE + 8);       // bge
-  run(b(6, 8), 1, UINT64_MAX, CODE + 8);       // bltu
-  run(b(7, 8), UINT64_MAX, 1, CODE + 8);       // bgeu
-  run(b(0, 2), 1, 2, CODE + 4);                 // Untaken: no target trap.
+  run(b(0, 8), 7, 7, CODE + 8);          // beq
+  run(b(1, 8), 7, 8, CODE + 8);          // bne
+  run(b(4, 8), UINT64_MAX, 1, CODE + 8); // blt
+  run(b(5, 8), 1, UINT64_MAX, CODE + 8); // bge
+  run(b(6, 8), 1, UINT64_MAX, CODE + 8); // bltu
+  run(b(7, 8), UINT64_MAX, 1, CODE + 8); // bgeu
+  run(b(0, 2), 1, 2, CODE + 4);          // Untaken: no target trap.
 
   const auto jalr_same_reg = i(0x67, 0, 0, 1, 1);
   write_word(memory, CODE, jalr_same_reg);
@@ -189,8 +187,7 @@ void test_control_flow() {
   sim.state().scalar.write_x(3, 0xface);
   expect_step(sim.step(), StepStatus::instruction_address_misaligned,
               jal_misaligned, CODE + 2);
-  check(sim.state().scalar.pc == CODE &&
-            sim.state().scalar.read_x(3) == 0xface,
+  check(sim.state().scalar.pc == CODE && sim.state().scalar.read_x(3) == 0xface,
         "misaligned jal does not write link register");
 
   const auto branch_misaligned = b(0, 2);
@@ -209,8 +206,7 @@ void test_control_flow() {
   sim.state().scalar.write_x(1, 0x1013);
   expect_step(sim.step(), StepStatus::instruction_address_misaligned,
               jalr_misaligned, 0x1012);
-  check(sim.state().scalar.pc == CODE &&
-            sim.state().scalar.read_x(1) == 0x1013,
+  check(sim.state().scalar.pc == CODE && sim.state().scalar.read_x(1) == 0x1013,
         "misaligned jalr preserves aliased link/source register");
 }
 
@@ -219,12 +215,9 @@ void test_loads() {
       std::byte{0x80}, std::byte{0xff}, std::byte{0xff}, std::byte{0xff},
       std::byte{0x44}, std::byte{0x33}, std::byte{0x22}, std::byte{0x11}};
   constexpr std::array cases{
-      RegisterCase{"lb sign", i(0x03, 0, 0), DATA, 0,
-                   0xffffffffffffff80ull},
-      RegisterCase{"lh sign", i(0x03, 1, 0), DATA, 0,
-                   0xffffffffffffff80ull},
-      RegisterCase{"lw sign", i(0x03, 2, 0), DATA, 0,
-                   0xffffffffffffff80ull},
+      RegisterCase{"lb sign", i(0x03, 0, 0), DATA, 0, 0xffffffffffffff80ull},
+      RegisterCase{"lh sign", i(0x03, 1, 0), DATA, 0, 0xffffffffffffff80ull},
+      RegisterCase{"lw sign", i(0x03, 2, 0), DATA, 0, 0xffffffffffffff80ull},
       RegisterCase{"ld little endian", i(0x03, 3, 0), DATA, 0,
                    0x11223344ffffff80ull},
       RegisterCase{"lbu zero", i(0x03, 4, 0), DATA, 0, 0x80},
@@ -254,8 +247,7 @@ void test_loads() {
   sim.reset(CODE);
   sim.state().scalar.write_x(1, CODE + 0x50);
   expect_step(sim.step(), StepStatus::load_fault, load_x0, CODE + 0x50);
-  check(sim.state().scalar.pc == CODE &&
-            sim.state().scalar.read_x(0) == 0,
+  check(sim.state().scalar.pc == CODE && sim.state().scalar.read_x(0) == 0,
         "load into x0 still accesses memory and can fault");
 
   const auto misaligned = i(0x03, 1, 1);
@@ -263,10 +255,9 @@ void test_loads() {
   sim.reset(CODE);
   sim.state().scalar.write_x(1, DATA);
   sim.state().scalar.write_x(3, 0xface);
-  expect_step(sim.step(), StepStatus::load_address_misaligned,
-              misaligned, DATA + 1);
-  check(sim.state().scalar.pc == CODE &&
-            sim.state().scalar.read_x(3) == 0xface,
+  expect_step(sim.step(), StepStatus::load_address_misaligned, misaligned,
+              DATA + 1);
+  check(sim.state().scalar.pc == CODE && sim.state().scalar.read_x(3) == 0xface,
         "misaligned load preserves destination and pc");
 
   const auto fault = i(0x03, 3, 0);
@@ -275,8 +266,7 @@ void test_loads() {
   sim.state().scalar.write_x(1, CODE + 0x50);
   sim.state().scalar.write_x(3, 0xface);
   expect_step(sim.step(), StepStatus::load_fault, fault, CODE + 0x50);
-  check(sim.state().scalar.pc == CODE &&
-            sim.state().scalar.read_x(3) == 0xface,
+  check(sim.state().scalar.pc == CODE && sim.state().scalar.read_x(3) == 0xface,
         "failed load preserves destination and pc");
 }
 
@@ -286,8 +276,8 @@ void test_stores() {
       RegisterCase{"sh", s(1, 0), DATA, 0x8877665544332211ull, 2},
       RegisterCase{"sw", s(2, 0), DATA, 0x8877665544332211ull, 4},
       RegisterCase{"sd", s(3, 0), DATA, 0x8877665544332211ull, 8},
-      RegisterCase{"negative offset", s(3, -8), DATA + 8,
-                   0x8877665544332211ull, 8},
+      RegisterCase{"negative offset", s(3, -8), DATA + 8, 0x8877665544332211ull,
+                   8},
   };
   for (const auto &test : cases) {
     FlatMemory memory(CODE, 0x50);
@@ -300,10 +290,10 @@ void test_stores() {
     std::array<std::byte, 8> bytes{};
     check(memory.read(DATA, bytes), "read stored bytes");
     for (std::size_t index = 0; index < bytes.size(); ++index) {
-      const auto expected = index < test.expected
-                                ? static_cast<std::byte>((test.rhs >>
-                                                          (8 * index)) & 0xffu)
-                                : std::byte{0};
+      const auto expected =
+          index < test.expected
+              ? static_cast<std::byte>((test.rhs >> (8 * index)) & 0xffu)
+              : std::byte{0};
       if (bytes[index] != expected) {
         throw std::runtime_error(std::string("execute ") + test.name);
       }
@@ -318,15 +308,14 @@ void test_stores() {
   sim.reset(CODE);
   sim.state().scalar.write_x(1, DATA);
   sim.state().scalar.write_x(2, 0x12345678);
-  expect_step(sim.step(), StepStatus::store_address_misaligned,
-              misaligned, DATA + 1);
-  check(sim.state().scalar.pc == CODE,
-        "misaligned store preserves pc");
+  expect_step(sim.step(), StepStatus::store_address_misaligned, misaligned,
+              DATA + 1);
+  check(sim.state().scalar.pc == CODE, "misaligned store preserves pc");
 
   const auto crossing = s(3, 0);
   write_word(memory, CODE, crossing);
-  constexpr std::array<std::byte, 4> marker{
-      std::byte{0xaa}, std::byte{0xbb}, std::byte{0xcc}, std::byte{0xdd}};
+  constexpr std::array<std::byte, 4> marker{std::byte{0xaa}, std::byte{0xbb},
+                                            std::byte{0xcc}, std::byte{0xdd}};
   check(memory.write(DATA, marker), "initialize final memory bytes");
   sim.reset(CODE);
   sim.state().scalar.write_x(1, DATA);
@@ -343,61 +332,47 @@ void test_m_extension() {
   constexpr std::array cases{
       RegisterCase{"mul", r(0x33, 0, 1), 7, 3, 21},
       RegisterCase{"mul low wrap", r(0x33, 0, 1), SIGN64, 2, 0},
-      RegisterCase{"mulh signed", r(0x33, 1, 1), UINT64_MAX,
-                   UINT64_MAX, 0},
-      RegisterCase{"mulhsu", r(0x33, 2, 1), UINT64_MAX,
-                   UINT64_MAX, UINT64_MAX},
-      RegisterCase{"mulhu", r(0x33, 3, 1), UINT64_MAX,
-                   UINT64_MAX, UINT64_MAX - 1},
+      RegisterCase{"mulh signed", r(0x33, 1, 1), UINT64_MAX, UINT64_MAX, 0},
+      RegisterCase{"mulhsu", r(0x33, 2, 1), UINT64_MAX, UINT64_MAX, UINT64_MAX},
+      RegisterCase{"mulhu", r(0x33, 3, 1), UINT64_MAX, UINT64_MAX,
+                   UINT64_MAX - 1},
       RegisterCase{"mulh mixed sign and limb carries", r(0x33, 1, 1),
                    0x12345678abcdef01ull, 0xfedcba9876543210ull,
                    0xffeb49923cad2a2cull},
       RegisterCase{"mulhsu mixed sign and limb carries", r(0x33, 2, 1),
                    0xfedcba9876543210ull, 0x12345678abcdef01ull,
                    0xffeb49923cad2a2cull},
-      RegisterCase{"mulhu limb carries", r(0x33, 3, 1),
-                   0x12345678abcdef01ull, 0xfedcba9876543210ull,
-                   0x121fa00ae87b192dull},
-      RegisterCase{"mulh both negative", r(0x33, 1, 1),
-                   0x87654321fedcba98ull, 0xfedcba9876543210ull,
-                   0x8938972c60de2cull},
+      RegisterCase{"mulhu limb carries", r(0x33, 3, 1), 0x12345678abcdef01ull,
+                   0xfedcba9876543210ull, 0x121fa00ae87b192dull},
+      RegisterCase{"mulh both negative", r(0x33, 1, 1), 0x87654321fedcba98ull,
+                   0xfedcba9876543210ull, 0x8938972c60de2cull},
       RegisterCase{"div signed", r(0x33, 4, 1), UINT64_MAX - 20, 4,
                    UINT64_MAX - 4},
       RegisterCase{"divu", r(0x33, 5, 1), 21, 4, 5},
-      RegisterCase{"rem signed", r(0x33, 6, 1), UINT64_MAX - 20, 4,
-                   UINT64_MAX},
+      RegisterCase{"rem signed", r(0x33, 6, 1), UINT64_MAX - 20, 4, UINT64_MAX},
       RegisterCase{"remu", r(0x33, 7, 1), 21, 4, 1},
       RegisterCase{"mulw sign", r(0x3b, 0, 1), 0x40000000, 2, SIGN32},
-      RegisterCase{"divw", r(0x3b, 4, 1), UINT64_MAX - 20, 4,
-                   UINT64_MAX - 4},
+      RegisterCase{"divw", r(0x3b, 4, 1), UINT64_MAX - 20, 4, UINT64_MAX - 4},
       RegisterCase{"divuw", r(0x3b, 5, 1), 0x80000000, 2, 0x40000000},
       RegisterCase{"divuw ignores upper bits", r(0x3b, 5, 1),
-                   0x12345678ffffffffull, 0xffff000000000001ull,
-                   UINT64_MAX},
-      RegisterCase{"remw", r(0x3b, 6, 1), UINT64_MAX - 20, 4,
-                   UINT64_MAX},
+                   0x12345678ffffffffull, 0xffff000000000001ull, UINT64_MAX},
+      RegisterCase{"remw", r(0x3b, 6, 1), UINT64_MAX - 20, 4, UINT64_MAX},
       RegisterCase{"remuw", r(0x3b, 7, 1), 0xffffffff, 2, 1},
       RegisterCase{"remuw sign extends word result", r(0x3b, 7, 1),
-                   0x1234567880000000ull, 0xffff0000ffffffffull,
-                   SIGN32},
-      RegisterCase{"div overflow", r(0x33, 4, 1), SIGN64,
-                   UINT64_MAX, SIGN64},
-      RegisterCase{"rem overflow", r(0x33, 6, 1), SIGN64,
-                   UINT64_MAX, 0},
+                   0x1234567880000000ull, 0xffff0000ffffffffull, SIGN32},
+      RegisterCase{"div overflow", r(0x33, 4, 1), SIGN64, UINT64_MAX, SIGN64},
+      RegisterCase{"rem overflow", r(0x33, 6, 1), SIGN64, UINT64_MAX, 0},
       RegisterCase{"div zero", r(0x33, 4, 1), 42, 0, UINT64_MAX},
       RegisterCase{"divu zero", r(0x33, 5, 1), 42, 0, UINT64_MAX},
       RegisterCase{"rem zero", r(0x33, 6, 1), 42, 0, 42},
       RegisterCase{"remu zero", r(0x33, 7, 1), 42, 0, 42},
-      RegisterCase{"divw overflow", r(0x3b, 4, 1), 0x80000000,
-                   UINT64_MAX, SIGN32},
-      RegisterCase{"remw overflow", r(0x3b, 6, 1), 0x80000000,
-                   UINT64_MAX, 0},
+      RegisterCase{"divw overflow", r(0x3b, 4, 1), 0x80000000, UINT64_MAX,
+                   SIGN32},
+      RegisterCase{"remw overflow", r(0x3b, 6, 1), 0x80000000, UINT64_MAX, 0},
       RegisterCase{"divw zero", r(0x3b, 4, 1), 42, 0, UINT64_MAX},
       RegisterCase{"divuw zero", r(0x3b, 5, 1), 42, 0, UINT64_MAX},
-      RegisterCase{"remw zero", r(0x3b, 6, 1), 0x80000000, 0,
-                   SIGN32},
-      RegisterCase{"remuw zero", r(0x3b, 7, 1), 0x80000000, 0,
-                   SIGN32},
+      RegisterCase{"remw zero", r(0x3b, 6, 1), 0x80000000, 0, SIGN32},
+      RegisterCase{"remuw zero", r(0x3b, 7, 1), 0x80000000, 0, SIGN32},
   };
   for (const auto &test : cases) {
     check_register_case(test);

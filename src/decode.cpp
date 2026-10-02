@@ -34,10 +34,8 @@ DecodeResult decode_binary_add(const encoding::NpuR3 &fields,
         {NpuDomain::tile, fields.src1},
         NpuRegister{NpuDomain::tile, fields.src2}};
   case NpuDomain::acc:
-  case NpuDomain::vec32:
-    return DecodeError::not_implemented;
-  case NpuDomain::vec8:
-    return DecodeError::illegal;
+  case NpuDomain::vec32: return DecodeError::not_implemented;
+  case NpuDomain::vec8: return DecodeError::illegal;
   }
   return DecodeError::illegal;
 }
@@ -51,8 +49,7 @@ DecodeResult decode_binary(std::uint32_t word) {
   }
 
   switch (static_cast<ElementwiseBinaryOp>(fields.funct4)) {
-  case ElementwiseBinaryOp::add:
-    return decode_binary_add(fields, selector);
+  case ElementwiseBinaryOp::add: return decode_binary_add(fields, selector);
   case ElementwiseBinaryOp::sub:
   case ElementwiseBinaryOp::mul:
   case ElementwiseBinaryOp::div:
@@ -63,19 +60,15 @@ DecodeResult decode_binary(std::uint32_t word) {
   case ElementwiseBinaryOp::bit_xor:
   case ElementwiseBinaryOp::shl:
   case ElementwiseBinaryOp::shr:
-  case ElementwiseBinaryOp::sra:
-    return DecodeError::not_implemented;
-  default:
-    return DecodeError::illegal;
+  case ElementwiseBinaryOp::sra: return DecodeError::not_implemented;
+  default: return DecodeError::illegal;
   }
 }
 
 DecodeResult decode_elementwise(std::uint32_t word) {
   switch (static_cast<ElementwiseMajor>(encoding::field<31, 28>(word))) {
-  case ElementwiseMajor::binary:
-    return decode_binary(word);
-  default:
-    return DecodeError::not_implemented;
+  case ElementwiseMajor::binary: return decode_binary(word);
+  default: return DecodeError::not_implemented;
   }
 }
 
@@ -83,13 +76,10 @@ DecodeResult decode_elementwise(std::uint32_t word) {
 
 DecodeResult decode(std::uint32_t word) {
   switch (static_cast<Quadrant>(encoding::field<1, 0>(word))) {
-  case Quadrant::scalar:
-    return decode_rv64im(word);
-  case Quadrant::elementwise:
-    return decode_elementwise(word);
+  case Quadrant::scalar: return decode_rv64im(word);
+  case Quadrant::elementwise: return decode_elementwise(word);
   case Quadrant::data_movement:
-  case Quadrant::cross_domain:
-    return DecodeError::not_implemented;
+  case Quadrant::cross_domain: return DecodeError::not_implemented;
   }
   return DecodeError::illegal;
 }

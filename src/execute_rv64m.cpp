@@ -21,8 +21,7 @@ std::uint64_t multiply_high_unsigned(std::uint64_t lhs, std::uint64_t rhs) {
   const auto p01 = a0 * b1;
   const auto p10 = a1 * b0;
   const auto p11 = a1 * b1;
-  const auto middle = (p00 >> 32) + (p01 & 0xffffffffu) +
-                      (p10 & 0xffffffffu);
+  const auto middle = (p00 >> 32) + (p01 & 0xffffffffu) + (p10 & 0xffffffffu);
   return p11 + (p01 >> 32) + (p10 >> 32) + (middle >> 32);
 }
 
@@ -60,8 +59,7 @@ std::uint32_t remainder_signed_word(std::uint32_t lhs, std::uint32_t rhs) {
 
 } // namespace
 
-ExecuteResult execute_rv64m(const DecodedInstr &instr,
-                            ScalarState &scalar) {
+ExecuteResult execute_rv64m(const DecodedInstr &instr, ScalarState &scalar) {
   const auto &r = instr.regs;
   const auto lhs = scalar.read_x(r.src1);
   const auto rhs = scalar.read_x(r.src2);

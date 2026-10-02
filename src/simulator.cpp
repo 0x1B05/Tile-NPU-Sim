@@ -60,15 +60,14 @@ StepResult Simulator::step() {
             pc, instr};
   }
   const auto *scalar_instr = std::get_if<DecodedInstr>(&decoded);
-  const auto execution = scalar_instr
-                             ? execute(*scalar_instr, state_, memory_)
-                             : execute(std::get<DecodedNpuInstr>(decoded),
-                                       state_, memory_);
+  const auto execution =
+      scalar_instr
+          ? execute(*scalar_instr, state_, memory_)
+          : execute(std::get<DecodedNpuInstr>(decoded), state_, memory_);
   if (execution.status == ExecuteStatus::retired) {
     state_.scalar.pc = execution.next_pc;
   }
-  return {step_status(execution.status), pc, instr,
-          execution.fault_address};
+  return {step_status(execution.status), pc, instr, execution.fault_address};
 }
 
 } // namespace tile_npu

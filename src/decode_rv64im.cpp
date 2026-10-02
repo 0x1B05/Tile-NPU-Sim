@@ -29,8 +29,7 @@ DecodedInstr r_instr(ScalarOp op, const encoding::RiscvR &r) {
   return {op, {r.dest, r.src1, r.src2}};
 }
 
-DecodedInstr i_instr(ScalarOp op, const encoding::RiscvI &i,
-                     std::int32_t imm) {
+DecodedInstr i_instr(ScalarOp op, const encoding::RiscvI &i, std::int32_t imm) {
   return {op, {i.dest, i.src1, 0}, imm};
 }
 
@@ -89,7 +88,7 @@ DecodeResult decode_branch(std::uint32_t word) {
 DecodeResult decode_op_imm(std::uint32_t word) {
   const auto i = encoding::RiscvI::from(word);
   switch (i.funct3) {
-  // clang-format off
+    // clang-format off
   case 0: return i_instr(ScalarOp::addi,  i);
   case 2: return i_instr(ScalarOp::slti,  i);
   case 3: return i_instr(ScalarOp::sltiu, i);
@@ -104,12 +103,9 @@ DecodeResult decode_op_imm(std::uint32_t word) {
     return DecodeError::illegal;
   case 5:
     switch (encoding::field<31, 26>(word)) {
-    case 0:
-      return i_instr(ScalarOp::srli, i, encoding::field<25, 20>(word));
-    case 0x10:
-      return i_instr(ScalarOp::srai, i, encoding::field<25, 20>(word));
-    default:
-      return DecodeError::illegal;
+    case 0: return i_instr(ScalarOp::srli, i, encoding::field<25, 20>(word));
+    case 0x10: return i_instr(ScalarOp::srai, i, encoding::field<25, 20>(word));
+    default: return DecodeError::illegal;
     }
   default: return DecodeError::illegal;
   }
@@ -126,12 +122,10 @@ DecodeResult decode_op_imm_32(std::uint32_t word) {
     return DecodeError::illegal;
   case 5:
     switch (encoding::field<31, 25>(word)) {
-    case 0:
-      return i_instr(ScalarOp::srliw, i, encoding::field<24, 20>(word));
+    case 0: return i_instr(ScalarOp::srliw, i, encoding::field<24, 20>(word));
     case 0x20:
       return i_instr(ScalarOp::sraiw, i, encoding::field<24, 20>(word));
-    default:
-      return DecodeError::illegal;
+    default: return DecodeError::illegal;
     }
   default: return DecodeError::illegal;
   }
@@ -206,8 +200,10 @@ DecodeResult decode_op_32(std::uint32_t word) {
 DecodeResult decode_misc_mem(std::uint32_t word) {
   if (encoding::field<14, 12>(word) == 0) {
     // Base implementations ignore FENCE's reserved rd, rs1, and fm settings.
-    return DecodedInstr{ScalarOp::fence, {0, 0, 0},
-                              static_cast<std::int32_t>(encoding::field<31, 20>(word))};
+    return DecodedInstr{
+        ScalarOp::fence,
+        {0, 0, 0},
+        static_cast<std::int32_t>(encoding::field<31, 20>(word))};
   }
   return DecodeError::not_implemented; // Zifencei and other extensions
 }
@@ -216,7 +212,8 @@ DecodeResult decode_system(std::uint32_t word) {
   switch (word) {
   case 0x00000073: return DecodedInstr{ScalarOp::ecall, {0, 0, 0}};
   case 0x00100073: return DecodedInstr{ScalarOp::ebreak, {0, 0, 0}};
-  default: return DecodeError::not_implemented; // CSR and privileged instructions
+  default:
+    return DecodeError::not_implemented; // CSR and privileged instructions
   }
 }
 
@@ -244,7 +241,7 @@ DecodeResult decode_rv64im(std::uint32_t word) {
     return i.funct3 == 0 ? DecodeResult{i_instr(ScalarOp::jalr, i)}
                          : DecodeResult{DecodeError::illegal};
   }
-  // clang-format off
+    // clang-format off
   case Opcode::load:      return decode_load(word);
   case Opcode::misc_mem:  return decode_misc_mem(word);
   case Opcode::op_imm:    return decode_op_imm(word);

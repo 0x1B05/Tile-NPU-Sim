@@ -42,5 +42,6 @@ void test_descriptor_view() {
   underflow.base_addr = 0;
   underflow.stride_bytes = -1;
   tile_npu::ConstVectorDescriptorView underflow_view(underflow);
-  check(!underflow_view.address(1), "descriptor view rejects address underflow");
+  check(!underflow_view.address(1),
+        "descriptor view rejects address underflow");
 }

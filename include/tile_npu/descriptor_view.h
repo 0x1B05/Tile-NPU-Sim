@@ -62,8 +62,7 @@ public:
   template <typename D = Descriptor>
   std::optional<std::uint64_t> address(std::size_t row, std::size_t col) const {
     static_assert(std::is_same_v<std::remove_const_t<D>, MatrixDescriptor>);
-    if (!valid())
-      return std::nullopt;
+    if (!valid()) return std::nullopt;
     // clang-format off
     const auto offset =
         std::int64_t{descriptor_->row_stride_bytes} * static_cast<std::int64_t>(row) +
@@ -75,8 +74,7 @@ public:
   template <typename D = Descriptor>
   std::optional<std::uint64_t> address(std::size_t index) const {
     static_assert(std::is_same_v<std::remove_const_t<D>, VectorDescriptor>);
-    if (!valid())
-      return std::nullopt;
+    if (!valid()) return std::nullopt;
     const auto offset = std::int64_t{descriptor_->stride_bytes} *
                         static_cast<std::int64_t>(index);
     return detail::add_signed_offset(descriptor_->base_addr, offset);
@@ -86,18 +84,15 @@ public:
   bool post_increment(std::size_t rows, std::size_t cols) {
     static_assert(std::is_same_v<std::remove_const_t<D>, MatrixDescriptor>);
     static_assert(!std::is_const_v<D>);
-    if (!valid())
-      return false;
+    if (!valid()) return false;
     const auto mode = static_cast<std::uint8_t>(descriptor_->flags & 0x3u);
-    if (mode == 0)
-      return true;
+    if (mode == 0) return true;
     const auto index = mode == 1 ? rows : cols;
     const auto stride = mode == 1 ? descriptor_->row_stride_bytes
                                   : descriptor_->col_stride_bytes;
     const auto offset = std::int64_t{stride} * static_cast<std::int64_t>(index);
     const auto next = detail::add_signed_offset(descriptor_->base_addr, offset);
-    if (!next)
-      return false;
+    if (!next) return false;
     descriptor_->base_addr = *next;
     return true;
   }
@@ -105,13 +100,11 @@ public:
   template <typename D = Descriptor> bool post_increment(std::size_t len) {
     static_assert(std::is_same_v<std::remove_const_t<D>, VectorDescriptor>);
     static_assert(!std::is_const_v<D>);
-    if (!valid() || (descriptor_->flags & 0x1u) == 0)
-      return valid();
+    if (!valid() || (descriptor_->flags & 0x1u) == 0) return valid();
     const auto offset = std::int64_t{descriptor_->stride_bytes} *
                         static_cast<std::int64_t>(len);
     const auto next = detail::add_signed_offset(descriptor_->base_addr, offset);
-    if (!next)
-      return false;
+    if (!next) return false;
     descriptor_->base_addr = *next;
     return true;
   }

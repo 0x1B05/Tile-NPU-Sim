@@ -24,8 +24,7 @@ void test_decode() {
   const auto add = tile_npu::decode(0x002081b3u); // add x3, x1, x2
   const auto *add_instr = std::get_if<tile_npu::DecodedInstr>(&add);
   check(add_instr && add_instr->op == tile_npu::ScalarOp::add &&
-            add_instr->regs.dest == 3 &&
-            add_instr->regs.src1 == 1 &&
+            add_instr->regs.dest == 3 && add_instr->regs.src1 == 1 &&
             add_instr->regs.src2 == 2,
         "decode RV64I add");
 
@@ -103,11 +102,10 @@ void test_memory_and_step() {
   sim.reset(0x1000);
   sim.state().scalar.write_x(1, 9);
   const auto result = sim.step();
-  check(result.status == tile_npu::StepStatus::retired &&
-            result.pc == 0x1000 && result.instr == 0x00000013u,
+  check(result.status == tile_npu::StepStatus::retired && result.pc == 0x1000 &&
+            result.instr == 0x00000013u,
         "fetch a little-endian 32-bit instruction");
-  check(sim.state().scalar.pc == 0x1004 &&
-            sim.state().scalar.read_x(1) == 9,
+  check(sim.state().scalar.pc == 0x1004 && sim.state().scalar.read_x(1) == 9,
         "addi x0, x0, 0 advances PC without changing registers");
 
   sim.reset(0x1004);
@@ -118,8 +116,8 @@ void test_memory_and_step() {
 
   sim.reset(0x1008);
   const auto fault = sim.step();
-  check(fault.status == tile_npu::StepStatus::fetch_fault &&
-            !fault.instr && sim.state().scalar.pc == 0x1008,
+  check(fault.status == tile_npu::StepStatus::fetch_fault && !fault.instr &&
+            sim.state().scalar.pc == 0x1008,
         "failed fetch leaves PC unchanged");
   sim.reset(0x1002);
   const auto misaligned = sim.step();

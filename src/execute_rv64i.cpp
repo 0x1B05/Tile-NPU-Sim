@@ -54,12 +54,12 @@ std::size_t store_width(ScalarOp op) {
 }
 // clang-format on
 
-ExecuteResult execute_load(const DecodedInstr &instr,
-                           ScalarState &scalar, Memory &memory) {
+ExecuteResult execute_load(const DecodedInstr &instr, ScalarState &scalar,
+                           Memory &memory) {
   const auto pc = scalar.pc;
   const auto width = load_width(instr.op);
-  const auto address = scalar.read_x(instr.regs.src1) +
-                       static_cast<std::uint64_t>(instr.imm);
+  const auto address =
+      scalar.read_x(instr.regs.src1) + static_cast<std::uint64_t>(instr.imm);
   if (address % width != 0) {
     return fault(ExecuteStatus::load_address_misaligned, pc, address);
   }
@@ -84,12 +84,12 @@ ExecuteResult execute_load(const DecodedInstr &instr,
   return retired(pc + 4);
 }
 
-ExecuteResult execute_store(const DecodedInstr &instr,
-                            ScalarState &scalar, Memory &memory) {
+ExecuteResult execute_store(const DecodedInstr &instr, ScalarState &scalar,
+                            Memory &memory) {
   const auto pc = scalar.pc;
   const auto width = store_width(instr.op);
-  const auto address = scalar.read_x(instr.regs.src1) +
-                       static_cast<std::uint64_t>(instr.imm);
+  const auto address =
+      scalar.read_x(instr.regs.src1) + static_cast<std::uint64_t>(instr.imm);
   if (address % width != 0) {
     return fault(ExecuteStatus::store_address_misaligned, pc, address);
   }
@@ -107,8 +107,8 @@ ExecuteResult execute_store(const DecodedInstr &instr,
 
 } // namespace
 
-ExecuteResult execute_rv64i(const DecodedInstr &instr,
-                            ScalarState &scalar, Memory &memory) {
+ExecuteResult execute_rv64i(const DecodedInstr &instr, ScalarState &scalar,
+                            Memory &memory) {
   const auto pc = scalar.pc;
   const auto next_pc = pc + 4;
   const auto &r = instr.regs;
@@ -134,9 +134,8 @@ ExecuteResult execute_rv64i(const DecodedInstr &instr,
   case ScalarOp::auipc: return write(pc + imm);
   case ScalarOp::jal:
   case ScalarOp::jalr: {
-    const auto target = instr.op == ScalarOp::jal
-                            ? pc + imm
-                            : (lhs + imm) & ~std::uint64_t{1};
+    const auto target =
+        instr.op == ScalarOp::jal ? pc + imm : (lhs + imm) & ~std::uint64_t{1};
     if (target % 4 != 0) {
       return fault(ExecuteStatus::instruction_address_misaligned, pc, target);
     }
@@ -176,8 +175,9 @@ ExecuteResult execute_rv64i(const DecodedInstr &instr,
   case ScalarOp::sb:
   case ScalarOp::sh:
   case ScalarOp::sw:
-  case ScalarOp::sd: return execute_store(instr, scalar, memory);
-  // clang-format off
+  case ScalarOp::sd:
+    return execute_store(instr, scalar, memory);
+    // clang-format off
   case ScalarOp::addi:    return write(lhs + imm);
   case ScalarOp::slti:    return write(signed_lhs < static_cast<std::int64_t>(instr.imm));
   case ScalarOp::sltiu:   return write(lhs < imm);

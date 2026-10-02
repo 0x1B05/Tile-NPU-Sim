@@ -10,16 +10,14 @@ namespace {
 constexpr bool valid_dtype(ConfigBank bank, DType dtype) {
   switch (bank) {
   case ConfigBank::tc:
-  case ConfigBank::bc:
-    return dtype == DType::i8 || dtype == DType::u8;
+  case ConfigBank::bc: return dtype == DType::i8 || dtype == DType::u8;
   case ConfigBank::ac:
   case ConfigBank::vc:
     return dtype == DType::i32 || dtype == DType::u32 || dtype == DType::f32;
   case ConfigBank::tm:
   case ConfigBank::am:
   case ConfigBank::bm:
-  case ConfigBank::vm:
-    return false;
+  case ConfigBank::vm: return false;
   }
   return false;
 }
@@ -27,16 +25,13 @@ constexpr bool valid_dtype(ConfigBank bank, DType dtype) {
 constexpr bool valid_register(ConfigBank bank, std::uint8_t index) {
   switch (bank) {
   case ConfigBank::tc:
-  case ConfigBank::tm:
-    return index < TILE_REGISTERS;
+  case ConfigBank::tm: return index < TILE_REGISTERS;
   case ConfigBank::ac:
-  case ConfigBank::am:
-    return index < ACC_REGISTERS;
+  case ConfigBank::am: return index < ACC_REGISTERS;
   case ConfigBank::bc:
   case ConfigBank::vc:
   case ConfigBank::bm:
-  case ConfigBank::vm:
-    return index < VECTOR_REGISTERS;
+  case ConfigBank::vm: return index < VECTOR_REGISTERS;
   }
   return false;
 }
@@ -85,8 +80,7 @@ template <typename T> bool scalar_as(const ConfigFieldValue &value, T &result) {
       result = static_cast<T>(*raw);
       return true;
     } else if constexpr (std::is_same_v<T, std::uint8_t>) {
-      if (*raw > std::numeric_limits<std::uint8_t>::max())
-        return false;
+      if (*raw > std::numeric_limits<std::uint8_t>::max()) return false;
       result = static_cast<T>(*raw);
       return true;
     } else if constexpr (std::is_same_v<T, std::int32_t>) {
@@ -95,8 +89,7 @@ template <typename T> bool scalar_as(const ConfigFieldValue &value, T &result) {
       constexpr auto high =
           std::numeric_limits<std::uint64_t>::max() -
           static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max());
-      if (*raw > low && *raw < high)
-        return false;
+      if (*raw > low && *raw < high) return false;
       result = static_cast<T>(static_cast<std::uint32_t>(*raw));
       return true;
     }
@@ -260,10 +253,8 @@ ConfigReadResult read_vector_descriptor(const VectorDescriptor &descriptor,
 
 ConfigReadResult read_config_field(const State &state, ConfigBank bank,
                                    std::uint8_t index, ConfigField field) {
-  if (!valid_register(bank, index))
-    return ConfigAccessError::invalid_register;
-  if (!field_allowed(bank, field))
-    return ConfigAccessError::unsupported_field;
+  if (!valid_register(bank, index)) return ConfigAccessError::invalid_register;
+  if (!field_allowed(bank, field)) return ConfigAccessError::unsupported_field;
 
   // clang-format off
   switch (bank) {
@@ -290,10 +281,8 @@ ConfigReadResult read_config_field(const State &state, ConfigBank bank,
 ConfigAccessError write_config_field(State &state, ConfigBank bank,
                                      std::uint8_t index, ConfigField field,
                                      const ConfigFieldValue &value) {
-  if (!valid_register(bank, index))
-    return ConfigAccessError::invalid_register;
-  if (!field_allowed(bank, field))
-    return ConfigAccessError::unsupported_field;
+  if (!valid_register(bank, index)) return ConfigAccessError::invalid_register;
+  if (!field_allowed(bank, field)) return ConfigAccessError::unsupported_field;
 
   // clang-format off
   switch (bank) {

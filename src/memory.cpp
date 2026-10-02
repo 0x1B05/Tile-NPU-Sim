@@ -15,8 +15,7 @@ bool FlatMemory::contains(std::uint64_t address, std::size_t size) const {
   return offset <= bytes_.size() && size <= bytes_.size() - offset;
 }
 
-bool FlatMemory::read(std::uint64_t address,
-                      std::span<std::byte> bytes) const {
+bool FlatMemory::read(std::uint64_t address, std::span<std::byte> bytes) const {
   if (!contains(address, bytes.size())) {
     return false;
   }
