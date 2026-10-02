@@ -1,259 +1,130 @@
 #include "decode_rv64im.h"
 
 #include "encoding.h"
+#include "pattern.h"
 
 #include <cstdint>
 
 namespace tile_npu {
 namespace {
 
-enum class Opcode : std::uint8_t {
-  // clang-format off
-  load      = 0x03,
-  misc_mem  = 0x0f,
-  op_imm    = 0x13,
-  auipc     = 0x17,
-  op_imm_32 = 0x1b,
-  store     = 0x23,
-  op        = 0x33,
-  lui       = 0x37,
-  op_32     = 0x3b,
-  branch    = 0x63,
-  jalr      = 0x67,
-  jal       = 0x6f,
-  system    = 0x73,
-  // clang-format on
+using encoding::RiscvB;
+using encoding::RiscvI;
+using encoding::RiscvJ;
+using encoding::RiscvR;
+using encoding::RiscvS;
+using encoding::RiscvU;
+
+template <unsigned ShamtBits> using Shift = encoding::RiscvShift<ShamtBits>;
+
+// Base implementations ignore FENCE's reserved rd, rs1, and fm settings.
+DecodeResult decode_fence(std::uint32_t word) {
+  return DecodedInstr{ScalarOp::fence,
+                      {0, 0, 0},
+                      static_cast<std::int32_t>(encoding::field<31, 20>(word))};
+}
+
+// clang-format off
+
+// First match wins: instruction patterns come before the catch-alls that
+// classify the remaining encodings of each opcode space.
+constexpr DecodeEntry RV64IM_TABLE[] = {
+    // U/J
+    {"??????? ????? ????? ??? ????? 01101 11", as<RiscvU, ScalarOp::lui>},
+    {"??????? ????? ????? ??? ????? 00101 11", as<RiscvU, ScalarOp::auipc>},
+    {"??????? ????? ????? ??? ????? 11011 11", as<RiscvJ, ScalarOp::jal>},
+    {"??????? ????? ????? 000 ????? 11001 11", as<RiscvI, ScalarOp::jalr>},
+    {"??????? ????? ????? ??? ????? 11001 11", fail<DecodeError::illegal>},
+    // load
+    {"??????? ????? ????? 000 ????? 00000 11", as<RiscvI, ScalarOp::lb>},
+    {"??????? ????? ????? 001 ????? 00000 11", as<RiscvI, ScalarOp::lh>},
+    {"??????? ????? ????? 010 ????? 00000 11", as<RiscvI, ScalarOp::lw>},
+    {"??????? ????? ????? 011 ????? 00000 11", as<RiscvI, ScalarOp::ld>},
+    {"??????? ????? ????? 100 ????? 00000 11", as<RiscvI, ScalarOp::lbu>},
+    {"??????? ????? ????? 101 ????? 00000 11", as<RiscvI, ScalarOp::lhu>},
+    {"??????? ????? ????? 110 ????? 00000 11", as<RiscvI, ScalarOp::lwu>},
+    {"??????? ????? ????? ??? ????? 00000 11", fail<DecodeError::illegal>},
+    // store
+    {"??????? ????? ????? 000 ????? 01000 11", as<RiscvS, ScalarOp::sb>},
+    {"??????? ????? ????? 001 ????? 01000 11", as<RiscvS, ScalarOp::sh>},
+    {"??????? ????? ????? 010 ????? 01000 11", as<RiscvS, ScalarOp::sw>},
+    {"??????? ????? ????? 011 ????? 01000 11", as<RiscvS, ScalarOp::sd>},
+    {"??????? ????? ????? ??? ????? 01000 11", fail<DecodeError::illegal>},
+    // branch
+    {"??????? ????? ????? 000 ????? 11000 11", as<RiscvB, ScalarOp::beq>},
+    {"??????? ????? ????? 001 ????? 11000 11", as<RiscvB, ScalarOp::bne>},
+    {"??????? ????? ????? 100 ????? 11000 11", as<RiscvB, ScalarOp::blt>},
+    {"??????? ????? ????? 101 ????? 11000 11", as<RiscvB, ScalarOp::bge>},
+    {"??????? ????? ????? 110 ????? 11000 11", as<RiscvB, ScalarOp::bltu>},
+    {"??????? ????? ????? 111 ????? 11000 11", as<RiscvB, ScalarOp::bgeu>},
+    {"??????? ????? ????? ??? ????? 11000 11", fail<DecodeError::illegal>},
+    // op-imm
+    {"??????? ????? ????? 000 ????? 00100 11", as<RiscvI, ScalarOp::addi>},
+    {"000000? ????? ????? 001 ????? 00100 11", as<Shift<6>, ScalarOp::slli>},
+    {"??????? ????? ????? 010 ????? 00100 11", as<RiscvI, ScalarOp::slti>},
+    {"??????? ????? ????? 011 ????? 00100 11", as<RiscvI, ScalarOp::sltiu>},
+    {"??????? ????? ????? 100 ????? 00100 11", as<RiscvI, ScalarOp::xori>},
+    {"000000? ????? ????? 101 ????? 00100 11", as<Shift<6>, ScalarOp::srli>},
+    {"010000? ????? ????? 101 ????? 00100 11", as<Shift<6>, ScalarOp::srai>},
+    {"??????? ????? ????? 110 ????? 00100 11", as<RiscvI, ScalarOp::ori>},
+    {"??????? ????? ????? 111 ????? 00100 11", as<RiscvI, ScalarOp::andi>},
+    {"??????? ????? ????? ??? ????? 00100 11", fail<DecodeError::illegal>},
+    // op-imm-32
+    {"??????? ????? ????? 000 ????? 00110 11", as<RiscvI, ScalarOp::addiw>},
+    {"0000000 ????? ????? 001 ????? 00110 11", as<Shift<5>, ScalarOp::slliw>},
+    {"0000000 ????? ????? 101 ????? 00110 11", as<Shift<5>, ScalarOp::srliw>},
+    {"0100000 ????? ????? 101 ????? 00110 11", as<Shift<5>, ScalarOp::sraiw>},
+    {"??????? ????? ????? ??? ????? 00110 11", fail<DecodeError::illegal>},
+    // op
+    {"0000000 ????? ????? 000 ????? 01100 11", as<RiscvR, ScalarOp::add>},
+    {"0000000 ????? ????? 001 ????? 01100 11", as<RiscvR, ScalarOp::sll>},
+    {"0000000 ????? ????? 010 ????? 01100 11", as<RiscvR, ScalarOp::slt>},
+    {"0000000 ????? ????? 011 ????? 01100 11", as<RiscvR, ScalarOp::sltu>},
+    {"0000000 ????? ????? 100 ????? 01100 11", as<RiscvR, ScalarOp::bit_xor>},
+    {"0000000 ????? ????? 101 ????? 01100 11", as<RiscvR, ScalarOp::srl>},
+    {"0000000 ????? ????? 110 ????? 01100 11", as<RiscvR, ScalarOp::bit_or>},
+    {"0000000 ????? ????? 111 ????? 01100 11", as<RiscvR, ScalarOp::bit_and>},
+    {"0100000 ????? ????? 000 ????? 01100 11", as<RiscvR, ScalarOp::sub>},
+    {"0100000 ????? ????? 101 ????? 01100 11", as<RiscvR, ScalarOp::sra>},
+    {"0000001 ????? ????? 000 ????? 01100 11", as<RiscvR, ScalarOp::mul>},
+    {"0000001 ????? ????? 001 ????? 01100 11", as<RiscvR, ScalarOp::mulh>},
+    {"0000001 ????? ????? 010 ????? 01100 11", as<RiscvR, ScalarOp::mulhsu>},
+    {"0000001 ????? ????? 011 ????? 01100 11", as<RiscvR, ScalarOp::mulhu>},
+    {"0000001 ????? ????? 100 ????? 01100 11", as<RiscvR, ScalarOp::div>},
+    {"0000001 ????? ????? 101 ????? 01100 11", as<RiscvR, ScalarOp::divu>},
+    {"0000001 ????? ????? 110 ????? 01100 11", as<RiscvR, ScalarOp::rem>},
+    {"0000001 ????? ????? 111 ????? 01100 11", as<RiscvR, ScalarOp::remu>},
+    {"??????? ????? ????? ??? ????? 01100 11", fail<DecodeError::illegal>},
+    // op-32
+    {"0000000 ????? ????? 000 ????? 01110 11", as<RiscvR, ScalarOp::addw>},
+    {"0000000 ????? ????? 001 ????? 01110 11", as<RiscvR, ScalarOp::sllw>},
+    {"0000000 ????? ????? 101 ????? 01110 11", as<RiscvR, ScalarOp::srlw>},
+    {"0100000 ????? ????? 000 ????? 01110 11", as<RiscvR, ScalarOp::subw>},
+    {"0100000 ????? ????? 101 ????? 01110 11", as<RiscvR, ScalarOp::sraw>},
+    {"0000001 ????? ????? 000 ????? 01110 11", as<RiscvR, ScalarOp::mulw>},
+    {"0000001 ????? ????? 100 ????? 01110 11", as<RiscvR, ScalarOp::divw>},
+    {"0000001 ????? ????? 101 ????? 01110 11", as<RiscvR, ScalarOp::divuw>},
+    {"0000001 ????? ????? 110 ????? 01110 11", as<RiscvR, ScalarOp::remw>},
+    {"0000001 ????? ????? 111 ????? 01110 11", as<RiscvR, ScalarOp::remuw>},
+    {"??????? ????? ????? ??? ????? 01110 11", fail<DecodeError::illegal>},
+    // misc-mem / system
+    {"??????? ????? ????? 000 ????? 00011 11", decode_fence},
+    {"??????? ????? ????? ??? ????? 00011 11", fail<DecodeError::not_implemented>}, // Zifencei etc.
+    {"0000000 00000 00000 000 00000 11100 11", no_operands<ScalarOp::ecall>},
+    {"0000000 00001 00000 000 00000 11100 11", no_operands<ScalarOp::ebreak>},
+    {"??????? ????? ????? ??? ????? 11100 11", fail<DecodeError::not_implemented>}, // CSR and privileged
+    // The all-ones encoding is always illegal; other opcodes in the scalar
+    // quadrant belong to extensions that are not implemented yet.
+    {"1111111 11111 11111 111 11111 11111 11", fail<DecodeError::illegal>},
+    {"??????? ????? ????? ??? ????? ????? 11", fail<DecodeError::not_implemented>},
 };
 
-DecodedInstr r_instr(ScalarOp op, const encoding::RiscvR &r) {
-  return {op, {r.dest, r.src1, r.src2}};
-}
-
-DecodedInstr i_instr(ScalarOp op, const encoding::RiscvI &i, std::int32_t imm) {
-  return {op, {i.dest, i.src1, 0}, imm};
-}
-
-DecodedInstr i_instr(ScalarOp op, const encoding::RiscvI &i) {
-  return i_instr(op, i, i.imm);
-}
-
-DecodeResult decode_load(std::uint32_t word) {
-  const auto i = encoding::RiscvI::from(word);
-  // clang-format off
-  switch (i.funct3) {
-  case 0: return i_instr(ScalarOp::lb,  i);
-  case 1: return i_instr(ScalarOp::lh,  i);
-  case 2: return i_instr(ScalarOp::lw,  i);
-  case 3: return i_instr(ScalarOp::ld,  i);
-  case 4: return i_instr(ScalarOp::lbu, i);
-  case 5: return i_instr(ScalarOp::lhu, i);
-  case 6: return i_instr(ScalarOp::lwu, i);
-  default: return DecodeError::illegal;
-  }
-  // clang-format on
-}
-
-DecodeResult decode_store(std::uint32_t word) {
-  const auto s = encoding::RiscvS::from(word);
-  ScalarOp op;
-  // clang-format off
-  switch (s.funct3) {
-  case 0: op = ScalarOp::sb; break;
-  case 1: op = ScalarOp::sh; break;
-  case 2: op = ScalarOp::sw; break;
-  case 3: op = ScalarOp::sd; break;
-  default: return DecodeError::illegal;
-  }
-  // clang-format on
-  return DecodedInstr{op, {0, s.src1, s.src2}, s.imm};
-}
-
-DecodeResult decode_branch(std::uint32_t word) {
-  const auto b = encoding::RiscvB::from(word);
-  ScalarOp op;
-  // clang-format off
-  switch (b.funct3) {
-  case 0: op = ScalarOp::beq;  break;
-  case 1: op = ScalarOp::bne;  break;
-  case 4: op = ScalarOp::blt;  break;
-  case 5: op = ScalarOp::bge;  break;
-  case 6: op = ScalarOp::bltu; break;
-  case 7: op = ScalarOp::bgeu; break;
-  default: return DecodeError::illegal;
-  }
-  // clang-format on
-  return DecodedInstr{op, {0, b.src1, b.src2}, b.imm};
-}
-
-DecodeResult decode_op_imm(std::uint32_t word) {
-  const auto i = encoding::RiscvI::from(word);
-  switch (i.funct3) {
-    // clang-format off
-  case 0: return i_instr(ScalarOp::addi,  i);
-  case 2: return i_instr(ScalarOp::slti,  i);
-  case 3: return i_instr(ScalarOp::sltiu, i);
-  case 4: return i_instr(ScalarOp::xori,  i);
-  case 6: return i_instr(ScalarOp::ori,   i);
-  case 7: return i_instr(ScalarOp::andi,  i);
-  // clang-format on
-  case 1:
-    if (encoding::field<31, 26>(word) == 0) {
-      return i_instr(ScalarOp::slli, i, encoding::field<25, 20>(word));
-    }
-    return DecodeError::illegal;
-  case 5:
-    switch (encoding::field<31, 26>(word)) {
-    case 0: return i_instr(ScalarOp::srli, i, encoding::field<25, 20>(word));
-    case 0x10: return i_instr(ScalarOp::srai, i, encoding::field<25, 20>(word));
-    default: return DecodeError::illegal;
-    }
-  default: return DecodeError::illegal;
-  }
-}
-
-DecodeResult decode_op_imm_32(std::uint32_t word) {
-  const auto i = encoding::RiscvI::from(word);
-  switch (i.funct3) {
-  case 0: return i_instr(ScalarOp::addiw, i);
-  case 1:
-    if (encoding::field<31, 25>(word) == 0) {
-      return i_instr(ScalarOp::slliw, i, encoding::field<24, 20>(word));
-    }
-    return DecodeError::illegal;
-  case 5:
-    switch (encoding::field<31, 25>(word)) {
-    case 0: return i_instr(ScalarOp::srliw, i, encoding::field<24, 20>(word));
-    case 0x20:
-      return i_instr(ScalarOp::sraiw, i, encoding::field<24, 20>(word));
-    default: return DecodeError::illegal;
-    }
-  default: return DecodeError::illegal;
-  }
-}
-
-DecodeResult decode_op(std::uint32_t word) {
-  const auto r = encoding::RiscvR::from(word);
-  // clang-format off
-  switch (r.funct7) {
-  case 0:
-    switch (r.funct3) {
-    case 0: return r_instr(ScalarOp::add,     r);
-    case 1: return r_instr(ScalarOp::sll,     r);
-    case 2: return r_instr(ScalarOp::slt,     r);
-    case 3: return r_instr(ScalarOp::sltu,    r);
-    case 4: return r_instr(ScalarOp::bit_xor, r);
-    case 5: return r_instr(ScalarOp::srl,     r);
-    case 6: return r_instr(ScalarOp::bit_or,  r);
-    case 7: return r_instr(ScalarOp::bit_and, r);
-    }
-    break;
-  case 0x20:
-    if (r.funct3 == 0) return r_instr(ScalarOp::sub, r);
-    if (r.funct3 == 5) return r_instr(ScalarOp::sra, r);
-    break;
-  case 1:
-    switch (r.funct3) {
-    case 0: return r_instr(ScalarOp::mul,    r);
-    case 1: return r_instr(ScalarOp::mulh,   r);
-    case 2: return r_instr(ScalarOp::mulhsu, r);
-    case 3: return r_instr(ScalarOp::mulhu,  r);
-    case 4: return r_instr(ScalarOp::div,    r);
-    case 5: return r_instr(ScalarOp::divu,   r);
-    case 6: return r_instr(ScalarOp::rem,    r);
-    case 7: return r_instr(ScalarOp::remu,   r);
-    }
-    break;
-  }
-  // clang-format on
-  return DecodeError::illegal;
-}
-
-DecodeResult decode_op_32(std::uint32_t word) {
-  const auto r = encoding::RiscvR::from(word);
-  // clang-format off
-  switch (r.funct7) {
-  case 0:
-    switch (r.funct3) {
-    case 0: return r_instr(ScalarOp::addw, r);
-    case 1: return r_instr(ScalarOp::sllw, r);
-    case 5: return r_instr(ScalarOp::srlw, r);
-    }
-    break;
-  case 0x20:
-    if (r.funct3 == 0) return r_instr(ScalarOp::subw, r);
-    if (r.funct3 == 5) return r_instr(ScalarOp::sraw, r);
-    break;
-  case 1:
-    switch (r.funct3) {
-    case 0: return r_instr(ScalarOp::mulw,  r);
-    case 4: return r_instr(ScalarOp::divw,  r);
-    case 5: return r_instr(ScalarOp::divuw, r);
-    case 6: return r_instr(ScalarOp::remw,  r);
-    case 7: return r_instr(ScalarOp::remuw, r);
-    }
-    break;
-  }
-  // clang-format on
-  return DecodeError::illegal;
-}
-
-DecodeResult decode_misc_mem(std::uint32_t word) {
-  if (encoding::field<14, 12>(word) == 0) {
-    // Base implementations ignore FENCE's reserved rd, rs1, and fm settings.
-    return DecodedInstr{
-        ScalarOp::fence,
-        {0, 0, 0},
-        static_cast<std::int32_t>(encoding::field<31, 20>(word))};
-  }
-  return DecodeError::not_implemented; // Zifencei and other extensions
-}
-
-DecodeResult decode_system(std::uint32_t word) {
-  switch (word) {
-  case 0x00000073: return DecodedInstr{ScalarOp::ecall, {0, 0, 0}};
-  case 0x00100073: return DecodedInstr{ScalarOp::ebreak, {0, 0, 0}};
-  default:
-    return DecodeError::not_implemented; // CSR and privileged instructions
-  }
-}
+// clang-format on
 
 } // namespace
 
 DecodeResult decode_rv64im(std::uint32_t word) {
-  if (word == 0xffffffffu) {
-    return DecodeError::illegal; // All-ones ILEN encoding is always illegal.
-  }
-  switch (static_cast<Opcode>(encoding::field<6, 0>(word))) {
-  case Opcode::lui: {
-    const auto u = encoding::RiscvU::from(word);
-    return DecodedInstr{ScalarOp::lui, {u.dest, 0, 0}, u.imm};
-  }
-  case Opcode::auipc: {
-    const auto u = encoding::RiscvU::from(word);
-    return DecodedInstr{ScalarOp::auipc, {u.dest, 0, 0}, u.imm};
-  }
-  case Opcode::jal: {
-    const auto j = encoding::RiscvJ::from(word);
-    return DecodedInstr{ScalarOp::jal, {j.dest, 0, 0}, j.imm};
-  }
-  case Opcode::jalr: {
-    const auto i = encoding::RiscvI::from(word);
-    return i.funct3 == 0 ? DecodeResult{i_instr(ScalarOp::jalr, i)}
-                         : DecodeResult{DecodeError::illegal};
-  }
-    // clang-format off
-  case Opcode::load:      return decode_load(word);
-  case Opcode::misc_mem:  return decode_misc_mem(word);
-  case Opcode::op_imm:    return decode_op_imm(word);
-  case Opcode::op_imm_32: return decode_op_imm_32(word);
-  case Opcode::store:     return decode_store(word);
-  case Opcode::op:        return decode_op(word);
-  case Opcode::op_32:     return decode_op_32(word);
-  case Opcode::branch:    return decode_branch(word);
-  case Opcode::system:    return decode_system(word);
-  // clang-format on
-  default: return DecodeError::not_implemented;
-  }
+  return match(RV64IM_TABLE, word);
 }
 
 } // namespace tile_npu

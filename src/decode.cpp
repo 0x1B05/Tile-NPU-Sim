@@ -2,6 +2,7 @@
 
 #include "decode_rv64im.h"
 #include "encoding.h"
+#include "pattern.h"
 #include "tile_npu/state.h"
 
 #include <cstdint>
@@ -9,47 +10,24 @@
 namespace tile_npu {
 namespace {
 
-enum class Quadrant : std::uint8_t {
-  elementwise = 0b00,
-  data_movement = 0b01,
-  cross_domain = 0b10,
-  scalar = 0b11,
-};
-
-enum class ElementwiseMajor : std::uint8_t { binary = 0b0000 };
-DecodeResult decode_binary_add(const encoding::NpuR3 &fields,
-                               const encoding::BinarySelector &selector) {
-  switch (static_cast<NpuDomain>(selector.domain)) {
-  case NpuDomain::tile:
-    if (selector.scalar_source) {
-      return DecodeError::not_implemented; // taddx
-    }
-    if (fields.dest >= TILE_REGISTERS || fields.src1 >= TILE_REGISTERS ||
-        fields.src2 >= TILE_REGISTERS) {
-      return DecodeError::illegal;
-    }
-    return ElementwiseBinaryInstruction{
-        ElementwiseBinaryOp::add,
-        {NpuDomain::tile, fields.dest},
-        {NpuDomain::tile, fields.src1},
-        NpuRegister{NpuDomain::tile, fields.src2}};
-  case NpuDomain::acc:
-  case NpuDomain::vec32: return DecodeError::not_implemented;
-  case NpuDomain::vec8: return DecodeError::illegal;
-  }
-  return DecodeError::illegal;
-}
-
-DecodeResult decode_binary(std::uint32_t word) {
-  const auto fields = encoding::NpuR3::from(word);
-  const auto selector = encoding::BinarySelector::from(fields.sel3);
-  if (fields.reserved4 != 0 ||
-      selector.domain == static_cast<std::uint8_t>(NpuDomain::vec8)) {
+// E_BIN add on the tile domain with BX=0. The pattern pins sel3, so only the
+// register bounds remain to check here.
+DecodeResult decode_tadd(std::uint32_t word) {
+  const auto f = encoding::NpuR3::from(word);
+  if (f.dest >= TILE_REGISTERS || f.src1 >= TILE_REGISTERS ||
+      f.src2 >= TILE_REGISTERS) {
     return DecodeError::illegal;
   }
+  return ElementwiseBinaryInstruction{ElementwiseBinaryOp::add,
+                                      {NpuDomain::tile, f.dest},
+                                      {NpuDomain::tile, f.src1},
+                                      NpuRegister{NpuDomain::tile, f.src2}};
+}
 
-  switch (static_cast<ElementwiseBinaryOp>(fields.funct4)) {
-  case ElementwiseBinaryOp::add: return decode_binary_add(fields, selector);
+// Defined E_BIN funct4 values other than add are not implemented yet;
+// reserved funct4 values are illegal.
+DecodeResult decode_binary_other(std::uint32_t word) {
+  switch (static_cast<ElementwiseBinaryOp>(encoding::field<24, 21>(word))) {
   case ElementwiseBinaryOp::sub:
   case ElementwiseBinaryOp::mul:
   case ElementwiseBinaryOp::div:
@@ -65,23 +43,31 @@ DecodeResult decode_binary(std::uint32_t word) {
   }
 }
 
-DecodeResult decode_elementwise(std::uint32_t word) {
-  switch (static_cast<ElementwiseMajor>(encoding::field<31, 28>(word))) {
-  case ElementwiseMajor::binary: return decode_binary(word);
-  default: return DecodeError::not_implemented;
-  }
-}
+// clang-format off
+
+// Pattern fields: major4 sel3 funct4 reserved4 src2 src1 dest q.
+// E_BIN reads sel3 as {dom2, BX}: dom tile=00 acc=01 vec8=10 vec32=11.
+constexpr DecodeEntry NPU_TABLE[] = {
+    {"0000 000 0000 0000 ????? ????? ????? 00", decode_tadd},
+    {"0000 0?? 0000 0000 ????? ????? ????? 00", fail<DecodeError::not_implemented>}, // taddx, add @acc
+    {"0000 10? ???? 0000 ????? ????? ????? 00", fail<DecodeError::illegal>},          // vec8 has no E_BIN
+    {"0000 11? 0000 0000 ????? ????? ????? 00", fail<DecodeError::not_implemented>},  // add @vec32
+    {"0000 ??? ???? 0000 ????? ????? ????? 00", decode_binary_other},
+    {"0000 ??? ???? ???? ????? ????? ????? 00", fail<DecodeError::illegal>},          // reserved4 != 0
+    {"???? ??? ???? ???? ????? ????? ????? 00", fail<DecodeError::not_implemented>},  // other elementwise majors
+    {"???? ??? ???? ???? ????? ????? ????? 01", fail<DecodeError::not_implemented>},  // data movement
+    {"???? ??? ???? ???? ????? ????? ????? 10", fail<DecodeError::not_implemented>},  // cross-domain/control
+};
+
+// clang-format on
 
 } // namespace
 
 DecodeResult decode(std::uint32_t word) {
-  switch (static_cast<Quadrant>(encoding::field<1, 0>(word))) {
-  case Quadrant::scalar: return decode_rv64im(word);
-  case Quadrant::elementwise: return decode_elementwise(word);
-  case Quadrant::data_movement:
-  case Quadrant::cross_domain: return DecodeError::not_implemented;
+  if (encoding::field<1, 0>(word) == 0b11) {
+    return decode_rv64im(word);
   }
-  return DecodeError::illegal;
+  return match(NPU_TABLE, word);
 }
 
 } // namespace tile_npu
