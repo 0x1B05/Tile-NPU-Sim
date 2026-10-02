@@ -9,6 +9,8 @@
 #include <string_view>
 #include <utility>
 
+#include "check.h"
+
 namespace {
 
 using tile_npu::FlatMemory;
@@ -18,14 +20,8 @@ using tile_npu::StepStatus;
 
 constexpr std::uint64_t CODE = 0x1000;
 constexpr std::uint64_t DATA = 0x1040;
-constexpr std::uint64_t kSign32 = 0xffffffff80000000ull;
-constexpr std::uint64_t kSign64 = 0x8000000000000000ull;
-
-void check(bool condition, std::string_view message) {
-  if (!condition) {
-    throw std::runtime_error(std::string(message));
-  }
-}
+constexpr std::uint64_t SIGN32 = 0xffffffff80000000ull;
+constexpr std::uint64_t SIGN64 = 0x8000000000000000ull;
 
 constexpr std::uint32_t r(std::uint32_t opcode, std::uint32_t funct3,
                           std::uint32_t funct7, std::uint32_t rd = 3,
@@ -68,15 +64,6 @@ constexpr std::uint32_t j(std::int32_t imm, std::uint32_t rd = 3) {
          (rd << 7) | 0x6fu;
 }
 
-void write_word(FlatMemory &memory, std::uint64_t address,
-                std::uint32_t word) {
-  std::array<std::byte, 4> bytes{};
-  for (std::size_t index = 0; index < bytes.size(); ++index) {
-    bytes[index] = static_cast<std::byte>((word >> (8 * index)) & 0xffu);
-  }
-  check(memory.write(address, bytes), "write instruction word");
-}
-
 void expect_step(const StepResult &result, StepStatus status,
                  std::uint32_t word,
                  std::optional<std::uint64_t> fault_address = std::nullopt) {
@@ -115,12 +102,12 @@ void test_integer_arithmetic() {
   constexpr std::array cases{
       RegisterCase{"add wrap", r(0x33, 0, 0), UINT64_MAX, 2, 1},
       RegisterCase{"sub wrap", r(0x33, 0, 0x20), 1, 2, UINT64_MAX},
-      RegisterCase{"sll shamt mask", r(0x33, 1, 0), 1, 127, kSign64},
+      RegisterCase{"sll shamt mask", r(0x33, 1, 0), 1, 127, SIGN64},
       RegisterCase{"slt signed", r(0x33, 2, 0), UINT64_MAX, 1, 1},
       RegisterCase{"sltu unsigned", r(0x33, 3, 0), UINT64_MAX, 1, 0},
       RegisterCase{"xor", r(0x33, 4, 0), 0xf0, 0x0f, 0xff},
-      RegisterCase{"srl", r(0x33, 5, 0), kSign64, 63, 1},
-      RegisterCase{"sra", r(0x33, 5, 0x20), kSign64, 63, UINT64_MAX},
+      RegisterCase{"srl", r(0x33, 5, 0), SIGN64, 63, 1},
+      RegisterCase{"sra", r(0x33, 5, 0x20), SIGN64, 63, UINT64_MAX},
       RegisterCase{"or", r(0x33, 6, 0), 0xf0, 0x0f, 0xff},
       RegisterCase{"and", r(0x33, 7, 0), 0xf0, 0x0f, 0},
       RegisterCase{"addi wrap", i(0x13, 0, 1), UINT64_MAX, 0, 0},
@@ -129,18 +116,18 @@ void test_integer_arithmetic() {
       RegisterCase{"xori", i(0x13, 4, -1), 0xf0, 0, ~std::uint64_t{0xf0}},
       RegisterCase{"ori", i(0x13, 6, 0xf0), 0x0f, 0, 0xff},
       RegisterCase{"andi", i(0x13, 7, 0x0f), 0xff, 0, 0x0f},
-      RegisterCase{"slli", i(0x13, 1, 63), 1, 0, kSign64},
-      RegisterCase{"srli", i(0x13, 5, 63), kSign64, 0, 1},
-      RegisterCase{"srai", i(0x13, 5, 0x43f), kSign64, 0, UINT64_MAX},
-      RegisterCase{"addiw", i(0x1b, 0, 1), 0x7fffffff, 0, kSign32},
-      RegisterCase{"slliw", i(0x1b, 1, 31), 1, 0, kSign32},
-      RegisterCase{"srliw", i(0x1b, 5, 31), kSign32, 0, 1},
-      RegisterCase{"sraiw", i(0x1b, 5, 0x41f), kSign32, 0, UINT64_MAX},
-      RegisterCase{"addw", r(0x3b, 0, 0), 0x7fffffff, 1, kSign32},
+      RegisterCase{"slli", i(0x13, 1, 63), 1, 0, SIGN64},
+      RegisterCase{"srli", i(0x13, 5, 63), SIGN64, 0, 1},
+      RegisterCase{"srai", i(0x13, 5, 0x43f), SIGN64, 0, UINT64_MAX},
+      RegisterCase{"addiw", i(0x1b, 0, 1), 0x7fffffff, 0, SIGN32},
+      RegisterCase{"slliw", i(0x1b, 1, 31), 1, 0, SIGN32},
+      RegisterCase{"srliw", i(0x1b, 5, 31), SIGN32, 0, 1},
+      RegisterCase{"sraiw", i(0x1b, 5, 0x41f), SIGN32, 0, UINT64_MAX},
+      RegisterCase{"addw", r(0x3b, 0, 0), 0x7fffffff, 1, SIGN32},
       RegisterCase{"subw", r(0x3b, 0, 0x20), 0, 1, UINT64_MAX},
-      RegisterCase{"sllw shamt mask", r(0x3b, 1, 0), 1, 63, kSign32},
-      RegisterCase{"srlw shamt mask", r(0x3b, 5, 0), kSign32, 63, 1},
-      RegisterCase{"sraw", r(0x3b, 5, 0x20), kSign32, 31, UINT64_MAX},
+      RegisterCase{"sllw shamt mask", r(0x3b, 1, 0), 1, 63, SIGN32},
+      RegisterCase{"srlw shamt mask", r(0x3b, 5, 0), SIGN32, 63, 1},
+      RegisterCase{"sraw", r(0x3b, 5, 0x20), SIGN32, 31, UINT64_MAX},
   };
   for (const auto &test : cases) {
     check_register_case(test);
@@ -176,7 +163,7 @@ void test_control_flow() {
           "control-flow result");
   };
 
-  run(u(0x37, 0x80000000u), 0, 0, CODE + 4, kSign32);
+  run(u(0x37, 0x80000000u), 0, 0, CODE + 4, SIGN32);
   run(u(0x17, 0xfffff000u), 0, 0, CODE + 4, 0);
   run(j(8), 0, 0, CODE + 8, CODE + 4);
   run(b(0, 8), 7, 7, CODE + 8);                 // beq
@@ -355,7 +342,7 @@ void test_stores() {
 void test_m_extension() {
   constexpr std::array cases{
       RegisterCase{"mul", r(0x33, 0, 1), 7, 3, 21},
-      RegisterCase{"mul low wrap", r(0x33, 0, 1), kSign64, 2, 0},
+      RegisterCase{"mul low wrap", r(0x33, 0, 1), SIGN64, 2, 0},
       RegisterCase{"mulh signed", r(0x33, 1, 1), UINT64_MAX,
                    UINT64_MAX, 0},
       RegisterCase{"mulhsu", r(0x33, 2, 1), UINT64_MAX,
@@ -380,7 +367,7 @@ void test_m_extension() {
       RegisterCase{"rem signed", r(0x33, 6, 1), UINT64_MAX - 20, 4,
                    UINT64_MAX},
       RegisterCase{"remu", r(0x33, 7, 1), 21, 4, 1},
-      RegisterCase{"mulw sign", r(0x3b, 0, 1), 0x40000000, 2, kSign32},
+      RegisterCase{"mulw sign", r(0x3b, 0, 1), 0x40000000, 2, SIGN32},
       RegisterCase{"divw", r(0x3b, 4, 1), UINT64_MAX - 20, 4,
                    UINT64_MAX - 4},
       RegisterCase{"divuw", r(0x3b, 5, 1), 0x80000000, 2, 0x40000000},
@@ -392,25 +379,25 @@ void test_m_extension() {
       RegisterCase{"remuw", r(0x3b, 7, 1), 0xffffffff, 2, 1},
       RegisterCase{"remuw sign extends word result", r(0x3b, 7, 1),
                    0x1234567880000000ull, 0xffff0000ffffffffull,
-                   kSign32},
-      RegisterCase{"div overflow", r(0x33, 4, 1), kSign64,
-                   UINT64_MAX, kSign64},
-      RegisterCase{"rem overflow", r(0x33, 6, 1), kSign64,
+                   SIGN32},
+      RegisterCase{"div overflow", r(0x33, 4, 1), SIGN64,
+                   UINT64_MAX, SIGN64},
+      RegisterCase{"rem overflow", r(0x33, 6, 1), SIGN64,
                    UINT64_MAX, 0},
       RegisterCase{"div zero", r(0x33, 4, 1), 42, 0, UINT64_MAX},
       RegisterCase{"divu zero", r(0x33, 5, 1), 42, 0, UINT64_MAX},
       RegisterCase{"rem zero", r(0x33, 6, 1), 42, 0, 42},
       RegisterCase{"remu zero", r(0x33, 7, 1), 42, 0, 42},
       RegisterCase{"divw overflow", r(0x3b, 4, 1), 0x80000000,
-                   UINT64_MAX, kSign32},
+                   UINT64_MAX, SIGN32},
       RegisterCase{"remw overflow", r(0x3b, 6, 1), 0x80000000,
                    UINT64_MAX, 0},
       RegisterCase{"divw zero", r(0x3b, 4, 1), 42, 0, UINT64_MAX},
       RegisterCase{"divuw zero", r(0x3b, 5, 1), 42, 0, UINT64_MAX},
       RegisterCase{"remw zero", r(0x3b, 6, 1), 0x80000000, 0,
-                   kSign32},
+                   SIGN32},
       RegisterCase{"remuw zero", r(0x3b, 7, 1), 0x80000000, 0,
-                   kSign32},
+                   SIGN32},
   };
   for (const auto &test : cases) {
     check_register_case(test);

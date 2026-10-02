@@ -2,17 +2,8 @@
 
 #include <cstdint>
 #include <limits>
-#include <stdexcept>
-#include <string>
-#include <string_view>
 
-namespace {
-
-void check(bool condition, std::string_view message) {
-  if (!condition) throw std::runtime_error(std::string(message));
-}
-
-} // namespace
+#include "check.h"
 
 void test_descriptor_view() {
   tile_npu::MatrixDescriptor matrix{};

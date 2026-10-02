@@ -1,18 +1,9 @@
 #include "tile_npu/config.h"
 
 #include <cstdint>
-#include <stdexcept>
-#include <string>
-#include <string_view>
 #include <variant>
 
-namespace {
-
-void check(bool condition, std::string_view message) {
-  if (!condition) throw std::runtime_error(std::string(message));
-}
-
-} // namespace
+#include "check.h"
 
 void test_config_fields() {
   tile_npu::State state{};

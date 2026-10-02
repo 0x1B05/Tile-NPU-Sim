@@ -73,7 +73,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 
 ## 测试约定
 
-- 无测试框架: 用 `check(condition, message)` 抛 `std::runtime_error`; 测试函数由 `tests/` 下统一的 main 驱动, 全部源文件编入 `sim_tests`。
+- 无测试框架: `tests/check.h` 提供共享的 `check(condition, message)` (抛 `std::runtime_error`) 和 `write_word`; 测试函数由 `tests/` 下统一的 main 驱动, 全部源文件编入 `sim_tests`。
 - 指令级测试直接内联机器码常数, 行尾注释对应的汇编形式 (如 `0x002081b3u, // add x3, x1, x2`)。
 - 程序级测试 (如 `tests/rv64im_program_test.cpp`) 用小段手工汇编的程序镜像, 注释给出汇编器与选项。
 - 外部 `.bin` 测试镜像不入库, 路径由命令行提供, 不作为构建依赖。
