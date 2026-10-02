@@ -10,8 +10,8 @@
 
 namespace {
 
-using tile_npu::DecodeError;
 using tile_npu::DecodedInstr;
+using tile_npu::DecodeError;
 using tile_npu::ScalarOp;
 
 struct Case {
@@ -34,14 +34,14 @@ constexpr std::uint32_t r(std::uint32_t opcode, std::uint32_t funct3,
 constexpr std::uint32_t i(std::uint32_t opcode, std::uint32_t funct3,
                           std::int32_t imm, std::uint32_t dest = 3,
                           std::uint32_t src1 = 5) {
-  return ((static_cast<std::uint32_t>(imm) & 0xfffu) << 20) |
-         (src1 << 15) | (funct3 << 12) | (dest << 7) | opcode;
+  return ((static_cast<std::uint32_t>(imm) & 0xfffu) << 20) | (src1 << 15) |
+         (funct3 << 12) | (dest << 7) | opcode;
 }
 
 constexpr std::uint32_t s(std::uint32_t funct3, std::int32_t imm) {
   const auto bits = static_cast<std::uint32_t>(imm) & 0xfffu;
-  return ((bits >> 5) << 25) | (7u << 20) | (5u << 15) |
-         (funct3 << 12) | ((bits & 0x1fu) << 7) | 0x23u;
+  return ((bits >> 5) << 25) | (7u << 20) | (5u << 15) | (funct3 << 12) |
+         ((bits & 0x1fu) << 7) | 0x23u;
 }
 
 constexpr std::uint32_t b(std::uint32_t funct3, std::int32_t imm) {
@@ -62,16 +62,13 @@ constexpr std::uint32_t j(std::int32_t imm) {
          (3u << 7) | 0x6fu;
 }
 
-template <std::size_t N>
-void check_cases(const std::array<Case, N> &cases) {
+template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
     const auto *decoded = std::get_if<DecodedInstr>(&result);
     if (decoded == nullptr || decoded->op != test.op ||
-        decoded->regs.dest != test.dest ||
-        decoded->regs.src1 != test.src1 ||
-        decoded->regs.src2 != test.src2 ||
-        decoded->imm != test.imm) {
+        decoded->regs.dest != test.dest || decoded->regs.src1 != test.src1 ||
+        decoded->regs.src2 != test.src2 || decoded->imm != test.imm) {
       throw std::runtime_error(std::string("decode ") + test.name);
     }
   }
@@ -183,14 +180,12 @@ void test_rv64im_decode() {
            std::numeric_limits<std::int32_t>::min()},
       Case{"lui positive", u(0x37, 0x7ffff000u), ScalarOp::lui, 3, 0, 0,
            0x7ffff000},
-      Case{"auipc", u(0x17, 0xfffff000u), ScalarOp::auipc, 3, 0, 0,
-           -4096},
+      Case{"auipc", u(0x17, 0xfffff000u), ScalarOp::auipc, 3, 0, 0, -4096},
       Case{"jal min", j(-1048576), ScalarOp::jal, 3, 0, 0, -1048576},
       Case{"jal max", j(1048574), ScalarOp::jal, 3, 0, 0, 1048574},
-      Case{"fence", i(0x0f, 0, 0x0ff, 3, 5), ScalarOp::fence, 0, 0, 0,
-           0x0ff},
-      Case{"fence reserved mode", i(0x0f, 0, 0x8ff), ScalarOp::fence,
-           0, 0, 0, 0x8ff},
+      Case{"fence", i(0x0f, 0, 0x0ff, 3, 5), ScalarOp::fence, 0, 0, 0, 0x0ff},
+      Case{"fence reserved mode", i(0x0f, 0, 0x8ff), ScalarOp::fence, 0, 0, 0,
+           0x8ff},
       Case{"ecall", 0x00000073u, ScalarOp::ecall, 0, 0, 0, 0},
       Case{"ebreak", 0x00100073u, ScalarOp::ebreak, 0, 0, 0, 0},
   };
@@ -209,26 +204,26 @@ void test_rv64im_decode() {
   check_cases(assembler_cases);
 
   constexpr std::array illegal_cases{
-      r(0x33, 0, 0x02), // OP funct7 is neither base nor M extension.
-      r(0x3b, 1, 1),    // OP-32 has no MULH word form.
+      r(0x33, 0, 0x02),  // OP funct7 is neither base nor M extension.
+      r(0x3b, 1, 1),     // OP-32 has no MULH word form.
       i(0x13, 1, 0x800), // SLLI reserves immediate[11:6].
       i(0x13, 5, 0x83f), // SRLI reserves immediate[11:6].
       i(0x1b, 1, 0x20),  // SLLIW reserves shamt[5].
       i(0x1b, 5, 0x420), // SRAIW reserves shamt[5].
-      i(0x03, 7, 0),    // LOAD funct3=111 is reserved.
-      s(4, 0),         // STORE funct3=100 is reserved.
-      b(2, 0),         // BRANCH funct3=010 is reserved.
-      i(0x67, 1, 0),  // JALR funct3 must be zero.
-      0xffffffffu,    // All-ones 32-bit instruction encoding is illegal.
+      i(0x03, 7, 0),     // LOAD funct3=111 is reserved.
+      s(4, 0),           // STORE funct3=100 is reserved.
+      b(2, 0),           // BRANCH funct3=010 is reserved.
+      i(0x67, 1, 0),     // JALR funct3 must be zero.
+      0xffffffffu,       // All-ones 32-bit instruction encoding is illegal.
   };
   check_illegal(illegal_cases);
 
   constexpr std::array unsupported_cases{
       i(0x0f, 1, 0), // FENCE.I belongs to Zifencei.
       i(0x73, 1, 0), // CSR instructions belong to Zicsr.
-      0x00200073u,  // Other SYSTEM instructions are not modeled yet.
-      0x000000f3u,  // ECALL with nonzero rd is not ECALL.
-      0x00108073u,  // EBREAK with nonzero rs1 is not EBREAK.
+      0x00200073u,   // Other SYSTEM instructions are not modeled yet.
+      0x000000f3u,   // ECALL with nonzero rd is not ECALL.
+      0x00108073u,   // EBREAK with nonzero rs1 is not EBREAK.
   };
   check_not_implemented(unsupported_cases);
 }

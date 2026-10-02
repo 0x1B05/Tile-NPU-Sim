@@ -12,7 +12,8 @@ public:
   virtual ~Memory() = default;
 
   // A failed read/write must not partially change the buffer or memory.
-  virtual bool read(std::uint64_t address, std::span<std::byte> bytes) const = 0;
+  virtual bool read(std::uint64_t address,
+                    std::span<std::byte> bytes) const = 0;
   virtual bool write(std::uint64_t address,
                      std::span<const std::byte> bytes) = 0;
 };
@@ -22,8 +23,7 @@ public:
   FlatMemory(std::uint64_t base, std::size_t size);
 
   bool read(std::uint64_t address, std::span<std::byte> bytes) const override;
-  bool write(std::uint64_t address,
-             std::span<const std::byte> bytes) override;
+  bool write(std::uint64_t address, std::span<const std::byte> bytes) override;
 
   std::uint64_t base() const { return base_; }
   std::size_t size() const { return bytes_.size(); }

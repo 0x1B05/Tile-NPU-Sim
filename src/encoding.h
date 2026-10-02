@@ -76,10 +76,12 @@ struct RiscvB {
   std::int32_t imm;
 
   static constexpr RiscvB from(std::uint32_t word) {
+    // clang-format off
     const auto imm = (field<31, 31>(word) << 12) |
-                           (field<7, 7>(word) << 11) |
-                           (field<30, 25>(word) << 5) |
-                           (field<11, 8>(word) << 1);
+                     (field<7, 7>(word)  << 11) |
+                     (field<30, 25>(word) <<  5) |
+                     (field<11, 8>(word)  <<  1);
+    // clang-format on
     return {static_cast<std::uint8_t>(field<14, 12>(word)),
             static_cast<std::uint8_t>(field<19, 15>(word)),
             static_cast<std::uint8_t>(field<24, 20>(word)),
@@ -102,12 +104,27 @@ struct RiscvJ {
   std::int32_t imm;
 
   static constexpr RiscvJ from(std::uint32_t word) {
+    // clang-format off
     const auto imm = (field<31, 31>(word) << 20) |
-                           (field<19, 12>(word) << 12) |
-                           (field<20, 20>(word) << 11) |
-                           (field<30, 21>(word) << 1);
+                     (field<19, 12>(word) << 12) |
+                     (field<20, 20>(word) << 11) |
+                     (field<30, 21>(word) <<  1);
+    // clang-format on
     return {static_cast<std::uint8_t>(field<11, 7>(word)),
             sign_extend(imm, 21)};
+  }
+};
+
+// I-form shift with a ShamtBits-wide amount (6 for RV64, 5 for the *W forms).
+template <unsigned ShamtBits> struct RiscvShift {
+  std::uint8_t dest;
+  std::uint8_t src1;
+  std::uint8_t shamt;
+
+  static constexpr RiscvShift from(std::uint32_t word) {
+    return {static_cast<std::uint8_t>(field<11, 7>(word)),
+            static_cast<std::uint8_t>(field<19, 15>(word)),
+            static_cast<std::uint8_t>(field<20 + ShamtBits - 1, 20>(word))};
   }
 };
 
@@ -128,17 +145,6 @@ struct NpuR3 {
             static_cast<std::uint8_t>(field<16, 12>(word)),
             static_cast<std::uint8_t>(field<11, 7>(word)),
             static_cast<std::uint8_t>(field<6, 2>(word))};
-  }
-};
-
-struct BinarySelector {
-  std::uint8_t domain;
-  bool scalar_source;
-
-  // E_BIN interprets R3's generic sel3 as {dom2, BX}.
-  static constexpr BinarySelector from(std::uint8_t sel3) {
-    return {static_cast<std::uint8_t>(field<2, 1>(sel3)),
-            field<0, 0>(sel3) != 0};
   }
 };
 

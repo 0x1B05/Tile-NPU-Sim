@@ -19,6 +19,10 @@ std::uint64_t signed_word(std::uint32_t value) {
   return sign_extend(value, 32);
 }
 
+std::uint64_t signed_word(std::int32_t value) {
+  return static_cast<std::uint64_t>(static_cast<std::int64_t>(value));
+}
+
 ExecuteResult retired(std::uint64_t next_pc) {
   return {ExecuteStatus::retired, next_pc};
 }
@@ -28,16 +32,14 @@ ExecuteResult fault(ExecuteStatus status, std::uint64_t pc,
   return {status, pc, address};
 }
 
+// clang-format off
 std::size_t load_width(ScalarOp op) {
   switch (op) {
-  case ScalarOp::lb:
-  case ScalarOp::lbu: return 1;
-  case ScalarOp::lh:
-  case ScalarOp::lhu: return 2;
-  case ScalarOp::lw:
-  case ScalarOp::lwu: return 4;
-  case ScalarOp::ld: return 8;
-  default: return 0;
+  case ScalarOp::lb: case ScalarOp::lbu: return 1;
+  case ScalarOp::lh: case ScalarOp::lhu: return 2;
+  case ScalarOp::lw: case ScalarOp::lwu: return 4;
+  case ScalarOp::ld:                     return 8;
+  default:                             return 0;
   }
 }
 
@@ -47,16 +49,17 @@ std::size_t store_width(ScalarOp op) {
   case ScalarOp::sh: return 2;
   case ScalarOp::sw: return 4;
   case ScalarOp::sd: return 8;
-  default: return 0;
+  default:         return 0;
   }
 }
+// clang-format on
 
-ExecuteResult execute_load(const DecodedInstr &instr,
-                           ScalarState &scalar, Memory &memory) {
+ExecuteResult execute_load(const DecodedInstr &instr, ScalarState &scalar,
+                           Memory &memory) {
   const auto pc = scalar.pc;
   const auto width = load_width(instr.op);
-  const auto address = scalar.read_x(instr.regs.src1) +
-                       static_cast<std::uint64_t>(instr.imm);
+  const auto address =
+      scalar.read_x(instr.regs.src1) + static_cast<std::uint64_t>(instr.imm);
   if (address % width != 0) {
     return fault(ExecuteStatus::load_address_misaligned, pc, address);
   }
@@ -69,22 +72,24 @@ ExecuteResult execute_load(const DecodedInstr &instr,
   for (std::size_t i = 0; i < width; ++i) {
     value |= std::uint64_t(std::to_integer<unsigned>(bytes[i])) << (i * 8);
   }
+  // clang-format off
   switch (instr.op) {
-  case ScalarOp::lb: value = sign_extend(value, 8); break;
+  case ScalarOp::lb: value = sign_extend(value, 8);  break;
   case ScalarOp::lh: value = sign_extend(value, 16); break;
   case ScalarOp::lw: value = sign_extend(value, 32); break;
   default: break;
   }
+  // clang-format on
   scalar.write_x(instr.regs.dest, value);
   return retired(pc + 4);
 }
 
-ExecuteResult execute_store(const DecodedInstr &instr,
-                            ScalarState &scalar, Memory &memory) {
+ExecuteResult execute_store(const DecodedInstr &instr, ScalarState &scalar,
+                            Memory &memory) {
   const auto pc = scalar.pc;
   const auto width = store_width(instr.op);
-  const auto address = scalar.read_x(instr.regs.src1) +
-                       static_cast<std::uint64_t>(instr.imm);
+  const auto address =
+      scalar.read_x(instr.regs.src1) + static_cast<std::uint64_t>(instr.imm);
   if (address % width != 0) {
     return fault(ExecuteStatus::store_address_misaligned, pc, address);
   }
@@ -102,8 +107,8 @@ ExecuteResult execute_store(const DecodedInstr &instr,
 
 } // namespace
 
-ExecuteResult execute_rv64i(const DecodedInstr &instr,
-                            ScalarState &scalar, Memory &memory) {
+ExecuteResult execute_rv64i(const DecodedInstr &instr, ScalarState &scalar,
+                            Memory &memory) {
   const auto pc = scalar.pc;
   const auto next_pc = pc + 4;
   const auto &r = instr.regs;
@@ -112,6 +117,10 @@ ExecuteResult execute_rv64i(const DecodedInstr &instr,
   const auto imm = static_cast<std::uint64_t>(instr.imm);
   const auto signed_lhs = std::bit_cast<std::int64_t>(lhs);
   const auto signed_rhs = std::bit_cast<std::int64_t>(rhs);
+  const auto lhs_word = static_cast<std::uint32_t>(lhs);
+  const auto rhs_word = static_cast<std::uint32_t>(rhs);
+  const auto imm_word = static_cast<std::uint32_t>(instr.imm);
+  const auto signed_lhs_word = std::bit_cast<std::int32_t>(lhs_word);
   const auto shamt = static_cast<unsigned>(rhs & 63);
   const auto word_shamt = static_cast<unsigned>(rhs & 31);
 
@@ -125,9 +134,8 @@ ExecuteResult execute_rv64i(const DecodedInstr &instr,
   case ScalarOp::auipc: return write(pc + imm);
   case ScalarOp::jal:
   case ScalarOp::jalr: {
-    const auto target = instr.op == ScalarOp::jal
-                            ? pc + imm
-                            : (lhs + imm) & ~std::uint64_t{1};
+    const auto target =
+        instr.op == ScalarOp::jal ? pc + imm : (lhs + imm) & ~std::uint64_t{1};
     if (target % 4 != 0) {
       return fault(ExecuteStatus::instruction_address_misaligned, pc, target);
     }
@@ -167,58 +175,41 @@ ExecuteResult execute_rv64i(const DecodedInstr &instr,
   case ScalarOp::sb:
   case ScalarOp::sh:
   case ScalarOp::sw:
-  case ScalarOp::sd: return execute_store(instr, scalar, memory);
-  case ScalarOp::addi: return write(lhs + imm);
-  case ScalarOp::slti:
-    return write(signed_lhs < static_cast<std::int64_t>(instr.imm));
-  case ScalarOp::sltiu: return write(lhs < imm);
-  case ScalarOp::xori: return write(lhs ^ imm);
-  case ScalarOp::ori: return write(lhs | imm);
-  case ScalarOp::andi: return write(lhs & imm);
-  case ScalarOp::slli: return write(lhs << instr.imm);
-  case ScalarOp::srli: return write(lhs >> instr.imm);
-  case ScalarOp::srai:
-    return write(static_cast<std::uint64_t>(signed_lhs >> instr.imm));
-  case ScalarOp::add: return write(lhs + rhs);
-  case ScalarOp::sub: return write(lhs - rhs);
-  case ScalarOp::sll: return write(lhs << shamt);
-  case ScalarOp::slt: return write(signed_lhs < signed_rhs);
-  case ScalarOp::sltu: return write(lhs < rhs);
+  case ScalarOp::sd:
+    return execute_store(instr, scalar, memory);
+    // clang-format off
+  case ScalarOp::addi:    return write(lhs + imm);
+  case ScalarOp::slti:    return write(signed_lhs < static_cast<std::int64_t>(instr.imm));
+  case ScalarOp::sltiu:   return write(lhs < imm);
+  case ScalarOp::xori:    return write(lhs ^ imm);
+  case ScalarOp::ori:     return write(lhs | imm);
+  case ScalarOp::andi:    return write(lhs & imm);
+  case ScalarOp::slli:    return write(lhs << instr.imm);
+  case ScalarOp::srli:    return write(lhs >> instr.imm);
+  case ScalarOp::srai:    return write(static_cast<std::uint64_t>(signed_lhs >> instr.imm));
+  case ScalarOp::add:     return write(lhs + rhs);
+  case ScalarOp::sub:     return write(lhs - rhs);
+  case ScalarOp::sll:     return write(lhs << shamt);
+  case ScalarOp::slt:     return write(signed_lhs < signed_rhs);
+  case ScalarOp::sltu:    return write(lhs < rhs);
   case ScalarOp::bit_xor: return write(lhs ^ rhs);
-  case ScalarOp::srl: return write(lhs >> shamt);
-  case ScalarOp::sra: return write(static_cast<std::uint64_t>(signed_lhs >> shamt));
-  case ScalarOp::bit_or: return write(lhs | rhs);
+  case ScalarOp::srl:     return write(lhs >> shamt);
+  case ScalarOp::sra:     return write(static_cast<std::uint64_t>(signed_lhs >> shamt));
+  case ScalarOp::bit_or:  return write(lhs | rhs);
   case ScalarOp::bit_and: return write(lhs & rhs);
-  case ScalarOp::addiw:
-    return write(signed_word(static_cast<std::uint32_t>(lhs) +
-                             static_cast<std::uint32_t>(instr.imm)));
-  case ScalarOp::slliw:
-    return write(signed_word(static_cast<std::uint32_t>(lhs)
-                             << instr.imm));
-  case ScalarOp::srliw:
-    return write(signed_word(static_cast<std::uint32_t>(lhs)
-                             >> instr.imm));
-  case ScalarOp::sraiw:
-    return write(signed_word(static_cast<std::uint32_t>(
-        std::bit_cast<std::int32_t>(static_cast<std::uint32_t>(lhs))
-        >> instr.imm)));
-  case ScalarOp::addw:
-    return write(signed_word(static_cast<std::uint32_t>(lhs) +
-                             static_cast<std::uint32_t>(rhs)));
-  case ScalarOp::subw:
-    return write(signed_word(static_cast<std::uint32_t>(lhs) -
-                             static_cast<std::uint32_t>(rhs)));
-  case ScalarOp::sllw:
-    return write(signed_word(static_cast<std::uint32_t>(lhs) << word_shamt));
-  case ScalarOp::srlw:
-    return write(signed_word(static_cast<std::uint32_t>(lhs) >> word_shamt));
-  case ScalarOp::sraw:
-    return write(signed_word(static_cast<std::uint32_t>(
-        std::bit_cast<std::int32_t>(static_cast<std::uint32_t>(lhs))
-        >> word_shamt)));
-  case ScalarOp::fence: return retired(next_pc);
-  case ScalarOp::ecall: return {ExecuteStatus::environment_call, pc};
-  case ScalarOp::ebreak: return {ExecuteStatus::breakpoint, pc};
+  case ScalarOp::addiw:   return write(signed_word(lhs_word + imm_word));
+  case ScalarOp::slliw:   return write(signed_word(lhs_word << instr.imm));
+  case ScalarOp::srliw:   return write(signed_word(lhs_word >> instr.imm));
+  case ScalarOp::sraiw:   return write(signed_word(signed_lhs_word >> instr.imm));
+  case ScalarOp::addw:    return write(signed_word(lhs_word + rhs_word));
+  case ScalarOp::subw:    return write(signed_word(lhs_word - rhs_word));
+  case ScalarOp::sllw:    return write(signed_word(lhs_word << word_shamt));
+  case ScalarOp::srlw:    return write(signed_word(lhs_word >> word_shamt));
+  case ScalarOp::sraw:    return write(signed_word(signed_lhs_word >> word_shamt));
+  case ScalarOp::fence:   return retired(next_pc);
+  case ScalarOp::ecall:   return {ExecuteStatus::environment_call, pc};
+  case ScalarOp::ebreak:  return {ExecuteStatus::breakpoint, pc};
+  // clang-format on
   default: return {ExecuteStatus::not_implemented, pc};
   }
 }

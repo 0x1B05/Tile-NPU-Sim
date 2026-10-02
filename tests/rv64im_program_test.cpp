@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <stdexcept>
 
+#include "check.h"
+
 void test_rv64im_program() {
   // Assembled with riscv64-linux-gnu-as -march=rv64im -mabi=lp64.
   constexpr std::array<std::uint32_t, 10> program{
@@ -21,13 +23,7 @@ void test_rv64im_program() {
   };
   tile_npu::FlatMemory memory(0x1000, 0x100);
   for (std::size_t i = 0; i < program.size(); ++i) {
-    std::array<std::byte, 4> bytes{};
-    for (std::size_t j = 0; j < bytes.size(); ++j) {
-      bytes[j] = static_cast<std::byte>((program[i] >> (j * 8)) & 0xffu);
-    }
-    if (!memory.write(0x1000 + i * 4, bytes)) {
-      throw std::runtime_error("load factorial program");
-    }
+    write_word(memory, 0x1000 + i * 4, program[i]);
   }
 
   tile_npu::Simulator sim(memory);

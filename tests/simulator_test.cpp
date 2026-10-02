@@ -10,22 +10,9 @@
 #include <string_view>
 #include <variant>
 
+#include "check.h"
+
 namespace {
-
-void check(bool condition, std::string_view message) {
-  if (!condition) {
-    throw std::runtime_error(std::string(message));
-  }
-}
-
-void write_word(tile_npu::FlatMemory &memory, std::uint64_t address,
-                std::uint32_t word) {
-  std::array<std::byte, 4> bytes{};
-  for (std::size_t i = 0; i < bytes.size(); ++i) {
-    bytes[i] = static_cast<std::byte>((word >> (8 * i)) & 0xffu);
-  }
-  check(memory.write(address, bytes), "write instruction word");
-}
 
 bool decode_error(std::uint32_t word, tile_npu::DecodeError expected) {
   const auto result = tile_npu::decode(word);
@@ -37,20 +24,18 @@ void test_decode() {
   const auto add = tile_npu::decode(0x002081b3u); // add x3, x1, x2
   const auto *add_instr = std::get_if<tile_npu::DecodedInstr>(&add);
   check(add_instr && add_instr->op == tile_npu::ScalarOp::add &&
-            add_instr->regs.dest == 3 &&
-            add_instr->regs.src1 == 1 &&
+            add_instr->regs.dest == 3 && add_instr->regs.src1 == 1 &&
             add_instr->regs.src2 == 2,
         "decode RV64I add");
 
   const auto tadd = tile_npu::decode(0x00002080u); // tadd t0, t1, t2
-  const auto *tadd_instr =
-      std::get_if<tile_npu::DecodedNpuInstr>(&tadd);
-  check(tadd_instr &&
-            tadd_instr->op == tile_npu::NpuOp::tadd &&
-            tadd_instr->regs.dest == 0 &&
-            tadd_instr->regs.src1 == 1 &&
-            tadd_instr->regs.src2 == 2,
-        "decode Tile tadd");
+  const auto *tadd_instr = std::get_if<tile_npu::DecodedNpuInstr>(&tadd);
+  check(tadd_instr != nullptr, "decode Tile tadd");
+  check(tadd_instr->op == tile_npu::ElementwiseBinaryOp::add &&
+            tadd_instr->dest.domain == tile_npu::NpuDomain::tile &&
+            tadd_instr->dest.index == 0 && tadd_instr->src1.index == 1 &&
+            std::get<tile_npu::NpuRegister>(tadd_instr->src2).index == 2,
+        "decode typed Tile tadd operands");
   const auto sub = tile_npu::decode(0x402081b3u);
   const auto *sub_instr = std::get_if<tile_npu::DecodedInstr>(&sub);
   check(sub_instr && sub_instr->op == tile_npu::ScalarOp::sub,
@@ -117,11 +102,10 @@ void test_memory_and_step() {
   sim.reset(0x1000);
   sim.state().scalar.write_x(1, 9);
   const auto result = sim.step();
-  check(result.status == tile_npu::StepStatus::retired &&
-            result.pc == 0x1000 && result.instr == 0x00000013u,
+  check(result.status == tile_npu::StepStatus::retired && result.pc == 0x1000 &&
+            result.instr == 0x00000013u,
         "fetch a little-endian 32-bit instruction");
-  check(sim.state().scalar.pc == 0x1004 &&
-            sim.state().scalar.read_x(1) == 9,
+  check(sim.state().scalar.pc == 0x1004 && sim.state().scalar.read_x(1) == 9,
         "addi x0, x0, 0 advances PC without changing registers");
 
   sim.reset(0x1004);
@@ -132,8 +116,8 @@ void test_memory_and_step() {
 
   sim.reset(0x1008);
   const auto fault = sim.step();
-  check(fault.status == tile_npu::StepStatus::fetch_fault &&
-            !fault.instr && sim.state().scalar.pc == 0x1008,
+  check(fault.status == tile_npu::StepStatus::fetch_fault && !fault.instr &&
+            sim.state().scalar.pc == 0x1008,
         "failed fetch leaves PC unchanged");
   sim.reset(0x1002);
   const auto misaligned = sim.step();
@@ -249,6 +233,9 @@ void test_failed_execution_is_non_mutating() {
 void test_rv64im_decode();
 void test_rv64im_execute();
 void test_rv64im_program();
+void test_matrix_view();
+void test_descriptor_view();
+void test_config_fields();
 
 int main() {
   try {
@@ -257,6 +244,9 @@ int main() {
     test_rv64im_decode();
     test_rv64im_execute();
     test_rv64im_program();
+    test_matrix_view();
+    test_descriptor_view();
+    test_config_fields();
     test_memory_and_step();
     test_add_execution();
     test_tadd_execution();
