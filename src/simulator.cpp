@@ -10,28 +10,6 @@
 #include <variant>
 
 namespace tile_npu {
-namespace {
-
-StepStatus step_status(ExecuteStatus status) {
-  using enum ExecuteStatus;
-  // clang-format off
-  switch (status) {
-  case retired:                        return StepStatus::retired;
-  case not_implemented:                return StepStatus::execution_not_implemented;
-  case invalid_configuration:          return StepStatus::invalid_configuration;
-  case instruction_address_misaligned: return StepStatus::instruction_address_misaligned;
-  case load_address_misaligned:        return StepStatus::load_address_misaligned;
-  case store_address_misaligned:       return StepStatus::store_address_misaligned;
-  case load_fault:                     return StepStatus::load_fault;
-  case store_fault:                    return StepStatus::store_fault;
-  case environment_call:               return StepStatus::environment_call;
-  case breakpoint:                     return StepStatus::breakpoint;
-  }
-  // clang-format on
-  return StepStatus::execution_not_implemented;
-}
-
-} // namespace
 
 void Simulator::reset(std::uint64_t entry_pc) {
   state_ = State{};
@@ -64,10 +42,10 @@ StepResult Simulator::step() {
       scalar_instr
           ? execute_scalar(*scalar_instr, state_, memory_)
           : execute_npu(std::get<DecodedNpuInstr>(decoded), state_, memory_);
-  if (execution.status == ExecuteStatus::retired) {
+  if (execution.status == StepStatus::retired) {
     state_.scalar.pc = execution.redirect.value_or(pc + 4);
   }
-  return {step_status(execution.status), pc, instr, execution.fault_address};
+  return {execution.status, pc, instr, execution.fault_address};
 }
 
 } // namespace tile_npu

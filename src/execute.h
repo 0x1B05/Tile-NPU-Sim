@@ -2,6 +2,7 @@
 
 #include "tile_npu/decode.h"
 #include "tile_npu/memory.h"
+#include "tile_npu/simulator.h"
 #include "tile_npu/state.h"
 
 #include <cstdint>
@@ -9,21 +10,10 @@
 
 namespace tile_npu {
 
-enum class ExecuteStatus {
-  retired,
-  not_implemented,
-  invalid_configuration,
-  instruction_address_misaligned,
-  load_address_misaligned,
-  store_address_misaligned,
-  load_fault,
-  store_fault,
-  environment_call,
-  breakpoint,
-};
-
+// Executors report the step pipeline's public status vocabulary, but only
+// ever produce the execution-stage subset of it.
 struct ExecuteResult {
-  ExecuteStatus status;
+  StepStatus status;
   // Set only by a taken jump/branch; any other retired instruction advances
   // to pc + 4, which the step loop owns.
   std::optional<std::uint64_t> redirect = std::nullopt;

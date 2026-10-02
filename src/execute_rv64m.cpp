@@ -87,12 +87,12 @@ ExecuteResult execute_rv64m(const DecodedInstr &instr, ScalarState &scalar) {
   case ScalarOp::divuw:  result = signed_word(rhs_word == 0 ? UINT32_MAX : lhs_word / rhs_word); break;
   case ScalarOp::remw:   result = signed_word(remainder_signed_word(lhs_word, rhs_word)); break;
   case ScalarOp::remuw:  result = signed_word(rhs_word == 0 ? lhs_word : lhs_word % rhs_word); break;
-  default: return {ExecuteStatus::not_implemented};
+  default: return {StepStatus::execution_not_implemented};
   }
   // clang-format on
 
   scalar.write_x(r.dest, result);
-  return {ExecuteStatus::retired};
+  return {StepStatus::retired};
 }
 
 } // namespace tile_npu

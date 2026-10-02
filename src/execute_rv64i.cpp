@@ -23,7 +23,7 @@ std::uint64_t signed_word(std::int32_t value) {
   return static_cast<std::uint64_t>(static_cast<std::int64_t>(value));
 }
 
-ExecuteResult fault(ExecuteStatus status, std::uint64_t address) {
+ExecuteResult fault(StepStatus status, std::uint64_t address) {
   return {status, std::nullopt, address};
 }
 
@@ -56,12 +56,12 @@ ExecuteResult execute_load(const DecodedInstr &instr, ScalarState &scalar,
   const auto address =
       scalar.read_x(instr.regs.src1) + static_cast<std::uint64_t>(instr.imm);
   if (address % width != 0) {
-    return fault(ExecuteStatus::load_address_misaligned, address);
+    return fault(StepStatus::load_address_misaligned, address);
   }
 
   std::array<std::byte, 8> bytes{};
   if (!memory.read(address, std::span<std::byte>(bytes.data(), width))) {
-    return fault(ExecuteStatus::load_fault, address);
+    return fault(StepStatus::load_fault, address);
   }
   std::uint64_t value = 0;
   for (std::size_t i = 0; i < width; ++i) {
@@ -76,7 +76,7 @@ ExecuteResult execute_load(const DecodedInstr &instr, ScalarState &scalar,
   }
   // clang-format on
   scalar.write_x(instr.regs.dest, value);
-  return {ExecuteStatus::retired};
+  return {StepStatus::retired};
 }
 
 ExecuteResult execute_store(const DecodedInstr &instr, ScalarState &scalar,
@@ -86,7 +86,7 @@ ExecuteResult execute_store(const DecodedInstr &instr, ScalarState &scalar,
   const auto address =
       scalar.read_x(instr.regs.src1) + static_cast<std::uint64_t>(instr.imm);
   if (address % width != 0) {
-    return fault(ExecuteStatus::store_address_misaligned, address);
+    return fault(StepStatus::store_address_misaligned, address);
   }
 
   const auto value = scalar.read_x(instr.regs.src2);
@@ -95,9 +95,9 @@ ExecuteResult execute_store(const DecodedInstr &instr, ScalarState &scalar,
     bytes[i] = static_cast<std::byte>((value >> (i * 8)) & 0xffu);
   }
   if (!memory.write(address, std::span<const std::byte>(bytes.data(), width))) {
-    return fault(ExecuteStatus::store_fault, address);
+    return fault(StepStatus::store_fault, address);
   }
-  return {ExecuteStatus::retired};
+  return {StepStatus::retired};
 }
 
 } // namespace
@@ -121,7 +121,7 @@ ExecuteResult execute_rv64i(const DecodedInstr &instr, ScalarState &scalar,
 
   auto write = [&](std::uint64_t value) -> ExecuteResult {
     scalar.write_x(r.dest, value);
-    return {ExecuteStatus::retired};
+    return {StepStatus::retired};
   };
 
   switch (instr.op) {
@@ -132,10 +132,10 @@ ExecuteResult execute_rv64i(const DecodedInstr &instr, ScalarState &scalar,
     const auto target =
         instr.op == ScalarOp::jal ? pc + imm : (lhs + imm) & ~std::uint64_t{1};
     if (target % 4 != 0) {
-      return fault(ExecuteStatus::instruction_address_misaligned, target);
+      return fault(StepStatus::instruction_address_misaligned, target);
     }
     scalar.write_x(r.dest, link);
-    return {ExecuteStatus::retired, target};
+    return {StepStatus::retired, target};
   }
   case ScalarOp::beq:
   case ScalarOp::bne:
@@ -153,12 +153,12 @@ ExecuteResult execute_rv64i(const DecodedInstr &instr, ScalarState &scalar,
     case ScalarOp::bgeu: taken = lhs >= rhs; break;
     default: break;
     }
-    if (!taken) return {ExecuteStatus::retired};
+    if (!taken) return {StepStatus::retired};
     const auto target = pc + imm;
     if (target % 4 != 0) {
-      return fault(ExecuteStatus::instruction_address_misaligned, target);
+      return fault(StepStatus::instruction_address_misaligned, target);
     }
-    return {ExecuteStatus::retired, target};
+    return {StepStatus::retired, target};
   }
   case ScalarOp::lb:
   case ScalarOp::lh:
@@ -201,11 +201,11 @@ ExecuteResult execute_rv64i(const DecodedInstr &instr, ScalarState &scalar,
   case ScalarOp::sllw:    return write(signed_word(lhs_word << word_shamt));
   case ScalarOp::srlw:    return write(signed_word(lhs_word >> word_shamt));
   case ScalarOp::sraw:    return write(signed_word(signed_lhs_word >> word_shamt));
-  case ScalarOp::fence:   return {ExecuteStatus::retired};
-  case ScalarOp::ecall:   return {ExecuteStatus::environment_call};
-  case ScalarOp::ebreak:  return {ExecuteStatus::breakpoint};
+  case ScalarOp::fence:   return {StepStatus::retired};
+  case ScalarOp::ecall:   return {StepStatus::environment_call};
+  case ScalarOp::ebreak:  return {StepStatus::breakpoint};
   // clang-format on
-  default: return {ExecuteStatus::not_implemented};
+  default: return {StepStatus::execution_not_implemented};
   }
 }
 
