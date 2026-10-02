@@ -65,7 +65,7 @@ StepResult Simulator::step() {
           ? execute_scalar(*scalar_instr, state_, memory_)
           : execute_npu(std::get<DecodedNpuInstr>(decoded), state_, memory_);
   if (execution.status == ExecuteStatus::retired) {
-    state_.scalar.pc = execution.next_pc;
+    state_.scalar.pc = execution.redirect.value_or(pc + 4);
   }
   return {step_status(execution.status), pc, instr, execution.fault_address};
 }

@@ -24,7 +24,9 @@ enum class ExecuteStatus {
 
 struct ExecuteResult {
   ExecuteStatus status;
-  std::uint64_t next_pc;
+  // Set only by a taken jump/branch; any other retired instruction advances
+  // to pc + 4, which the step loop owns.
+  std::optional<std::uint64_t> redirect = std::nullopt;
   std::optional<std::uint64_t> fault_address = std::nullopt;
 };
 

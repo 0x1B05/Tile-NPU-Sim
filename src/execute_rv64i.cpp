@@ -23,13 +23,8 @@ std::uint64_t signed_word(std::int32_t value) {
   return static_cast<std::uint64_t>(static_cast<std::int64_t>(value));
 }
 
-ExecuteResult retired(std::uint64_t next_pc) {
-  return {ExecuteStatus::retired, next_pc};
-}
-
-ExecuteResult fault(ExecuteStatus status, std::uint64_t pc,
-                    std::uint64_t address) {
-  return {status, pc, address};
+ExecuteResult fault(ExecuteStatus status, std::uint64_t address) {
+  return {status, std::nullopt, address};
 }
 
 // clang-format off
@@ -61,12 +56,12 @@ ExecuteResult execute_load(const DecodedInstr &instr, ScalarState &scalar,
   const auto address =
       scalar.read_x(instr.regs.src1) + static_cast<std::uint64_t>(instr.imm);
   if (address % width != 0) {
-    return fault(ExecuteStatus::load_address_misaligned, pc, address);
+    return fault(ExecuteStatus::load_address_misaligned, address);
   }
 
   std::array<std::byte, 8> bytes{};
   if (!memory.read(address, std::span<std::byte>(bytes.data(), width))) {
-    return fault(ExecuteStatus::load_fault, pc, address);
+    return fault(ExecuteStatus::load_fault, address);
   }
   std::uint64_t value = 0;
   for (std::size_t i = 0; i < width; ++i) {
@@ -81,7 +76,7 @@ ExecuteResult execute_load(const DecodedInstr &instr, ScalarState &scalar,
   }
   // clang-format on
   scalar.write_x(instr.regs.dest, value);
-  return retired(pc + 4);
+  return {ExecuteStatus::retired};
 }
 
 ExecuteResult execute_store(const DecodedInstr &instr, ScalarState &scalar,
@@ -91,7 +86,7 @@ ExecuteResult execute_store(const DecodedInstr &instr, ScalarState &scalar,
   const auto address =
       scalar.read_x(instr.regs.src1) + static_cast<std::uint64_t>(instr.imm);
   if (address % width != 0) {
-    return fault(ExecuteStatus::store_address_misaligned, pc, address);
+    return fault(ExecuteStatus::store_address_misaligned, address);
   }
 
   const auto value = scalar.read_x(instr.regs.src2);
@@ -100,9 +95,9 @@ ExecuteResult execute_store(const DecodedInstr &instr, ScalarState &scalar,
     bytes[i] = static_cast<std::byte>((value >> (i * 8)) & 0xffu);
   }
   if (!memory.write(address, std::span<const std::byte>(bytes.data(), width))) {
-    return fault(ExecuteStatus::store_fault, pc, address);
+    return fault(ExecuteStatus::store_fault, address);
   }
-  return retired(pc + 4);
+  return {ExecuteStatus::retired};
 }
 
 } // namespace
@@ -110,7 +105,7 @@ ExecuteResult execute_store(const DecodedInstr &instr, ScalarState &scalar,
 ExecuteResult execute_rv64i(const DecodedInstr &instr, ScalarState &scalar,
                             Memory &memory) {
   const auto pc = scalar.pc;
-  const auto next_pc = pc + 4;
+  const auto link = pc + 4;
   const auto &r = instr.regs;
   const auto lhs = scalar.read_x(r.src1);
   const auto rhs = scalar.read_x(r.src2);
@@ -124,9 +119,9 @@ ExecuteResult execute_rv64i(const DecodedInstr &instr, ScalarState &scalar,
   const auto shamt = static_cast<unsigned>(rhs & 63);
   const auto word_shamt = static_cast<unsigned>(rhs & 31);
 
-  auto write = [&](std::uint64_t value) {
+  auto write = [&](std::uint64_t value) -> ExecuteResult {
     scalar.write_x(r.dest, value);
-    return retired(next_pc);
+    return {ExecuteStatus::retired};
   };
 
   switch (instr.op) {
@@ -137,10 +132,10 @@ ExecuteResult execute_rv64i(const DecodedInstr &instr, ScalarState &scalar,
     const auto target =
         instr.op == ScalarOp::jal ? pc + imm : (lhs + imm) & ~std::uint64_t{1};
     if (target % 4 != 0) {
-      return fault(ExecuteStatus::instruction_address_misaligned, pc, target);
+      return fault(ExecuteStatus::instruction_address_misaligned, target);
     }
-    scalar.write_x(r.dest, next_pc);
-    return retired(target);
+    scalar.write_x(r.dest, link);
+    return {ExecuteStatus::retired, target};
   }
   case ScalarOp::beq:
   case ScalarOp::bne:
@@ -158,12 +153,12 @@ ExecuteResult execute_rv64i(const DecodedInstr &instr, ScalarState &scalar,
     case ScalarOp::bgeu: taken = lhs >= rhs; break;
     default: break;
     }
-    if (!taken) return retired(next_pc);
+    if (!taken) return {ExecuteStatus::retired};
     const auto target = pc + imm;
-    return target % 4 == 0
-               ? retired(target)
-               : fault(ExecuteStatus::instruction_address_misaligned, pc,
-                       target);
+    if (target % 4 != 0) {
+      return fault(ExecuteStatus::instruction_address_misaligned, target);
+    }
+    return {ExecuteStatus::retired, target};
   }
   case ScalarOp::lb:
   case ScalarOp::lh:
@@ -206,11 +201,11 @@ ExecuteResult execute_rv64i(const DecodedInstr &instr, ScalarState &scalar,
   case ScalarOp::sllw:    return write(signed_word(lhs_word << word_shamt));
   case ScalarOp::srlw:    return write(signed_word(lhs_word >> word_shamt));
   case ScalarOp::sraw:    return write(signed_word(signed_lhs_word >> word_shamt));
-  case ScalarOp::fence:   return retired(next_pc);
-  case ScalarOp::ecall:   return {ExecuteStatus::environment_call, pc};
-  case ScalarOp::ebreak:  return {ExecuteStatus::breakpoint, pc};
+  case ScalarOp::fence:   return {ExecuteStatus::retired};
+  case ScalarOp::ecall:   return {ExecuteStatus::environment_call};
+  case ScalarOp::ebreak:  return {ExecuteStatus::breakpoint};
   // clang-format on
-  default: return {ExecuteStatus::not_implemented, pc};
+  default: return {ExecuteStatus::not_implemented};
   }
 }
 
