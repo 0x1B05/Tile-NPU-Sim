@@ -39,16 +39,16 @@ bool execute_tadd(const ElementwiseBinaryInstruction &instr, State &state) {
   const auto &dst_config = state.tc[dst_index];
   const auto &lhs_config = state.tc[lhs_index];
   const auto &rhs_config = state.tc[rhs_index];
+  const bool dtypes_match = dst_config.dtype == lhs_config.dtype &&
+                            dst_config.dtype == rhs_config.dtype;
+  const bool shapes_match = dst_config.rows == lhs_config.rows &&
+                            dst_config.rows == rhs_config.rows &&
+                            dst_config.cols == lhs_config.cols &&
+                            dst_config.cols == rhs_config.cols;
   if (!valid_tile_config(dst_config) || !valid_tile_config(lhs_config) ||
       !valid_tile_config(rhs_config) ||
-      (dst_config.arith_mode != ArithMode::wrap &&
-       dst_config.arith_mode != ArithMode::sat) ||
-      dst_config.dtype != lhs_config.dtype ||
-      dst_config.dtype != rhs_config.dtype ||
-      dst_config.rows != lhs_config.rows ||
-      dst_config.rows != rhs_config.rows ||
-      dst_config.cols != lhs_config.cols ||
-      dst_config.cols != rhs_config.cols) {
+      dst_config.arith_mode > ArithMode::sat || !dtypes_match ||
+      !shapes_match) {
     return false;
   }
 

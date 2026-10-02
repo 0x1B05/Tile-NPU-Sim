@@ -110,6 +110,22 @@ template <typename T> bool scalar_as(const ConfigFieldValue &value, T &result) {
   return false;
 }
 
+template <typename T>
+ConfigAccessError write_scalar(T &target, const ConfigFieldValue &value) {
+  T raw;
+  return scalar_as(value, raw) ? (target = raw, ConfigAccessError::none)
+                               : ConfigAccessError::invalid_value;
+}
+
+template <typename T>
+ConfigAccessError write_scalar(T &target, const ConfigFieldValue &value,
+                               std::type_identity_t<T> max) {
+  T raw;
+  return scalar_as(value, raw) && raw <= max
+             ? (target = raw, ConfigAccessError::none)
+             : ConfigAccessError::invalid_value;
+}
+
 ConfigAccessError write_dtype(ConfigBank bank, DType &target,
                               const ConfigFieldValue &value) {
   DType dtype;
@@ -126,21 +142,66 @@ ConfigAccessError write_matrix_shape(Config &config, ConfigField field,
       (field == ConfigField::layout && raw != 0)) {
     return ConfigAccessError::invalid_value;
   }
-  if (field == ConfigField::rows)
-    config.rows = raw;
-  if (field == ConfigField::cols)
-    config.cols = raw;
-  if (field == ConfigField::layout)
-    config.layout = raw;
+  // clang-format off
+  switch (field) {
+  case ConfigField::rows:   config.rows = raw;   break;
+  case ConfigField::cols:   config.cols = raw;   break;
+  case ConfigField::layout: config.layout = raw; break;
+  default: break;
+  }
+  // clang-format on
   return ConfigAccessError::none;
 }
 
-ConfigAccessError write_vector_len(std::uint8_t &target,
-                                   const ConfigFieldValue &value) {
-  std::uint8_t raw;
-  return scalar_as(value, raw) && raw <= VECTOR_LANES
-             ? (target = raw, ConfigAccessError::none)
-             : ConfigAccessError::invalid_value;
+template <typename Config>
+ConfigAccessError write_matrix_config(Config &config, ConfigBank bank,
+                                      ConfigField field,
+                                      const ConfigFieldValue &value) {
+  if (field == ConfigField::dtype)
+    return write_dtype(bank, config.dtype, value);
+  if (field == ConfigField::rows || field == ConfigField::cols ||
+      field == ConfigField::layout)
+    return write_matrix_shape(config, field, value);
+  return ConfigAccessError::unsupported_field;
+}
+
+template <typename Config>
+ConfigAccessError write_vector_config(Config &config, ConfigBank bank,
+                                      ConfigField field,
+                                      const ConfigFieldValue &value) {
+  if (field == ConfigField::dtype)
+    return write_dtype(bank, config.dtype, value);
+  if (field == ConfigField::len)
+    return write_scalar(config.len, value, VECTOR_LANES);
+  return ConfigAccessError::unsupported_field;
+}
+
+ConfigAccessError write_matrix_descriptor(MatrixDescriptor &descriptor,
+                                          ConfigField field,
+                                          const ConfigFieldValue &value) {
+  if (field == ConfigField::base_addr)
+    return write_scalar(descriptor.base_addr, value);
+  if (field == ConfigField::row_stride_bytes)
+    return write_scalar(descriptor.row_stride_bytes, value);
+  if (field == ConfigField::col_stride_bytes)
+    return write_scalar(descriptor.col_stride_bytes, value);
+  if (field == ConfigField::transform)
+    return write_scalar(descriptor.transform, value, std::uint8_t{1});
+  if (field == ConfigField::flags)
+    return write_scalar(descriptor.flags, value, std::uint8_t{2});
+  return ConfigAccessError::unsupported_field;
+}
+
+ConfigAccessError write_vector_descriptor(VectorDescriptor &descriptor,
+                                          ConfigField field,
+                                          const ConfigFieldValue &value) {
+  if (field == ConfigField::base_addr)
+    return write_scalar(descriptor.base_addr, value);
+  if (field == ConfigField::stride_bytes)
+    return write_scalar(descriptor.stride_bytes, value);
+  if (field == ConfigField::flags)
+    return write_scalar(descriptor.flags, value, std::uint8_t{1});
+  return ConfigAccessError::unsupported_field;
 }
 
 ConfigReadResult unsupported() { return ConfigAccessError::unsupported_field; }
@@ -234,108 +295,27 @@ ConfigAccessError write_config_field(State &state, ConfigBank bank,
   if (!field_allowed(bank, field))
     return ConfigAccessError::unsupported_field;
 
+  // clang-format off
   switch (bank) {
   case ConfigBank::tc: {
     auto &config = state.tc[index];
-    if (field == ConfigField::dtype)
-      return write_dtype(bank, config.dtype, value);
-    if (field == ConfigField::rows || field == ConfigField::cols ||
-        field == ConfigField::layout)
-      return write_matrix_shape(config, field, value);
-    if (field == ConfigField::arith_mode) {
-      ArithMode mode;
-      return scalar_as(value, mode) &&
-                     (mode == ArithMode::wrap || mode == ArithMode::sat)
-                 ? (config.arith_mode = mode, ConfigAccessError::none)
-                 : ConfigAccessError::invalid_value;
-    }
-    return ConfigAccessError::unsupported_field;
+    if (field == ConfigField::arith_mode)
+      return write_scalar(config.arith_mode, value, ArithMode::sat);
+    return write_matrix_config(config, bank, field, value);
   }
-  case ConfigBank::ac: {
-    auto &config = state.ac[index];
-    if (field == ConfigField::dtype)
-      return write_dtype(bank, config.dtype, value);
-    if (field == ConfigField::rows || field == ConfigField::cols ||
-        field == ConfigField::layout)
-      return write_matrix_shape(config, field, value);
-    return ConfigAccessError::unsupported_field;
-  }
-  case ConfigBank::bc: {
-    auto &config = state.bc[index];
-    if (field == ConfigField::dtype)
-      return write_dtype(bank, config.dtype, value);
-    if (field == ConfigField::len)
-      return write_vector_len(config.len, value);
-    return ConfigAccessError::unsupported_field;
-  }
-  case ConfigBank::vc: {
-    auto &config = state.vc[index];
-    if (field == ConfigField::dtype)
-      return write_dtype(bank, config.dtype, value);
-    if (field == ConfigField::len)
-      return write_vector_len(config.len, value);
-    return ConfigAccessError::unsupported_field;
-  }
+  case ConfigBank::ac: return write_matrix_config(state.ac[index], bank, field, value);
+  case ConfigBank::bc: return write_vector_config(state.bc[index], bank, field, value);
+  case ConfigBank::vc: return write_vector_config(state.vc[index], bank, field, value);
   case ConfigBank::tm:
-  case ConfigBank::am: {
-    auto &descriptor =
-        bank == ConfigBank::tm ? state.tm[index] : state.am[index];
-    if (field == ConfigField::base_addr) {
-      std::uint64_t value64;
-      return scalar_as(value, value64)
-                 ? (descriptor.base_addr = value64, ConfigAccessError::none)
-                 : ConfigAccessError::invalid_value;
-    }
-    if (field == ConfigField::row_stride_bytes ||
-        field == ConfigField::col_stride_bytes) {
-      std::int32_t stride;
-      if (!scalar_as(value, stride))
-        return ConfigAccessError::invalid_value;
-      if (field == ConfigField::row_stride_bytes)
-        descriptor.row_stride_bytes = stride;
-      if (field == ConfigField::col_stride_bytes)
-        descriptor.col_stride_bytes = stride;
-      return ConfigAccessError::none;
-    }
-    if (field == ConfigField::transform) {
-      std::uint8_t transform;
-      return scalar_as(value, transform) && transform <= 1
-                 ? (descriptor.transform = transform, ConfigAccessError::none)
-                 : ConfigAccessError::invalid_value;
-    }
-    if (field == ConfigField::flags) {
-      std::uint8_t flags;
-      const auto valid = scalar_as(value, flags) && flags <= 2;
-      return valid ? (descriptor.flags = flags, ConfigAccessError::none)
-                   : ConfigAccessError::invalid_value;
-    }
-    return ConfigAccessError::unsupported_field;
-  }
+  case ConfigBank::am:
+    return write_matrix_descriptor(
+        bank == ConfigBank::tm ? state.tm[index] : state.am[index], field, value);
   case ConfigBank::bm:
-  case ConfigBank::vm: {
-    auto &descriptor =
-        bank == ConfigBank::bm ? state.bm[index] : state.vm[index];
-    if (field == ConfigField::base_addr) {
-      std::uint64_t value64;
-      return scalar_as(value, value64)
-                 ? (descriptor.base_addr = value64, ConfigAccessError::none)
-                 : ConfigAccessError::invalid_value;
-    }
-    if (field == ConfigField::stride_bytes) {
-      std::int32_t stride;
-      return scalar_as(value, stride)
-                 ? (descriptor.stride_bytes = stride, ConfigAccessError::none)
-                 : ConfigAccessError::invalid_value;
-    }
-    if (field == ConfigField::flags) {
-      std::uint8_t flags;
-      return scalar_as(value, flags) && flags <= 1
-                 ? (descriptor.flags = flags, ConfigAccessError::none)
-                 : ConfigAccessError::invalid_value;
-    }
-    return ConfigAccessError::unsupported_field;
+  case ConfigBank::vm:
+    return write_vector_descriptor(
+        bank == ConfigBank::bm ? state.bm[index] : state.vm[index], field, value);
   }
-  }
+  // clang-format on
   return ConfigAccessError::unsupported_field;
 }
 
