@@ -62,8 +62,8 @@ StepResult Simulator::step() {
   const auto *scalar_instr = std::get_if<DecodedInstr>(&decoded);
   const auto execution =
       scalar_instr
-          ? execute(*scalar_instr, state_, memory_)
-          : execute(std::get<DecodedNpuInstr>(decoded), state_, memory_);
+          ? execute_scalar(*scalar_instr, state_, memory_)
+          : execute_npu(std::get<DecodedNpuInstr>(decoded), state_, memory_);
   if (execution.status == ExecuteStatus::retired) {
     state_.scalar.pc = execution.next_pc;
   }
