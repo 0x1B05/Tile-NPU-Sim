@@ -41,6 +41,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `src/decode.cpp` | NPU 译码表 (q != 11): major4/sel3/funct4 由 pattern 直接匹配, 首条命中生效 |
 | `src/decode_rv64im.cpp` | RV64IM 译码表 (q = 11): 一行一条指令的 pattern, 表尾 catch-all 划分 illegal / not_implemented |
 | `src/execute.cpp` | 执行分派 (标量 / NPU 各域执行器) |
+| `src/execute_elementwise.cpp` | 逐元素 (E_BIN) 族执行器: 公共约束校验与逐元素循环抽象为模板, 每个 op 只提供算术 lambda |
 | `src/execute_rv64i.cpp`, `src/execute_rv64m.cpp` | RV64I 与 M 扩展语义 |
 | `src/simulator.cpp`, `src/memory.cpp` | 取指 (小端 4 字节拼字) 与步进循环, 内存实现 |
 | `tests/*.cpp` | 全部编入 `sim_tests` 一个测试程序; 无测试框架, 见"测试约定" |
