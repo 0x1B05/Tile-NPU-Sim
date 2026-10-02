@@ -17,24 +17,25 @@ constexpr std::size_t MEMORY_SIZE = 128 * 1024 * 1024;
 constexpr std::uint64_t STEP_LIMIT = 10'000'000;
 
 std::string_view status_name(tile_npu::StepStatus status) {
-  using tile_npu::StepStatus;
+  using enum tile_npu::StepStatus;
+  // clang-format off
   switch (status) {
-  case StepStatus::retired: return "retired";
-  case StepStatus::decode_not_implemented: return "decode_not_implemented";
-  case StepStatus::execution_not_implemented: return "execution_not_implemented";
-  case StepStatus::illegal_instruction: return "illegal_instruction";
-  case StepStatus::invalid_configuration: return "invalid_configuration";
-  case StepStatus::misaligned_pc: return "misaligned_pc";
-  case StepStatus::fetch_fault: return "fetch_fault";
-  case StepStatus::instruction_address_misaligned:
-    return "instruction_address_misaligned";
-  case StepStatus::load_address_misaligned: return "load_address_misaligned";
-  case StepStatus::store_address_misaligned: return "store_address_misaligned";
-  case StepStatus::load_fault: return "load_fault";
-  case StepStatus::store_fault: return "store_fault";
-  case StepStatus::environment_call: return "environment_call";
-  case StepStatus::breakpoint: return "breakpoint";
+  case retired:                        return "retired";
+  case decode_not_implemented:         return "decode_not_implemented";
+  case execution_not_implemented:      return "execution_not_implemented";
+  case illegal_instruction:            return "illegal_instruction";
+  case invalid_configuration:          return "invalid_configuration";
+  case misaligned_pc:                  return "misaligned_pc";
+  case fetch_fault:                    return "fetch_fault";
+  case instruction_address_misaligned: return "instruction_address_misaligned";
+  case load_address_misaligned:        return "load_address_misaligned";
+  case store_address_misaligned:       return "store_address_misaligned";
+  case load_fault:                     return "load_fault";
+  case store_fault:                    return "store_fault";
+  case environment_call:               return "environment_call";
+  case breakpoint:                     return "breakpoint";
   }
+  // clang-format on
   return "unknown";
 }
 

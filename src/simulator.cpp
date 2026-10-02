@@ -13,23 +13,21 @@ namespace tile_npu {
 namespace {
 
 StepStatus step_status(ExecuteStatus status) {
+  using enum ExecuteStatus;
+  // clang-format off
   switch (status) {
-  case ExecuteStatus::retired: return StepStatus::retired;
-  case ExecuteStatus::not_implemented:
-    return StepStatus::execution_not_implemented;
-  case ExecuteStatus::invalid_configuration:
-    return StepStatus::invalid_configuration;
-  case ExecuteStatus::instruction_address_misaligned:
-    return StepStatus::instruction_address_misaligned;
-  case ExecuteStatus::load_address_misaligned:
-    return StepStatus::load_address_misaligned;
-  case ExecuteStatus::store_address_misaligned:
-    return StepStatus::store_address_misaligned;
-  case ExecuteStatus::load_fault: return StepStatus::load_fault;
-  case ExecuteStatus::store_fault: return StepStatus::store_fault;
-  case ExecuteStatus::environment_call: return StepStatus::environment_call;
-  case ExecuteStatus::breakpoint: return StepStatus::breakpoint;
+  case retired:                        return StepStatus::retired;
+  case not_implemented:                return StepStatus::execution_not_implemented;
+  case invalid_configuration:          return StepStatus::invalid_configuration;
+  case instruction_address_misaligned: return StepStatus::instruction_address_misaligned;
+  case load_address_misaligned:        return StepStatus::load_address_misaligned;
+  case store_address_misaligned:       return StepStatus::store_address_misaligned;
+  case load_fault:                     return StepStatus::load_fault;
+  case store_fault:                    return StepStatus::store_fault;
+  case environment_call:               return StepStatus::environment_call;
+  case breakpoint:                     return StepStatus::breakpoint;
   }
+  // clang-format on
   return StepStatus::execution_not_implemented;
 }
 

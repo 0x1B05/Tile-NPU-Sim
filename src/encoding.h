@@ -76,10 +76,12 @@ struct RiscvB {
   std::int32_t imm;
 
   static constexpr RiscvB from(std::uint32_t word) {
+    // clang-format off
     const auto imm = (field<31, 31>(word) << 12) |
-                           (field<7, 7>(word) << 11) |
-                           (field<30, 25>(word) << 5) |
-                           (field<11, 8>(word) << 1);
+                     (field<7, 7>(word)  << 11) |
+                     (field<30, 25>(word) <<  5) |
+                     (field<11, 8>(word)  <<  1);
+    // clang-format on
     return {static_cast<std::uint8_t>(field<14, 12>(word)),
             static_cast<std::uint8_t>(field<19, 15>(word)),
             static_cast<std::uint8_t>(field<24, 20>(word)),
@@ -102,10 +104,12 @@ struct RiscvJ {
   std::int32_t imm;
 
   static constexpr RiscvJ from(std::uint32_t word) {
+    // clang-format off
     const auto imm = (field<31, 31>(word) << 20) |
-                           (field<19, 12>(word) << 12) |
-                           (field<20, 20>(word) << 11) |
-                           (field<30, 21>(word) << 1);
+                     (field<19, 12>(word) << 12) |
+                     (field<20, 20>(word) << 11) |
+                     (field<30, 21>(word) <<  1);
+    // clang-format on
     return {static_cast<std::uint8_t>(field<11, 7>(word)),
             sign_extend(imm, 21)};
   }

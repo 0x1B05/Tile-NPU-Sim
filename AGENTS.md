@@ -82,6 +82,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 
 - 遵循现有代码: 2 空格缩进, `#pragma once`, `snake_case` 函数/变量, `enum class` 强类型枚举, 尽可能 `constexpr`。
 - 常量名用 `ALL_CAPS` (如 `MATRIX_EXTENT`), 不用 `k` 前缀。
+- 查表性质的 switch 和位段拼装用对齐排版, 并以 `// clang-format off`/`// clang-format on` 保护。
 - 位段一律通过 `encoding::field<Hi,Lo>` 提取, 不在别处散落魔数移位。
 - 注释为英文, 只写"为什么/哪一层约定", 不复述代码。
 

@@ -64,11 +64,11 @@ public:
     static_assert(std::is_same_v<std::remove_const_t<D>, MatrixDescriptor>);
     if (!valid())
       return std::nullopt;
+    // clang-format off
     const auto offset =
-        std::int64_t{descriptor_->row_stride_bytes} *
-            static_cast<std::int64_t>(row) +
-        std::int64_t{descriptor_->col_stride_bytes} *
-            static_cast<std::int64_t>(col);
+        std::int64_t{descriptor_->row_stride_bytes} * static_cast<std::int64_t>(row) +
+        std::int64_t{descriptor_->col_stride_bytes} * static_cast<std::int64_t>(col);
+    // clang-format on
     return detail::add_signed_offset(descriptor_->base_addr, offset);
   }
 
@@ -94,10 +94,8 @@ public:
     const auto index = mode == 1 ? rows : cols;
     const auto stride = mode == 1 ? descriptor_->row_stride_bytes
                                   : descriptor_->col_stride_bytes;
-    const auto next =
-        detail::add_signed_offset(descriptor_->base_addr,
-                                  std::int64_t{stride} *
-                                      static_cast<std::int64_t>(index));
+    const auto offset = std::int64_t{stride} * static_cast<std::int64_t>(index);
+    const auto next = detail::add_signed_offset(descriptor_->base_addr, offset);
     if (!next)
       return false;
     descriptor_->base_addr = *next;
@@ -109,10 +107,9 @@ public:
     static_assert(!std::is_const_v<D>);
     if (!valid() || (descriptor_->flags & 0x1u) == 0)
       return valid();
-    const auto next =
-        detail::add_signed_offset(descriptor_->base_addr,
-                                  std::int64_t{descriptor_->stride_bytes} *
-                                      static_cast<std::int64_t>(len));
+    const auto offset = std::int64_t{descriptor_->stride_bytes} *
+                        static_cast<std::int64_t>(len);
+    const auto next = detail::add_signed_offset(descriptor_->base_addr, offset);
     if (!next)
       return false;
     descriptor_->base_addr = *next;
