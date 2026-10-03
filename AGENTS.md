@@ -2,7 +2,7 @@
 
 ## 项目概览
 
-Tile NPU 指令集的功能模拟器 (functional simulator), 独立 git 仓库, 远端为 `git@github.com:0x1B05/Tile-NPU-Sim`。当前为单 hart, 按程序序同步执行的库 (`tile_npu_sim` 静态库), 译码与执行已覆盖 32-bit RV64IM 整数指令和 Tile `tadd`; 其余 NPU 指令待逐族补充。
+Tile NPU 指令集的功能模拟器 (functional simulator), 独立 git 仓库, 远端为 `git@github.com:0x1B05/Tile-NPU-Sim`。当前为单 hart, 按程序序同步执行的库 (`tile_npu_sim` 静态库) 加 monitor 程序 `sim_run` (交互 sdb shell + batch 模式); 译码与执行已覆盖 32-bit RV64IM 整数指令和 Tile `tadd`; 其余 NPU 指令待逐族补充。
 
 配套的 ISA 手册仓库在 `../Tile-NPU-ISA/` (另一个独立 git 仓库)。
 
@@ -17,12 +17,15 @@ Tile NPU 指令集的功能模拟器 (functional simulator), 独立 git 仓库, 
 ## 构建与测试命令
 
 ```bash
-xmake                                  # 构建 tile_npu_sim 静态库
+xmake                                  # 构建 tile_npu_sim 静态库与 sim_run
 xmake test                             # 构建并运行全部测试 (sim_tests)
-xmake build sim_run                    # 构建 .bin 映像运行器
-xmake run sim_run path/to/program.bin  # 运行裸 .bin 映像
+xmake run sim_run program.bin          # sdb 交互模式 (si/c/info r/x/q)
+xmake run sim_run -b a.bin b.bin       # batch 模式, 逐镜像报 PASS/FAIL
+xmake f --monitor=n && xmake           # 关闭 monitor, 只构建库
 xmake project -k compile_commands      # 为 clangd 生成编译数据库
 ```
+
+构建配置用 xmake 原生 option (`xmake f --xxx=y/n`, 定义在 xmake.lua 顶部), 不引入 Kconfig 工具链。
 
 ## 文件组织
 
@@ -45,7 +48,8 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `src/execute_rv64i.cpp`, `src/execute_rv64m.cpp` | RV64I 与 M 扩展语义 |
 | `src/simulator.cpp`, `src/memory.cpp` | 取指 (小端 4 字节拼字) 与步进循环, 内存实现 |
 | `tests/*.cpp` | 全部编入 `sim_tests` 一个测试程序; 无测试框架, 见"测试约定" |
-| `tools/bin_runner.cpp` | `sim_run`: 将裸 `.bin` 载入 `0x80000000` (128 MiB RAM) 并从该地址执行 |
+| `src/monitor/monitor.cpp` | `sim_run` 主程序: 参数解析, 镜像装载, batch 模式 |
+| `src/monitor/sdb.cpp` | sdb 交互 shell: `si`/`c`/`info r`/`x`/`q`, 空行重复上一条命令 |
 
 ## 建模约定 (修改前必读)
 
@@ -55,7 +59,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 - 标量执行: 64-bit 回绕算术, 小端访存, load/store 要求自然对齐; 非对齐访问只报告状态, 不改变架构状态。
 - 单 hart 模型下 `FENCE` 为 no-op; `ECALL`/`EBREAK` 使 `step()` 停在当前 PC, 交给调用方处理。
 - 状态与诊断的区分是刻意的: `decode_not_implemented` (编码可能合法但未译码) / `illegal` (保留编码) / `execution_not_implemented` / `invalid_configuration` 都是**模拟器诊断, 不是 ISA 定义的 trap**。
-- `Simulator::reset(entry_pc)` 清模拟器状态并设 PC, 不清内存; ISA 手册未定义架构复位值与入口地址。`sim_run` 的装载地址, RAM 大小与 `EBREAK` 时 `a0 == 0` 判成功, 都是 **runner 约定, 不是架构契约**。
+- `Simulator::reset(entry_pc)` 清模拟器状态并设 PC, 不清内存; ISA 手册未定义架构复位值与入口地址。`sim_run` 的装载地址 (`0x80000000`), RAM 大小 (128 MiB) 与 `EBREAK` 时 `a0 == 0` 判成功, 都是 **runner 约定, 不是架构契约**。
 - 凡是模拟器自有约定 (复位, 装载, 停机判定), 必须在代码注释或文档中明确标注为模拟器约定, 不得写成 ISA 行为。
 
 ## ISA 语义同步规则 (重要)
