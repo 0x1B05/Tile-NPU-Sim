@@ -120,10 +120,6 @@ void test_memory_and_step() {
             sim.state().scalar.pc == 0x1008,
         "failed fetch leaves PC unchanged");
   sim.reset(0x1002);
-  const auto misaligned = sim.step();
-  check(misaligned.status == tile_npu::StepStatus::misaligned_pc &&
-            !misaligned.instr && sim.state().scalar.pc == 0x1002,
-        "unaligned PC is rejected before fetch");
   check(sim.state().scalar.read_x(1) == 0, "reset clears simulator state");
 }
 

@@ -145,7 +145,6 @@ std::string_view status_name(StepStatus status) {
   case execution_not_implemented:      return "execution_not_implemented";
   case illegal_instruction:            return "illegal_instruction";
   case invalid_configuration:          return "invalid_configuration";
-  case misaligned_pc:                  return "misaligned_pc";
   case fetch_fault:                    return "fetch_fault";
   case instruction_address_misaligned: return "instruction_address_misaligned";
   case load_address_misaligned:        return "load_address_misaligned";
