@@ -3,6 +3,11 @@ set_languages("c++20")
 set_config("ccachedir", path.join(os.projectdir(), ".cache", "ccache"))
 add_rules("mode.debug", "mode.release")
 
+option("monitor")
+    set_default(true)
+    set_showmenu(true)
+    set_description("Build sim_run, the interactive monitor and batch runner")
+
 target("tile_npu_sim")
     set_kind("static")
     add_files("src/*.cpp")
@@ -15,8 +20,9 @@ target("sim_tests")
     add_files("tests/*.cpp")
     add_tests("core")
 
-target("sim_run")
-    set_kind("binary")
-    set_default(false)
-    add_deps("tile_npu_sim")
-    add_files("tools/bin_runner.cpp")
+if has_config("monitor") then
+    target("sim_run")
+        set_kind("binary")
+        add_deps("tile_npu_sim")
+        add_files("src/monitor/*.cpp")
+end
