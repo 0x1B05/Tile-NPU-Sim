@@ -41,8 +41,8 @@ target("guest_images")
             local elf = path.join(bindir, path.basename(src) .. ".elf")
             local bin = path.join(bindir, path.basename(src) .. ".bin")
             local args = {"-march=rv64im", "-mabi=lp64", "-O2", "-ffreestanding",
-                          "-nostdlib", "-static", "-no-pie", "-T", linkscript,
-                          "-o", elf}
+                          "-nostdlib", "-static", "-no-pie", "-I", srcdir,
+                          "-T", linkscript, "-o", elf}
             table.insert(args, src)
             table.join2(args, extra)
             os.vrunv(gcc, args)
@@ -67,8 +67,9 @@ target("tile_npu_sim")
 target("sim_tests")
     set_kind("binary")
     set_default(false)
-    add_deps("tile_npu_sim")
+    add_deps("tile_npu_sim", "guest_images")
     add_files("tests/*.cpp")
+    add_defines("GUEST_IMAGE_DIR=\"" .. guest_bindir .. "\"")
     add_tests("core")
 
 if has_config("monitor") then

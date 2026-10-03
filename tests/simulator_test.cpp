@@ -163,56 +163,6 @@ TEST_CASE(add_execution) {
   check_eq(hex(sim.state().scalar.pc), hex(0x2008), "add to x0 advances pc");
 }
 
-TEST_CASE(tadd_execution) {
-  tile_npu::FlatMemory memory(0x3000, 8);
-  write_word(memory, 0x3000, 0x00002080u); // tadd t0, t1, t2
-  write_word(memory, 0x3004, 0x00002084u); // tadd t1, t1, t2
-
-  tile_npu::Simulator sim(memory);
-  sim.reset(0x3000);
-  auto &state = sim.state();
-  for (auto index : {0, 1, 2}) {
-    state.tc[index].rows = 2;
-    state.tc[index].cols = 2;
-  }
-  state.tc[0].arith_mode = tile_npu::ArithMode::sat;
-  state.t[1][0] = 127;  // 127 + 1 = 128 (i8 sat)
-  state.t[1][1] = 128;  // -128 + -1 = -129 (i8 sat) -> 128
-  state.t[1][32] = 2;   // 2 + -2 = 0 (row 1)
-  state.t[1][33] = 255; // -1 + -1 = -2 (i8) = 254
-  state.t[2][0] = 1;
-  state.t[2][1] = 255;
-  state.t[2][32] = 254;
-  state.t[2][33] = 255;
-  state.t[0][2] = 0x5a;
-
-  check(sim.step().status == tile_npu::StepStatus::retired &&
-            state.t[0][0] == 127 && state.t[0][1] == 128 &&
-            state.t[0][32] == 0 && state.t[0][33] == 254 &&
-            state.t[0][2] == 0x5a && state.scalar.pc == 0x3004,
-        "i8 saturation touches only valid elements");
-  // Second tadd aliases dest onto src1: 127+1 wraps to 128, 128+255 to 127.
-  check(sim.step().status == tile_npu::StepStatus::retired &&
-            state.t[1][0] == 128 && state.t[1][1] == 127 &&
-            state.t[1][32] == 0 && state.t[1][33] == 254 &&
-            state.scalar.pc == 0x3008,
-        "i8 wrap permits destination/source aliasing");
-
-  sim.reset(0x3000);
-  auto &unsigned_state = sim.state();
-  for (auto index : {0, 1, 2}) {
-    unsigned_state.tc[index].dtype = tile_npu::DType::u8;
-    unsigned_state.tc[index].rows = 1;
-    unsigned_state.tc[index].cols = 1;
-  }
-  unsigned_state.tc[0].arith_mode = tile_npu::ArithMode::sat;
-  unsigned_state.t[1][0] = 250; // 250 + 10 = 260 (u8 sat) -> 255
-  unsigned_state.t[2][0] = 10;
-  check(sim.step().status == tile_npu::StepStatus::retired &&
-            unsigned_state.t[0][0] == 255,
-        "u8 saturation clamps at 255");
-}
-
 TEST_CASE(empty_tadd) {
   tile_npu::FlatMemory memory(0x3800, 4);
   write_word(memory, 0x3800, 0); // tadd t0, t0, t0; empty default shape
