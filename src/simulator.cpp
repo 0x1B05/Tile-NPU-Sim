@@ -1,6 +1,6 @@
 #include "tile_npu/simulator.h"
 
-#include "execute.h"
+#include "execute/execute.h"
 #include "tile_npu/decode.h"
 
 #include <array>

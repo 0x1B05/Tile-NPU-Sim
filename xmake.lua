@@ -10,7 +10,7 @@ option("monitor")
 
 target("tile_npu_sim")
     set_kind("static")
-    add_files("src/*.cpp")
+    add_files("src/*.cpp", "src/decode/*.cpp", "src/execute/*.cpp")
     add_includedirs("include", {public = true})
 
 target("sim_tests")

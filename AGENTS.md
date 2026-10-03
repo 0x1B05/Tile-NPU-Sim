@@ -39,13 +39,13 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `include/tile_npu/matrix_view.h` | 逻辑矩阵坐标到物理寄存器存储的 view, 当前实现 canonical layout |
 | `include/tile_npu/descriptor_view.h` | TM/AM/BM/VM 地址计算、保留位校验与访存后 `base_addr` 自增 |
 | `include/tile_npu/simulator.h` | `Simulator` 单步 API: `reset(entry_pc)`, `step()` → `StepResult`/`StepStatus` |
-| `src/encoding.h` | 位段提取 (`field<Hi,Lo>`) 与 RISC-V R/I/S/B/U/J/Shift, NPU 各格式的字段解析 |
-| `src/pattern.h` | INSTPAT 风格译码机制: 编译期 `Pattern` 位型解析, `DecodeEntry` 译码表, `as`/`fail`/`match` 通用 handler |
-| `src/decode.cpp` | NPU 译码表 (q != 11): major4/sel3/funct4 由 pattern 直接匹配, 首条命中生效 |
-| `src/decode_rv64im.cpp` | RV64IM 译码表 (q = 11): 一行一条指令的 pattern, 表尾 catch-all 划分 illegal / not_implemented |
-| `src/execute.cpp` | 执行分派 (标量 / NPU 各域执行器) |
-| `src/execute_elementwise.cpp` | 逐元素 (E_BIN) 族执行器: 公共约束校验与逐元素循环抽象为模板, 每个 op 只提供算术 lambda |
-| `src/execute_rv64i.cpp`, `src/execute_rv64m.cpp` | RV64I 与 M 扩展语义 |
+| `src/decode/encoding.h` | 位段提取 (`field<Hi,Lo>`) 与 RISC-V R/I/S/B/U/J/Shift, NPU 各格式的字段解析 |
+| `src/decode/pattern.h` | INSTPAT 风格译码机制: 编译期 `Pattern` 位型解析, `DecodeEntry` 译码表, `as`/`fail`/`match` 通用 handler |
+| `src/decode/decode.cpp` | NPU 译码表 (q != 11): major4/sel3/funct4 由 pattern 直接匹配, 首条命中生效 |
+| `src/decode/decode_rv64im.cpp` | RV64IM 译码表 (q = 11): 一行一条指令的 pattern, 表尾 catch-all 划分 illegal / not_implemented |
+| `src/execute/execute.cpp` | 执行分派 (标量 / NPU 各域执行器) |
+| `src/execute/execute_elementwise.cpp` | 逐元素 (E_BIN) 族执行器: 公共约束校验与逐元素循环抽象为模板, 每个 op 只提供算术 lambda |
+| `src/execute/execute_rv64i.cpp`, `src/execute/execute_rv64m.cpp` | RV64I 与 M 扩展语义 |
 | `src/simulator.cpp`, `src/memory.cpp` | 取指 (小端 4 字节拼字) 与步进循环, 内存实现 |
 | `tests/*.cpp` | 全部编入 `sim_tests` 一个测试程序; 无测试框架, 见"测试约定" |
 | `src/monitor/monitor.cpp` | `sim_run` 主程序: 参数解析, 镜像装载, batch 模式 |
@@ -72,9 +72,9 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 
 ## 新增指令的实现流程
 
-1. `src/encoding.h` 补充字段提取 (若无对应格式)。
-2. 译码: `include/tile_npu/instruction.h` 增加带数据域和 typed operand 的指令类型, 在对应译码表 (`src/decode.cpp` 或 `decode_rv64im.cpp`) 加一行 `{pattern, handler}`; pattern 无法表达的剩余检查 (如寄存器号边界) 写进自定义 handler, 保留编码必须报 `illegal`。
-3. 执行: `src/execute.cpp` 分派到对应执行器, 语义严格按手册伪代码; 未实现的执行报 `execution_not_implemented`, 不要留静默路径。
+1. `src/decode/encoding.h` 补充字段提取 (若无对应格式)。
+2. 译码: `include/tile_npu/instruction.h` 增加带数据域和 typed operand 的指令类型, 在对应译码表 (`src/decode/decode.cpp` 或 `src/decode/decode_rv64im.cpp`) 加一行 `{pattern, handler}`; pattern 无法表达的剩余检查 (如寄存器号边界) 写进自定义 handler, 保留编码必须报 `illegal`。
+3. 执行: `src/execute/execute.cpp` 分派到对应执行器, 语义严格按手册伪代码; 未实现的执行报 `execution_not_implemented`, 不要留静默路径。
 4. 测试: 每新增操作必须补三类用例 — 合法编码, 保留/非法编码, 边界值 (立即数边界, 寄存器编号边界, 有效 shape 边界)。
 
 ## 测试约定
