@@ -1,6 +1,6 @@
 #include "tile_npu/simulator.h"
 
-#include "execute.h"
+#include "execute/execute.h"
 #include "tile_npu/decode.h"
 
 #include <array>
@@ -18,9 +18,6 @@ void Simulator::reset(std::uint64_t entry_pc) {
 
 StepResult Simulator::step() {
   const std::uint64_t pc = state_.scalar.pc;
-  if (pc % 4 != 0) {
-    return {StepStatus::misaligned_pc, pc, std::nullopt};
-  }
   std::array<std::byte, 4> bytes{};
   if (!memory_.read(pc, bytes)) {
     return {StepStatus::fetch_fault, pc, std::nullopt};

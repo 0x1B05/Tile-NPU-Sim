@@ -2,7 +2,7 @@
 
 ## 项目概览
 
-Tile NPU 指令集的功能模拟器 (functional simulator), 独立 git 仓库, 远端为 `git@github.com:0x1B05/Tile-NPU-Sim`。当前为单 hart, 按程序序同步执行的库 (`tile_npu_sim` 静态库), 译码与执行已覆盖 32-bit RV64IM 整数指令和 Tile `tadd`; 其余 NPU 指令待逐族补充。
+Tile NPU 指令集的功能模拟器 (functional simulator), 独立 git 仓库, 远端为 `git@github.com:0x1B05/Tile-NPU-Sim`。当前为单 hart, 按程序序同步执行的库 (`tile_npu_sim` 静态库) 加 monitor 程序 `sim_run` (交互 sdb shell + batch 模式); 译码与执行已覆盖 32-bit RV64IM 整数指令和 Tile `tadd`; 其余 NPU 指令待逐族补充。
 
 配套的 ISA 手册仓库在 `../Tile-NPU-ISA/` (另一个独立 git 仓库)。
 
@@ -17,12 +17,15 @@ Tile NPU 指令集的功能模拟器 (functional simulator), 独立 git 仓库, 
 ## 构建与测试命令
 
 ```bash
-xmake                                  # 构建 tile_npu_sim 静态库
+xmake                                  # 构建 tile_npu_sim 静态库与 sim_run
 xmake test                             # 构建并运行全部测试 (sim_tests)
-xmake build sim_run                    # 构建 .bin 映像运行器
-xmake run sim_run path/to/program.bin  # 运行裸 .bin 映像
+xmake run sim_run program.bin          # sdb 交互模式 (si/c/info r/x/q)
+xmake run sim_run -b a.bin b.bin       # batch 模式, 逐镜像报 PASS/FAIL
+xmake f --monitor=n && xmake           # 关闭 monitor, 只构建库
 xmake project -k compile_commands      # 为 clangd 生成编译数据库
 ```
+
+构建配置用 xmake 原生 option (`xmake f --xxx=y/n`, 定义在 xmake.lua 顶部), 不引入 Kconfig 工具链。
 
 ## 文件组织
 
@@ -36,16 +39,17 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `include/tile_npu/matrix_view.h` | 逻辑矩阵坐标到物理寄存器存储的 view, 当前实现 canonical layout |
 | `include/tile_npu/descriptor_view.h` | TM/AM/BM/VM 地址计算、保留位校验与访存后 `base_addr` 自增 |
 | `include/tile_npu/simulator.h` | `Simulator` 单步 API: `reset(entry_pc)`, `step()` → `StepResult`/`StepStatus` |
-| `src/encoding.h` | 位段提取 (`field<Hi,Lo>`) 与 RISC-V R/I/S/B/U/J/Shift, NPU 各格式的字段解析 |
-| `src/pattern.h` | INSTPAT 风格译码机制: 编译期 `Pattern` 位型解析, `DecodeEntry` 译码表, `as`/`fail`/`match` 通用 handler |
-| `src/decode.cpp` | NPU 译码表 (q != 11): major4/sel3/funct4 由 pattern 直接匹配, 首条命中生效 |
-| `src/decode_rv64im.cpp` | RV64IM 译码表 (q = 11): 一行一条指令的 pattern, 表尾 catch-all 划分 illegal / not_implemented |
-| `src/execute.cpp` | 执行分派 (标量 / NPU 各域执行器) |
-| `src/execute_elementwise.cpp` | 逐元素 (E_BIN) 族执行器: 公共约束校验与逐元素循环抽象为模板, 每个 op 只提供算术 lambda |
-| `src/execute_rv64i.cpp`, `src/execute_rv64m.cpp` | RV64I 与 M 扩展语义 |
+| `src/decode/encoding.h` | 位段提取 (`field<Hi,Lo>`) 与 RISC-V R/I/S/B/U/J/Shift, NPU 各格式的字段解析 |
+| `src/decode/pattern.h` | INSTPAT 风格译码机制: 编译期 `Pattern` 位型解析, `DecodeEntry` 译码表, `as`/`fail`/`match` 通用 handler |
+| `src/decode/decode.cpp` | NPU 译码表 (q != 11): major4/sel3/funct4 由 pattern 直接匹配, 首条命中生效 |
+| `src/decode/decode_rv64im.cpp` | RV64IM 译码表 (q = 11): 一行一条指令的 pattern, 表尾 catch-all 划分 illegal / not_implemented |
+| `src/execute/execute.cpp` | 执行分派 (标量 / NPU 各域执行器) |
+| `src/execute/execute_elementwise.cpp` | 逐元素 (E_BIN) 族执行器: 公共约束校验与逐元素循环抽象为模板, 每个 op 只提供算术 lambda |
+| `src/execute/execute_rv64i.cpp`, `src/execute/execute_rv64m.cpp` | RV64I 与 M 扩展语义 |
 | `src/simulator.cpp`, `src/memory.cpp` | 取指 (小端 4 字节拼字) 与步进循环, 内存实现 |
 | `tests/*.cpp` | 全部编入 `sim_tests` 一个测试程序; 无测试框架, 见"测试约定" |
-| `tools/bin_runner.cpp` | `sim_run`: 将裸 `.bin` 载入 `0x80000000` (128 MiB RAM) 并从该地址执行 |
+| `src/monitor/monitor.cpp` | `sim_run` 主程序: 参数解析, 镜像装载, batch 模式 |
+| `src/monitor/sdb.cpp` | sdb 交互 shell: `si`/`c`/`info r`/`x`/`q`, 空行重复上一条命令 |
 
 ## 建模约定 (修改前必读)
 
@@ -55,7 +59,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 - 标量执行: 64-bit 回绕算术, 小端访存, load/store 要求自然对齐; 非对齐访问只报告状态, 不改变架构状态。
 - 单 hart 模型下 `FENCE` 为 no-op; `ECALL`/`EBREAK` 使 `step()` 停在当前 PC, 交给调用方处理。
 - 状态与诊断的区分是刻意的: `decode_not_implemented` (编码可能合法但未译码) / `illegal` (保留编码) / `execution_not_implemented` / `invalid_configuration` 都是**模拟器诊断, 不是 ISA 定义的 trap**。
-- `Simulator::reset(entry_pc)` 清模拟器状态并设 PC, 不清内存; ISA 手册未定义架构复位值与入口地址。`sim_run` 的装载地址, RAM 大小与 `EBREAK` 时 `a0 == 0` 判成功, 都是 **runner 约定, 不是架构契约**。
+- `Simulator::reset(entry_pc)` 清模拟器状态并设 PC, 不清内存; ISA 手册未定义架构复位值与入口地址。`sim_run` 的装载地址 (`0x80000000`), RAM 大小 (128 MiB) 与 `EBREAK` 时 `a0 == 0` 判成功, 都是 **runner 约定, 不是架构契约**。
 - 凡是模拟器自有约定 (复位, 装载, 停机判定), 必须在代码注释或文档中明确标注为模拟器约定, 不得写成 ISA 行为。
 
 ## ISA 语义同步规则 (重要)
@@ -68,9 +72,9 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 
 ## 新增指令的实现流程
 
-1. `src/encoding.h` 补充字段提取 (若无对应格式)。
-2. 译码: `include/tile_npu/instruction.h` 增加带数据域和 typed operand 的指令类型, 在对应译码表 (`src/decode.cpp` 或 `decode_rv64im.cpp`) 加一行 `{pattern, handler}`; pattern 无法表达的剩余检查 (如寄存器号边界) 写进自定义 handler, 保留编码必须报 `illegal`。
-3. 执行: `src/execute.cpp` 分派到对应执行器, 语义严格按手册伪代码; 未实现的执行报 `execution_not_implemented`, 不要留静默路径。
+1. `src/decode/encoding.h` 补充字段提取 (若无对应格式)。
+2. 译码: `include/tile_npu/instruction.h` 增加带数据域和 typed operand 的指令类型, 在对应译码表 (`src/decode/decode.cpp` 或 `src/decode/decode_rv64im.cpp`) 加一行 `{pattern, handler}`; pattern 无法表达的剩余检查 (如寄存器号边界) 写进自定义 handler, 保留编码必须报 `illegal`。
+3. 执行: `src/execute/execute.cpp` 分派到对应执行器, 语义严格按手册伪代码; 未实现的执行报 `execution_not_implemented`, 不要留静默路径。
 4. 测试: 每新增操作必须补三类用例 — 合法编码, 保留/非法编码, 边界值 (立即数边界, 寄存器编号边界, 有效 shape 边界)。
 
 ## 测试约定

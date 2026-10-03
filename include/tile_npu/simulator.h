@@ -14,7 +14,6 @@ enum class StepStatus {
   execution_not_implemented,
   illegal_instruction,
   invalid_configuration,
-  misaligned_pc,
   fetch_fault,
   instruction_address_misaligned,
   load_address_misaligned,
@@ -40,6 +39,8 @@ public:
   const State &state() const { return state_; }
 
   // Simulator initialization convention, not an ISA-defined reset sequence.
+  // The entry pc must be 4-byte aligned; alignment then holds by construction
+  // because redirect targets are validated during execution.
   void reset(std::uint64_t entry_pc);
   StepResult step();
 
