@@ -4,9 +4,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
-#include <stdexcept>
 #include <string>
 #include <variant>
+
+#include "check.h"
 
 namespace {
 
@@ -66,11 +67,14 @@ template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
     const auto *decoded = std::get_if<DecodedInstr>(&result);
-    if (decoded == nullptr || decoded->op != test.op ||
-        decoded->regs.dest != test.dest || decoded->regs.src1 != test.src1 ||
-        decoded->regs.src2 != test.src2 || decoded->imm != test.imm) {
-      throw std::runtime_error(std::string("decode ") + test.name);
-    }
+    const std::string what =
+        std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
+    check(decoded != nullptr, what);
+    check_eq(decoded->op, test.op, what + ": op");
+    check_eq(decoded->regs.dest, test.dest, what + ": rd");
+    check_eq(decoded->regs.src1, test.src1, what + ": rs1");
+    check_eq(decoded->regs.src2, test.src2, what + ": rs2");
+    check_eq(decoded->imm, test.imm, what + ": imm");
   }
 }
 
@@ -79,10 +83,9 @@ void check_illegal(const std::array<std::uint32_t, N> &words) {
   for (const auto word : words) {
     const auto result = tile_npu::decode(word);
     const auto *error = std::get_if<DecodeError>(&result);
-    if (error == nullptr || *error != DecodeError::illegal) {
-      throw std::runtime_error("accepts reserved RV64IM encoding " +
-                               std::to_string(word));
-    }
+    check(error != nullptr, "accepts reserved RV64IM encoding " + to_hex(word));
+    check_eq(*error, DecodeError::illegal,
+             "error kind for reserved RV64IM encoding " + to_hex(word));
   }
 }
 
@@ -91,16 +94,15 @@ void check_not_implemented(const std::array<std::uint32_t, N> &words) {
   for (const auto word : words) {
     const auto result = tile_npu::decode(word);
     const auto *error = std::get_if<DecodeError>(&result);
-    if (error == nullptr || *error != DecodeError::not_implemented) {
-      throw std::runtime_error("accepts unsupported instruction " +
-                               std::to_string(word));
-    }
+    check(error != nullptr, "accepts unsupported instruction " + to_hex(word));
+    check_eq(*error, DecodeError::not_implemented,
+             "error kind for unsupported instruction " + to_hex(word));
   }
 }
 
 } // namespace
 
-void test_rv64im_decode() {
+TEST_CASE(rv64im_decode) {
   constexpr std::array register_cases{
       Case{"add", r(0x33, 0, 0), ScalarOp::add, 3, 5, 7, 0},
       Case{"sub", r(0x33, 0, 0x20), ScalarOp::sub, 3, 5, 7, 0},

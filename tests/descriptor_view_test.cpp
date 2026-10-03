@@ -5,31 +5,36 @@
 
 #include "check.h"
 
-void test_descriptor_view() {
+TEST_CASE(descriptor_view) {
   tile_npu::MatrixDescriptor matrix{};
   matrix.base_addr = 0x1000;
   matrix.row_stride_bytes = 64;
   matrix.col_stride_bytes = 2;
   matrix.flags = 1;
   tile_npu::MatrixDescriptorView matrix_view(matrix);
-  check(matrix_view.valid() && matrix_view.address(1, 2) == 0x1044,
-        "matrix descriptor address calculation");
-  check(matrix_view.post_increment(2, 3) && matrix.base_addr == 0x1080,
-        "matrix descriptor row increment");
+  check(matrix_view.valid(), "matrix descriptor with increment mode is valid");
+  check_eq(hex(matrix_view.address(1, 2).value_or(0)), hex(0x1044),
+           "matrix descriptor address calculation");
+  check(matrix_view.post_increment(2, 3), "matrix descriptor row increment");
+  check_eq(hex(matrix.base_addr), hex(0x1080),
+           "matrix descriptor increments base address");
 
   tile_npu::VectorDescriptor vector{};
   vector.base_addr = 0x2000;
   vector.stride_bytes = -4;
   vector.flags = 1;
   tile_npu::VectorDescriptorView vector_view(vector);
-  check(vector_view.valid() && vector_view.address(2) == 0x1ff8,
-        "vector descriptor signed stride");
-  check(vector_view.post_increment(4) && vector.base_addr == 0x1ff0,
-        "vector descriptor increment");
+  check(vector_view.valid(), "vector descriptor with increment mode is valid");
+  check_eq(hex(vector_view.address(2).value_or(0)), hex(0x1ff8),
+           "vector descriptor signed stride");
+  check(vector_view.post_increment(4), "vector descriptor increment");
+  check_eq(hex(vector.base_addr), hex(0x1ff0),
+           "vector descriptor decrements base address");
 
   matrix.flags = 3;
-  check(!matrix_view.valid() && !matrix_view.post_increment(1, 1),
-        "descriptor view rejects reserved increment mode");
+  check(!matrix_view.valid(), "descriptor view rejects reserved inc mode");
+  check(!matrix_view.post_increment(1, 1),
+        "descriptor view rejects increment with reserved inc mode");
 
   tile_npu::MatrixDescriptor overflow{};
   overflow.base_addr = std::numeric_limits<std::uint64_t>::max();

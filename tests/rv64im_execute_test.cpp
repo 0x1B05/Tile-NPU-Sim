@@ -4,9 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
-#include <stdexcept>
 #include <string>
-#include <string_view>
 #include <utility>
 
 #include "check.h"
@@ -67,9 +65,12 @@ constexpr std::uint32_t j(std::int32_t imm, std::uint32_t rd = 3) {
 void expect_step(const StepResult &result, StepStatus status,
                  std::uint32_t word,
                  std::optional<std::uint64_t> fault_address = std::nullopt) {
-  check(result.status == status && result.pc == CODE && result.instr == word &&
-            result.fault_address == fault_address,
-        "step status, instruction, or fault address");
+  const std::string what = "step " + to_hex(word);
+  check_eq(result.status, status, what + ": status");
+  check_eq(hex(result.pc), hex(CODE), what + ": pc");
+  check_eq(hex(result.instr), hex(std::make_optional(word)), what + ": instr");
+  check_eq(hex(result.fault_address), hex(fault_address),
+           what + ": fault address");
 }
 
 struct RegisterCase {
@@ -88,13 +89,12 @@ void check_register_case(const RegisterCase &test) {
   sim.state().scalar.write_x(1, test.lhs);
   sim.state().scalar.write_x(2, test.rhs);
   sim.state().scalar.write_x(3, 0xdeadbeef);
-  const auto result = sim.step();
-  if (result.status != StepStatus::retired || result.pc != CODE ||
-      result.instr != test.word || result.fault_address ||
-      sim.state().scalar.read_x(3) != test.expected ||
-      sim.state().scalar.pc != CODE + 4) {
-    throw std::runtime_error(std::string("execute ") + test.name);
-  }
+  expect_step(sim.step(), StepStatus::retired, test.word);
+  const std::string what =
+      std::string("execute ") + test.name + " (" + to_hex(test.word) + ")";
+  check_eq(hex(sim.state().scalar.read_x(3)), hex(test.expected),
+           what + ": rd");
+  check_eq(hex(sim.state().scalar.pc), hex(CODE + 4), what + ": next pc");
 }
 
 void test_integer_arithmetic() {
@@ -139,8 +139,9 @@ void test_integer_arithmetic() {
   sim.state().scalar.write_x(1, 4);
   sim.state().scalar.write_x(2, 5);
   expect_step(sim.step(), StepStatus::retired, 0x00208033u);
-  check(sim.state().scalar.read_x(0) == 0 && sim.state().scalar.pc == CODE + 4,
-        "write to x0 is discarded");
+  check_eq(sim.state().scalar.read_x(0), std::uint64_t{0},
+           "write to x0 is discarded");
+  check_eq(hex(sim.state().scalar.pc), hex(CODE + 4), "add to x0 advances pc");
 }
 
 void test_control_flow() {
@@ -156,9 +157,10 @@ void test_control_flow() {
     sim.state().scalar.write_x(2, rhs);
     sim.state().scalar.write_x(3, 0xface);
     expect_step(sim.step(), StepStatus::retired, word);
-    check(sim.state().scalar.pc == expected_pc &&
-              sim.state().scalar.read_x(3) == expected_rd,
-          "control-flow result");
+    const std::string what = "control-flow " + to_hex(word);
+    check_eq(hex(sim.state().scalar.pc), hex(expected_pc), what + ": pc");
+    check_eq(hex(sim.state().scalar.read_x(3)), hex(expected_rd),
+             what + ": rd");
   };
 
   run(u(0x37, 0x80000000u), 0, 0, CODE + 4, SIGN32);
@@ -177,9 +179,10 @@ void test_control_flow() {
   sim.reset(CODE);
   sim.state().scalar.write_x(1, 0x1015);
   expect_step(sim.step(), StepStatus::retired, jalr_same_reg);
-  check(sim.state().scalar.pc == 0x1014 &&
-            sim.state().scalar.read_x(1) == CODE + 4,
-        "jalr reads old rs1, clears bit zero, then writes rd");
+  check_eq(hex(sim.state().scalar.pc), hex(0x1014),
+           "jalr reads old rs1 and clears bit zero");
+  check_eq(hex(sim.state().scalar.read_x(1)), hex(CODE + 4),
+           "jalr writes the link register");
 
   const auto jal_misaligned = j(2);
   write_word(memory, CODE, jal_misaligned);
@@ -187,8 +190,10 @@ void test_control_flow() {
   sim.state().scalar.write_x(3, 0xface);
   expect_step(sim.step(), StepStatus::instruction_address_misaligned,
               jal_misaligned, CODE + 2);
-  check(sim.state().scalar.pc == CODE && sim.state().scalar.read_x(3) == 0xface,
-        "misaligned jal does not write link register");
+  check_eq(hex(sim.state().scalar.pc), hex(CODE),
+           "misaligned jal leaves pc at the jump");
+  check_eq(hex(sim.state().scalar.read_x(3)), hex(0xface),
+           "misaligned jal does not write the link register");
 
   const auto branch_misaligned = b(0, 2);
   write_word(memory, CODE, branch_misaligned);
@@ -197,8 +202,8 @@ void test_control_flow() {
   sim.state().scalar.write_x(2, 7);
   expect_step(sim.step(), StepStatus::instruction_address_misaligned,
               branch_misaligned, CODE + 2);
-  check(sim.state().scalar.pc == CODE,
-        "taken branch reports misaligned target at branch");
+  check_eq(hex(sim.state().scalar.pc), hex(CODE),
+           "taken branch reports misaligned target at branch");
 
   const auto jalr_misaligned = i(0x67, 0, 0, 1, 1);
   write_word(memory, CODE, jalr_misaligned);
@@ -206,8 +211,10 @@ void test_control_flow() {
   sim.state().scalar.write_x(1, 0x1013);
   expect_step(sim.step(), StepStatus::instruction_address_misaligned,
               jalr_misaligned, 0x1012);
-  check(sim.state().scalar.pc == CODE && sim.state().scalar.read_x(1) == 0x1013,
-        "misaligned jalr preserves aliased link/source register");
+  check_eq(hex(sim.state().scalar.pc), hex(CODE),
+           "misaligned jalr leaves pc unchanged");
+  check_eq(hex(sim.state().scalar.read_x(1)), hex(0x1013),
+           "misaligned jalr preserves aliased link/source register");
 }
 
 void test_loads() {
@@ -234,10 +241,10 @@ void test_loads() {
     sim.reset(CODE);
     sim.state().scalar.write_x(1, test.lhs);
     expect_step(sim.step(), StepStatus::retired, test.word);
-    if (sim.state().scalar.read_x(3) != test.expected ||
-        sim.state().scalar.pc != CODE + 4) {
-      throw std::runtime_error(std::string("execute ") + test.name);
-    }
+    const std::string what = std::string("execute ") + test.name;
+    check_eq(hex(sim.state().scalar.read_x(3)), hex(test.expected),
+             what + ": rd");
+    check_eq(hex(sim.state().scalar.pc), hex(CODE + 4), what + ": next pc");
   }
 
   FlatMemory memory(CODE, 0x50);
@@ -247,8 +254,10 @@ void test_loads() {
   sim.reset(CODE);
   sim.state().scalar.write_x(1, CODE + 0x50);
   expect_step(sim.step(), StepStatus::load_fault, load_x0, CODE + 0x50);
-  check(sim.state().scalar.pc == CODE && sim.state().scalar.read_x(0) == 0,
-        "load into x0 still accesses memory and can fault");
+  check_eq(hex(sim.state().scalar.pc), hex(CODE),
+           "load into x0 reports the fault at the load");
+  check_eq(sim.state().scalar.read_x(0), std::uint64_t{0},
+           "load into x0 still accesses memory and keeps x0 zero");
 
   const auto misaligned = i(0x03, 1, 1);
   write_word(memory, CODE, misaligned);
@@ -257,8 +266,10 @@ void test_loads() {
   sim.state().scalar.write_x(3, 0xface);
   expect_step(sim.step(), StepStatus::load_address_misaligned, misaligned,
               DATA + 1);
-  check(sim.state().scalar.pc == CODE && sim.state().scalar.read_x(3) == 0xface,
-        "misaligned load preserves destination and pc");
+  check_eq(hex(sim.state().scalar.pc), hex(CODE),
+           "misaligned load preserves pc");
+  check_eq(hex(sim.state().scalar.read_x(3)), hex(0xface),
+           "misaligned load preserves destination");
 
   const auto fault = i(0x03, 3, 0);
   write_word(memory, CODE, fault);
@@ -266,8 +277,9 @@ void test_loads() {
   sim.state().scalar.write_x(1, CODE + 0x50);
   sim.state().scalar.write_x(3, 0xface);
   expect_step(sim.step(), StepStatus::load_fault, fault, CODE + 0x50);
-  check(sim.state().scalar.pc == CODE && sim.state().scalar.read_x(3) == 0xface,
-        "failed load preserves destination and pc");
+  check_eq(hex(sim.state().scalar.pc), hex(CODE), "failed load preserves pc");
+  check_eq(hex(sim.state().scalar.read_x(3)), hex(0xface),
+           "failed load preserves destination");
 }
 
 void test_stores() {
@@ -294,11 +306,11 @@ void test_stores() {
           index < test.expected
               ? static_cast<std::byte>((test.rhs >> (8 * index)) & 0xffu)
               : std::byte{0};
-      if (bytes[index] != expected) {
-        throw std::runtime_error(std::string("execute ") + test.name);
-      }
+      check_eq(bytes[index], expected,
+               std::string("execute ") + test.name + ": byte " +
+                   std::to_string(index));
     }
-    check(sim.state().scalar.pc == CODE + 4, "store advances pc");
+    check_eq(hex(sim.state().scalar.pc), hex(CODE + 4), "store advances pc");
   }
 
   FlatMemory memory(CODE, 0x44);
@@ -310,7 +322,8 @@ void test_stores() {
   sim.state().scalar.write_x(2, 0x12345678);
   expect_step(sim.step(), StepStatus::store_address_misaligned, misaligned,
               DATA + 1);
-  check(sim.state().scalar.pc == CODE, "misaligned store preserves pc");
+  check_eq(hex(sim.state().scalar.pc), hex(CODE),
+           "misaligned store preserves pc");
 
   const auto crossing = s(3, 0);
   write_word(memory, CODE, crossing);
@@ -323,9 +336,11 @@ void test_stores() {
   expect_step(sim.step(), StepStatus::store_fault, crossing, DATA);
   std::array<std::byte, 4> after{};
   check(memory.read(DATA, after), "read memory after store fault");
-  check(after == marker && sim.state().scalar.pc == CODE &&
-            sim.state().scalar.read_x(2) == 0x8877665544332211ull,
-        "crossing store fails atomically and preserves state");
+  check(after == marker, "crossing store fails atomically");
+  check_eq(hex(sim.state().scalar.pc), hex(CODE),
+           "crossing store preserves pc");
+  check_eq(hex(sim.state().scalar.read_x(2)), hex(0x8877665544332211ull),
+           "crossing store preserves source register");
 }
 
 void test_m_extension() {
@@ -391,26 +406,25 @@ void test_environment_boundary() {
     sim.reset(CODE);
     sim.state().scalar.write_x(10, 0xfeed);
     expect_step(sim.step(), status, word);
-    check(sim.state().scalar.pc == CODE &&
-              sim.state().scalar.read_x(10) == 0xfeed,
-          "environment boundary preserves architectural state");
+    check_eq(hex(sim.state().scalar.pc), hex(CODE),
+             "environment boundary preserves pc");
+    check_eq(hex(sim.state().scalar.read_x(10)), hex(0xfeed),
+             "environment boundary preserves architectural state");
   }
 
   constexpr std::uint32_t fence = 0x0ff0000fu;
   write_word(memory, CODE, fence);
   sim.reset(CODE);
   expect_step(sim.step(), StepStatus::retired, fence);
-  check(sim.state().scalar.pc == CODE + 4,
-        "fence retires with synchronous memory");
+  check_eq(hex(sim.state().scalar.pc), hex(CODE + 4),
+           "fence retires with synchronous memory");
 }
 
 } // namespace
 
-void test_rv64im_execute() {
-  test_integer_arithmetic();
-  test_control_flow();
-  test_loads();
-  test_stores();
-  test_m_extension();
-  test_environment_boundary();
-}
+TEST_CASE(rv64im_execute_integer_arithmetic) { test_integer_arithmetic(); }
+TEST_CASE(rv64im_execute_control_flow) { test_control_flow(); }
+TEST_CASE(rv64im_execute_loads) { test_loads(); }
+TEST_CASE(rv64im_execute_stores) { test_stores(); }
+TEST_CASE(rv64im_execute_m_extension) { test_m_extension(); }
+TEST_CASE(rv64im_execute_environment_boundary) { test_environment_boundary(); }

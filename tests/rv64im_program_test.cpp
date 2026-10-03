@@ -7,7 +7,7 @@
 
 #include "check.h"
 
-void test_rv64im_program() {
+TEST_CASE(rv64im_program) {
   // Assembled with riscv64-linux-gnu-as -march=rv64im -mabi=lp64.
   constexpr std::array<std::uint32_t, 10> program{
       0x00001237u, // lui x4, 0x1
