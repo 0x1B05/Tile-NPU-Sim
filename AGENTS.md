@@ -53,6 +53,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `tests/guest/` | guest 测试: C 程序 (共享 `crt0.S`) 与裸 `.S` (NPU 编码宏在 `npu.inc`), 经 `link.ld` 链接成扁平 bin 到 `build/guest/` |
 | `tests/riscv-tests-env/riscv_test.h` | 官方 riscv-tests 的自定义最小 env: 无特权态/tohost, PASS/FAIL 走 `ebreak`/`a0` 约定 |
 | `scripts/fetch_riscv_tests.sh` | 拉取官方 riscv-tests (pinned commit) 到 `external/` (gitignored) |
+| `xmake/guest.lua`, `xmake/riscv_tests.lua` | 按关注点拆出的构建脚本 (guest 镜像 / 官方套件), 由根 `xmake.lua` includes; 共享汇编逻辑在 `xmake/modules/guestimg.lua` |
 | `src/monitor/monitor.cpp` | `sim_run` 主程序: 参数解析, 镜像装载, batch 模式 |
 | `src/monitor/sdb.cpp` | sdb 交互 shell: `si`/`c`/`info r`/`x`/`q`, 空行重复上一条命令 |
 
@@ -86,7 +87,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 
 - 无第三方测试框架: `tests/check.h` 提供手卷迷你框架 — `TEST_CASE(name)` 静态自动注册, `tests/main.cpp` 逐用例跑并汇总; `check_eq(actual, expected, what)` 失败时带 actual/expected 值与 file:line, 指令字/地址等数值用 `hex()` 包装后按十六进制打印。
 - 指令级测试直接内联机器码常数, 行尾注释对应的汇编形式 (如 `0x002081b3u, // add x3, x1, x2`)。
-- guest 镜像: `tests/guest/**.c` 由 RISC-V 工具链交叉编译 (共享 `crt0.S` 起栈并调 `main`, 裸 `.S` 自带 `_start`), 链接成扁平 bin (构建产物, 不入库); `rv64im/` 下为自校验程序 (`main` 返回 0 即 PASS, 经 `ebreak`/`a0` 约定上报), 逐个注册为 `sim_run -b` 的 xmake 测试。需要 riscv64 工具链, 前缀可用 `xmake f --riscv_cross=` 改。
+- guest 镜像: `tests/guest/**.c` 由 RISC-V 工具链交叉编译 (共享 `crt0.S` 起栈并调 `main`, 裸 `.S` 自带 `_start`), 链接成扁平 bin (构建产物, 不入库); `rv64im/` 下为自校验程序 (`main` 返回 0 即 PASS, 经 `ebreak`/`a0` 约定上报), 逐个注册为 `sim_run -b` 的 xmake 测试。需要 riscv64 工具链, 前缀可用 `xmake f --riscv_cross=` 改。镜像依赖挂在 `sim_tests` 上 (`sim_run` 二进制本身不需要交叉工具链); 过滤单跑 guest 测试前先 `xmake build guest_images` 或跑一遍完整 `xmake test`。
 - NPU 指令正例写 guest 镜像: `tests/guest/npu/*.S` 用 `npu.inc` 的编码宏 (字段布局与 `src/decode/encoding.h` 一一对应), host 侧 driver (`tests/npu_guest_test.cpp`) 装载镜像、设配置、逐条步进断言; 非法编码负例留在 host 侧表驱动。
 - 官方套件 (可选): `xmake f --rvtests=y` 后 `riscv-tests` 的 rv64ui/rv64um 逐个注册为 `sim_run -b` 测试; `fence_i` (Zifencei) 与 `ma_data` (依赖 trap 投递) 在 xmake.lua 里显式排除。
 - 外部 `.bin` 测试镜像不入库, 路径由命令行提供, 不作为构建依赖。

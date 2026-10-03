@@ -43,7 +43,10 @@ Guest test programs under `tests/guest/` are C sources cross-compiled with a
 RISC-V toolchain (`riscv64-linux-gnu-gcc`/`objcopy` by default; override the
 prefix with `xmake f --riscv_cross=<prefix>`), linked against a minimal
 `crt0.S`. Self-checking RV64IM programs run through `sim_run -b` as
-individual `xmake test` cases.
+individual `xmake test` cases. Images attach to the `sim_tests` target, so
+the `sim_run` binary itself never needs the cross toolchain; before a
+filtered rerun like `xmake test 'sim_run/guest/factorial'`, build the images
+first (`xmake build guest_images` or a full `xmake test`).
 
 The official [riscv-tests](https://github.com/riscv-software-src/riscv-tests)
 suite (rv64ui + rv64um) is available as an opt-in conformance check:
