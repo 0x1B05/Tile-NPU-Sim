@@ -44,3 +44,16 @@ RISC-V toolchain (`riscv64-linux-gnu-gcc`/`objcopy` by default; override the
 prefix with `xmake f --riscv_cross=<prefix>`), linked against a minimal
 `crt0.S`. Self-checking RV64IM programs run through `sim_run -b` as
 individual `xmake test` cases.
+
+The official [riscv-tests](https://github.com/riscv-software-src/riscv-tests)
+suite (rv64ui + rv64um) is available as an opt-in conformance check:
+
+```sh
+scripts/fetch_riscv_tests.sh      # clone the pinned commit into external/
+xmake f --rvtests=y && xmake test
+```
+
+The suite is assembled against a minimal custom env
+(`tests/riscv-tests-env/riscv_test.h`) that reports pass/fail through the
+runner's `ebreak`/`a0` convention; `fence_i` and `ma_data` are excluded
+(Zifencei and trap delivery are not modeled).
