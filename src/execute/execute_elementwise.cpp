@@ -1,35 +1,23 @@
 #include "execute_elementwise.h"
 
 #include "config_check.h"
+#include "ebin_op.h"
 #include "tile_npu/matrix_view.h"
-#include "tile_npu/unreachable.h"
 
-#include <algorithm>
-#include <bit>
-#include <cmath>
+#include <cstddef>
 #include <cstdint>
-#include <limits>
 #include <optional>
 #include <span>
-#include <type_traits>
 #include <variant>
 
 namespace tile_npu {
 namespace {
 
-// The overflow mode only exists on the tile domain (8-bit add/sub); the
-// 32-bit domains always wrap.
-ArithMode arith_mode_of(const TileConfig &config) { return config.arith_mode; }
-ArithMode arith_mode_of(const AccConfig &) { return ArithMode::wrap; }
-ArithMode arith_mode_of(const Vec32Config &) { return ArithMode::wrap; }
-
-// div is f32-only; bitwise and shift operations are integer-only. Tile
-// mul/div never reach here: the tile domain has no such encodings. Legality
-// comes from the shared EBIN_BY_FUNCT4 table.
-bool op_supports_dtype(EbinOp op, DType dtype) {
-  const auto &info = EBIN_BY_FUNCT4[static_cast<std::uint8_t>(op)];
-  if (!info) return false; // hand-constructed op with an unassigned code
-  return dtype == DType::f32 ? info->f32_allowed : info->integer_allowed;
+// decode_scalar(xS, TYPE) keeps the low element-width bits of xS.
+template <typename Element>
+Element scalar_operand(const State &state, const NpuOperand &src2) {
+  return static_cast<Element>(
+      state.scalar.read_x(std::get<ScalarRegister>(src2).index));
 }
 
 // Decode already guarantees this; hand-constructed instructions can violate
@@ -49,7 +37,8 @@ bool operands_valid(const EbinInstr &instr,
   const auto &dst = configs[instr.dest.index];
   const auto &lhs = configs[instr.src1.index];
   if (!valid_elementwise_config(dst) || !valid_elementwise_config(lhs) ||
-      !configs_match(dst, lhs) || !op_supports_dtype(instr.op, dst.dtype)) {
+      !configs_match(dst, lhs) ||
+      !ebin_op_supports_dtype(instr.op, dst.dtype)) {
     return false;
   }
   if (const auto *rhs = std::get_if<NpuRegister>(&instr.src2)) {
@@ -59,80 +48,6 @@ bool operands_valid(const EbinInstr &instr,
            configs_match(dst, rhs_config);
   }
   return true;
-}
-
-// decode_scalar(xS, TYPE) keeps the low element-width bits of xS.
-template <typename Element>
-Element scalar_operand(const State &state, const NpuOperand &src2) {
-  return static_cast<Element>(
-      state.scalar.read_x(std::get<ScalarRegister>(src2).index));
-}
-
-// One element of the operation on raw storage bits; the dtype selects the
-// numeric interpretation. 8-bit add/sub widen to int so sat mode can clamp;
-// everything else wraps to the element width. Shift amounts take the low
-// log2(width) bits of the right operand. f32 min/max follow IEEE 754
-// minNum/maxNum: NaN does not propagate.
-template <typename E>
-E apply_op(EbinOp op, DType dtype, ArithMode arith, E lhs, E rhs) {
-  if constexpr (sizeof(E) == sizeof(float)) {
-    if (dtype == DType::f32) {
-      const auto left = std::bit_cast<float>(lhs);
-      const auto right = std::bit_cast<float>(rhs);
-      float result = 0.0f;
-      switch (op) {
-      case EbinOp::add: result = left + right; break;
-      case EbinOp::sub: result = left - right; break;
-      case EbinOp::mul: result = left * right; break;
-      case EbinOp::div: result = left / right; break;
-      case EbinOp::min: result = std::fmin(left, right); break;
-      case EbinOp::max: result = std::fmax(left, right); break;
-      // Integer-only ops never get here: operands_valid rejects them.
-      default: unreachable("f32 element with an integer-only E_BIN op");
-      }
-      return std::bit_cast<E>(result);
-    }
-  }
-  using S = std::make_signed_t<E>;
-  constexpr E shamt_mask = static_cast<E>(std::numeric_limits<E>::digits - 1);
-  const bool is_signed = dtype == DType::i8 || dtype == DType::i32;
-  switch (op) {
-  case EbinOp::add:
-  case EbinOp::sub: {
-    if constexpr (sizeof(E) == 1) {
-      const int left =
-          is_signed ? static_cast<int>(static_cast<S>(lhs)) : int{lhs};
-      const int right =
-          is_signed ? static_cast<int>(static_cast<S>(rhs)) : int{rhs};
-      int result = op == EbinOp::add ? left + right : left - right;
-      if (arith == ArithMode::sat) {
-        result = is_signed ? std::clamp(result, -128, 127)
-                           : std::clamp(result, 0, 255);
-      }
-      return static_cast<E>(result);
-    }
-    return static_cast<E>(op == EbinOp::add ? lhs + rhs : lhs - rhs);
-  }
-  case EbinOp::mul: return static_cast<E>(lhs * rhs);
-  case EbinOp::min:
-  case EbinOp::max:
-    if (is_signed) {
-      const auto left = static_cast<S>(lhs);
-      const auto right = static_cast<S>(rhs);
-      return static_cast<E>(op == EbinOp::min ? std::min(left, right)
-                                              : std::max(left, right));
-    }
-    return op == EbinOp::min ? std::min(lhs, rhs) : std::max(lhs, rhs);
-  case EbinOp::bit_and: return static_cast<E>(lhs & rhs);
-  case EbinOp::bit_or: return static_cast<E>(lhs | rhs);
-  case EbinOp::bit_xor: return static_cast<E>(lhs ^ rhs);
-  case EbinOp::shl: return static_cast<E>(lhs << (rhs & shamt_mask));
-  case EbinOp::shr: return static_cast<E>(lhs >> (rhs & shamt_mask));
-  case EbinOp::sra:
-    return static_cast<E>(static_cast<S>(lhs) >> (rhs & shamt_mask));
-    // Integer div never gets here: operands_valid rejects it.
-  default: unreachable("integer element with the f32-only E_BIN div");
-  }
 }
 
 // Shared matrix-domain loop (tile, acc): runs the operation over the
@@ -171,8 +86,8 @@ ExecuteResult elementwise_matrix(
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
       const auto right =
           rhs_register != nullptr ? rhs->at(row, col) : scalar_rhs;
-      dst.at(row, col) =
-          apply_op(instr.op, dst_config.dtype, arith, lhs.at(row, col), right);
+      dst.at(row, col) = apply_ebin_op(instr.op, dst_config.dtype, arith,
+                                       lhs.at(row, col), right);
     }
   }
   return {.status = StepStatus::retired};
@@ -201,7 +116,7 @@ ExecuteResult elementwise_vector(
     const auto right =
         rhs_register != nullptr ? regs[rhs_register->index][lane] : scalar_rhs;
     dst_reg[lane] =
-        apply_op(instr.op, dst_config.dtype, arith, lhs_reg[lane], right);
+        apply_ebin_op(instr.op, dst_config.dtype, arith, lhs_reg[lane], right);
   }
   return {.status = StepStatus::retired};
 }
