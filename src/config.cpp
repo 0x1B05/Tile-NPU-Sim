@@ -23,17 +23,7 @@ constexpr bool valid_dtype(ConfigBank bank, DType dtype) {
 }
 
 constexpr bool valid_register_index(ConfigBank bank, std::uint8_t index) {
-  switch (bank) {
-  case ConfigBank::tc:
-  case ConfigBank::tm: return index < TILE_REGISTERS;
-  case ConfigBank::ac:
-  case ConfigBank::am: return index < ACC_REGISTERS;
-  case ConfigBank::bc:
-  case ConfigBank::vc:
-  case ConfigBank::bm:
-  case ConfigBank::vm: return index < VECTOR_REGISTERS;
-  }
-  return false;
+  return index < config_register_count(bank);
 }
 
 constexpr bool field_supported(ConfigBank bank, ConfigField field) {

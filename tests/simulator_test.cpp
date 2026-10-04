@@ -23,8 +23,10 @@ std::optional<tile_npu::DecodeError> decode_error(std::uint32_t word) {
 
 TEST_CASE(npu_decode) {
   const auto tadd = tile_npu::decode(0x00002080u); // tadd t0, t1, t2
-  const auto *tadd_instr = std::get_if<tile_npu::DecodedNpuInstr>(&tadd);
-  check(tadd_instr != nullptr, "decode Tile tadd");
+  const auto *tadd_npu = std::get_if<tile_npu::DecodedNpuInstr>(&tadd);
+  check(tadd_npu != nullptr, "decode Tile tadd");
+  const auto *tadd_instr = std::get_if<tile_npu::EbinInstr>(tadd_npu);
+  check(tadd_instr != nullptr, "tadd is an EbinInstr");
   check_eq(tadd_instr->op, tile_npu::EbinOp::add, "tadd op");
   check_eq(tadd_instr->dest.domain, tile_npu::NpuDomain::tile,
            "tadd dest domain");

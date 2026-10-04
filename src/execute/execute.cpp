@@ -25,7 +25,11 @@ ExecuteResult execute_scalar(const DecodedScalarInstr &instr,
 ExecuteResult execute_npu(const DecodedNpuInstr &instr, ExecContext &ctx) {
   // Today every decodable NPU instruction is an elementwise binary op; data
   // movement and cross-domain families get their own executors here later.
-  return execute_elementwise(instr, ctx.state);
+  if (const auto *ebin = std::get_if<EbinInstr>(&instr)) {
+    return execute_elementwise(*ebin, ctx.state);
+  }
+  // CfgInstr decodes but its executor lands separately.
+  return {.status = StepStatus::execution_not_implemented};
 }
 
 } // namespace tile_npu

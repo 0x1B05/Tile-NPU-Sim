@@ -1,16 +1,29 @@
 #pragma once
 
+#include "tile_npu/instruction.h"
 #include "tile_npu/state.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <variant>
 
 namespace tile_npu {
 
-// The bank names match the architectural configuration register families.
-// Keeping the bank and index together makes field access independent of the
-// instruction format that selected it.
-enum class ConfigBank : std::uint8_t { tc, ac, bc, vc, tm, am, bm, vm };
+// Architectural register count per bank; decode uses it to reject out-of-range
+// config register numbers as illegal encodings.
+inline constexpr std::size_t config_register_count(ConfigBank bank) {
+  switch (bank) {
+  case ConfigBank::tc:
+  case ConfigBank::tm: return TILE_REGISTERS;
+  case ConfigBank::ac:
+  case ConfigBank::am: return ACC_REGISTERS;
+  case ConfigBank::bc:
+  case ConfigBank::vc:
+  case ConfigBank::bm:
+  case ConfigBank::vm: return VECTOR_REGISTERS;
+  }
+  return 0;
+}
 
 enum class ConfigField : std::uint8_t {
   dtype,
