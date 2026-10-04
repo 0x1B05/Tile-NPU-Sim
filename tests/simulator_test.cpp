@@ -69,12 +69,12 @@ TEST_CASE(npu_decode) {
                  "reject unassigned E_BIN bit-operation code"},
       RejectCase{0x08002080u, DecodeError::illegal,
                  "reject reserved Vec8 E_BIN domain"},
-      RejectCase{0x40002080u, DecodeError::not_implemented,
-                 "other elementwise major remains unimplemented"},
-      RejectCase{0x10002081u, DecodeError::not_implemented,
-                 "other data movement major remains unimplemented"},
+      RejectCase{0x60002080u, DecodeError::illegal,
+                 "reserved elementwise major"},
+      RejectCase{0x10002081u, DecodeError::illegal,
+                 "reserved data movement major"},
       RejectCase{0x00002082u, DecodeError::not_implemented,
-                 "NPU quadrant 10 remains unimplemented"},
+                 "MMA_BDOT major not yet implemented"},
   };
   for (const auto &test : reject_cases) {
     check_eq(decode_error(test.word), std::optional{test.error},
@@ -126,8 +126,8 @@ TEST_CASE(memory_and_step) {
 
   sim.reset(0x1004);
   const auto npu_result = sim.step();
-  check_eq(npu_result.status, tile_npu::StepStatus::decode_not_implemented,
-           "NPU-space step status");
+  check_eq(npu_result.status, tile_npu::StepStatus::illegal_instruction,
+           "NPU-space reserved encoding status");
   check_eq(hex(npu_result.instr), hex(std::make_optional(0xf0000000u)),
            "NPU-space opcode is still fetched as 32 bits");
 

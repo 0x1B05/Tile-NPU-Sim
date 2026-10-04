@@ -274,6 +274,24 @@ struct Er4Instr {
   NpuRegister src2{};
 };
 
+// E_MASK operations (R4): inside the effective region, positions failing the
+// condition are replaced with a fill value. FS picks the fill source (fill5
+// immediate table / Scalar xFill); the bound Scalar register is read per op
+// (packed nRows/nCols for matrix tail, xLen for vector tail, signed xDelta
+// for tril/triu). tril/triu are matrix-only.
+enum class MaskOp : std::uint8_t { tail = 0b000, tril = 0b001, triu = 0b010 };
+
+// Operand reading: dest = D, src = S, bound = xB (Scalar register), fill =
+// fill5 code (fill_is_scalar = false) or xFill register number (true).
+struct MaskInstr {
+  MaskOp op = MaskOp::tail;
+  NpuRegister dest{};
+  NpuRegister src{};
+  RegisterIndex bound = 0;
+  std::uint8_t fill = 0;
+  bool fill_is_scalar = false;
+};
+
 // The architectural configuration register types (TC/AC/BC/VC/TM/AM/BM/VM).
 // Decode derives the register type from (major4, sel2) or (sel2, MV), so
 // field access is independent of the instruction format that selected it.
