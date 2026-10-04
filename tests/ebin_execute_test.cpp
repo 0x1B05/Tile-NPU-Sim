@@ -409,38 +409,43 @@ TEST_CASE(ebin_i32_rejects_div) {
 }
 
 TEST_CASE(ebin_rejects_mismatched_configs) {
-  FlatMemory memory(CODE_BASE, 12);
-  Simulator sim(memory);
-  write_word(memory, CODE_BASE,
+  // Each case perturbs one constraint of an otherwise legal tadd t0, t1, t2
+  // (1x1 i8) and gets a fresh simulator: a rejected step does not advance
+  // the pc, so sharing one would re-execute the first instruction.
+  struct Case {
+    const char *name;
+    void (*perturb)(tile_npu::State &);
+  };
+  constexpr std::array cases{
+      Case{"dtype mismatch",
+           [](tile_npu::State &state) { state.tc[1].dtype = DType::u8; }},
+      Case{"shape mismatch",
+           [](tile_npu::State &state) {
+             state.tc[1].cols = 2;
+             state.tc[2].cols = 2;
+           }},
+      Case{"reserved arith_mode",
+           [](tile_npu::State &state) {
+             state.tc[0].arith_mode = static_cast<ArithMode>(2);
+           }},
+  };
+  for (const auto &test : cases) {
+    FlatMemory memory(CODE_BASE, 4);
+    Simulator sim(memory);
+    load_one(sim, memory,
              make_ebin(EbinOp::add, NpuDomain::tile, false, 0, 1,
                        2)); // tadd t0, t1, t2
-  write_word(memory, CODE_BASE + 4,
-             make_ebin(EbinOp::add, NpuDomain::tile, false, 3, 4,
-                       5)); // tadd t3, t4, t5
-  write_word(memory, CODE_BASE + 8,
-             make_ebin(EbinOp::add, NpuDomain::tile, false, 6, 7,
-                       8)); // tadd t6, t7, t8
-  sim.reset(CODE_BASE);
-  auto &state = sim.state();
-  // dtype mismatch between destination and sources.
-  tile_cfg(state, 0, DType::i8, 1, 1);
-  tile_cfg(state, 1, DType::u8, 1, 1);
-  tile_cfg(state, 2, DType::u8, 1, 1);
-  // shape mismatch.
-  tile_cfg(state, 3, DType::i8, 1, 1);
-  tile_cfg(state, 4, DType::i8, 1, 2);
-  tile_cfg(state, 5, DType::i8, 1, 2);
-  // reserved arith_mode value.
-  tile_cfg(state, 6, DType::i8, 1, 1);
-  tile_cfg(state, 7, DType::i8, 1, 1);
-  tile_cfg(state, 8, DType::i8, 1, 1);
-  state.tc[6].arith_mode = static_cast<ArithMode>(2);
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "dtype mismatch rejected");
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "shape mismatch rejected");
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "reserved arith_mode rejected");
+    auto &state = sim.state();
+    for (auto index : {0, 1, 2}) {
+      tile_cfg(state, index, DType::i8, 1, 1);
+    }
+    state.t[1][0] = i8_bits(1);
+    state.t[2][0] = i8_bits(2);
+    test.perturb(state);
+    check_eq(sim.step().status, StepStatus::invalid_configuration, test.name);
+    check_eq(hex(state.scalar.pc), hex(CODE_BASE), "rejected op keeps pc");
+    check_eq(hex(state.t[0][0]), hex(0x0u), "rejected op leaves t0 untouched");
+  }
 }
 
 TEST_CASE(ebin_legality_matrix) {
