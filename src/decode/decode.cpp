@@ -139,6 +139,32 @@ DecodeResult decode_er4(std::uint32_t word) {
                                   {domain, f.src2}}};
 }
 
+// E_MASK (R4): sel3 = {dom2, FS}; FS = 0 takes the fill from the fill5
+// immediate table (codes 9-31 are reserved), FS = 1 from Scalar xFill.
+// tril/triu are matrix-only, funct3 >= 011 is reserved. The fill5 dtype
+// restriction (codes 5-8 are f32-only) fails at execution.
+DecodeResult decode_emask(std::uint32_t word) {
+  const auto f = encoding::NpuR4::from(word);
+  const auto domain = static_cast<NpuDomain>(f.sel3 >> 1);
+  const bool fill_is_scalar = (f.sel3 & 1) != 0;
+  const bool vector_domain =
+      domain == NpuDomain::vec8 || domain == NpuDomain::vec32;
+  if (f.funct3 > 0b010 || (vector_domain && f.funct3 != 0b000) ||
+      (!fill_is_scalar && f.arg > 8)) {
+    return DecodeError::illegal;
+  }
+  const auto count = domain_register_count(domain);
+  if (f.dest >= count || f.src1 >= count) {
+    return DecodeError::illegal;
+  }
+  return DecodedNpuInstr{MaskInstr{static_cast<MaskOp>(f.funct3),
+                                   {domain, f.dest},
+                                   {domain, f.src1},
+                                   f.src2,
+                                   f.arg,
+                                   fill_is_scalar}};
+}
+
 // M_BLK block/gather forms (R2): sel3 = {dom2, 0}; funct3 = {form2, LS} with
 // LS picking load (0) or store (1). S5 names the gather index vector (a Vec32
 // register) and the patterns pin it to 0 for the block forms.
@@ -309,7 +335,11 @@ constexpr DecodeEntry NPU_TABLE[] = {
     // E_R4 (R4): sel3 = {dom2, 0}, arg5 is the fourth operand (mask/addend).
     {"0011 ??0 ??? ????? ????? ????? ????? 00", decode_er4},
     {"0011 ??? ??? ????? ????? ????? ????? 00", fail<DecodeError::illegal>},            // reserved E_R4 encodings
-    {"???? ??? ???? ???? ????? ????? ????? 00", fail<DecodeError::not_implemented>},  // other elementwise majors
+    // E_MASK (R4): sel3 = {dom2, FS}, arg5 = fill5 / xFill; one pattern, the
+    // handler rejects the reserved funct3/vector-tril/fill5 encodings.
+    {"0100 ??? ??? ????? ????? ????? ????? 00", decode_emask},
+    // All assigned elementwise majors decode above; the rest is reserved.
+    {"???? ??? ???? ???? ????? ????? ????? 00", fail<DecodeError::illegal>},
 
     // M_BLK (R2): sel3 = {dom2, 0}; S5 is the gather index vector, 0 for the
     // block forms. funct3 = {form2, LS}: 00x block, 010 gather.
@@ -340,7 +370,8 @@ constexpr DecodeEntry NPU_TABLE[] = {
     {"0100 ?0? 001 00000 ????? ????? ????? 01", decode_lane_move},                    // insert
     {"0100 ?0? 010 00000 ????? ????? ????? 01", decode_lane_move},                    // broadcast
     {"0100 ??? ??? ????? ????? ????? ????? 01", fail<DecodeError::illegal>},          // reserved LANE_MOVE encodings
-    {"???? ??? ???? ???? ????? ????? ????? 01", fail<DecodeError::not_implemented>},  // other data movement majors
+    // All assigned data movement majors decode above; the rest is reserved.
+    {"???? ??? ???? ???? ????? ????? ????? 01", fail<DecodeError::illegal>},
     // CFG_MAT_SETI / CFG_VEC_SETI (I format); field3 = 111 is reserved.
     {"0101 ?? 111 ???? ???? ???? ???? ????? 10", fail<DecodeError::illegal>},
     {"0110 ?? 111 ???? ???? ???? ???? ????? 10", fail<DecodeError::illegal>},
