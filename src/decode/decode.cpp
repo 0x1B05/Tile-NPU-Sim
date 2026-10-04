@@ -272,6 +272,29 @@ DecodeResult decode_qnt(std::uint32_t word) {
                                   index_is_scalar}};
 }
 
+// MMA_BDOT (R4): funct3 bit2 picks mma (Acc destination) or bdot (Vec32
+// destination); bdot has no accumulate form, so funct3 codes 101/111 are
+// reserved (the pattern pins reserved3/reserved5 to 0). The left source is a
+// Tile for mma and a Vec8 for bdot; the right source is always a Tile. All
+// dtype/shape constraints fail at execution.
+DecodeResult decode_mma(std::uint32_t word) {
+  const auto f = encoding::NpuR4::from(word);
+  const bool bdot = (f.funct3 & 0b100) != 0;
+  if (f.funct3 == 0b101 || f.funct3 == 0b111) {
+    return DecodeError::illegal;
+  }
+  const auto dest_domain = bdot ? NpuDomain::vec32 : NpuDomain::acc;
+  const auto lhs_domain = bdot ? NpuDomain::vec8 : NpuDomain::tile;
+  if (f.dest >= domain_register_count(dest_domain) ||
+      f.src1 >= domain_register_count(lhs_domain) || f.src2 >= TILE_REGISTERS) {
+    return DecodeError::illegal;
+  }
+  return DecodedNpuInstr{MmaInstr{static_cast<MmaOp>(f.funct3),
+                                  {dest_domain, f.dest},
+                                  {lhs_domain, f.src1},
+                                  {NpuDomain::tile, f.src2}}};
+}
+
 // M_BLK block/gather forms (R2): sel3 = {dom2, 0}; funct3 = {form2, LS} with
 // LS picking load (0) or store (1). S5 names the gather index vector (a Vec32
 // register) and the patterns pin it to 0 for the block forms.
@@ -479,6 +502,10 @@ constexpr DecodeEntry NPU_TABLE[] = {
     {"0100 ??? ??? ????? ????? ????? ????? 01", fail<DecodeError::illegal>},          // reserved LANE_MOVE encodings
     // All assigned data movement majors decode above; the rest is reserved.
     {"???? ??? ???? ???? ????? ????? ????? 01", fail<DecodeError::illegal>},
+    // MMA_BDOT (R4): reserved3/reserved5 pinned to 0; one pattern, the
+    // handler rejects the reserved funct3 codes 101/111.
+    {"0000 000 ??? 00000 ????? ????? ????? 10", decode_mma},
+    {"0000 ??? ??? ????? ????? ????? ????? 10", fail<DecodeError::illegal>},          // reserved MMA_BDOT encodings
     // CVT (R2): sel3 = {dom2, 0}, dom2 = Acc/Vec32 only. funct3 = 000 cvt,
     // 001 twiden (Acc destination only).
     {"0011 ?10 000 0000000000 ????? ????? 10", decode_cvt},                           // acvt/vcvt
