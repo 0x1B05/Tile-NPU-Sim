@@ -43,6 +43,10 @@ inline bool valid_elementwise_config(const AccConfig &config) {
   return valid_domain_config(config);
 }
 
+inline bool valid_elementwise_config(const Vec8Config &config) {
+  return valid_domain_config(config);
+}
+
 inline bool valid_elementwise_config(const Vec32Config &config) {
   return valid_domain_config(config);
 }
