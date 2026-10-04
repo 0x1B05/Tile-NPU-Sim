@@ -243,3 +243,31 @@
 .macro VSILU d5, s5
     E_UNARY 3, 6, \d5, \s5
 .endm
+
+# E_CMP (R4), mirroring NpuR4 in src/decode/encoding.h:
+#   [31:28] major4 = 2  [27:26] dom2  [25] BX  [24:22] funct3 (cond)
+#   [21:17] reserved(0)  [16:12] B5/xS  [11:7] A5  [6:2] M5  [1:0] q = 00
+# funct3: 0 eq, 1 ne (int), 2 lt, 3 ge (int), 4 le (f32), 5 unord (f32).
+.macro E_CMP dom2, bx, funct3, m5, a5, b5
+    .word ((2 << 28) | (\dom2 << 26) | (\bx << 25) | (\funct3 << 22) | (\b5 << 12) | (\a5 << 7) | (\m5 << 2))
+.endm
+
+.macro ACMPLT m5, a5, b5
+    E_CMP 1, 0, 2, \m5, \a5, \b5
+.endm
+
+.macro ACMPGE m5, a5, b5
+    E_CMP 1, 0, 3, \m5, \a5, \b5
+.endm
+
+.macro ACMPXEQ m5, a5, xs
+    E_CMP 1, 1, 0, \m5, \a5, \xs
+.endm
+
+.macro VCMPUNORD m5, a5, b5
+    E_CMP 3, 0, 5, \m5, \a5, \b5
+.endm
+
+.macro VCMPLE m5, a5, b5
+    E_CMP 3, 0, 4, \m5, \a5, \b5
+.endm
