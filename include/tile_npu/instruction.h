@@ -349,6 +349,28 @@ struct QntInstr {
   bool index_is_scalar = false;
 };
 
+// MMA_BDOT operations (R4): funct3 bit2 picks matrix multiply (0, mma.*) or
+// vector-matrix dot (1, bdot.*); bit1 picks the right-operand orientation
+// (nn = 0, nt = 1); bit0 picks zero-fill or accumulate for mma (bdot only
+// has the zero form, so funct3 codes 101/111 are reserved).
+enum class MmaOp : std::uint8_t {
+  nn_zero = 0b000,
+  nn_acc = 0b001,
+  nt_zero = 0b010,
+  nt_acc = 0b011,
+  bdot_nn = 0b100,
+  bdot_nt = 0b110,
+};
+
+// Operand reading: dest = aD (Acc) for mma, vD (Vec32) for bdot; src_a = tA
+// (Tile) for mma, bA (Vec8) for bdot; src_b is always the right Tile tB.
+struct MmaInstr {
+  MmaOp op = MmaOp::nn_zero;
+  NpuRegister dest{};
+  NpuRegister src_a{};
+  NpuRegister src_b{};
+};
+
 // The architectural configuration register types (TC/AC/BC/VC/TM/AM/BM/VM).
 // Decode derives the register type from (major4, sel2) or (sel2, MV), so
 // field access is independent of the instruction format that selected it.

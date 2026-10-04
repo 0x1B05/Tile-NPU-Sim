@@ -155,7 +155,7 @@ TEST_CASE(cfg_decode_rejects_reserved) {
       ErrorCase{"get ac12 out of range", cfg_reg(1, 0, 2, 0, 12, 5),
                 DecodeError::illegal},
       // Defined but not yet decoded families report not_implemented.
-      ErrorCase{"mma family", (0x0u << 28) | 0x2u,
+      ErrorCase{"sys family", (0x8u << 28) | 0x2u,
                 DecodeError::not_implemented},
       ErrorCase{"reserved major4 1001", (0x9u << 28) | 0x2u,
                 DecodeError::not_implemented},
