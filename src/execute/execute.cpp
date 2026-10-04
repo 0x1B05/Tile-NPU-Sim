@@ -10,6 +10,7 @@
 #include "execute_eun.h"
 #include "execute_init.h"
 #include "execute_mblk.h"
+#include "execute_mma.h"
 #include "execute_qnt.h"
 #include "execute_reduce.h"
 #include "execute_row_lane.h"
@@ -82,6 +83,10 @@ ExecuteResult execute_one(const ReduceInstr &instr, ExecContext &ctx) {
 
 ExecuteResult execute_one(const QntInstr &instr, ExecContext &ctx) {
   return execute_qnt(instr, ctx.state);
+}
+
+ExecuteResult execute_one(const MmaInstr &instr, ExecContext &ctx) {
+  return execute_mma(instr, ctx.state);
 }
 
 } // namespace
