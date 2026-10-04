@@ -66,6 +66,33 @@ DecodeResult decode_eun(std::uint32_t word) {
       static_cast<EunOp>(f.funct3), {domain, f.dest}, {domain, f.src2}}};
 }
 
+// E_CMP (R4): sel3 = {dom2, BX}; the patterns pin dom2 to Acc/Vec32 (the only
+// domains with comparisons) and the reserved5 position to 0. funct3 is the
+// condition code; the dtype-dependent restrictions (ne/ge are integer-only,
+// le/unord f32-only) cannot be checked here and fail at execution.
+DecodeResult decode_ecmp(std::uint32_t word) {
+  const auto f = encoding::NpuR4::from(word);
+  const auto domain = static_cast<NpuDomain>(f.sel3 >> 1);
+  const auto &info = CMP_BY_FUNCT3[f.funct3];
+  if (!info) {
+    return DecodeError::illegal;
+  }
+  const auto count = domain_register_count(domain);
+  if (f.src1 >= count || f.dest >= count) {
+    return DecodeError::illegal;
+  }
+  const bool scalar_src2 = (f.sel3 & 1) != 0;
+  if (!scalar_src2 && f.src2 >= count) {
+    return DecodeError::illegal;
+  }
+  return DecodedNpuInstr{
+      CmpInstr{info->op,
+               {domain, f.dest},
+               {domain, f.src1},
+               scalar_src2 ? NpuOperand{ScalarRegister{f.src2}}
+                           : NpuOperand{NpuRegister{domain, f.src2}}}};
+}
+
 // M_BLK block/gather forms (R2): sel3 = {dom2, 0}; funct3 = {form2, LS} with
 // LS picking load (0) or store (1). S5 names the gather index vector (a Vec32
 // register) and the patterns pin it to 0 for the block forms.
@@ -225,6 +252,11 @@ constexpr DecodeEntry NPU_TABLE[] = {
     {"0001 ??0 000 0000000000 ????? ????? 00", decode_eun},                           // not
     {"0001 ?10 ??? 0000000000 ????? ????? 00", decode_eun},                           // Acc/Vec32 ops
     {"0001 ??? ??? ????? ????? ????? ????? 00", fail<DecodeError::illegal>},          // reserved E_UNARY encodings
+    // E_CMP (R4): sel3 = {dom2, BX}, reserved5 pinned to 0; comparisons only
+    // exist on Acc/Vec32.
+    {"0010 01? ??? 00000 ????? ????? ????? 00", decode_ecmp},                           // acc
+    {"0010 11? ??? 00000 ????? ????? ????? 00", decode_ecmp},                           // vec32
+    {"0010 ??? ??? ????? ????? ????? ????? 00", fail<DecodeError::illegal>},            // reserved E_CMP encodings
     {"???? ??? ???? ???? ????? ????? ????? 00", fail<DecodeError::not_implemented>},  // other elementwise majors
 
     // M_BLK (R2): sel3 = {dom2, 0}; S5 is the gather index vector, 0 for the
