@@ -93,6 +93,31 @@ DecodeResult decode_ecmp(std::uint32_t word) {
                            : NpuOperand{NpuRegister{domain, f.src2}}}};
 }
 
+// E_BCAST (R3): sel3 = {TA, 0, DIR}; TA pairs Tile with Vec8 (0) or Acc with
+// Vec32 (1), DIR picks byrow (0) or bycol (1). The funct4 operation codes are
+// shared with E_BIN (including tile having no mul/div); the dtype-dependent
+// restrictions fail at execution.
+DecodeResult decode_ebcast(std::uint32_t word) {
+  const auto f = encoding::NpuR3::from(word);
+  const auto matrix_domain =
+      (f.sel3 & 0b100) != 0 ? NpuDomain::acc : NpuDomain::tile;
+  const auto vector_domain =
+      (f.sel3 & 0b100) != 0 ? NpuDomain::vec32 : NpuDomain::vec8;
+  const auto &info = EBIN_BY_FUNCT4[f.funct4];
+  if (!info || (matrix_domain == NpuDomain::tile && !info->tile_allowed)) {
+    return DecodeError::illegal;
+  }
+  const auto count = domain_register_count(matrix_domain);
+  if (f.dest >= count || f.src1 >= count) {
+    return DecodeError::illegal;
+  }
+  return DecodedNpuInstr{BcastInstr{info->op,
+                                    {matrix_domain, f.dest},
+                                    {matrix_domain, f.src1},
+                                    {vector_domain, f.src2},
+                                    (f.sel3 & 1) != 0}};
+}
+
 // M_BLK block/gather forms (R2): sel3 = {dom2, 0}; funct3 = {form2, LS} with
 // LS picking load (0) or store (1). S5 names the gather index vector (a Vec32
 // register) and the patterns pin it to 0 for the block forms.
@@ -257,6 +282,9 @@ constexpr DecodeEntry NPU_TABLE[] = {
     {"0010 01? ??? 00000 ????? ????? ????? 00", decode_ecmp},                           // acc
     {"0010 11? ??? 00000 ????? ????? ????? 00", decode_ecmp},                           // vec32
     {"0010 ??? ??? ????? ????? ????? ????? 00", fail<DecodeError::illegal>},            // reserved E_CMP encodings
+    // E_BCAST (R3): sel3 = {TA, 0, DIR}, reserved4 pinned to 0.
+    {"0101 ?0? ???? 0000 ????? ????? ????? 00", decode_ebcast},
+    {"0101 ??? ???? ???? ????? ????? ????? 00", fail<DecodeError::illegal>},            // reserved E_BCAST encodings
     {"???? ??? ???? ???? ????? ????? ????? 00", fail<DecodeError::not_implemented>},  // other elementwise majors
 
     // M_BLK (R2): sel3 = {dom2, 0}; S5 is the gather index vector, 0 for the
