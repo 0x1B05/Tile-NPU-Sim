@@ -291,3 +291,22 @@
 .macro AMULV_COL d5, a5, s5
     E_BCAST 1, 1, 2, \d5, \a5, \s5
 .endm
+
+# E_R4 (R4), mirroring NpuR4 in src/decode/encoding.h:
+#   [31:28] major4 = 3  [27:26] dom2  [25] 0  [24:22] funct3
+#   [21:17] arg5 (mask M / addend C)  [16:12] B5  [11:7] A5  [6:2] D5
+#   [1:0] q = 00
+# funct3: 0 select, 1 fmadd (Acc/Vec32 only).
+.macro E_R4 dom2, funct3, arg5, d5, a5, b5
+    .word ((3 << 28) | (\dom2 << 26) | (\funct3 << 22) | (\arg5 << 17) | (\b5 << 12) | (\a5 << 7) | (\d5 << 2))
+.endm
+
+# select: asm operand order D, M, A, B; arg5 carries M.
+.macro TSELECT d5, m5, a5, b5
+    E_R4 0, 0, \m5, \d5, \a5, \b5
+.endm
+
+# fmadd: asm operand order D, A, B, C; arg5 carries C.
+.macro VFMADD d5, a5, b5, c5
+    E_R4 3, 1, \c5, \d5, \a5, \b5
+.endm
