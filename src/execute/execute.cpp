@@ -10,6 +10,7 @@
 #include "execute_eun.h"
 #include "execute_init.h"
 #include "execute_mblk.h"
+#include "execute_reduce.h"
 #include "execute_row_lane.h"
 #include "execute_rv64i.h"
 #include "execute_rv64m.h"
@@ -72,6 +73,10 @@ ExecuteResult execute_one(const CfgInstr &instr, ExecContext &ctx) {
 
 ExecuteResult execute_one(const CvtInstr &instr, ExecContext &ctx) {
   return execute_cvt(instr, ctx.state);
+}
+
+ExecuteResult execute_one(const ReduceInstr &instr, ExecContext &ctx) {
+  return execute_reduce(instr, ctx.state);
 }
 
 } // namespace
