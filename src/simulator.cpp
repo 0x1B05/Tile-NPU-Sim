@@ -37,10 +37,10 @@ StepResult Simulator::step() {
             .instr = instr};
   }
   const auto *scalar_instr = std::get_if<DecodedScalarInstr>(&decoded);
+  ExecContext ctx{state_, memory_};
   const auto execution =
-      scalar_instr
-          ? execute_scalar(*scalar_instr, state_, memory_)
-          : execute_npu(std::get<DecodedNpuInstr>(decoded), state_, memory_);
+      scalar_instr ? execute_scalar(*scalar_instr, ctx)
+                   : execute_npu(std::get<DecodedNpuInstr>(decoded), ctx);
   if (execution.status == StepStatus::retired) {
     state_.scalar.pc = execution.redirect.value_or(pc + 4);
   }

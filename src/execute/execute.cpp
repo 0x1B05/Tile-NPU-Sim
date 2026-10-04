@@ -14,19 +14,18 @@ constexpr bool is_rv64m(ScalarOp op) {
 
 } // namespace
 
-ExecuteResult execute_scalar(const DecodedScalarInstr &instr, State &state,
-                             Memory &memory) {
+ExecuteResult execute_scalar(const DecodedScalarInstr &instr,
+                             ExecContext &ctx) {
   if (is_rv64m(instr.op)) {
-    return execute_rv64m(instr, state.scalar);
+    return execute_rv64m(instr, ctx.state.scalar);
   }
-  return execute_rv64i(instr, state.scalar, memory);
+  return execute_rv64i(instr, ctx);
 }
 
-ExecuteResult execute_npu(const DecodedNpuInstr &instr, State &state,
-                          Memory &) {
+ExecuteResult execute_npu(const DecodedNpuInstr &instr, ExecContext &ctx) {
   // Today every decodable NPU instruction is an elementwise binary op; data
   // movement and cross-domain families get their own executors here later.
-  return execute_elementwise(instr, state);
+  return execute_elementwise(instr, ctx.state);
 }
 
 } // namespace tile_npu

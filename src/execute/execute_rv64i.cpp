@@ -49,9 +49,8 @@ std::size_t store_width(ScalarOp op) {
 }
 // clang-format on
 
-ExecuteResult execute_load(const DecodedScalarInstr &instr, ScalarState &scalar,
-                           Memory &memory) {
-  const auto pc = scalar.pc;
+ExecuteResult execute_load(const DecodedScalarInstr &instr, ExecContext &ctx) {
+  ScalarState &scalar = ctx.state.scalar;
   const auto width = load_width(instr.op);
   const auto address =
       scalar.read_x(instr.regs.src1) + static_cast<std::uint64_t>(instr.imm);
@@ -60,7 +59,7 @@ ExecuteResult execute_load(const DecodedScalarInstr &instr, ScalarState &scalar,
   }
 
   std::array<std::byte, 8> bytes{};
-  if (!memory.read(address, std::span<std::byte>(bytes.data(), width))) {
+  if (!ctx.memory.read(address, std::span<std::byte>(bytes.data(), width))) {
     return fault(StepStatus::load_fault, address);
   }
   std::uint64_t value = 0;
@@ -79,9 +78,8 @@ ExecuteResult execute_load(const DecodedScalarInstr &instr, ScalarState &scalar,
   return {.status = StepStatus::retired};
 }
 
-ExecuteResult execute_store(const DecodedScalarInstr &instr,
-                            ScalarState &scalar, Memory &memory) {
-  const auto pc = scalar.pc;
+ExecuteResult execute_store(const DecodedScalarInstr &instr, ExecContext &ctx) {
+  ScalarState &scalar = ctx.state.scalar;
   const auto width = store_width(instr.op);
   const auto address =
       scalar.read_x(instr.regs.src1) + static_cast<std::uint64_t>(instr.imm);
@@ -94,7 +92,8 @@ ExecuteResult execute_store(const DecodedScalarInstr &instr,
   for (std::size_t i = 0; i < width; ++i) {
     bytes[i] = static_cast<std::byte>((value >> (i * 8)) & 0xffu);
   }
-  if (!memory.write(address, std::span<const std::byte>(bytes.data(), width))) {
+  if (!ctx.memory.write(address,
+                        std::span<const std::byte>(bytes.data(), width))) {
     return fault(StepStatus::store_fault, address);
   }
   return {.status = StepStatus::retired};
@@ -102,8 +101,8 @@ ExecuteResult execute_store(const DecodedScalarInstr &instr,
 
 } // namespace
 
-ExecuteResult execute_rv64i(const DecodedScalarInstr &instr,
-                            ScalarState &scalar, Memory &memory) {
+ExecuteResult execute_rv64i(const DecodedScalarInstr &instr, ExecContext &ctx) {
+  ScalarState &scalar = ctx.state.scalar;
   const auto pc = scalar.pc;
   const auto link = pc + 4;
   const auto &r = instr.regs;
@@ -169,11 +168,11 @@ ExecuteResult execute_rv64i(const DecodedScalarInstr &instr,
   case ScalarOp::ld:
   case ScalarOp::lbu:
   case ScalarOp::lhu:
-  case ScalarOp::lwu: return execute_load(instr, scalar, memory);
+  case ScalarOp::lwu: return execute_load(instr, ctx);
   case ScalarOp::sb:
   case ScalarOp::sh:
   case ScalarOp::sw:
-  case ScalarOp::sd:  return execute_store(instr, scalar, memory);
+  case ScalarOp::sd:  return execute_store(instr, ctx);
 
   case ScalarOp::addi:    return write(lhs + imm);
   case ScalarOp::slti:    return write(signed_lhs < static_cast<std::int64_t>(instr.imm));

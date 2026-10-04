@@ -20,10 +20,15 @@ struct ExecuteResult {
   std::optional<std::uint64_t> fault_address = std::nullopt;
 };
 
+// The machine an instruction executes against, bundled so executors that
+// touch memory (or will, e.g. descriptor data movement) share one signature.
+struct ExecContext {
+  State &state;
+  Memory &memory;
+};
+
 // An unsuccessful execution leaves architectural state unchanged.
-ExecuteResult execute_scalar(const DecodedScalarInstr &instr, State &state,
-                             Memory &memory);
-ExecuteResult execute_npu(const DecodedNpuInstr &instr, State &state,
-                          Memory &memory);
+ExecuteResult execute_scalar(const DecodedScalarInstr &instr, ExecContext &ctx);
+ExecuteResult execute_npu(const DecodedNpuInstr &instr, ExecContext &ctx);
 
 } // namespace tile_npu
