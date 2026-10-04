@@ -112,6 +112,43 @@ DecodeResult decode_init_move(std::uint32_t word) {
   return DecodedNpuInstr{InitInstr{op, {domain, f.dest}, f.src2, 0}};
 }
 
+// ROW_MOVE (R4): sel3 = {EW, 0, IS}; EW pairs Tile <-> Vec8 (0) or
+// Acc <-> Vec32 (1). The vector side has 32 registers, so only the matrix
+// register number needs a bounds check.
+DecodeResult decode_row_move(std::uint32_t word) {
+  const auto f = encoding::NpuR4::from(word);
+  const auto matrix_domain =
+      (f.sel3 & 0b100) != 0 ? NpuDomain::acc : NpuDomain::tile;
+  const auto vector_domain =
+      (f.sel3 & 0b100) != 0 ? NpuDomain::vec32 : NpuDomain::vec8;
+  const bool insert = f.funct3 == 0b000;
+  const auto matrix_index = insert ? f.dest : f.src1;
+  if (matrix_index >= domain_register_count(matrix_domain)) {
+    return DecodeError::illegal;
+  }
+  return DecodedNpuInstr{RowInstr{insert ? RowOp::insert : RowOp::extract,
+                                  {matrix_domain, matrix_index},
+                                  {vector_domain, insert ? f.src1 : f.dest},
+                                  f.src2,
+                                  (f.sel3 & 1) != 0}};
+}
+
+// LANE_MOVE (R4): sel3 = {EW, 0, IS}; EW picks Vec8 (0) or Vec32 (1). Both
+// sides take any 5-bit register number.
+DecodeResult decode_lane_move(std::uint32_t word) {
+  const auto f = encoding::NpuR4::from(word);
+  const auto domain =
+      (f.sel3 & 0b100) != 0 ? NpuDomain::vec32 : NpuDomain::vec8;
+  const auto op = f.funct3 == 0b000   ? LaneOp::extract
+                  : f.funct3 == 0b001 ? LaneOp::insert
+                                      : LaneOp::broadcast;
+  auto dst = op == LaneOp::extract ? NpuOperand{ScalarRegister{f.dest}}
+                                   : NpuOperand{NpuRegister{domain, f.dest}};
+  auto src = op == LaneOp::insert ? NpuOperand{ScalarRegister{f.src1}}
+                                  : NpuOperand{NpuRegister{domain, f.src1}};
+  return DecodedNpuInstr{LaneInstr{op, dst, src, f.src2, (f.sel3 & 1) != 0}};
+}
+
 // sel2 selects the register family pair, the vector-side bit picks within it:
 // 00 -> TC/BC, 01 -> AC/VC, 10 -> TM/BM, 11 -> AM/VM.
 constexpr ConfigRegType cfg_reg_type(std::uint8_t sel2, bool vector_side) {
@@ -187,6 +224,15 @@ constexpr DecodeEntry NPU_TABLE[] = {
     // values in the I layout are reserved.
     {"0010 ?? 000 ???? ???? ???? ???? ????? 01", decode_init_fill},                   // fill
     {"0010 ??? ??? ????? ????? ????? ????? 01", fail<DecodeError::illegal>},          // reserved INIT_MOVE encodings
+    // ROW_MOVE (R4): sel3 = {EW, 0, IS}, funct3 = insert.row/extract.row.
+    {"0011 ?0? 000 00000 ????? ????? ????? 01", decode_row_move},                     // insert.row
+    {"0011 ?0? 001 00000 ????? ????? ????? 01", decode_row_move},                     // extract.row
+    {"0011 ??? ??? ????? ????? ????? ????? 01", fail<DecodeError::illegal>},          // reserved ROW_MOVE encodings
+    // LANE_MOVE (R4): sel3 = {EW, 0, IS}, funct3 = extract/insert/broadcast.
+    {"0100 ?0? 000 00000 ????? ????? ????? 01", decode_lane_move},                    // extract
+    {"0100 ?0? 001 00000 ????? ????? ????? 01", decode_lane_move},                    // insert
+    {"0100 ?0? 010 00000 ????? ????? ????? 01", decode_lane_move},                    // broadcast
+    {"0100 ??? ??? ????? ????? ????? ????? 01", fail<DecodeError::illegal>},          // reserved LANE_MOVE encodings
     {"???? ??? ???? ???? ????? ????? ????? 01", fail<DecodeError::not_implemented>},  // other data movement majors
     // CFG_MAT_SETI / CFG_VEC_SETI (I format); field3 = 111 is reserved.
     {"0101 ?? 111 ???? ???? ???? ???? ????? 10", fail<DecodeError::illegal>},

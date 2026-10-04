@@ -4,6 +4,7 @@
 #include "execute_elementwise.h"
 #include "execute_init.h"
 #include "execute_mblk.h"
+#include "execute_row_lane.h"
 #include "execute_rv64i.h"
 #include "execute_rv64m.h"
 
@@ -29,6 +30,14 @@ ExecuteResult execute_one(const MblkInstr &instr, ExecContext &ctx) {
 
 ExecuteResult execute_one(const InitInstr &instr, ExecContext &ctx) {
   return execute_init(instr, ctx.state);
+}
+
+ExecuteResult execute_one(const RowInstr &instr, ExecContext &ctx) {
+  return execute_row_move(instr, ctx.state);
+}
+
+ExecuteResult execute_one(const LaneInstr &instr, ExecContext &ctx) {
+  return execute_lane_move(instr, ctx.state);
 }
 
 ExecuteResult execute_one(const CfgInstr &instr, ExecContext &ctx) {

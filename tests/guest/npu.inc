@@ -139,3 +139,70 @@
 .macro BFILL d5, imm
     INIT_FILL 2, \d5, \imm
 .endm
+
+.macro ALOAD d5
+    M_BLK 1, 0, \d5, 0
+.endm
+
+.macro VSTORE d5
+    M_BLK 3, 1, \d5, 0
+.endm
+
+# ROW_MOVE (R4), mirroring NpuR4 in src/decode/encoding.h:
+#   [31:28] major4 = 3  [27] EW  [26] 0  [25] IS  [24:22] funct3
+#   [21:17] reserved(0)  [16:12] index5  [11:7] S5  [6:2] D5  [1:0] q = 01
+# EW = 0: Tile <-> Vec8; EW = 1: Acc <-> Vec32.
+# funct3: 0 = insert.row (D5 = matrix, S5 = vector),
+#         1 = extract.row (D5 = vector, S5 = matrix).
+# IS = 0: index5 is an immediate row number; IS = 1: index5 names xS.
+.macro ROW_MOVE ew, is, funct3, index5, s5, d5
+    .word ((3 << 28) | (\ew << 27) | (\is << 25) | (\funct3 << 22) | (\index5 << 12) | (\s5 << 7) | (\d5 << 2) | 1)
+.endm
+
+.macro TINSROW d5, idx, s5
+    ROW_MOVE 0, 0, 0, \idx, \s5, \d5
+.endm
+
+.macro TEXROW d5, s5, idx
+    ROW_MOVE 0, 0, 1, \idx, \s5, \d5
+.endm
+
+.macro AINSROW d5, idx, s5
+    ROW_MOVE 1, 0, 0, \idx, \s5, \d5
+.endm
+
+.macro AEXROW d5, s5, idx
+    ROW_MOVE 1, 0, 1, \idx, \s5, \d5
+.endm
+
+# LANE_MOVE (R4): major4 = 4, same layout as ROW_MOVE.
+# EW = 0: Vec8; EW = 1: Vec32.
+# funct3: 0 = extract (D5 = xD, S5 = vector), 1 = insert (D5 = vector,
+#         S5 = xS), 2 = broadcast (D5/S5 vectors).
+.macro LANE_MOVE ew, is, funct3, index5, s5, d5
+    .word ((4 << 28) | (\ew << 27) | (\is << 25) | (\funct3 << 22) | (\index5 << 12) | (\s5 << 7) | (\d5 << 2) | 1)
+.endm
+
+.macro BEXTRACT xd, s5, idx
+    LANE_MOVE 0, 0, 0, \idx, \s5, \xd
+.endm
+
+.macro BINSERT d5, idx, xs
+    LANE_MOVE 0, 0, 1, \idx, \xs, \d5
+.endm
+
+.macro BBROADCAST d5, s5, idx
+    LANE_MOVE 0, 0, 2, \idx, \s5, \d5
+.endm
+
+.macro VEXTRACT xd, s5, idx
+    LANE_MOVE 1, 0, 0, \idx, \s5, \xd
+.endm
+
+.macro VINSERT d5, idx, xs
+    LANE_MOVE 1, 0, 1, \idx, \xs, \d5
+.endm
+
+.macro VBROADCAST d5, s5, idx
+    LANE_MOVE 1, 0, 2, \idx, \s5, \d5
+.endm
