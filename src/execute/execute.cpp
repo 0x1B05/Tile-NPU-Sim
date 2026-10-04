@@ -2,6 +2,7 @@
 
 #include "execute_cfg.h"
 #include "execute_elementwise.h"
+#include "execute_eun.h"
 #include "execute_init.h"
 #include "execute_mblk.h"
 #include "execute_row_lane.h"
@@ -22,6 +23,10 @@ constexpr bool is_rv64m(ScalarOp op) {
 // dispatch exhaustive as new instruction families are added.
 ExecuteResult execute_one(const EbinInstr &instr, ExecContext &ctx) {
   return execute_elementwise(instr, ctx.state);
+}
+
+ExecuteResult execute_one(const EunInstr &instr, ExecContext &ctx) {
+  return execute_eun(instr, ctx.state);
 }
 
 ExecuteResult execute_one(const MblkInstr &instr, ExecContext &ctx) {
