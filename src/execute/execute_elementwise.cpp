@@ -17,20 +17,6 @@
 namespace tile_npu {
 namespace {
 
-// Elementwise adds its own constraint on top of valid_domain_config: a
-// defined arith_mode (2-3 are reserved by the ISA).
-bool valid_config(const TileConfig &config) {
-  return valid_domain_config(config) && config.arith_mode <= ArithMode::sat;
-}
-
-bool valid_config(const AccConfig &config) {
-  return valid_domain_config(config);
-}
-
-bool valid_config(const Vec32Config &config) {
-  return valid_domain_config(config);
-}
-
 // The overflow mode only exists on the tile domain (8-bit add/sub); the
 // 32-bit domains always wrap.
 ArithMode arith_mode_of(const TileConfig &config) { return config.arith_mode; }
@@ -62,14 +48,15 @@ bool operands_valid(const EbinInstr &instr,
   }
   const auto &dst = configs[instr.dest.index];
   const auto &lhs = configs[instr.src1.index];
-  if (!valid_config(dst) || !valid_config(lhs) || !configs_match(dst, lhs) ||
-      !op_supports_dtype(instr.op, dst.dtype)) {
+  if (!valid_elementwise_config(dst) || !valid_elementwise_config(lhs) ||
+      !configs_match(dst, lhs) || !op_supports_dtype(instr.op, dst.dtype)) {
     return false;
   }
   if (const auto *rhs = std::get_if<NpuRegister>(&instr.src2)) {
     if (rhs->index >= RegCount) return false;
     const auto &rhs_config = configs[rhs->index];
-    return valid_config(rhs_config) && configs_match(dst, rhs_config);
+    return valid_elementwise_config(rhs_config) &&
+           configs_match(dst, rhs_config);
   }
   return true;
 }

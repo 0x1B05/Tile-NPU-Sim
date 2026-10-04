@@ -179,6 +179,25 @@ struct LaneInstr {
   bool index_is_scalar = false;
 };
 
+// E_UNARY single-source elementwise operations (R2): bitwise not, abs, neg
+// and the approximate f32 special functions. Vec8 has no E_UNARY; on the
+// tile domain only `bit_not` exists. Numeric values match the funct3 codes.
+enum class EunOp : std::uint8_t {
+  bit_not = 0b000,
+  abs = 0b001,
+  neg = 0b010,
+  exp2 = 0b011,
+  rcp = 0b100,
+  rsqrt = 0b101,
+  silu = 0b110,
+};
+
+struct EunInstr {
+  EunOp op = EunOp::bit_not;
+  NpuRegister dest{};
+  NpuRegister src{};
+};
+
 // The architectural configuration register types (TC/AC/BC/VC/TM/AM/BM/VM).
 // Decode derives the register type from (major4, sel2) or (sel2, MV), so
 // field access is independent of the instruction format that selected it.

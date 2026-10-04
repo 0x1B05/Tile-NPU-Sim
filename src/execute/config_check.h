@@ -33,6 +33,20 @@ inline bool valid_domain_config(const Vec32Config &config) {
          config.len >= 1 && config.len <= VECTOR_LANES;
 }
 
+// Elementwise (E_BIN/E_UNARY) adds one constraint on top of
+// valid_domain_config: a defined arith_mode (2-3 are reserved by the ISA).
+inline bool valid_elementwise_config(const TileConfig &config) {
+  return valid_domain_config(config) && config.arith_mode <= ArithMode::sat;
+}
+
+inline bool valid_elementwise_config(const AccConfig &config) {
+  return valid_domain_config(config);
+}
+
+inline bool valid_elementwise_config(const Vec32Config &config) {
+  return valid_domain_config(config);
+}
+
 // The ISA's common intra-domain constraint: source and destination share the
 // dtype and the effective shape.
 inline bool configs_match(const TileConfig &dst, const TileConfig &src) {

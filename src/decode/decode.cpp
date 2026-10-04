@@ -49,6 +49,23 @@ DecodeResult decode_ebin(std::uint32_t word) {
                                : NpuOperand{NpuRegister{domain, f.src2}}};
 }
 
+// E_UNARY (R2): sel3 = {dom2, 0}. dom2 = 10 (Vec8) is reserved, funct3 = 111
+// is reserved, and on the tile domain only `not` exists (the first pattern
+// pins funct3 = 000 for tile and vec8).
+DecodeResult decode_eun(std::uint32_t word) {
+  const auto f = encoding::NpuR2::from(word);
+  const auto domain = static_cast<NpuDomain>(f.sel3 >> 1);
+  if (domain == NpuDomain::vec8 || f.funct3 == 0b111) {
+    return DecodeError::illegal;
+  }
+  const auto count = domain_register_count(domain);
+  if (f.dest >= count || f.src2 >= count) {
+    return DecodeError::illegal;
+  }
+  return DecodedNpuInstr{EunInstr{
+      static_cast<EunOp>(f.funct3), {domain, f.dest}, {domain, f.src2}}};
+}
+
 // M_BLK block/gather forms (R2): sel3 = {dom2, 0}; funct3 = {form2, LS} with
 // LS picking load (0) or store (1). S5 names the gather index vector (a Vec32
 // register) and the patterns pin it to 0 for the block forms.
@@ -202,6 +219,12 @@ constexpr DecodeEntry NPU_TABLE[] = {
     {"0000 10? ???? 0000 ????? ????? ????? 00", fail<DecodeError::illegal>},          // vec8 has no E_BIN
     {"0000 11? ???? 0000 ????? ????? ????? 00", decode_ebin},                         // vec32
     {"0000 ??? ???? ???? ????? ????? ????? 00", fail<DecodeError::illegal>},          // reserved4 != 0
+    // E_UNARY (R2): sel3 = {dom2, 0}; `not` on any matrix/vec32 domain, the
+    // rest of the ops on Acc/Vec32 only (patterns pin funct3 = 000 for
+    // dom2 x0, i.e. Tile/Vec8).
+    {"0001 ??0 000 0000000000 ????? ????? 00", decode_eun},                           // not
+    {"0001 ?10 ??? 0000000000 ????? ????? 00", decode_eun},                           // Acc/Vec32 ops
+    {"0001 ??? ??? ????? ????? ????? ????? 00", fail<DecodeError::illegal>},          // reserved E_UNARY encodings
     {"???? ??? ???? ???? ????? ????? ????? 00", fail<DecodeError::not_implemented>},  // other elementwise majors
 
     // M_BLK (R2): sel3 = {dom2, 0}; S5 is the gather index vector, 0 for the

@@ -255,6 +255,28 @@ TEST_CASE(npu_guest_rowlane) {
            "rowlane image reports success via a0");
 }
 
+TEST_CASE(npu_guest_eun) {
+  // tests/guest/npu/eun.S self-configures configs and descriptors, then
+  // exercises the E_UNARY family (not/abs/neg/exp2/rcp/rsqrt/silu) with
+  // store-back checks against expected values in .data. It reaches ebreak
+  // with a0 = 0 on success; a failing check reports its stage in a0.
+  tile_npu::FlatMemory memory{IMAGE_BASE, 1024};
+  tile_npu::Simulator sim(memory);
+  load_image(memory, "eun");
+  sim.reset(IMAGE_BASE);
+  tile_npu::StepResult result{};
+  for (int steps = 0; steps < 512; ++steps) {
+    result = sim.step();
+    if (result.status == tile_npu::StepStatus::breakpoint) {
+      break;
+    }
+  }
+  check_eq(result.status, tile_npu::StepStatus::breakpoint,
+           "eun image reaches ebreak");
+  check_eq(hex(sim.state().scalar.read_x(10)), hex(0x0u),
+           "eun image reports success via a0");
+}
+
 TEST_CASE(npu_guest_cfg_self_check) {
   // tests/guest/npu/cfg.S programs config registers with cfg.seti/cfg.setx,
   // reads them back with cfg.get, and reaches ebreak with a0 = 0 on success.
