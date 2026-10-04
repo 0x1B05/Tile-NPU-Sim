@@ -25,20 +25,15 @@ inline constexpr std::size_t config_register_count(ConfigRegType reg_type) {
   return 0;
 }
 
+// clang-format off
 enum class ConfigField : std::uint8_t {
-  dtype,
-  rows,
-  cols,
-  layout,
-  arith_mode,
-  len,
-  base_addr,
-  row_stride_bytes,
-  col_stride_bytes,
-  transform,
-  flags,
-  stride_bytes,
+  dtype, rows, cols, layout, arith_mode,                  // matrix configs
+  len,                                                    // vector configs
+  base_addr, row_stride_bytes, col_stride_bytes, transform,
+  flags,                                                  // matrix descriptors
+  stride_bytes,                                           // vector descriptors
 };
+// clang-format on
 
 using ConfigFieldValue =
     std::variant<DType, ArithMode, std::uint8_t, std::int32_t, std::uint64_t>;

@@ -99,7 +99,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 - 格式化以仓库根目录 `.clang-format` (LLVM 派生) 为准; 改动过的文件提交前跑一遍 `clang-format -i`, 保证各机器输出一致。
 - 遵循现有代码: `#pragma once`, `snake_case` 函数/变量, `enum class` 强类型枚举, 尽可能 `constexpr`。
 - 常量名用 `ALL_CAPS` (如 `MATRIX_EXTENT`), 不用 `k` 前缀。
-- 查表性质的 switch 和位段拼装用对齐排版, 并以 `// clang-format off`/`// clang-format on` 保护 (格式化器不会动保护区)。
+- 查表性质的 switch、位段拼装和编码枚举/元数据表用对齐排版 (编码枚举可按编码空间分组、一行多个枚举项), 并以 `// clang-format off`/`on` 保护 (格式化器不会动保护区)。
 - 位段一律通过 `encoding::field<Hi,Lo>` 提取, 不在别处散落魔数移位。
 - 注释为英文, 只写"为什么/哪一层约定", 不复述代码。
 
