@@ -57,6 +57,15 @@ bool run_batch(const char *path) {
                 << " retired instructions\n";
       return exit_code == 0;
     }
+    if (result.status == tile_npu::StepStatus::kernel_end) {
+      // Monitor convention: kernel.end is a normal kernel termination; the
+      // a0 == 0 pass rule applies as at ebreak.
+      const auto exit_code = sim.state().scalar.read_x(10);
+      std::cout << (exit_code == 0 ? "PASS " : "FAIL ") << path
+                << ": kernel.end a0=" << exit_code << " after " << steps
+                << " retired instructions\n";
+      return exit_code == 0;
+    }
     std::cerr << "FAIL " << path << ": "
               << tile_npu::monitor::stop_message(result) << '\n';
     return false;
