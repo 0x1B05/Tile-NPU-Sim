@@ -15,7 +15,7 @@ struct DecodedScalarInstr {
 };
 
 using DecodedNpuInstr =
-    std::variant<EbinInstr, EunInstr, CmpInstr, BcastInstr, MblkInstr,
+    std::variant<EbinInstr, EunInstr, CmpInstr, BcastInstr, Er4Instr, MblkInstr,
                  InitInstr, RowInstr, LaneInstr, CfgInstr>;
 
 enum class DecodeError { not_implemented, illegal };

@@ -118,6 +118,27 @@ DecodeResult decode_ebcast(std::uint32_t word) {
                                     (f.sel3 & 1) != 0}};
 }
 
+// E_R4 (R4): sel3 = {dom2, 0}; funct3 = 000 select, 001 fmadd. Vec8 has no
+// E_R4, fmadd has no tile encoding, and funct3 >= 010 is reserved; the f32
+// dtype restriction on fmadd fails at execution.
+DecodeResult decode_er4(std::uint32_t word) {
+  const auto f = encoding::NpuR4::from(word);
+  const auto domain = static_cast<NpuDomain>(f.sel3 >> 1);
+  if (domain == NpuDomain::vec8 || f.funct3 > 0b001 ||
+      (f.funct3 == 0b001 && domain == NpuDomain::tile)) {
+    return DecodeError::illegal;
+  }
+  const auto count = domain_register_count(domain);
+  if (f.dest >= count || f.arg >= count || f.src1 >= count || f.src2 >= count) {
+    return DecodeError::illegal;
+  }
+  return DecodedNpuInstr{Er4Instr{static_cast<Er4Op>(f.funct3),
+                                  {domain, f.dest},
+                                  {domain, f.arg},
+                                  {domain, f.src1},
+                                  {domain, f.src2}}};
+}
+
 // M_BLK block/gather forms (R2): sel3 = {dom2, 0}; funct3 = {form2, LS} with
 // LS picking load (0) or store (1). S5 names the gather index vector (a Vec32
 // register) and the patterns pin it to 0 for the block forms.
@@ -285,6 +306,9 @@ constexpr DecodeEntry NPU_TABLE[] = {
     // E_BCAST (R3): sel3 = {TA, 0, DIR}, reserved4 pinned to 0.
     {"0101 ?0? ???? 0000 ????? ????? ????? 00", decode_ebcast},
     {"0101 ??? ???? ???? ????? ????? ????? 00", fail<DecodeError::illegal>},            // reserved E_BCAST encodings
+    // E_R4 (R4): sel3 = {dom2, 0}, arg5 is the fourth operand (mask/addend).
+    {"0011 ??0 ??? ????? ????? ????? ????? 00", decode_er4},
+    {"0011 ??? ??? ????? ????? ????? ????? 00", fail<DecodeError::illegal>},            // reserved E_R4 encodings
     {"???? ??? ???? ???? ????? ????? ????? 00", fail<DecodeError::not_implemented>},  // other elementwise majors
 
     // M_BLK (R2): sel3 = {dom2, 0}; S5 is the gather index vector, 0 for the
