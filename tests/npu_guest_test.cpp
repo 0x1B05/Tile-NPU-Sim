@@ -141,3 +141,23 @@ TEST_CASE(npu_guest_tadd_u8_sat) {
   const std::uint8_t expected[1][1] = {{255}};
   check_region(state.t[0], expected, "t0");
 }
+
+TEST_CASE(npu_guest_cfg_self_check) {
+  // tests/guest/npu/cfg.S programs config registers with cfg.seti/cfg.setx,
+  // reads them back with cfg.get, and reaches ebreak with a0 = 0 on success.
+  tile_npu::FlatMemory memory{IMAGE_BASE, 128};
+  tile_npu::Simulator sim(memory);
+  load_image(memory, "cfg");
+  sim.reset(IMAGE_BASE);
+  tile_npu::StepResult result{};
+  for (int steps = 0; steps < 64; ++steps) {
+    result = sim.step();
+    if (result.status == tile_npu::StepStatus::breakpoint) {
+      break;
+    }
+  }
+  check_eq(result.status, tile_npu::StepStatus::breakpoint,
+           "cfg image reaches ebreak");
+  check_eq(hex(sim.state().scalar.read_x(10)), hex(0x0u),
+           "cfg image reports success via a0");
+}

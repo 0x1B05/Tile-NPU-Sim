@@ -7,55 +7,46 @@
 namespace tile_npu {
 namespace {
 
-constexpr bool valid_dtype(ConfigBank bank, DType dtype) {
-  switch (bank) {
-  case ConfigBank::tc:
-  case ConfigBank::bc: return dtype == DType::i8 || dtype == DType::u8;
-  case ConfigBank::ac:
-  case ConfigBank::vc:
+constexpr bool valid_dtype(ConfigRegType reg_type, DType dtype) {
+  switch (reg_type) {
+  case ConfigRegType::tc:
+  case ConfigRegType::bc: return dtype == DType::i8 || dtype == DType::u8;
+  case ConfigRegType::ac:
+  case ConfigRegType::vc:
     return dtype == DType::i32 || dtype == DType::u32 || dtype == DType::f32;
-  case ConfigBank::tm:
-  case ConfigBank::am:
-  case ConfigBank::bm:
-  case ConfigBank::vm: return false;
+  case ConfigRegType::tm:
+  case ConfigRegType::am:
+  case ConfigRegType::bm:
+  case ConfigRegType::vm: return false;
   }
   return false;
 }
 
-constexpr bool valid_register_index(ConfigBank bank, std::uint8_t index) {
-  switch (bank) {
-  case ConfigBank::tc:
-  case ConfigBank::tm: return index < TILE_REGISTERS;
-  case ConfigBank::ac:
-  case ConfigBank::am: return index < ACC_REGISTERS;
-  case ConfigBank::bc:
-  case ConfigBank::vc:
-  case ConfigBank::bm:
-  case ConfigBank::vm: return index < VECTOR_REGISTERS;
-  }
-  return false;
+constexpr bool valid_register_index(ConfigRegType reg_type,
+                                    std::uint8_t index) {
+  return index < config_register_count(reg_type);
 }
 
-constexpr bool field_supported(ConfigBank bank, ConfigField field) {
-  switch (bank) {
-  case ConfigBank::tc:
+constexpr bool field_supported(ConfigRegType reg_type, ConfigField field) {
+  switch (reg_type) {
+  case ConfigRegType::tc:
     return field == ConfigField::dtype || field == ConfigField::rows ||
            field == ConfigField::cols || field == ConfigField::layout ||
            field == ConfigField::arith_mode;
-  case ConfigBank::ac:
+  case ConfigRegType::ac:
     return field == ConfigField::dtype || field == ConfigField::rows ||
            field == ConfigField::cols || field == ConfigField::layout;
-  case ConfigBank::bc:
-  case ConfigBank::vc:
+  case ConfigRegType::bc:
+  case ConfigRegType::vc:
     return field == ConfigField::dtype || field == ConfigField::len;
-  case ConfigBank::tm:
-  case ConfigBank::am:
+  case ConfigRegType::tm:
+  case ConfigRegType::am:
     return field == ConfigField::base_addr ||
            field == ConfigField::row_stride_bytes ||
            field == ConfigField::col_stride_bytes ||
            field == ConfigField::transform || field == ConfigField::flags;
-  case ConfigBank::bm:
-  case ConfigBank::vm:
+  case ConfigRegType::bm:
+  case ConfigRegType::vm:
     return field == ConfigField::base_addr ||
            field == ConfigField::stride_bytes || field == ConfigField::flags;
   }
@@ -120,10 +111,10 @@ ConfigAccessError write_scalar(T &target, const ConfigFieldValue &value,
              : ConfigAccessError::invalid_value;
 }
 
-ConfigAccessError write_dtype(ConfigBank bank, DType &target,
+ConfigAccessError write_dtype(ConfigRegType reg_type, DType &target,
                               const ConfigFieldValue &value) {
   DType dtype;
-  return coerce_scalar(value, dtype) && valid_dtype(bank, dtype)
+  return coerce_scalar(value, dtype) && valid_dtype(reg_type, dtype)
              ? (target = dtype, ConfigAccessError::none)
              : ConfigAccessError::invalid_value;
 }
@@ -148,11 +139,11 @@ ConfigAccessError write_matrix_shape(Config &config, ConfigField field,
 }
 
 template <typename Config>
-ConfigAccessError write_matrix_config(Config &config, ConfigBank bank,
+ConfigAccessError write_matrix_config(Config &config, ConfigRegType reg_type,
                                       ConfigField field,
                                       const ConfigFieldValue &value) {
   if (field == ConfigField::dtype)
-    return write_dtype(bank, config.dtype, value);
+    return write_dtype(reg_type, config.dtype, value);
   if (field == ConfigField::rows || field == ConfigField::cols ||
       field == ConfigField::layout)
     return write_matrix_shape(config, field, value);
@@ -160,11 +151,11 @@ ConfigAccessError write_matrix_config(Config &config, ConfigBank bank,
 }
 
 template <typename Config>
-ConfigAccessError write_vector_config(Config &config, ConfigBank bank,
+ConfigAccessError write_vector_config(Config &config, ConfigRegType reg_type,
                                       ConfigField field,
                                       const ConfigFieldValue &value) {
   if (field == ConfigField::dtype)
-    return write_dtype(bank, config.dtype, value);
+    return write_dtype(reg_type, config.dtype, value);
   if (field == ConfigField::len)
     return write_scalar(config.len, value, VECTOR_LANES);
   return ConfigAccessError::unsupported_field;
@@ -254,72 +245,72 @@ ConfigReadResult read_vector_descriptor(const VectorDescriptor &descriptor,
 
 } // namespace
 
-ConfigReadResult read_config_field(const State &state, ConfigBank bank,
+ConfigReadResult read_config_field(const State &state, ConfigRegType reg_type,
                                    std::uint8_t index, ConfigField field) {
-  if (!valid_register_index(bank, index))
+  if (!valid_register_index(reg_type, index))
     return ConfigAccessError::invalid_register;
-  if (!field_supported(bank, field))
+  if (!field_supported(reg_type, field))
     return ConfigAccessError::unsupported_field;
 
   // clang-format off
-  switch (bank) {
-  case ConfigBank::tc:
+  switch (reg_type) {
+  case ConfigRegType::tc:
     if (field == ConfigField::arith_mode)
       return state.tc[index].arith_mode;
     return read_matrix_config(state.tc[index], field);
-  case ConfigBank::ac: return read_matrix_config(state.ac[index], field);
-  case ConfigBank::bc: return read_vector_config(state.bc[index], field);
-  case ConfigBank::vc: return read_vector_config(state.vc[index], field);
-  case ConfigBank::tm:
-  case ConfigBank::am:
+  case ConfigRegType::ac: return read_matrix_config(state.ac[index], field);
+  case ConfigRegType::bc: return read_vector_config(state.bc[index], field);
+  case ConfigRegType::vc: return read_vector_config(state.vc[index], field);
+  case ConfigRegType::tm:
+  case ConfigRegType::am:
     return read_matrix_descriptor(
-        bank == ConfigBank::tm ? state.tm[index] : state.am[index], field);
-  case ConfigBank::bm:
-  case ConfigBank::vm:
+        reg_type == ConfigRegType::tm ? state.tm[index] : state.am[index], field);
+  case ConfigRegType::bm:
+  case ConfigRegType::vm:
     return read_vector_descriptor(
-        bank == ConfigBank::bm ? state.bm[index] : state.vm[index], field);
+        reg_type == ConfigRegType::bm ? state.bm[index] : state.vm[index], field);
   }
   // clang-format on
   return ConfigAccessError::unsupported_field;
 }
 
-ConfigAccessError write_config_field(State &state, ConfigBank bank,
+ConfigAccessError write_config_field(State &state, ConfigRegType reg_type,
                                      std::uint8_t index, ConfigField field,
                                      const ConfigFieldValue &value) {
-  if (!valid_register_index(bank, index))
+  if (!valid_register_index(reg_type, index))
     return ConfigAccessError::invalid_register;
-  if (!field_supported(bank, field))
+  if (!field_supported(reg_type, field))
     return ConfigAccessError::unsupported_field;
 
   // clang-format off
-  switch (bank) {
-  case ConfigBank::tc: {
+  switch (reg_type) {
+  case ConfigRegType::tc: {
     auto &config = state.tc[index];
     if (field == ConfigField::arith_mode)
       return write_scalar(config.arith_mode, value, ArithMode::sat);
-    return write_matrix_config(config, bank, field, value);
+    return write_matrix_config(config, reg_type, field, value);
   }
-  case ConfigBank::ac: return write_matrix_config(state.ac[index], bank, field, value);
-  case ConfigBank::bc: return write_vector_config(state.bc[index], bank, field, value);
-  case ConfigBank::vc: return write_vector_config(state.vc[index], bank, field, value);
-  case ConfigBank::tm:
-  case ConfigBank::am:
+  case ConfigRegType::ac: return write_matrix_config(state.ac[index], reg_type, field, value);
+  case ConfigRegType::bc: return write_vector_config(state.bc[index], reg_type, field, value);
+  case ConfigRegType::vc: return write_vector_config(state.vc[index], reg_type, field, value);
+  case ConfigRegType::tm:
+  case ConfigRegType::am:
     return write_matrix_descriptor(
-        bank == ConfigBank::tm ? state.tm[index] : state.am[index], field, value);
-  case ConfigBank::bm:
-  case ConfigBank::vm:
+        reg_type == ConfigRegType::tm ? state.tm[index] : state.am[index], field, value);
+  case ConfigRegType::bm:
+  case ConfigRegType::vm:
     return write_vector_descriptor(
-        bank == ConfigBank::bm ? state.bm[index] : state.vm[index], field, value);
+        reg_type == ConfigRegType::bm ? state.bm[index] : state.vm[index], field, value);
   }
   // clang-format on
   return ConfigAccessError::unsupported_field;
 }
 
 std::variant<ConfigField, ConfigAccessError>
-config_field_from_code(ConfigBank bank, std::uint8_t field_code) {
+config_field_from_code(ConfigRegType reg_type, std::uint8_t field_code) {
   // clang-format off
-  switch (bank) {
-  case ConfigBank::tc:
+  switch (reg_type) {
+  case ConfigRegType::tc:
     switch (field_code) {
     case 0: return ConfigField::dtype;
     case 1: return ConfigField::rows;
@@ -328,7 +319,7 @@ config_field_from_code(ConfigBank bank, std::uint8_t field_code) {
     case 4: return ConfigField::arith_mode;
     default: return ConfigAccessError::unsupported_field;
     }
-  case ConfigBank::ac:
+  case ConfigRegType::ac:
     switch (field_code) {
     case 0: return ConfigField::dtype;
     case 1: return ConfigField::rows;
@@ -336,15 +327,15 @@ config_field_from_code(ConfigBank bank, std::uint8_t field_code) {
     case 3: return ConfigField::layout;
     default: return ConfigAccessError::unsupported_field;
     }
-  case ConfigBank::bc:
-  case ConfigBank::vc:
+  case ConfigRegType::bc:
+  case ConfigRegType::vc:
     switch (field_code) {
     case 0: return ConfigField::dtype;
     case 1: return ConfigField::len;
     default: return ConfigAccessError::unsupported_field;
     }
-  case ConfigBank::tm:
-  case ConfigBank::am:
+  case ConfigRegType::tm:
+  case ConfigRegType::am:
     switch (field_code) {
     case 0: return ConfigField::base_addr;
     case 1: return ConfigField::row_stride_bytes;
@@ -353,8 +344,8 @@ config_field_from_code(ConfigBank bank, std::uint8_t field_code) {
     case 4: return ConfigField::flags;
     default: return ConfigAccessError::unsupported_field;
     }
-  case ConfigBank::bm:
-  case ConfigBank::vm:
+  case ConfigRegType::bm:
+  case ConfigRegType::vm:
     switch (field_code) {
     case 0: return ConfigField::base_addr;
     case 1: return ConfigField::stride_bytes;

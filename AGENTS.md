@@ -2,7 +2,7 @@
 
 ## 项目概览
 
-Tile NPU 指令集的功能模拟器 (functional simulator), 独立 git 仓库, 远端为 `git@github.com:0x1B05/Tile-NPU-Sim`。当前为单 hart, 按程序序同步执行的库 (`tile_npu_sim` 静态库) 加 monitor 程序 `sim_run` (交互 sdb shell + batch 模式); 译码与执行已覆盖 32-bit RV64IM 整数指令和 Tile `tadd`; 其余 NPU 指令待逐族补充。
+Tile NPU 指令集的功能模拟器 (functional simulator), 独立 git 仓库, 远端为 `git@github.com:0x1B05/Tile-NPU-Sim`。当前为单 hart, 按程序序同步执行的库 (`tile_npu_sim` 静态库) 加 monitor 程序 `sim_run` (交互 sdb shell + batch 模式); 译码与执行已覆盖 32-bit RV64IM 整数指令、Tile `tadd` 和配置指令 (`cfg.seti/setx/copy/get`); 其余 NPU 指令待逐族补充。
 
 配套的 ISA 手册仓库在 `../Tile-NPU-ISA/` (另一个独立 git 仓库)。
 
@@ -35,7 +35,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | ---- | ---- |
 | `include/tile_npu/state.h` | 架构状态: 五个数据域的寄存器堆 (Tile/Acc/Vec8/Vec32/Scalar), 计算配置 (TC/AC/BC/VC) 与访存描述符 (TM/AM/BM/VM), 物理尺寸常量 |
 | `include/tile_npu/memory.h` | 字节寻址内存接口; `FlatMemory` 为平坦 RAM 实现 |
-| `include/tile_npu/instruction.h` | typed instruction IR: scalar operands, NPU domains/registers, and elementwise operation types |
+| `include/tile_npu/instruction.h` | typed instruction IR: scalar operands, NPU domains/registers, elementwise 与 config (`CfgInstr`, `ConfigRegType`) 指令类型 |
 | `include/tile_npu/decode.h` | 译码结果类型: typed scalar/NPU instructions, `DecodeError`, `DecodeResult` |
 | `include/tile_npu/config.h`, `src/config.cpp` | 统一配置/描述符字段访问、字段编号映射与写入校验 |
 | `include/tile_npu/matrix_view.h` | 逻辑矩阵坐标到物理寄存器存储的 view, 当前实现 canonical layout |
@@ -46,6 +46,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `src/decode/decode.cpp` | NPU 译码表 (q != 11): major4/sel3/funct4 由 pattern 直接匹配, 首条命中生效 |
 | `src/decode/decode_rv64im.cpp` | RV64IM 译码表 (q = 11): 一行一条指令的 pattern, 表尾 catch-all 划分 illegal / not_implemented |
 | `src/execute/execute.cpp` | 执行分派 (标量 / NPU 各域执行器) |
+| `src/execute/execute_cfg.cpp` | 配置指令 (`cfg.*`) 执行器: 经 `config.h` 字段访问器读写, 校验失败上报 `invalid_configuration` (CFG_ERROR) |
 | `src/execute/execute_elementwise.cpp` | 逐元素 (E_BIN) 族执行器: 公共约束校验与逐元素循环抽象为模板, 每个 op 只提供算术 lambda |
 | `src/execute/execute_rv64i.cpp`, `src/execute/execute_rv64m.cpp` | RV64I 与 M 扩展语义 |
 | `src/simulator.cpp`, `src/memory.cpp` | 取指 (小端 4 字节拼字) 与步进循环, 内存实现 |

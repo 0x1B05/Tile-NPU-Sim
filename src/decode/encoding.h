@@ -148,4 +148,43 @@ struct NpuR3 {
   }
 };
 
+// cfg.seti (CFG_MAT_SETI / CFG_VEC_SETI): major4 sel2 field3 imm16 C5 q.
+struct NpuI {
+  std::uint8_t major4;
+  std::uint8_t sel2;
+  std::uint8_t field3;
+  std::int32_t imm; // sign-extended imm16
+  std::uint8_t dest;
+
+  static constexpr NpuI from(std::uint32_t word) {
+    return {static_cast<std::uint8_t>(field<31, 28>(word)),
+            static_cast<std::uint8_t>(field<27, 26>(word)),
+            static_cast<std::uint8_t>(field<25, 23>(word)),
+            sign_extend(field<22, 7>(word), 16),
+            static_cast<std::uint8_t>(field<6, 2>(word))};
+  }
+};
+
+// R4 positional fields; each family gives them meaning (CFG_REG reads arg as
+// field5 and requires the src2 position to be 0, which the patterns pin).
+struct NpuR4 {
+  std::uint8_t major4;
+  std::uint8_t sel3;
+  std::uint8_t funct3;
+  std::uint8_t arg;  // [21:17]
+  std::uint8_t src2; // [16:12]
+  std::uint8_t src1; // [11:7]
+  std::uint8_t dest; // [6:2]
+
+  static constexpr NpuR4 from(std::uint32_t word) {
+    return {static_cast<std::uint8_t>(field<31, 28>(word)),
+            static_cast<std::uint8_t>(field<27, 25>(word)),
+            static_cast<std::uint8_t>(field<24, 22>(word)),
+            static_cast<std::uint8_t>(field<21, 17>(word)),
+            static_cast<std::uint8_t>(field<16, 12>(word)),
+            static_cast<std::uint8_t>(field<11, 7>(word)),
+            static_cast<std::uint8_t>(field<6, 2>(word))};
+  }
+};
+
 } // namespace tile_npu::encoding

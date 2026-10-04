@@ -126,4 +126,28 @@ struct EbinInstr {
   NpuOperand src2 = NpuRegister{};
 };
 
+// The architectural configuration register types (TC/AC/BC/VC/TM/AM/BM/VM).
+// Decode derives the register type from (major4, sel2) or (sel2, MV), so
+// field access is independent of the instruction format that selected it.
+enum class ConfigRegType : std::uint8_t { tc, ac, bc, vc, tm, am, bm, vm };
+
+enum class CfgOp : std::uint8_t { seti, setx, copy, get };
+
+// Operand reading per op:
+//   seti: dest = C,  field = field3 code, imm = sign-extended imm16
+//   setx: dest = C,  field = field3 code, src = xS
+//   copy: dest = CD, src = CS
+//   get:  dest = xD, src = C, field = field3 code
+// `field` stays the raw 3-bit code: register types that lack the field fail
+// with CFG_ERROR at execution, while the reserved code 7 never reaches here
+// (decode rejects it as illegal).
+struct CfgInstr {
+  CfgOp op = CfgOp::seti;
+  ConfigRegType reg_type = ConfigRegType::tc;
+  RegisterIndex dest = 0;
+  RegisterIndex src = 0;
+  std::uint8_t field = 0;
+  std::int32_t imm = 0;
+};
+
 } // namespace tile_npu
