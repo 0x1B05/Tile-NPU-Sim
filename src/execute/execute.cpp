@@ -1,5 +1,6 @@
 #include "execute.h"
 
+#include "execute_cfg.h"
 #include "execute_elementwise.h"
 #include "execute_rv64i.h"
 #include "execute_rv64m.h"
@@ -23,13 +24,12 @@ ExecuteResult execute_scalar(const DecodedScalarInstr &instr,
 }
 
 ExecuteResult execute_npu(const DecodedNpuInstr &instr, ExecContext &ctx) {
-  // Today every decodable NPU instruction is an elementwise binary op; data
-  // movement and cross-domain families get their own executors here later.
+  // Today every decodable NPU instruction is an elementwise binary op or a
+  // config access; data movement families get their own executors here later.
   if (const auto *ebin = std::get_if<EbinInstr>(&instr)) {
     return execute_elementwise(*ebin, ctx.state);
   }
-  // CfgInstr decodes but its executor lands separately.
-  return {.status = StepStatus::execution_not_implemented};
+  return execute_cfg(std::get<CfgInstr>(instr), ctx);
 }
 
 } // namespace tile_npu
