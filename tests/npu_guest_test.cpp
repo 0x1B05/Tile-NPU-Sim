@@ -389,6 +389,28 @@ TEST_CASE(npu_guest_cvt) {
            "cvt image reports success via a0");
 }
 
+TEST_CASE(npu_guest_reduce) {
+  // tests/guest/npu/reduce.S self-configures configs and descriptors, then
+  // exercises an areduce.rows.sum (f32) and a vreduce.argmax (NaN candidate
+  // wins) with store-back and in-register checks. It reaches ebreak with
+  // a0 = 0 on success; a failing check reports its stage in a0.
+  tile_npu::FlatMemory memory{IMAGE_BASE, 1024};
+  tile_npu::Simulator sim(memory);
+  load_image(memory, "reduce");
+  sim.reset(IMAGE_BASE);
+  tile_npu::StepResult result{};
+  for (int steps = 0; steps < 512; ++steps) {
+    result = sim.step();
+    if (result.status == tile_npu::StepStatus::breakpoint) {
+      break;
+    }
+  }
+  check_eq(result.status, tile_npu::StepStatus::breakpoint,
+           "reduce image reaches ebreak");
+  check_eq(hex(sim.state().scalar.read_x(10)), hex(0x0u),
+           "reduce image reports success via a0");
+}
+
 TEST_CASE(npu_guest_cfg_self_check) {
   // tests/guest/npu/cfg.S programs config registers with cfg.seti/cfg.setx,
   // reads them back with cfg.get, and reaches ebreak with a0 = 0 on success.

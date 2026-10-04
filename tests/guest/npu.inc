@@ -350,3 +350,22 @@
 .macro TWIDEN d5, s5
     CVT 1, 1, \d5, \s5
 .endm
+
+# AREDUCE (R2), mirroring NpuR2 in src/decode/encoding.h:
+#   [31:28] major4 = 1  [27:25] reserved(0)  [24:22] funct3
+#   [21:12] reserved(0)  [11:7] S5 (aS)  [6:2] D5 (vD)  [1:0] q = 10
+# funct3: 0 sum, 1 max, 2 min, 3 sumsq, 4 argmax, 5 absmax.
+.macro AREDUCE funct3, vd, as
+    .word ((1 << 28) | (\funct3 << 22) | (\as << 7) | (\vd << 2) | 2)
+.endm
+
+# VREDUCE (R2): major4 = 2, D5 = xD; same layout otherwise.
+.macro VREDUCE funct3, xd, vs
+    .word ((2 << 28) | (\funct3 << 22) | (\vs << 7) | (\xd << 2) | 2)
+.endm
+
+# vreduce.argmax (R4 two-destination variant): xVal5 in the src2 slot,
+# reserved3/reserved5 = 0, D5 = xIndex.
+.macro VREDUCE_ARGMAX xi, xv, vs
+    .word ((2 << 28) | (4 << 22) | (\xv << 12) | (\vs << 7) | (\xi << 2) | 2)
+.endm
