@@ -448,6 +448,34 @@ TEST_CASE(ebin_rejects_mismatched_configs) {
   }
 }
 
+TEST_CASE(ebin_rejects_empty_shape) {
+  // A zero dimension matches across operands, so only the 1..extent bound
+  // rejects it; the loops would otherwise run zero iterations and retire.
+  FlatMemory memory(CODE_BASE, 4);
+  Simulator sim(memory);
+  load_one(sim, memory,
+           make_ebin(EbinOp::add, NpuDomain::tile, false, 0, 1,
+                     2)); // tadd t0, t1, t2
+  auto &state = sim.state();
+  for (auto index : {0, 1, 2}) {
+    tile_cfg(state, index, DType::i8, 0, 0);
+  }
+  check_eq(sim.step().status, StepStatus::invalid_configuration,
+           "zero effective shape rejects");
+
+  FlatMemory vec_memory(CODE_BASE, 4);
+  Simulator vec_sim(vec_memory);
+  load_one(vec_sim, vec_memory,
+           make_ebin(EbinOp::add, NpuDomain::vec32, false, 0, 1,
+                     2)); // vadd v0, v1, v2
+  auto &vec_state = vec_sim.state();
+  for (auto index : {0, 1, 2}) {
+    vec_cfg(vec_state, index, DType::i32, 0);
+  }
+  check_eq(vec_sim.step().status, StepStatus::invalid_configuration,
+           "zero lane count rejects");
+}
+
 TEST_CASE(ebin_legality_matrix) {
   // The ISA's dtype table restated as a sweep: f32 supports only
   // add/sub/mul/div/min/max; integers support everything but div. The op

@@ -105,19 +105,30 @@ template <typename Config>
 ConfigAccessError write_matrix_shape(Config &config, ConfigField field,
                                      const ConfigFieldValue &value) {
   std::uint8_t raw;
-  if (!coerce_scalar(value, raw) || raw > MATRIX_EXTENT ||
-      (field == ConfigField::layout && raw != 0)) {
+  if (!coerce_scalar(value, raw)) {
     return ConfigAccessError::invalid_value;
   }
-  // clang-format off
+  // Effective matrix dimensions range from 1 to the physical extent; the
+  // canonical layout is the only one defined.
   switch (field) {
-  case ConfigField::rows:   config.rows = raw;   break;
-  case ConfigField::cols:   config.cols = raw;   break;
-  case ConfigField::layout: config.layout = raw; break;
-  default: break;
+  case ConfigField::rows:
+    if (raw == 0 || raw > MATRIX_EXTENT) {
+      return ConfigAccessError::invalid_value;
+    }
+    config.rows = raw;
+    return ConfigAccessError::none;
+  case ConfigField::cols:
+    if (raw == 0 || raw > MATRIX_EXTENT) {
+      return ConfigAccessError::invalid_value;
+    }
+    config.cols = raw;
+    return ConfigAccessError::none;
+  case ConfigField::layout:
+    if (raw != 0) return ConfigAccessError::invalid_value;
+    config.layout = raw;
+    return ConfigAccessError::none;
+  default: return ConfigAccessError::unsupported_field;
   }
-  // clang-format on
-  return ConfigAccessError::none;
 }
 
 // clang-format off
@@ -138,7 +149,15 @@ ConfigAccessError write_acc_config(AccConfig &config, ConfigField field, const C
 
 template <typename Config>
 ConfigAccessError write_vector_config(Config &config, ConfigRegType reg_type, ConfigField field, const ConfigFieldValue &value) {
-  if (field == ConfigField::len)   return write_scalar(config.len, value, VECTOR_LANES);
+  if (field == ConfigField::len) {
+    // The effective lane count ranges from 1 to the physical lane count.
+    std::uint8_t len;
+    if (!coerce_scalar(value, len) || len == 0 || len > VECTOR_LANES) {
+      return ConfigAccessError::invalid_value;
+    }
+    config.len = len;
+    return ConfigAccessError::none;
+  }
   if (field == ConfigField::dtype) return write_dtype(reg_type, config.dtype, value);
   return ConfigAccessError::unsupported_field;
 }

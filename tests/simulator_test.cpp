@@ -165,15 +165,15 @@ TEST_CASE(add_execution) {
 
 TEST_CASE(empty_tadd) {
   tile_npu::FlatMemory memory(0x3800, 4);
-  write_word(memory, 0x3800, 0); // tadd t0, t0, t0; empty default shape
+  write_word(memory, 0x3800, 0); // tadd t0, t0, t0; zero default shape
   tile_npu::Simulator sim(memory);
   sim.reset(0x3800);
   sim.state().t[0][0] = 42;
-  check_eq(sim.step().status, tile_npu::StepStatus::retired,
-           "all-zero NPU word is a 32-bit empty tadd");
+  check_eq(sim.step().status, tile_npu::StepStatus::invalid_configuration,
+           "all-zero NPU word decodes as tadd, but the zero shape is illegal");
   check_eq(sim.state().t[0][0], std::uint8_t{42},
-           "empty tadd leaves data untouched");
-  check_eq(hex(sim.state().scalar.pc), hex(0x3804), "empty tadd advances pc");
+           "rejected tadd leaves data untouched");
+  check_eq(hex(sim.state().scalar.pc), hex(0x3800), "rejected tadd keeps pc");
 }
 
 TEST_CASE(failed_execution_is_non_mutating) {
