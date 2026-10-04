@@ -295,6 +295,16 @@ DecodeResult decode_mma(std::uint32_t word) {
                                   {NpuDomain::tile, f.src2}}};
 }
 
+// SYS (Z format): funct3 selects the fence granularity or kernel.end; the
+// pattern pins reserved23 to 0. funct3 codes 100-111 are reserved.
+DecodeResult decode_sys(std::uint32_t word) {
+  const auto funct3 = encoding::field<27, 25>(word);
+  if (funct3 > 0b011) {
+    return DecodeError::illegal;
+  }
+  return DecodedNpuInstr{SysInstr{static_cast<SysOp>(funct3)}};
+}
+
 // M_BLK block/gather forms (R2): sel3 = {dom2, 0}; funct3 = {form2, LS} with
 // LS picking load (0) or store (1). S5 names the gather index vector (a Vec32
 // register) and the patterns pin it to 0 for the block forms.
@@ -542,6 +552,11 @@ constexpr DecodeEntry NPU_TABLE[] = {
     {"0111 ??? 001 00000 00000 ????? ????? 10", decode_cfg_reg<CfgOp::copy>},
     {"0111 ??? 010 00??? 00000 ????? ????? 10", decode_cfg_reg<CfgOp::get>},
     {"0111 ??? ??? ????? ????? ????? ????? 10", fail<DecodeError::illegal>},
+
+    // SYS (Z format): one pattern pins reserved23 to 0; the handler rejects
+    // the reserved funct3 codes 100-111.
+    {"1000 ??? 00000000000000000000000 10", decode_sys},
+    {"1000 ??? ????? ????? ????? ????? ??? 10", fail<DecodeError::illegal>},        // reserved SYS encodings
 
     {"???? ??? ???? ???? ????? ????? ????? 10", fail<DecodeError::not_implemented>},  // other cross-domain/control
 };

@@ -22,6 +22,7 @@ enum class StepStatus {
   store_fault,
   environment_call,
   breakpoint,
+  kernel_end,
 };
 
 struct StepResult {
