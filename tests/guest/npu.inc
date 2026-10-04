@@ -330,3 +330,23 @@
 .macro VMASK_TAIL d5, s5, xl, fill5
     E_MASK 3, 0, 0, \fill5, \xl, \s5, \d5
 .endm
+
+# CVT (R2), mirroring NpuR2 in src/decode/encoding.h:
+#   [31:28] major4 = 3  [27:26] dom2 (dst domain)  [25] 0  [24:22] funct3
+#   [21:12] reserved(0)  [11:7] S5  [6:2] D5  [1:0] q = 10
+# funct3: 0 = i32 -> f32 (acvt/vcvt), 1 = i8 -> i32 widen (twiden, Acc dst).
+.macro CVT dom2, funct3, d5, s5
+    .word ((3 << 28) | (\dom2 << 26) | (\funct3 << 22) | (\s5 << 7) | (\d5 << 2) | 2)
+.endm
+
+.macro ACVT d5, s5
+    CVT 1, 0, \d5, \s5
+.endm
+
+.macro VCVT d5, s5
+    CVT 3, 0, \d5, \s5
+.endm
+
+.macro TWIDEN d5, s5
+    CVT 1, 1, \d5, \s5
+.endm

@@ -366,6 +366,29 @@ TEST_CASE(npu_guest_emask) {
            "emask image reports success via a0");
 }
 
+TEST_CASE(npu_guest_cvt) {
+  // tests/guest/npu/cvt.S self-configures configs and descriptors, then
+  // exercises twiden (i8 Tile -> i32 Acc), an in-place acvt (i32 -> f32,
+  // checking the destination dtype update) and a vcvt, with store-back
+  // checks. It reaches ebreak with a0 = 0 on success; a failing check
+  // reports its stage in a0.
+  tile_npu::FlatMemory memory{IMAGE_BASE, 1024};
+  tile_npu::Simulator sim(memory);
+  load_image(memory, "cvt");
+  sim.reset(IMAGE_BASE);
+  tile_npu::StepResult result{};
+  for (int steps = 0; steps < 512; ++steps) {
+    result = sim.step();
+    if (result.status == tile_npu::StepStatus::breakpoint) {
+      break;
+    }
+  }
+  check_eq(result.status, tile_npu::StepStatus::breakpoint,
+           "cvt image reaches ebreak");
+  check_eq(hex(sim.state().scalar.read_x(10)), hex(0x0u),
+           "cvt image reports success via a0");
+}
+
 TEST_CASE(npu_guest_cfg_self_check) {
   // tests/guest/npu/cfg.S programs config registers with cfg.seti/cfg.setx,
   // reads them back with cfg.get, and reaches ebreak with a0 = 0 on success.
