@@ -2,7 +2,7 @@
 
 ## 项目概览
 
-Tile NPU 指令集的功能模拟器 (functional simulator), 独立 git 仓库, 远端为 `git@github.com:0x1B05/Tile-NPU-Sim`。当前为单 hart, 按程序序同步执行的库 (`tile_npu_sim` 静态库) 加 monitor 程序 `sim_run` (交互 sdb shell + batch 模式); 译码与执行已覆盖 32-bit RV64IM 整数指令、逐元素二元 (`E_BIN`) 全族、配置指令 (`cfg.seti/setx/copy/get`) 和 `M_BLK` 访存族 (block/row load/store, gather load); 其余 NPU 指令待逐族补充。
+Tile NPU 指令集的功能模拟器 (functional simulator), 独立 git 仓库, 远端为 `git@github.com:0x1B05/Tile-NPU-Sim`。当前为单 hart, 按程序序同步执行的库 (`tile_npu_sim` 静态库) 加 monitor 程序 `sim_run` (交互 sdb shell + batch 模式); 译码与执行已覆盖 32-bit RV64IM 整数指令、逐元素二元 (`E_BIN`) 全族、配置指令 (`cfg.seti/setx/copy/get`)、`M_BLK` 访存族 (block/row load/store, gather load) 和 `INIT_MOVE` 族 (fill/fillx/copy/ttranspose); 其余 NPU 指令待逐族补充。
 
 配套的 ISA 手册仓库在 `../Tile-NPU-ISA/` (另一个独立 git 仓库)。
 
@@ -35,7 +35,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | ---- | ---- |
 | `include/tile_npu/state.h` | 架构状态: 五个数据域的寄存器堆 (Tile/Acc/Vec8/Vec32/Scalar), 计算配置 (TC/AC/BC/VC) 与访存描述符 (TM/AM/BM/VM), 物理尺寸常量 |
 | `include/tile_npu/memory.h` | 字节寻址内存接口; `FlatMemory` 为平坦 RAM 实现 |
-| `include/tile_npu/instruction.h` | typed instruction IR: scalar operands, NPU domains/registers, elementwise (`EbinInstr` + `EBIN_BY_FUNCT4` 操作元数据表), config (`CfgInstr`, `ConfigRegType`) 与访存 (`MblkInstr`) 指令类型 |
+| `include/tile_npu/instruction.h` | typed instruction IR: scalar operands, NPU domains/registers, elementwise (`EbinInstr` + `EBIN_BY_FUNCT4` 操作元数据表), config (`CfgInstr`, `ConfigRegType`), 访存 (`MblkInstr`) 与初始化/搬运 (`InitInstr`) 指令类型 |
 | `include/tile_npu/decode.h` | 译码结果类型: typed scalar/NPU instructions, `DecodeError`, `DecodeResult` |
 | `include/tile_npu/config.h`, `src/config.cpp` | 统一配置/描述符字段访问、字段编号映射与写入校验 |
 | `include/tile_npu/matrix_view.h` | 逻辑矩阵坐标到物理寄存器存储的 view, 当前实现 canonical layout |
@@ -47,9 +47,11 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `src/decode/decode.cpp` | NPU 译码表 (q != 11): major4/sel3/funct4 由 pattern 直接匹配, 首条命中生效 |
 | `src/decode/decode_rv64im.cpp` | RV64IM 译码表 (q = 11): 一行一条指令的 pattern, 表尾 catch-all 划分 illegal / not_implemented |
 | `src/execute/execute.cpp` | 执行分派 (标量 / NPU 各域执行器) |
+| `src/execute/config_check.h` | 各执行器共享的配置合法性 (`valid_domain_config`) 与同源同形约束 (`configs_match`) |
 | `src/execute/execute_cfg.cpp` | 配置指令 (`cfg.*`) 执行器: 经 `config.h` 字段访问器读写, 校验失败上报 `invalid_configuration` (CFG_ERROR) |
 | `src/execute/execute_elementwise.cpp` | 逐元素 (E_BIN) 族执行器: 公共约束校验与矩阵/向量循环抽象为模板, 操作语义集中在 `apply_op` |
 | `src/execute/execute_mblk.cpp` | M_BLK 访存族执行器: 先完成全部地址计算 (溢出报 `invalid_configuration`), 再做传输; load 先 stage 寄存器副本, store 先 `contains` 全探测, fault 不改变架构状态 |
+| `src/execute/execute_init.cpp` | INIT_MOVE 族执行器: fill/fillx 按目的 dtype 截取元素位宽, copy 要求同 dtype 同有效 shape, ttranspose 先 stage 源再写回并更新目的配置行列 |
 | `src/execute/execute_rv64i.cpp`, `src/execute/execute_rv64m.cpp` | RV64I 与 M 扩展语义 |
 | `src/simulator.cpp`, `src/memory.cpp` | 取指 (小端 4 字节拼字) 与步进循环, 内存实现 |
 | `tests/*.cpp` | 全部编入 `sim_tests` 一个测试程序; 手卷迷你框架, 见"测试约定" |
