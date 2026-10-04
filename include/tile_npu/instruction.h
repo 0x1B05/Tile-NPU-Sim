@@ -328,6 +328,27 @@ struct ReduceInstr {
   NpuRegister src{};
 };
 
+// QNT operations (R4): quant covers tquant.rows.q8s32, vquant.q8s32,
+// tdequant.rows.f32 and bdequant.f32 (dom2 picks the main destination
+// domain, and with it the direction); quant_ext_scale is the external-scale
+// row quantize tquant.rows.scale.q8s32 (Tile destination only). funct3 >=
+// 010 is reserved.
+enum class QntOp : std::uint8_t { quant = 0b000, quant_ext_scale = 0b001 };
+
+// Operand reading: dest = D and src = S are the main operands (tquant:
+// tD/aS; tdequant: aD/tS; vquant: bD/vS; bdequant: vD/bS); scale is the
+// vScale Vec32 register (destination for quant, source otherwise); index is
+// the scale lane (vector forms only: an immediate when index_is_scalar is
+// false, a Scalar register number when true).
+struct QntInstr {
+  QntOp op = QntOp::quant;
+  NpuRegister dest{};
+  NpuRegister src{};
+  RegisterIndex scale = 0;
+  std::uint8_t index = 0;
+  bool index_is_scalar = false;
+};
+
 // The architectural configuration register types (TC/AC/BC/VC/TM/AM/BM/VM).
 // Decode derives the register type from (major4, sel2) or (sel2, MV), so
 // field access is independent of the instruction format that selected it.

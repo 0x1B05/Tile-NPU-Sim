@@ -236,6 +236,42 @@ DecodeResult decode_vreduce_argmax(std::uint32_t word) {
                                      {NpuDomain::vec32, f.src1}}};
 }
 
+// QNT (R4): sel3 = {dom2, IS}; dom2 selects the main destination domain and
+// with it the direction (Tile = tquant, Acc = tdequant, Vec8 = vquant,
+// Vec32 = bdequant). funct3 = 001 is the external-scale row quantize and
+// exists for Tile destinations only; funct3 >= 010 is reserved. IS/index5
+// carry the scale lane for the vector forms and are reserved (0) for the
+// matrix forms. All dtype/shape constraints fail at execution.
+DecodeResult decode_qnt(std::uint32_t word) {
+  const auto f = encoding::NpuR4::from(word);
+  const auto domain = static_cast<NpuDomain>(f.sel3 >> 1);
+  const bool index_is_scalar = (f.sel3 & 1) != 0;
+  const bool vector_form =
+      domain == NpuDomain::vec8 || domain == NpuDomain::vec32;
+  if (f.funct3 > 0b001 || (f.funct3 == 0b001 && domain != NpuDomain::tile) ||
+      (!vector_form && (index_is_scalar || f.src2 != 0))) {
+    return DecodeError::illegal;
+  }
+  if (f.dest >= domain_register_count(domain)) {
+    return DecodeError::illegal;
+  }
+  // The main source domain is fixed per form: Acc for tquant, Tile for
+  // tdequant, Vec32 for vquant, Vec8 for bdequant.
+  const auto src_domain = domain == NpuDomain::tile   ? NpuDomain::acc
+                          : domain == NpuDomain::acc  ? NpuDomain::tile
+                          : domain == NpuDomain::vec8 ? NpuDomain::vec32
+                                                      : NpuDomain::vec8;
+  if (f.src1 >= domain_register_count(src_domain)) {
+    return DecodeError::illegal;
+  }
+  return DecodedNpuInstr{QntInstr{static_cast<QntOp>(f.funct3),
+                                  {domain, f.dest},
+                                  {src_domain, f.src1},
+                                  f.arg,
+                                  f.src2,
+                                  index_is_scalar}};
+}
+
 // M_BLK block/gather forms (R2): sel3 = {dom2, 0}; funct3 = {form2, LS} with
 // LS picking load (0) or store (1). S5 names the gather index vector (a Vec32
 // register) and the patterns pin it to 0 for the block forms.
@@ -460,6 +496,10 @@ constexpr DecodeEntry NPU_TABLE[] = {
     {"0010 000 011 0000000000 ????? ????? 10", decode_vreduce},
     {"0010 000 100 00000 ????? ????? ????? 10", decode_vreduce_argmax},
     {"0010 ??? ??? ????? ????? ????? ????? 10", fail<DecodeError::illegal>},          // reserved VREDUCE encodings
+    // QNT (R4): sel3 = {dom2, IS}, vScale5 in arg5, index5 in the src2
+    // position; one pattern, the handler rejects the reserved funct3 and
+    // matrix-form IS/index5 encodings.
+    {"0100 ??? ??? ????? ????? ????? ????? 10", decode_qnt},
     // CFG_MAT_SETI / CFG_VEC_SETI (I format); field3 = 111 is reserved.
     {"0101 ?? 111 ???? ???? ???? ???? ????? 10", fail<DecodeError::illegal>},
     {"0110 ?? 111 ???? ???? ???? ???? ????? 10", fail<DecodeError::illegal>},
