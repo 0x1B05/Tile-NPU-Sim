@@ -21,7 +21,7 @@ struct ExecuteResult {
 };
 
 // An unsuccessful execution leaves architectural state unchanged.
-ExecuteResult execute_scalar(const DecodedInstr &instr, State &state,
+ExecuteResult execute_scalar(const DecodedScalarInstr &instr, State &state,
                              Memory &memory);
 ExecuteResult execute_npu(const DecodedNpuInstr &instr, State &state,
                           Memory &memory);

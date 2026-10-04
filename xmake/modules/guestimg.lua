@@ -20,8 +20,8 @@ function output_paths(bindir, name)
     return path.join(bindir, name .. ".elf"), path.join(bindir, name .. ".bin")
 end
 
--- Assemble+link src (with optional extra sources/includes) into a flat bin.
-function assemble(gcc, objcopy, linkscript, src, elf, bin, extra)
+-- Compile+link src (with optional extra sources/includes), objcopy to a bin.
+function build_guest_image(gcc, objcopy, linkscript, src, elf, bin, extra)
     local args = {"-march=rv64im", "-mabi=lp64", "-O2", "-ffreestanding",
                   "-nostdlib", "-static", "-no-pie", "-T", linkscript,
                   "-o", elf}

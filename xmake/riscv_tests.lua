@@ -59,7 +59,7 @@ if has_config("rvtests") then
                 local src = path.join(srcdir, "isa", name .. ".S")
                 local elf, bin = guestimg.output_paths(bindir, name:gsub("/", "-"))
                 depend.on_changed(function()
-                    guestimg.assemble(gcc, objcopy, linkscript, src, elf, bin,
+                    guestimg.build_guest_image(gcc, objcopy, linkscript, src, elf, bin,
                                       {"-I", target:values("envdir"), "-I", macrosdir})
                 end, {dependfile = target:dependfile(name:gsub("/", "-")),
                       files = {src, linkscript, envheader,

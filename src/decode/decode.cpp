@@ -18,27 +18,27 @@ DecodeResult decode_tadd(std::uint32_t word) {
       f.src2 >= TILE_REGISTERS) {
     return DecodeError::illegal;
   }
-  return ElementwiseBinaryInstruction{ElementwiseBinaryOp::add,
-                                      {NpuDomain::tile, f.dest},
-                                      {NpuDomain::tile, f.src1},
-                                      NpuRegister{NpuDomain::tile, f.src2}};
+  return EbinInstr{EbinOp::add,
+                   {NpuDomain::tile, f.dest},
+                   {NpuDomain::tile, f.src1},
+                   NpuRegister{NpuDomain::tile, f.src2}};
 }
 
 // Defined E_BIN funct4 values other than add are not implemented yet;
 // reserved funct4 values are illegal.
 DecodeResult decode_binary_other(std::uint32_t word) {
-  switch (static_cast<ElementwiseBinaryOp>(encoding::field<24, 21>(word))) {
-  case ElementwiseBinaryOp::sub:
-  case ElementwiseBinaryOp::mul:
-  case ElementwiseBinaryOp::div:
-  case ElementwiseBinaryOp::min:
-  case ElementwiseBinaryOp::max:
-  case ElementwiseBinaryOp::bit_and:
-  case ElementwiseBinaryOp::bit_or:
-  case ElementwiseBinaryOp::bit_xor:
-  case ElementwiseBinaryOp::shl:
-  case ElementwiseBinaryOp::shr:
-  case ElementwiseBinaryOp::sra: return DecodeError::not_implemented;
+  switch (static_cast<EbinOp>(encoding::field<24, 21>(word))) {
+  case EbinOp::sub:
+  case EbinOp::mul:
+  case EbinOp::div:
+  case EbinOp::min:
+  case EbinOp::max:
+  case EbinOp::bit_and:
+  case EbinOp::bit_or:
+  case EbinOp::bit_xor:
+  case EbinOp::shl:
+  case EbinOp::shr:
+  case EbinOp::sra: return DecodeError::not_implemented;
   default: return DecodeError::illegal;
   }
 }

@@ -7,17 +7,18 @@
 
 namespace tile_npu {
 
-struct DecodedInstr {
+struct DecodedScalarInstr {
   ScalarOp op;
-  ScalarOperands regs;
+  ScalarRegs regs;
   // Signed offset/value, shift amount, or raw 12-bit FENCE control field.
   std::int32_t imm = 0;
 };
 
-using DecodedNpuInstr = ElementwiseBinaryInstruction;
+using DecodedNpuInstr = EbinInstr;
 
 enum class DecodeError { not_implemented, illegal };
-using DecodeResult = std::variant<DecodedInstr, DecodedNpuInstr, DecodeError>;
+using DecodeResult =
+    std::variant<DecodedScalarInstr, DecodedNpuInstr, DecodeError>;
 
 DecodeResult decode(std::uint32_t word);
 

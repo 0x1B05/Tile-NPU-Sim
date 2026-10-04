@@ -14,7 +14,7 @@ constexpr bool is_rv64m(ScalarOp op) {
 
 } // namespace
 
-ExecuteResult execute_scalar(const DecodedInstr &instr, State &state,
+ExecuteResult execute_scalar(const DecodedScalarInstr &instr, State &state,
                              Memory &memory) {
   if (is_rv64m(instr.op)) {
     return execute_rv64m(instr, state.scalar);

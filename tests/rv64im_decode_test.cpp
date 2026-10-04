@@ -11,7 +11,7 @@
 
 namespace {
 
-using tile_npu::DecodedInstr;
+using tile_npu::DecodedScalarInstr;
 using tile_npu::DecodeError;
 using tile_npu::ScalarOp;
 
@@ -66,7 +66,7 @@ constexpr std::uint32_t j(std::int32_t imm) {
 template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
-    const auto *decoded = std::get_if<DecodedInstr>(&result);
+    const auto *decoded = std::get_if<DecodedScalarInstr>(&result);
     const std::string what =
         std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
     check(decoded != nullptr, what);

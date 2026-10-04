@@ -115,9 +115,9 @@ private:
   Descriptor *descriptor_;
 };
 
-using MatrixDescriptorView = DescriptorView<MatrixDescriptor>;
-using ConstMatrixDescriptorView = DescriptorView<const MatrixDescriptor>;
-using VectorDescriptorView = DescriptorView<VectorDescriptor>;
-using ConstVectorDescriptorView = DescriptorView<const VectorDescriptor>;
+using MatrixDescView = DescriptorView<MatrixDescriptor>;
+using ConstMatrixDescView = DescriptorView<const MatrixDescriptor>;
+using VectorDescView = DescriptorView<VectorDescriptor>;
+using ConstVectorDescView = DescriptorView<const VectorDescriptor>;
 
 } // namespace tile_npu

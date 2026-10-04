@@ -36,7 +36,7 @@ StepResult Simulator::step() {
             .pc = pc,
             .instr = instr};
   }
-  const auto *scalar_instr = std::get_if<DecodedInstr>(&decoded);
+  const auto *scalar_instr = std::get_if<DecodedScalarInstr>(&decoded);
   const auto execution =
       scalar_instr
           ? execute_scalar(*scalar_instr, state_, memory_)

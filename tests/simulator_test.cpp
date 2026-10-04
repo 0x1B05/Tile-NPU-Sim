@@ -25,7 +25,7 @@ TEST_CASE(npu_decode) {
   const auto tadd = tile_npu::decode(0x00002080u); // tadd t0, t1, t2
   const auto *tadd_instr = std::get_if<tile_npu::DecodedNpuInstr>(&tadd);
   check(tadd_instr != nullptr, "decode Tile tadd");
-  check_eq(tadd_instr->op, tile_npu::ElementwiseBinaryOp::add, "tadd op");
+  check_eq(tadd_instr->op, tile_npu::EbinOp::add, "tadd op");
   check_eq(tadd_instr->dest.domain, tile_npu::NpuDomain::tile,
            "tadd dest domain");
   check_eq(tadd_instr->dest.index, std::uint8_t{0}, "tadd dest index");
@@ -34,14 +34,14 @@ TEST_CASE(npu_decode) {
            std::uint8_t{2}, "tadd src2 index");
 
   const auto add = tile_npu::decode(0x002081b3u); // add x3, x1, x2
-  const auto *add_instr = std::get_if<tile_npu::DecodedInstr>(&add);
+  const auto *add_instr = std::get_if<tile_npu::DecodedScalarInstr>(&add);
   check(add_instr != nullptr, "decode RV64I add");
   check_eq(add_instr->op, tile_npu::ScalarOp::add, "add op");
   check_eq(add_instr->regs.dest, std::uint8_t{3}, "add rd");
   check_eq(add_instr->regs.src1, std::uint8_t{1}, "add rs1");
   check_eq(add_instr->regs.src2, std::uint8_t{2}, "add rs2");
   const auto sub = tile_npu::decode(0x402081b3u);
-  const auto *sub_instr = std::get_if<tile_npu::DecodedInstr>(&sub);
+  const auto *sub_instr = std::get_if<tile_npu::DecodedScalarInstr>(&sub);
   check(sub_instr != nullptr, "decode RV64I sub");
   check_eq(sub_instr->op, tile_npu::ScalarOp::sub,
            "decode RV64I sub separately from add");

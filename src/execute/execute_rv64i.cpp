@@ -49,7 +49,7 @@ std::size_t store_width(ScalarOp op) {
 }
 // clang-format on
 
-ExecuteResult execute_load(const DecodedInstr &instr, ScalarState &scalar,
+ExecuteResult execute_load(const DecodedScalarInstr &instr, ScalarState &scalar,
                            Memory &memory) {
   const auto pc = scalar.pc;
   const auto width = load_width(instr.op);
@@ -79,8 +79,8 @@ ExecuteResult execute_load(const DecodedInstr &instr, ScalarState &scalar,
   return {.status = StepStatus::retired};
 }
 
-ExecuteResult execute_store(const DecodedInstr &instr, ScalarState &scalar,
-                            Memory &memory) {
+ExecuteResult execute_store(const DecodedScalarInstr &instr,
+                            ScalarState &scalar, Memory &memory) {
   const auto pc = scalar.pc;
   const auto width = store_width(instr.op);
   const auto address =
@@ -102,8 +102,8 @@ ExecuteResult execute_store(const DecodedInstr &instr, ScalarState &scalar,
 
 } // namespace
 
-ExecuteResult execute_rv64i(const DecodedInstr &instr, ScalarState &scalar,
-                            Memory &memory) {
+ExecuteResult execute_rv64i(const DecodedScalarInstr &instr,
+                            ScalarState &scalar, Memory &memory) {
   const auto pc = scalar.pc;
   const auto link = pc + 4;
   const auto &r = instr.regs;

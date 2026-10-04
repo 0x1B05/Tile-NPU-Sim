@@ -19,9 +19,10 @@ template <unsigned ShamtBits> using Shift = encoding::RiscvShift<ShamtBits>;
 
 // Base implementations ignore FENCE's reserved rd, rs1, and fm settings.
 DecodeResult decode_fence(std::uint32_t word) {
-  return DecodedInstr{ScalarOp::fence,
-                      {0, 0, 0},
-                      static_cast<std::int32_t>(encoding::field<31, 20>(word))};
+  return DecodedScalarInstr{
+      ScalarOp::fence,
+      {0, 0, 0},
+      static_cast<std::int32_t>(encoding::field<31, 20>(word))};
 }
 
 // clang-format off

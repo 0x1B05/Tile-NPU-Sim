@@ -20,8 +20,8 @@ bool valid_tile_config(const TileConfig &config) {
 // per-element operation. Elements are widened to int for the arithmetic and
 // saturated on store when the destination config selects sat mode.
 template <typename F>
-ExecuteResult elementwise_binary(const ElementwiseBinaryInstruction &instr,
-                                 State &state, F &&apply) {
+ExecuteResult elementwise_binary(const EbinInstr &instr, State &state,
+                                 F &&apply) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   if (instr.dest.domain != NpuDomain::tile ||
       instr.src1.domain != NpuDomain::tile) {
@@ -88,10 +88,9 @@ ExecuteResult elementwise_binary(const ElementwiseBinaryInstruction &instr,
 
 } // namespace
 
-ExecuteResult execute_elementwise(const ElementwiseBinaryInstruction &instr,
-                                  State &state) {
+ExecuteResult execute_elementwise(const EbinInstr &instr, State &state) {
   switch (instr.op) {
-  case ElementwiseBinaryOp::add:
+  case EbinOp::add:
     return elementwise_binary(instr, state,
                               [](int left, int right) { return left + right; });
   default: return {.status = StepStatus::execution_not_implemented};

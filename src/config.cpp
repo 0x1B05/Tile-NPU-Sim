@@ -22,7 +22,7 @@ constexpr bool valid_dtype(ConfigBank bank, DType dtype) {
   return false;
 }
 
-constexpr bool valid_register(ConfigBank bank, std::uint8_t index) {
+constexpr bool valid_register_index(ConfigBank bank, std::uint8_t index) {
   switch (bank) {
   case ConfigBank::tc:
   case ConfigBank::tm: return index < TILE_REGISTERS;
@@ -36,7 +36,7 @@ constexpr bool valid_register(ConfigBank bank, std::uint8_t index) {
   return false;
 }
 
-constexpr bool field_allowed(ConfigBank bank, ConfigField field) {
+constexpr bool field_supported(ConfigBank bank, ConfigField field) {
   switch (bank) {
   case ConfigBank::tc:
     return field == ConfigField::dtype || field == ConfigField::rows ||
@@ -62,16 +62,17 @@ constexpr bool field_allowed(ConfigBank bank, ConfigField field) {
   return false;
 }
 
-template <typename T> const T *get(const ConfigFieldValue &value) {
+template <typename T> const T *get_typed(const ConfigFieldValue &value) {
   return std::get_if<T>(&value);
 }
 
-template <typename T> bool scalar_as(const ConfigFieldValue &value, T &result) {
-  if (const auto *typed = get<T>(value)) {
+template <typename T>
+bool coerce_scalar(const ConfigFieldValue &value, T &result) {
+  if (const auto *typed = get_typed<T>(value)) {
     result = *typed;
     return true;
   }
-  if (const auto *raw = get<std::uint64_t>(value)) {
+  if (const auto *raw = get_typed<std::uint64_t>(value)) {
     if constexpr (std::is_enum_v<T>) {
       if (*raw > static_cast<std::uint64_t>(
                      std::numeric_limits<std::uint8_t>::max())) {
@@ -95,7 +96,7 @@ template <typename T> bool scalar_as(const ConfigFieldValue &value, T &result) {
     }
   }
   if constexpr (std::is_same_v<T, std::int32_t>) {
-    if (const auto *raw = get<std::uint8_t>(value)) {
+    if (const auto *raw = get_typed<std::uint8_t>(value)) {
       result = *raw;
       return true;
     }
@@ -106,15 +107,15 @@ template <typename T> bool scalar_as(const ConfigFieldValue &value, T &result) {
 template <typename T>
 ConfigAccessError write_scalar(T &target, const ConfigFieldValue &value) {
   T raw;
-  return scalar_as(value, raw) ? (target = raw, ConfigAccessError::none)
-                               : ConfigAccessError::invalid_value;
+  return coerce_scalar(value, raw) ? (target = raw, ConfigAccessError::none)
+                                   : ConfigAccessError::invalid_value;
 }
 
 template <typename T>
 ConfigAccessError write_scalar(T &target, const ConfigFieldValue &value,
                                std::type_identity_t<T> max) {
   T raw;
-  return scalar_as(value, raw) && raw <= max
+  return coerce_scalar(value, raw) && raw <= max
              ? (target = raw, ConfigAccessError::none)
              : ConfigAccessError::invalid_value;
 }
@@ -122,7 +123,7 @@ ConfigAccessError write_scalar(T &target, const ConfigFieldValue &value,
 ConfigAccessError write_dtype(ConfigBank bank, DType &target,
                               const ConfigFieldValue &value) {
   DType dtype;
-  return scalar_as(value, dtype) && valid_dtype(bank, dtype)
+  return coerce_scalar(value, dtype) && valid_dtype(bank, dtype)
              ? (target = dtype, ConfigAccessError::none)
              : ConfigAccessError::invalid_value;
 }
@@ -131,7 +132,7 @@ template <typename Config>
 ConfigAccessError write_matrix_shape(Config &config, ConfigField field,
                                      const ConfigFieldValue &value) {
   std::uint8_t raw;
-  if (!scalar_as(value, raw) || raw > MATRIX_EXTENT ||
+  if (!coerce_scalar(value, raw) || raw > MATRIX_EXTENT ||
       (field == ConfigField::layout && raw != 0)) {
     return ConfigAccessError::invalid_value;
   }
@@ -197,7 +198,9 @@ ConfigAccessError write_vector_descriptor(VectorDescriptor &descriptor,
   return ConfigAccessError::unsupported_field;
 }
 
-ConfigReadResult unsupported() { return ConfigAccessError::unsupported_field; }
+ConfigReadResult unsupported_field() {
+  return ConfigAccessError::unsupported_field;
+}
 
 template <typename Config>
 ConfigReadResult read_matrix_config(const Config &config, ConfigField field) {
@@ -207,7 +210,7 @@ ConfigReadResult read_matrix_config(const Config &config, ConfigField field) {
   case ConfigField::rows:   return config.rows;
   case ConfigField::cols:   return config.cols;
   case ConfigField::layout: return config.layout;
-  default:                  return unsupported();
+  default:                  return unsupported_field();
   }
   // clang-format on
 }
@@ -218,7 +221,7 @@ ConfigReadResult read_vector_config(const Config &config, ConfigField field) {
   switch (field) {
   case ConfigField::dtype: return config.dtype;
   case ConfigField::len:   return config.len;
-  default:                 return unsupported();
+  default:                 return unsupported_field();
   }
   // clang-format on
 }
@@ -232,7 +235,7 @@ ConfigReadResult read_matrix_descriptor(const MatrixDescriptor &descriptor,
   case ConfigField::col_stride_bytes: return descriptor.col_stride_bytes;
   case ConfigField::transform:        return descriptor.transform;
   case ConfigField::flags:            return descriptor.flags;
-  default:                            return unsupported();
+  default:                            return unsupported_field();
   }
   // clang-format on
 }
@@ -244,7 +247,7 @@ ConfigReadResult read_vector_descriptor(const VectorDescriptor &descriptor,
   case ConfigField::base_addr:    return descriptor.base_addr;
   case ConfigField::stride_bytes: return descriptor.stride_bytes;
   case ConfigField::flags:        return descriptor.flags;
-  default:                        return unsupported();
+  default:                        return unsupported_field();
   }
   // clang-format on
 }
@@ -253,8 +256,10 @@ ConfigReadResult read_vector_descriptor(const VectorDescriptor &descriptor,
 
 ConfigReadResult read_config_field(const State &state, ConfigBank bank,
                                    std::uint8_t index, ConfigField field) {
-  if (!valid_register(bank, index)) return ConfigAccessError::invalid_register;
-  if (!field_allowed(bank, field)) return ConfigAccessError::unsupported_field;
+  if (!valid_register_index(bank, index))
+    return ConfigAccessError::invalid_register;
+  if (!field_supported(bank, field))
+    return ConfigAccessError::unsupported_field;
 
   // clang-format off
   switch (bank) {
@@ -281,8 +286,10 @@ ConfigReadResult read_config_field(const State &state, ConfigBank bank,
 ConfigAccessError write_config_field(State &state, ConfigBank bank,
                                      std::uint8_t index, ConfigField field,
                                      const ConfigFieldValue &value) {
-  if (!valid_register(bank, index)) return ConfigAccessError::invalid_register;
-  if (!field_allowed(bank, field)) return ConfigAccessError::unsupported_field;
+  if (!valid_register_index(bank, index))
+    return ConfigAccessError::invalid_register;
+  if (!field_supported(bank, field))
+    return ConfigAccessError::unsupported_field;
 
   // clang-format off
   switch (bank) {

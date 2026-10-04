@@ -10,7 +10,7 @@ using RegisterIndex = std::uint8_t;
 // Scalar operands use the names from the RV64 encoding, while NPU operands
 // carry their register domain explicitly. This keeps format decoding separate
 // from the semantic operation that consumes the operands.
-struct ScalarOperands {
+struct ScalarRegs {
   RegisterIndex dest = 0;
   RegisterIndex src1 = 0;
   RegisterIndex src2 = 0;
@@ -104,7 +104,7 @@ struct NpuRegister {
 
 using NpuOperand = std::variant<NpuRegister, ScalarRegister>;
 
-enum class ElementwiseBinaryOp : std::uint8_t {
+enum class EbinOp : std::uint8_t {
   add = 0b0000,
   sub = 0b0001,
   mul = 0b0010,
@@ -119,8 +119,8 @@ enum class ElementwiseBinaryOp : std::uint8_t {
   sra = 0b1101,
 };
 
-struct ElementwiseBinaryInstruction {
-  ElementwiseBinaryOp op = ElementwiseBinaryOp::add;
+struct EbinInstr {
+  EbinOp op = EbinOp::add;
   NpuRegister dest{};
   NpuRegister src1{};
   NpuOperand src2 = NpuRegister{};

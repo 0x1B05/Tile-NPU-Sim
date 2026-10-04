@@ -11,7 +11,7 @@ TEST_CASE(descriptor_view) {
   matrix.row_stride_bytes = 64;
   matrix.col_stride_bytes = 2;
   matrix.flags = 1;
-  tile_npu::MatrixDescriptorView matrix_view(matrix);
+  tile_npu::MatrixDescView matrix_view(matrix);
   check(matrix_view.valid(), "matrix descriptor with increment mode is valid");
   check_eq(hex(matrix_view.address(1, 2).value_or(0)), hex(0x1044),
            "matrix descriptor address calculation");
@@ -23,7 +23,7 @@ TEST_CASE(descriptor_view) {
   vector.base_addr = 0x2000;
   vector.stride_bytes = -4;
   vector.flags = 1;
-  tile_npu::VectorDescriptorView vector_view(vector);
+  tile_npu::VectorDescView vector_view(vector);
   check(vector_view.valid(), "vector descriptor with increment mode is valid");
   check_eq(hex(vector_view.address(2).value_or(0)), hex(0x1ff8),
            "vector descriptor signed stride");
@@ -39,14 +39,14 @@ TEST_CASE(descriptor_view) {
   tile_npu::MatrixDescriptor overflow{};
   overflow.base_addr = std::numeric_limits<std::uint64_t>::max();
   overflow.col_stride_bytes = 1;
-  tile_npu::ConstMatrixDescriptorView overflow_view(overflow);
+  tile_npu::ConstMatrixDescView overflow_view(overflow);
   check(!overflow_view.address(0, 1),
         "descriptor view rejects address overflow");
 
   tile_npu::VectorDescriptor underflow{};
   underflow.base_addr = 0;
   underflow.stride_bytes = -1;
-  tile_npu::ConstVectorDescriptorView underflow_view(underflow);
+  tile_npu::ConstVectorDescView underflow_view(underflow);
   check(!underflow_view.address(1),
         "descriptor view rejects address underflow");
 }

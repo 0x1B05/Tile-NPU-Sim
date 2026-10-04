@@ -27,20 +27,20 @@ target("guest_images")
         local npumacros = path.join(srcdir, "npu.inc")
         -- Per-image incremental assembly: rebuild only when the source, the
         -- shared include/linker inputs, or the toolchain change.
-        local function assemble(src, extra, deps)
+        local function build_guest_image(src, extra, deps)
             local elf, bin = guestimg.output_paths(bindir, path.basename(src))
             depend.on_changed(function()
-                guestimg.assemble(gcc, objcopy, linkscript, src, elf, bin, extra)
+                guestimg.build_guest_image(gcc, objcopy, linkscript, src, elf, bin, extra)
             end, {dependfile = target:dependfile(path.basename(src)),
                   files = deps,
                   values = {gcc, "-march=rv64im -mabi=lp64 -O2"}})
         end
         for _, src in ipairs(os.files(path.join(srcdir, "**.c"))) do
-            assemble(src, {crt0, "-I", srcdir}, {src, linkscript, crt0})
+            build_guest_image(src, {crt0, "-I", srcdir}, {src, linkscript, crt0})
         end
         for _, src in ipairs(os.files(path.join(srcdir, "**.S"))) do
             if path.filename(src) ~= "crt0.S" then
-                assemble(src, {"-I", srcdir}, {src, linkscript, npumacros})
+                build_guest_image(src, {"-I", srcdir}, {src, linkscript, npumacros})
             end
         end
     end)
