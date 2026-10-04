@@ -35,7 +35,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | ---- | ---- |
 | `include/tile_npu/state.h` | 架构状态: 五个数据域的寄存器堆 (Tile/Acc/Vec8/Vec32/Scalar), 计算配置 (TC/AC/BC/VC) 与访存描述符 (TM/AM/BM/VM), 物理尺寸常量 |
 | `include/tile_npu/memory.h` | 字节寻址内存接口; `FlatMemory` 为平坦 RAM 实现 |
-| `include/tile_npu/instruction.h` | typed instruction IR: scalar operands, NPU domains/registers, elementwise 与 config (`CfgInstr`, `ConfigBank`) 指令类型 |
+| `include/tile_npu/instruction.h` | typed instruction IR: scalar operands, NPU domains/registers, elementwise 与 config (`CfgInstr`, `ConfigRegType`) 指令类型 |
 | `include/tile_npu/decode.h` | 译码结果类型: typed scalar/NPU instructions, `DecodeError`, `DecodeResult` |
 | `include/tile_npu/config.h`, `src/config.cpp` | 统一配置/描述符字段访问、字段编号映射与写入校验 |
 | `include/tile_npu/matrix_view.h` | 逻辑矩阵坐标到物理寄存器存储的 view, 当前实现 canonical layout |

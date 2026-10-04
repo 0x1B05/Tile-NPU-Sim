@@ -9,18 +9,18 @@
 
 namespace tile_npu {
 
-// Architectural register count per bank; decode uses it to reject out-of-range
-// config register numbers as illegal encodings.
-inline constexpr std::size_t config_register_count(ConfigBank bank) {
-  switch (bank) {
-  case ConfigBank::tc:
-  case ConfigBank::tm: return TILE_REGISTERS;
-  case ConfigBank::ac:
-  case ConfigBank::am: return ACC_REGISTERS;
-  case ConfigBank::bc:
-  case ConfigBank::vc:
-  case ConfigBank::bm:
-  case ConfigBank::vm: return VECTOR_REGISTERS;
+// Architectural register count per register type; decode uses it to reject
+// out-of-range config register numbers as illegal encodings.
+inline constexpr std::size_t config_register_count(ConfigRegType reg_type) {
+  switch (reg_type) {
+  case ConfigRegType::tc:
+  case ConfigRegType::tm: return TILE_REGISTERS;
+  case ConfigRegType::ac:
+  case ConfigRegType::am: return ACC_REGISTERS;
+  case ConfigRegType::bc:
+  case ConfigRegType::vc:
+  case ConfigRegType::bm:
+  case ConfigRegType::vm: return VECTOR_REGISTERS;
   }
   return 0;
 }
@@ -56,18 +56,18 @@ using ConfigReadResult =
     std::variant<DType, ArithMode, std::uint8_t, std::int32_t, std::uint64_t,
                  ConfigAccessError>;
 
-ConfigReadResult read_config_field(const State &state, ConfigBank bank,
+ConfigReadResult read_config_field(const State &state, ConfigRegType reg_type,
                                    std::uint8_t index, ConfigField field);
 
-ConfigAccessError write_config_field(State &state, ConfigBank bank,
+ConfigAccessError write_config_field(State &state, ConfigRegType reg_type,
                                      std::uint8_t index, ConfigField field,
                                      const ConfigFieldValue &value);
 
-// Convert a decoded field code to its semantic field. The mapping is bank
-// dependent because the same field3 value means `rows` for a matrix config
+// Convert a decoded field code to its semantic field. The mapping depends on
+// the register type: the same field3 value means `rows` for a matrix config
 // and `len` for a vector config.
 std::variant<ConfigField, ConfigAccessError>
-config_field_from_code(ConfigBank bank, std::uint8_t field_code);
+config_field_from_code(ConfigRegType reg_type, std::uint8_t field_code);
 
 // This is the value written by cfg.get. Enum fields are returned as their
 // architectural numeric code; signed fields preserve their two's-complement

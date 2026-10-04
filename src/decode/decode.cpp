@@ -46,39 +46,39 @@ DecodeResult decode_binary_other(std::uint32_t word) {
 
 // sel2 selects the register family pair, the vector-side bit picks within it:
 // 00 -> TC/BC, 01 -> AC/VC, 10 -> TM/BM, 11 -> AM/VM.
-constexpr ConfigBank cfg_bank(std::uint8_t sel2, bool vector_side) {
+constexpr ConfigRegType cfg_reg_type(std::uint8_t sel2, bool vector_side) {
   switch (sel2) {
-  case 0: return vector_side ? ConfigBank::bc : ConfigBank::tc;
-  case 1: return vector_side ? ConfigBank::vc : ConfigBank::ac;
-  case 2: return vector_side ? ConfigBank::bm : ConfigBank::tm;
-  default: return vector_side ? ConfigBank::vm : ConfigBank::am;
+  case 0: return vector_side ? ConfigRegType::bc : ConfigRegType::tc;
+  case 1: return vector_side ? ConfigRegType::vc : ConfigRegType::ac;
+  case 2: return vector_side ? ConfigRegType::bm : ConfigRegType::tm;
+  default: return vector_side ? ConfigRegType::vm : ConfigRegType::am;
   }
 }
 
 DecodeResult decode_cfg_seti(std::uint32_t word) {
   const auto f = encoding::NpuI::from(word);
-  const auto bank = cfg_bank(f.sel2, f.major4 == 0b0110);
+  const auto reg_type = cfg_reg_type(f.sel2, f.major4 == 0b0110);
   // Out-of-range config register numbers are reserved encodings.
-  if (f.dest >= config_register_count(bank)) {
+  if (f.dest >= config_register_count(reg_type)) {
     return DecodeError::illegal;
   }
   return DecodedNpuInstr{
-      CfgInstr{CfgOp::seti, bank, f.dest, 0, f.field3, f.imm}};
+      CfgInstr{CfgOp::seti, reg_type, f.dest, 0, f.field3, f.imm}};
 }
 
 template <CfgOp Op> DecodeResult decode_cfg_reg(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
-  const auto bank = cfg_bank(f.sel3 >> 1, (f.sel3 & 1) != 0);
-  const auto count = config_register_count(bank);
+  const auto reg_type = cfg_reg_type(f.sel3 >> 1, (f.sel3 & 1) != 0);
+  const auto count = config_register_count(reg_type);
   // Scalar operands (xS in setx, xD in get) always name a valid register;
-  // config operands are bounded per bank.
+  // config operands are bounded per register type.
   if (Op != CfgOp::get && f.dest >= count) {
     return DecodeError::illegal;
   }
   if (Op != CfgOp::setx && f.src1 >= count) {
     return DecodeError::illegal;
   }
-  return DecodedNpuInstr{CfgInstr{Op, bank, f.dest, f.src1,
+  return DecodedNpuInstr{CfgInstr{Op, reg_type, f.dest, f.src1,
                                   static_cast<std::uint8_t>(f.arg & 0x7), 0}};
 }
 

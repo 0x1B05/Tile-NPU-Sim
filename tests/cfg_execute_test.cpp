@@ -29,7 +29,8 @@ constexpr std::uint32_t cfg_reg(std::uint32_t sel2, std::uint32_t mv,
          (field5 << 17) | (s5 << 7) | (d5 << 2) | 0x2u;
 }
 
-// field3 codes per bank family (matrix config / vector config / descriptor).
+// field3 codes per config register type (matrix config / vector config /
+// descriptor).
 constexpr std::uint32_t FIELD_DTYPE = 0;
 constexpr std::uint32_t FIELD_ROWS = 1;
 constexpr std::uint32_t FIELD_COLS = 2;
@@ -87,7 +88,7 @@ TEST_CASE(cfg_seti_rejects_out_of_range_value) {
   check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE), "failed step keeps pc");
 }
 
-TEST_CASE(cfg_seti_rejects_dtype_wrong_bank) {
+TEST_CASE(cfg_seti_rejects_unsupported_dtype) {
   FlatMemory memory(CODE_BASE, 4);
   Simulator sim(memory);
   // AC supports i32/u32/f32; dtype code 0 (i8) is invalid there.
@@ -97,7 +98,7 @@ TEST_CASE(cfg_seti_rejects_dtype_wrong_bank) {
   check_eq(sim.state().ac[0].dtype, DType::i32, "ac0.dtype preserved");
 }
 
-TEST_CASE(cfg_seti_rejects_field_bank_lacks) {
+TEST_CASE(cfg_seti_rejects_unsupported_field) {
   FlatMemory memory(CODE_BASE, 4);
   Simulator sim(memory);
   // BC has dtype/len only; field code 2 (cols in matrix configs) is absent.
@@ -192,7 +193,7 @@ TEST_CASE(cfg_get_to_x0_is_discarded) {
   check_eq(hex(sim.state().scalar.read_x(0)), hex(0x0u), "x0 stays zero");
 }
 
-TEST_CASE(cfg_get_rejects_field_bank_lacks) {
+TEST_CASE(cfg_get_rejects_unsupported_field) {
   FlatMemory memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, cfg_reg(0, 1, 2, 4, 0, 5));
