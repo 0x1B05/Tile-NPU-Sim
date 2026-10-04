@@ -194,6 +194,48 @@ DecodeResult decode_cvt(std::uint32_t word) {
       CvtInstr{CvtOp::cvt, {domain, f.dest}, {domain, f.src2}}};
 }
 
+// AREDUCE (R2): reserved3/reserved10 are pinned by the pattern; S5 is the
+// Acc source, D5 the Vec32 destination. funct3 >= 110 is reserved. The f32
+// dtype and length constraints fail at execution.
+DecodeResult decode_areduce(std::uint32_t word) {
+  const auto f = encoding::NpuR2::from(word);
+  if (f.funct3 > 0b101 || f.src2 >= ACC_REGISTERS ||
+      f.dest >= VECTOR_REGISTERS) {
+    return DecodeError::illegal;
+  }
+  return DecodedNpuInstr{
+      ReduceInstr{static_cast<ReduceOp>(f.funct3),
+                  NpuOperand{NpuRegister{NpuDomain::vec32, f.dest}},
+                  {},
+                  {NpuDomain::acc, f.src2}}};
+}
+
+// VREDUCE sum/max/min/sumsq (R2): D5 is the Scalar destination, S5 the
+// Vec32 source. The f32 dtype constraint fails at execution.
+DecodeResult decode_vreduce(std::uint32_t word) {
+  const auto f = encoding::NpuR2::from(word);
+  if (f.src2 >= VECTOR_REGISTERS) {
+    return DecodeError::illegal;
+  }
+  return DecodedNpuInstr{ReduceInstr{static_cast<ReduceOp>(f.funct3),
+                                     NpuOperand{ScalarRegister{f.dest}},
+                                     {},
+                                     {NpuDomain::vec32, f.src2}}};
+}
+
+// vreduce.argmax (R4 two-destination variant): D5 = xIndex, the src2
+// position carries xVal5 (xValue); reserved5 is pinned by the pattern.
+DecodeResult decode_vreduce_argmax(std::uint32_t word) {
+  const auto f = encoding::NpuR4::from(word);
+  if (f.src1 >= VECTOR_REGISTERS) {
+    return DecodeError::illegal;
+  }
+  return DecodedNpuInstr{ReduceInstr{ReduceOp::argmax,
+                                     NpuOperand{ScalarRegister{f.dest}},
+                                     NpuOperand{ScalarRegister{f.src2}},
+                                     {NpuDomain::vec32, f.src1}}};
+}
+
 // M_BLK block/gather forms (R2): sel3 = {dom2, 0}; funct3 = {form2, LS} with
 // LS picking load (0) or store (1). S5 names the gather index vector (a Vec32
 // register) and the patterns pin it to 0 for the block forms.
@@ -406,6 +448,18 @@ constexpr DecodeEntry NPU_TABLE[] = {
     {"0011 ?10 000 0000000000 ????? ????? 10", decode_cvt},                           // acvt/vcvt
     {"0011 010 001 0000000000 ????? ????? 10", decode_cvt},                           // twiden
     {"0011 ??? ??? ????? ????? ????? ????? 10", fail<DecodeError::illegal>},          // reserved CVT encodings
+    // AREDUCE (R2): reserved3/reserved10 pinned to 0; funct3 = 000 sum,
+    // 001 max, 010 min, 011 sumsq, 100 argmax, 101 absmax.
+    {"0001 000 ??? 0000000000 ????? ????? 10", decode_areduce},
+    {"0001 ??? ??? ????? ????? ????? ????? 10", fail<DecodeError::illegal>},          // reserved AREDUCE encodings
+    // VREDUCE (R2): funct3 = 000 sum, 001 max, 010 min, 011 sumsq; argmax
+    // uses the R4 two-destination variant (xVal5 in the src2 position).
+    {"0010 000 000 0000000000 ????? ????? 10", decode_vreduce},
+    {"0010 000 001 0000000000 ????? ????? 10", decode_vreduce},
+    {"0010 000 010 0000000000 ????? ????? 10", decode_vreduce},
+    {"0010 000 011 0000000000 ????? ????? 10", decode_vreduce},
+    {"0010 000 100 00000 ????? ????? ????? 10", decode_vreduce_argmax},
+    {"0010 ??? ??? ????? ????? ????? ????? 10", fail<DecodeError::illegal>},          // reserved VREDUCE encodings
     // CFG_MAT_SETI / CFG_VEC_SETI (I format); field3 = 111 is reserved.
     {"0101 ?? 111 ???? ???? ???? ???? ????? 10", fail<DecodeError::illegal>},
     {"0110 ?? 111 ???? ???? ???? ???? ????? 10", fail<DecodeError::illegal>},

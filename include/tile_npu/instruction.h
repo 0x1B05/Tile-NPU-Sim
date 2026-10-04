@@ -305,6 +305,29 @@ struct CvtInstr {
   NpuRegister src{};
 };
 
+// AREDUCE/VREDUCE operations: the funct3 codes are shared between the two
+// families; argmax is the only two-destination form (VREDUCE R4 variant) and
+// absmax exists only on AREDUCE.
+enum class ReduceOp : std::uint8_t {
+  sum = 0b000,
+  max = 0b001,
+  min = 0b010,
+  sumsq = 0b011,
+  argmax = 0b100,
+  absmax = 0b101,
+};
+
+// Operand reading:
+//   areduce.rows.*: dest = vD (Vec32), src = aS (Acc); dest2 unused
+//   vreduce.*:      dest = xD (Scalar), src = vS (Vec32); dest2 unused
+//   vreduce.argmax: dest = xIndex (Scalar), dest2 = xValue (Scalar), src = vS
+struct ReduceInstr {
+  ReduceOp op = ReduceOp::sum;
+  NpuOperand dest{};
+  NpuOperand dest2{};
+  NpuRegister src{};
+};
+
 // The architectural configuration register types (TC/AC/BC/VC/TM/AM/BM/VM).
 // Decode derives the register type from (major4, sel2) or (sel2, MV), so
 // field access is independent of the instruction format that selected it.
