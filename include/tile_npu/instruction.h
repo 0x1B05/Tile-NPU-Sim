@@ -198,6 +198,53 @@ struct EunInstr {
   NpuRegister src{};
 };
 
+// E_CMP comparisons (R4), defined on Acc and Vec32 only: the destination is a
+// same-shape u32 mask (true = all ones, false = 0). sel3 = {dom2, BX}; BX
+// picks the second source (same-domain register or Scalar xS). Numeric
+// values match the funct3 condition codes.
+enum class CmpOp : std::uint8_t {
+  // clang-format off
+  eq    = 0b000,
+  ne    = 0b001,
+  lt    = 0b010,
+  ge    = 0b011,
+  le    = 0b100,
+  unord = 0b101,
+  // clang-format on
+};
+
+// Operand reading: dest = mask M (u32), src1 = A, src2 = B or xS.
+struct CmpInstr {
+  CmpOp op = CmpOp::eq;
+  NpuRegister dest{};
+  NpuRegister src1{};
+  NpuOperand src2 = NpuRegister{};
+};
+
+// Condition metadata for the E_CMP family, mirroring the ISA's funct3 table:
+// ne/ge are integer-only and le/unord are f32-only; eq/lt accept both.
+// Decode, execution and tests share this table so a new condition is added
+// in one place.
+struct CmpInfo {
+  CmpOp op;
+  bool integer_allowed;
+  bool f32_allowed;
+};
+
+// Indexed by funct3 code; unassigned codes (110/111) hold nullopt.
+inline constexpr std::array<std::optional<CmpInfo>, 8> CMP_BY_FUNCT3 = [] {
+  std::array<std::optional<CmpInfo>, 8> table{};
+  // clang-format off
+  table[0b000] = CmpInfo{CmpOp::eq   , true , true };
+  table[0b001] = CmpInfo{CmpOp::ne   , true , false};
+  table[0b010] = CmpInfo{CmpOp::lt   , true , true };
+  table[0b011] = CmpInfo{CmpOp::ge   , true , false};
+  table[0b100] = CmpInfo{CmpOp::le   , false, true };
+  table[0b101] = CmpInfo{CmpOp::unord, false, true };
+  // clang-format on
+  return table;
+}();
+
 // The architectural configuration register types (TC/AC/BC/VC/TM/AM/BM/VM).
 // Decode derives the register type from (major4, sel2) or (sel2, MV), so
 // field access is independent of the instruction format that selected it.

@@ -1,6 +1,7 @@
 #include "execute.h"
 
 #include "execute_cfg.h"
+#include "execute_ecmp.h"
 #include "execute_elementwise.h"
 #include "execute_eun.h"
 #include "execute_init.h"
@@ -27,6 +28,10 @@ ExecuteResult execute_one(const EbinInstr &instr, ExecContext &ctx) {
 
 ExecuteResult execute_one(const EunInstr &instr, ExecContext &ctx) {
   return execute_eun(instr, ctx.state);
+}
+
+ExecuteResult execute_one(const CmpInstr &instr, ExecContext &ctx) {
+  return execute_ecmp(instr, ctx.state);
 }
 
 ExecuteResult execute_one(const MblkInstr &instr, ExecContext &ctx) {
