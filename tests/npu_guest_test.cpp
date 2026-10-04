@@ -142,6 +142,55 @@ TEST_CASE(npu_guest_tadd_u8_sat) {
   check_region(state.t[0], expected, "t0");
 }
 
+TEST_CASE(npu_guest_ebin) {
+  // tests/guest/npu/ebin.S self-configures tc0..tc4 (2x2 i8) via cfg.seti and
+  // runs tsub t0, t1, t2 / tmax t3, t1, t2 / taddx t4, t1, x2 (x2 = 5) over
+  // the host-poked data below.
+  tile_npu::FlatMemory memory{IMAGE_BASE, 128};
+  tile_npu::Simulator sim(memory);
+  load_image(memory, "ebin");
+  sim.reset(IMAGE_BASE);
+  auto &state = sim.state();
+  state.t[1][tile_index(0, 0)] = i8_bits(0);
+  state.t[1][tile_index(0, 1)] = i8_bits(-128);
+  state.t[1][tile_index(1, 0)] = i8_bits(5);
+  state.t[1][tile_index(1, 1)] = i8_bits(-1);
+  state.t[2][tile_index(0, 0)] = i8_bits(1);
+  state.t[2][tile_index(0, 1)] = i8_bits(1);
+  state.t[2][tile_index(1, 0)] = i8_bits(10);
+  state.t[2][tile_index(1, 1)] = i8_bits(127);
+
+  tile_npu::StepResult result{};
+  for (int steps = 0; steps < 64; ++steps) {
+    result = sim.step();
+    if (result.status == tile_npu::StepStatus::breakpoint) {
+      break;
+    }
+  }
+  check_eq(result.status, tile_npu::StepStatus::breakpoint,
+           "ebin image reaches ebreak");
+
+  // tsub (wrap): 0 - 1 = -1; -128 - 1 = -129 wraps to 127; 5 - 10 = -5;
+  // -1 - 127 = -128.
+  const std::uint8_t expected_t0[2][2] = {
+      {i8_bits(-1), i8_bits(127)},
+      {i8_bits(-5), i8_bits(-128)},
+  };
+  check_region(state.t[0], expected_t0, "t0");
+  // tmax (i8 signed): max(0, 1) / max(-128, 1) / max(5, 10) / max(-1, 127).
+  const std::uint8_t expected_t3[2][2] = {
+      {i8_bits(1), i8_bits(1)},
+      {i8_bits(10), i8_bits(127)},
+  };
+  check_region(state.t[3], expected_t3, "t3");
+  // taddx with x2 = 5: 0 + 5 / -128 + 5 = -123 / 5 + 5 = 10 / -1 + 5 = 4.
+  const std::uint8_t expected_t4[2][2] = {
+      {i8_bits(5), i8_bits(-123)},
+      {i8_bits(10), i8_bits(4)},
+  };
+  check_region(state.t[4], expected_t4, "t4");
+}
+
 TEST_CASE(npu_guest_cfg_self_check) {
   // tests/guest/npu/cfg.S programs config registers with cfg.seti/cfg.setx,
   // reads them back with cfg.get, and reaches ebreak with a0 = 0 on success.
