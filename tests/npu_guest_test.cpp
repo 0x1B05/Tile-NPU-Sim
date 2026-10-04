@@ -191,6 +191,28 @@ TEST_CASE(npu_guest_ebin) {
   check_region(state.t[4], expected_t4, "t4");
 }
 
+TEST_CASE(npu_guest_mem) {
+  // tests/guest/npu/mem.S self-configures descriptors and configs, then
+  // exercises block/transposed/row/gather accesses with store-back checks
+  // and a descriptor auto-increment readback. It reaches ebreak with
+  // a0 = 0 on success; a failing check reports its stage number in a0.
+  tile_npu::FlatMemory memory{IMAGE_BASE, 1024};
+  tile_npu::Simulator sim(memory);
+  load_image(memory, "mem");
+  sim.reset(IMAGE_BASE);
+  tile_npu::StepResult result{};
+  for (int steps = 0; steps < 256; ++steps) {
+    result = sim.step();
+    if (result.status == tile_npu::StepStatus::breakpoint) {
+      break;
+    }
+  }
+  check_eq(result.status, tile_npu::StepStatus::breakpoint,
+           "mem image reaches ebreak");
+  check_eq(hex(sim.state().scalar.read_x(10)), hex(0x0u),
+           "mem image reports success via a0");
+}
+
 TEST_CASE(npu_guest_cfg_self_check) {
   // tests/guest/npu/cfg.S programs config registers with cfg.seti/cfg.setx,
   // reads them back with cfg.get, and reaches ebreak with a0 = 0 on success.
