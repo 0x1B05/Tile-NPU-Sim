@@ -1,0 +1,145 @@
+#include "tile_npu/decode.h"
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <variant>
+
+#include "check.h"
+#include "eun_helpers.h"
+
+namespace {
+
+using tile_npu::DecodedNpuInstr;
+using tile_npu::DecodeError;
+using tile_npu::EunInstr;
+using tile_npu::EunOp;
+using tile_npu::NpuDomain;
+
+struct Case {
+  const char *name;
+  std::uint32_t word;
+  EunOp op;
+  NpuDomain domain;
+  std::uint8_t dest;
+  std::uint8_t src;
+};
+
+template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
+  for (const auto &test : cases) {
+    const auto result = tile_npu::decode(test.word);
+    const auto *npu = std::get_if<DecodedNpuInstr>(&result);
+    const std::string what =
+        std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
+    check(npu != nullptr, what);
+    const auto *decoded = std::get_if<EunInstr>(npu);
+    check(decoded != nullptr, what);
+    check_eq(decoded->op, test.op, what + ": op");
+    check_eq(decoded->dest.domain, test.domain, what + ": domain");
+    check_eq(decoded->dest.index, test.dest, what + ": dest");
+    check_eq(decoded->src.domain, test.domain, what + ": src domain");
+    check_eq(decoded->src.index, test.src, what + ": src");
+  }
+}
+
+struct ErrorCase {
+  const char *name;
+  std::uint32_t word;
+  DecodeError error;
+};
+
+template <std::size_t N>
+void check_errors(const std::array<ErrorCase, N> &cases) {
+  for (const auto &test : cases) {
+    const auto result = tile_npu::decode(test.word);
+    const auto *error = std::get_if<DecodeError>(&result);
+    const std::string what =
+        std::string(test.name) + " (" + to_hex(test.word) + ")";
+    check(error != nullptr, what + " decodes");
+    check_eq(*error, test.error, what + ": error kind");
+  }
+}
+
+} // namespace
+
+TEST_CASE(eun_decode) {
+  constexpr std::array cases{
+      // Anchor word computed by hand from the encoding figure.
+      Case{.name = "tnot t0, t1",
+           .word = 0x10000080u,
+           .op = EunOp::bit_not,
+           .domain = NpuDomain::tile,
+           .dest = 0,
+           .src = 1},
+      Case{.name = "anot a11, a0",
+           .word = make_eun(NpuDomain::acc, 0, 11, 0),
+           .op = EunOp::bit_not,
+           .domain = NpuDomain::acc,
+           .dest = 11,
+           .src = 0},
+      Case{.name = "vabs v2, v3",
+           .word = make_eun(NpuDomain::vec32, 1, 2, 3),
+           .op = EunOp::abs,
+           .domain = NpuDomain::vec32,
+           .dest = 2,
+           .src = 3},
+      Case{.name = "aneg a1, a2",
+           .word = make_eun(NpuDomain::acc, 2, 1, 2),
+           .op = EunOp::neg,
+           .domain = NpuDomain::acc,
+           .dest = 1,
+           .src = 2},
+      Case{.name = "vexp2.approx v5, v6",
+           .word = make_eun(NpuDomain::vec32, 3, 5, 6),
+           .op = EunOp::exp2,
+           .domain = NpuDomain::vec32,
+           .dest = 5,
+           .src = 6},
+      Case{.name = "arcp.approx a0, a1",
+           .word = make_eun(NpuDomain::acc, 4, 0, 1),
+           .op = EunOp::rcp,
+           .domain = NpuDomain::acc,
+           .dest = 0,
+           .src = 1},
+      Case{.name = "vrsqrt.approx v1, v2",
+           .word = make_eun(NpuDomain::vec32, 5, 1, 2),
+           .op = EunOp::rsqrt,
+           .domain = NpuDomain::vec32,
+           .dest = 1,
+           .src = 2},
+      Case{.name = "vsilu.approx v31, v0",
+           .word = make_eun(NpuDomain::vec32, 6, 31, 0),
+           .op = EunOp::silu,
+           .domain = NpuDomain::vec32,
+           .dest = 31,
+           .src = 0},
+  };
+  check_cases(cases);
+}
+
+TEST_CASE(eun_decode_rejects_reserved) {
+  constexpr std::array cases{
+      // Vec8 has no E_UNARY; on Tile only `not` exists; funct3 = 111 is
+      // reserved.
+      ErrorCase{"bnot", make_eun(NpuDomain::vec8, 0, 0, 0),
+                DecodeError::illegal},
+      ErrorCase{"tabs", make_eun(NpuDomain::tile, 1, 0, 0),
+                DecodeError::illegal},
+      ErrorCase{"texp2", make_eun(NpuDomain::tile, 3, 0, 0),
+                DecodeError::illegal},
+      ErrorCase{"funct3 111", make_eun(NpuDomain::acc, 7, 0, 0),
+                DecodeError::illegal},
+      // sel3 bit 0 and reserved10 must be 0.
+      ErrorCase{"sel3 bit0", make_eun(NpuDomain::vec32, 0, 0, 0) | (1u << 25),
+                DecodeError::illegal},
+      ErrorCase{"reserved10", make_eun(NpuDomain::vec32, 0, 0, 0) | (1u << 12),
+                DecodeError::illegal},
+      // Register numbers are bounded per domain.
+      ErrorCase{"tnot t16", make_eun(NpuDomain::tile, 0, 16, 0),
+                DecodeError::illegal},
+      ErrorCase{"aneg a12", make_eun(NpuDomain::acc, 2, 0, 12),
+                DecodeError::illegal},
+  };
+  check_errors(cases);
+}
