@@ -1,6 +1,7 @@
 #include "execute.h"
 
 #include "execute_cfg.h"
+#include "execute_cvt.h"
 #include "execute_ebcast.h"
 #include "execute_ecmp.h"
 #include "execute_elementwise.h"
@@ -67,6 +68,10 @@ ExecuteResult execute_one(const LaneInstr &instr, ExecContext &ctx) {
 
 ExecuteResult execute_one(const CfgInstr &instr, ExecContext &ctx) {
   return execute_cfg(instr, ctx);
+}
+
+ExecuteResult execute_one(const CvtInstr &instr, ExecContext &ctx) {
+  return execute_cvt(instr, ctx.state);
 }
 
 } // namespace
