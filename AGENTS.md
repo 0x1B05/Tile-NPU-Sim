@@ -2,7 +2,7 @@
 
 ## 项目概览
 
-Tile NPU 指令集的功能模拟器 (functional simulator), 独立 git 仓库, 远端为 `git@github.com:0x1B05/Tile-NPU-Sim`。当前为单 hart, 按程序序同步执行的库 (`tile_npu_sim` 静态库) 加 monitor 程序 `sim_run` (交互 sdb shell + batch 模式); 译码与执行已覆盖 32-bit RV64IM 整数指令、逐元素二元 (`E_BIN`)、逐元素一元 (`E_UNARY`)、比较 (`E_CMP`)、向量广播 (`E_BCAST`)、四寄存器 (`E_R4`: select/fmadd)、mask (`E_MASK`: tail/tril/triu)、类型转换 (`CVT`: acvt/vcvt/twiden)、规约 (`AREDUCE` 行规约, `VREDUCE` 向量规约与 argmax) 和量化/反量化 (`QNT`) 各族、配置指令 (`cfg.seti/setx/copy/get`)、`M_BLK` 访存族 (block/row load/store, gather load)、`INIT_MOVE` (fill/fillx/copy/ttranspose) 和行/lane 搬运族 (`ROW_MOVE` insert/extract.row, `LANE_MOVE` extract/insert/broadcast); 其余 NPU 指令待逐族补充。
+Tile NPU 指令集的功能模拟器 (functional simulator), 独立 git 仓库, 远端为 `git@github.com:0x1B05/Tile-NPU-Sim`。当前为单 hart, 按程序序同步执行的库 (`tile_npu_sim` 静态库) 加 monitor 程序 `sim_run` (交互 sdb shell + batch 模式); 译码与执行已覆盖 32-bit RV64IM 整数指令、逐元素二元 (`E_BIN`)、逐元素一元 (`E_UNARY`)、比较 (`E_CMP`)、向量广播 (`E_BCAST`)、四寄存器 (`E_R4`: select/fmadd)、mask (`E_MASK`: tail/tril/triu)、类型转换 (`CVT`: acvt/vcvt/twiden)、规约 (`AREDUCE` 行规约, `VREDUCE` 向量规约与 argmax)、量化/反量化 (`QNT`) 和矩阵乘/点积 (`MMA_BDOT`) 各族、配置指令 (`cfg.seti/setx/copy/get`)、`M_BLK` 访存族 (block/row load/store, gather load)、`INIT_MOVE` (fill/fillx/copy/ttranspose) 和行/lane 搬运族 (`ROW_MOVE` insert/extract.row, `LANE_MOVE` extract/insert/broadcast); 其余 NPU 指令待逐族补充。
 
 配套的 ISA 手册仓库在 `../Tile-NPU-ISA/` (另一个独立 git 仓库)。
 
@@ -35,7 +35,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | ---- | ---- |
 | `include/tile_npu/state.h` | 架构状态: 五个数据域的寄存器堆 (Tile/Acc/Vec8/Vec32/Scalar), 计算配置 (TC/AC/BC/VC) 与访存描述符 (TM/AM/BM/VM), 物理尺寸常量 |
 | `include/tile_npu/memory.h` | 字节寻址内存接口; `FlatMemory` 为平坦 RAM 实现 |
-| `include/tile_npu/instruction.h` | typed instruction IR: scalar operands, NPU domains/registers, elementwise (`EbinInstr` + `EBIN_BY_FUNCT4` 操作元数据表, `EunInstr`, `CmpInstr` + `CMP_BY_FUNCT3` 条件元数据表, `BcastInstr`, `Er4Instr`, `MaskInstr`, `CvtInstr`, `ReduceInstr`, `QntInstr`), config (`CfgInstr`, `ConfigRegType`), 访存 (`MblkInstr`), 初始化 (`InitInstr`) 与行/lane 搬运 (`RowInstr`, `LaneInstr`) 指令类型 |
+| `include/tile_npu/instruction.h` | typed instruction IR: scalar operands, NPU domains/registers, elementwise (`EbinInstr` + `EBIN_BY_FUNCT4` 操作元数据表, `EunInstr`, `CmpInstr` + `CMP_BY_FUNCT3` 条件元数据表, `BcastInstr`, `Er4Instr`, `MaskInstr`, `CvtInstr`, `ReduceInstr`, `QntInstr`, `MmaInstr`), config (`CfgInstr`, `ConfigRegType`), 访存 (`MblkInstr`), 初始化 (`InitInstr`) 与行/lane 搬运 (`RowInstr`, `LaneInstr`) 指令类型 |
 | `include/tile_npu/decode.h` | 译码结果类型: typed scalar/NPU instructions, `DecodeError`, `DecodeResult` |
 | `include/tile_npu/config.h`, `src/config.cpp` | 统一配置/描述符字段访问、字段编号映射与写入校验 |
 | `include/tile_npu/matrix_view.h` | 逻辑矩阵坐标到物理寄存器存储的 view, 当前实现 canonical layout |
@@ -59,6 +59,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `src/execute/execute_cvt.cpp` | 类型转换 (CVT) 族执行器: acvt/vcvt 要求两侧 i32 同形, 逐元素转 f32 并在成功时更新目的 dtype (允许原地); twiden 把 i8 Tile 符号扩展到同形 i32 Acc |
 | `src/execute/execute_reduce.cpp` | 规约 (AREDUCE/VREDUCE) 族执行器: 行规约要求 f32 源且目的 len 等于行数 (argmax 目的为 i32); vreduce 结果 f32 位模式写 xD 低 32 位; argmax 按手册 NaN 规则扫描 (NaN 候选胜出, 已有 NaN 不败, 并列取小索引) |
 | `src/execute/execute_qnt.cpp` | 量化/反量化 (QNT) 族执行器: tquant/vquant 动态 scale 为 absmax/127 (忽略 NaN), 量化用 RNE + 饱和 [-127,127] (NaN 商得 0); tquant 外部 scale 形式不写 vScale; 反量化为 f32(bits) x scale; 矩阵形式 vScale 逐行, 向量形式按 index5/xS 选单个 scale lane |
+| `src/execute/execute_mma.cpp` | 矩阵乘/点积 (MMA_BDOT) 族执行器: mma.{nn,nt}.{zero,acc} 为 i8 符号扩展后的 i32 乘加 (acc 形式 wrap32 累加到目的旧值), nt 对右 Tile 做逻辑转置; bdot.{nn,nt} 为 Vec8 与 Tile 列/行的点积, 只有 zero 形式 |
 | `src/execute/execute_mblk.cpp` | M_BLK 访存族执行器: 先完成全部地址计算 (溢出报 `invalid_configuration`), 再做传输; load 先 stage 寄存器副本, store 先 `contains` 全探测, fault 不改变架构状态 |
 | `src/execute/execute_init.cpp` | INIT_MOVE 族执行器: fill/fillx 按目的 dtype 截取元素位宽, copy 要求同 dtype 同有效 shape, ttranspose 先 stage 源再写回并更新目的配置行列 |
 | `src/execute/execute_row_lane.cpp` | ROW_MOVE/LANE_MOVE 执行器: 行搬运要求向量长度等于矩阵列数且行号有效, lane extract 按源 dtype 扩展, insert 截取低位, broadcast 写入目的有效 lane |
