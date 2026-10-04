@@ -1,6 +1,8 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
+#include <optional>
 #include <variant>
 
 namespace tile_npu {
@@ -20,75 +22,28 @@ struct ScalarRegister {
   RegisterIndex index = 0;
 };
 
+// Grouped by RV64 opcode space, mirroring the group order of RV64IM_TABLE in
+// decode_rv64im.cpp.
+// clang-format off
 enum class ScalarOp {
-  lui,
-  auipc,
-  jal,
-  jalr,
-  beq,
-  bne,
-  blt,
-  bge,
-  bltu,
-  bgeu,
-  lb,
-  lh,
-  lw,
-  ld,
-  lbu,
-  lhu,
-  lwu,
-  sb,
-  sh,
-  sw,
-  sd,
-  addi,
-  slti,
-  sltiu,
-  xori,
-  ori,
-  andi,
-  slli,
-  srli,
-  srai,
-  add,
-  sub,
-  sll,
-  slt,
-  sltu,
-  bit_xor,
-  srl,
-  sra,
-  bit_or,
-  bit_and,
-  fence,
-  ecall,
-  ebreak,
-  addiw,
-  slliw,
-  srliw,
-  sraiw,
-  addw,
-  subw,
-  sllw,
-  srlw,
-  sraw,
+  lui,   auipc,  jal,    jalr,                            // U/J
+  lb,    lh,     lw,     ld,    lbu,   lhu,   lwu,        // load
+  sb,    sh,     sw,     sd,                              // store
+  beq,   bne,    blt,    bge,   bltu,  bgeu,              // branch
+  addi,  slti,   sltiu,  xori,  ori,   andi,              // op-imm
+  slli,  srli,   srai,                                    // op-imm shift
+  addiw, slliw,  srliw,  sraiw,                           // op-imm-32
+  add,   sub,    sll,    slt,   sltu,  bit_xor,           // op
+  srl,   sra,    bit_or, bit_and,
+  addw,  subw,   sllw,   srlw,  sraw,                     // op-32
+  fence, ecall,  ebreak,                                  // misc-mem / system
+
   // The M extension stays contiguous at the end: execute dispatch ranges
   // over it (is_rv64m in execute.cpp).
-  mul,
-  mulh,
-  mulhsu,
-  mulhu,
-  div,
-  divu,
-  rem,
-  remu,
-  mulw,
-  divw,
-  divuw,
-  remw,
-  remuw,
+  mul,   mulh,   mulhsu, mulhu, div,   divu,  rem,  remu, // M op
+  mulw,  divw,   divuw,  remw,  remuw,                    // M op-32
 };
+// clang-format on
 
 enum class NpuDomain : std::uint8_t {
   tile = 0b00,
@@ -105,18 +60,20 @@ struct NpuRegister {
 using NpuOperand = std::variant<NpuRegister, ScalarRegister>;
 
 enum class EbinOp : std::uint8_t {
-  add = 0b0000,
-  sub = 0b0001,
-  mul = 0b0010,
-  div = 0b0011,
-  min = 0b0100,
-  max = 0b0101,
+  // clang-format off
+  add     = 0b0000,
+  sub     = 0b0001,
+  mul     = 0b0010,
+  div     = 0b0011,
+  min     = 0b0100,
+  max     = 0b0101,
   bit_and = 0b1000,
-  bit_or = 0b1001,
+  bit_or  = 0b1001,
   bit_xor = 0b1010,
-  shl = 0b1011,
-  shr = 0b1100,
-  sra = 0b1101,
+  shl     = 0b1011,
+  shr     = 0b1100,
+  sra     = 0b1101,
+  // clang-format on
 };
 
 struct EbinInstr {
@@ -125,6 +82,39 @@ struct EbinInstr {
   NpuRegister src1{};
   NpuOperand src2 = NpuRegister{};
 };
+
+// Operation metadata for the E_BIN family, mirroring the ISA's funct4 table:
+// tile_allowed is false for mul/div (the tile domain has no 8-bit mul/div
+// encodings); integer_allowed is false for div (f32-only); f32_allowed is
+// false for the bitwise and shift operations (integer-only). Decode,
+// execution and tests share this table so a new operation is added in one
+// place.
+struct EbinInfo {
+  EbinOp op;
+  bool tile_allowed;
+  bool integer_allowed;
+  bool f32_allowed;
+};
+
+// Indexed by funct4 code; unassigned codes hold nullopt.
+inline constexpr std::array<std::optional<EbinInfo>, 16> EBIN_BY_FUNCT4 = [] {
+  std::array<std::optional<EbinInfo>, 16> table{};
+  // clang-format off
+  table[0b0000] = EbinInfo{EbinOp::add    , true , true , true};
+  table[0b0001] = EbinInfo{EbinOp::sub    , true , true , true};
+  table[0b0010] = EbinInfo{EbinOp::mul    , false, true , true};
+  table[0b0011] = EbinInfo{EbinOp::div    , false, false, true};
+  table[0b0100] = EbinInfo{EbinOp::min    , true , true , true};
+  table[0b0101] = EbinInfo{EbinOp::max    , true , true , true};
+  table[0b1000] = EbinInfo{EbinOp::bit_and, true , true , false};
+  table[0b1001] = EbinInfo{EbinOp::bit_or , true , true , false};
+  table[0b1010] = EbinInfo{EbinOp::bit_xor, true , true , false};
+  table[0b1011] = EbinInfo{EbinOp::shl    , true , true , false};
+  table[0b1100] = EbinInfo{EbinOp::shr    , true , true , false};
+  table[0b1101] = EbinInfo{EbinOp::sra    , true , true , false};
+  // clang-format on
+  return table;
+}();
 
 // The architectural configuration register types (TC/AC/BC/VC/TM/AM/BM/VM).
 // Decode derives the register type from (major4, sel2) or (sel2, MV), so

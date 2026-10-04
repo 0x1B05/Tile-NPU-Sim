@@ -5,12 +5,24 @@
 #include "execute_rv64i.h"
 #include "execute_rv64m.h"
 
+#include <variant>
+
 namespace tile_npu {
 
 namespace {
 
 constexpr bool is_rv64m(ScalarOp op) {
   return op >= ScalarOp::mul && op <= ScalarOp::remuw;
+}
+
+// One overload per decoded NPU instruction type; std::visit keeps the
+// dispatch exhaustive as new instruction families are added.
+ExecuteResult execute_one(const EbinInstr &instr, ExecContext &ctx) {
+  return execute_elementwise(instr, ctx.state);
+}
+
+ExecuteResult execute_one(const CfgInstr &instr, ExecContext &ctx) {
+  return execute_cfg(instr, ctx);
 }
 
 } // namespace
@@ -24,12 +36,8 @@ ExecuteResult execute_scalar(const DecodedScalarInstr &instr,
 }
 
 ExecuteResult execute_npu(const DecodedNpuInstr &instr, ExecContext &ctx) {
-  // Today every decodable NPU instruction is an elementwise binary op or a
-  // config access; data movement families get their own executors here later.
-  if (const auto *ebin = std::get_if<EbinInstr>(&instr)) {
-    return execute_elementwise(*ebin, ctx.state);
-  }
-  return execute_cfg(std::get<CfgInstr>(instr), ctx);
+  return std::visit(
+      [&ctx](const auto &decoded) { return execute_one(decoded, ctx); }, instr);
 }
 
 } // namespace tile_npu

@@ -8,17 +8,15 @@ FlatMemory::FlatMemory(std::uint64_t base, std::size_t size)
     : base_(base), bytes_(size) {}
 
 bool FlatMemory::contains(std::uint64_t address, std::size_t size) const {
-  if (address < base_) {
-    return false;
-  }
+  if (address < base_) return false;
+
   const std::uint64_t offset = address - base_;
   return offset <= bytes_.size() && size <= bytes_.size() - offset;
 }
 
 bool FlatMemory::read(std::uint64_t address, std::span<std::byte> bytes) const {
-  if (!contains(address, bytes.size())) {
-    return false;
-  }
+  if (!contains(address, bytes.size())) return false;
+
   const auto offset = static_cast<std::size_t>(address - base_);
   std::copy_n(bytes_.begin() + offset, bytes.size(), bytes.begin());
   return true;
@@ -26,9 +24,8 @@ bool FlatMemory::read(std::uint64_t address, std::span<std::byte> bytes) const {
 
 bool FlatMemory::write(std::uint64_t address,
                        std::span<const std::byte> bytes) {
-  if (!contains(address, bytes.size())) {
-    return false;
-  }
+  if (!contains(address, bytes.size())) return false;
+
   const auto offset = static_cast<std::size_t>(address - base_);
   std::copy(bytes.begin(), bytes.end(), bytes_.begin() + offset);
   return true;

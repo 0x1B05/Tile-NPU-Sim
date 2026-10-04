@@ -6,42 +6,47 @@
 #include "tile_npu/config.h"
 #include "tile_npu/state.h"
 
+#include <cstddef>
 #include <cstdint>
 
 namespace tile_npu {
 namespace {
 
-// E_BIN add on the tile domain with BX=0. The pattern pins sel3, so only the
-// register bounds remain to check here.
-DecodeResult decode_tadd(std::uint32_t word) {
-  const auto f = encoding::NpuR3::from(word);
-  if (f.dest >= TILE_REGISTERS || f.src1 >= TILE_REGISTERS ||
-      f.src2 >= TILE_REGISTERS) {
-    return DecodeError::illegal;
+constexpr std::size_t domain_register_count(NpuDomain domain) {
+  switch (domain) {
+  case NpuDomain::tile: return TILE_REGISTERS;
+  case NpuDomain::acc: return ACC_REGISTERS;
+  case NpuDomain::vec8:
+  case NpuDomain::vec32: return VECTOR_REGISTERS;
   }
-  return EbinInstr{EbinOp::add,
-                   {NpuDomain::tile, f.dest},
-                   {NpuDomain::tile, f.src1},
-                   NpuRegister{NpuDomain::tile, f.src2}};
+  return 0;
 }
 
-// Defined E_BIN funct4 values other than add are not implemented yet;
-// reserved funct4 values are illegal.
-DecodeResult decode_binary_other(std::uint32_t word) {
-  switch (static_cast<EbinOp>(encoding::field<24, 21>(word))) {
-  case EbinOp::sub:
-  case EbinOp::mul:
-  case EbinOp::div:
-  case EbinOp::min:
-  case EbinOp::max:
-  case EbinOp::bit_and:
-  case EbinOp::bit_or:
-  case EbinOp::bit_xor:
-  case EbinOp::shl:
-  case EbinOp::shr:
-  case EbinOp::sra: return DecodeError::not_implemented;
-  default: return DecodeError::illegal;
+// E_BIN (R3): sel3 = {dom2, BX}; BX=0 takes src2 from the same domain, BX=1
+// from scalar xS. Unassigned funct4 values and tile mul/div are reserved;
+// both come from the shared EBIN_BY_FUNCT4 table. The dtype-dependent
+// restrictions (div is f32-only, shifts/bitwise are integer-only) cannot be
+// checked here and fail at execution.
+DecodeResult decode_ebin(std::uint32_t word) {
+  const auto f = encoding::NpuR3::from(word);
+  const auto domain = static_cast<NpuDomain>(f.sel3 >> 1);
+  const auto &info = EBIN_BY_FUNCT4[f.funct4];
+  if (!info || (domain == NpuDomain::tile && !info->tile_allowed)) {
+    return DecodeError::illegal;
   }
+  const auto count = domain_register_count(domain);
+  if (f.dest >= count || f.src1 >= count) {
+    return DecodeError::illegal;
+  }
+  const bool scalar_src2 = (f.sel3 & 1) != 0;
+  if (!scalar_src2 && f.src2 >= count) {
+    return DecodeError::illegal;
+  }
+  return EbinInstr{info->op,
+                   {domain, f.dest},
+                   {domain, f.src1},
+                   scalar_src2 ? NpuOperand{ScalarRegister{f.src2}}
+                               : NpuOperand{NpuRegister{domain, f.src2}}};
 }
 
 // sel2 selects the register family pair, the vector-side bit picks within it:
@@ -90,11 +95,10 @@ template <CfgOp Op> DecodeResult decode_cfg_reg(std::uint32_t word) {
 //   R4: major4 sel3 funct3 arg5    src2 src1 dest q
 // E_BIN reads sel3 as {dom2, BX}: dom tile=00 acc=01 vec8=10 vec32=11.
 constexpr DecodeEntry NPU_TABLE[] = {
-    {"0000 000 0000 0000 ????? ????? ????? 00", decode_tadd},
-    {"0000 0?? 0000 0000 ????? ????? ????? 00", fail<DecodeError::not_implemented>}, // taddx, add @acc
+    {"0000 00? ???? 0000 ????? ????? ????? 00", decode_ebin},                         // tile
+    {"0000 01? ???? 0000 ????? ????? ????? 00", decode_ebin},                         // acc
     {"0000 10? ???? 0000 ????? ????? ????? 00", fail<DecodeError::illegal>},          // vec8 has no E_BIN
-    {"0000 11? 0000 0000 ????? ????? ????? 00", fail<DecodeError::not_implemented>},  // add @vec32
-    {"0000 ??? ???? 0000 ????? ????? ????? 00", decode_binary_other},
+    {"0000 11? ???? 0000 ????? ????? ????? 00", decode_ebin},                         // vec32
     {"0000 ??? ???? ???? ????? ????? ????? 00", fail<DecodeError::illegal>},          // reserved4 != 0
     {"???? ??? ???? ???? ????? ????? ????? 00", fail<DecodeError::not_implemented>},  // other elementwise majors
     // CFG_MAT_SETI / CFG_VEC_SETI (I format); field3 = 111 is reserved.

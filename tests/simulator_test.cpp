@@ -55,8 +55,6 @@ TEST_CASE(npu_decode) {
     std::string_view name;
   };
   constexpr std::array reject_cases{
-      RejectCase{0x02002080u, DecodeError::not_implemented,
-                 "taddx is not mistaken for tadd"},
       RejectCase{0x00022080u, DecodeError::illegal,
                  "reject nonzero E_BIN reserved bits"},
       RejectCase{0x00002800u, DecodeError::illegal,

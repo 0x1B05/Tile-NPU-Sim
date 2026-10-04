@@ -15,6 +15,21 @@
     E_BIN 0, 0, \dest, \src1, \src2
 .endm
 
+# E_BIN subtract on the tile domain with BX=0: funct4 = 1.
+.macro TSUB dest, src1, src2
+    E_BIN 0, 1, \dest, \src1, \src2
+.endm
+
+# E_BIN max on the tile domain with BX=0: funct4 = 5.
+.macro TMAX dest, src1, src2
+    E_BIN 0, 5, \dest, \src1, \src2
+.endm
+
+# E_BIN add on the tile domain with a scalar source (BX=1): src2 names xS.
+.macro TADDX dest, src1, xs
+    E_BIN 1, 0, \dest, \src1, \xs
+.endm
+
 # I format (cfg.seti), mirroring NpuI in src/decode/encoding.h:
 #   [31:28] major4 (5 = matrix side, 6 = vector side)  [27:26] sel2
 #   [25:23] field3  [22:7] imm16  [6:2] C5  [1:0] q = 10
