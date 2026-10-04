@@ -11,7 +11,9 @@ class Memory {
 public:
   virtual ~Memory() = default;
 
-  // A failed read/write must not partially change the buffer or memory.
+  // Range probe for pre-validating multi-element accesses; a failed
+  // read/write must not partially change the buffer or memory.
+  virtual bool contains(std::uint64_t address, std::size_t size) const = 0;
   virtual bool read(std::uint64_t address,
                     std::span<std::byte> bytes) const = 0;
   virtual bool write(std::uint64_t address,
@@ -22,6 +24,7 @@ class FlatMemory final : public Memory {
 public:
   FlatMemory(std::uint64_t base, std::size_t size);
 
+  bool contains(std::uint64_t address, std::size_t size) const override;
   bool read(std::uint64_t address, std::span<std::byte> bytes) const override;
   bool write(std::uint64_t address, std::span<const std::byte> bytes) override;
 
@@ -29,8 +32,6 @@ public:
   std::size_t size() const { return bytes_.size(); }
 
 private:
-  bool contains(std::uint64_t address, std::size_t size) const;
-
   std::uint64_t base_;
   std::vector<std::byte> bytes_;
 };
