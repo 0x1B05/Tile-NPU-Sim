@@ -2,7 +2,7 @@
 
 ## 项目概览
 
-Tile NPU 指令集的功能模拟器 (functional simulator), 独立 git 仓库, 远端为 `git@github.com:0x1B05/Tile-NPU-Sim`。当前为单 hart, 按程序序同步执行的库 (`tile_npu_sim` 静态库) 加 monitor 程序 `sim_run` (交互 sdb shell + batch 模式); 译码与执行已覆盖 32-bit RV64IM 整数指令、逐元素二元 (`E_BIN`)、逐元素一元 (`E_UNARY`)、比较 (`E_CMP`)、向量广播 (`E_BCAST`)、四寄存器 (`E_R4`: select/fmadd)、mask (`E_MASK`: tail/tril/triu)、类型转换 (`CVT`: acvt/vcvt/twiden)、规约 (`AREDUCE` 行规约, `VREDUCE` 向量规约与 argmax)、量化/反量化 (`QNT`)、矩阵乘/点积 (`MMA_BDOT`) 和同步/结束 (`SYS`) 各族、配置指令 (`cfg.seti/setx/copy/get`)、`M_BLK` 访存族 (block/row load/store, gather load)、`INIT_MOVE` (fill/fillx/copy/ttranspose) 和行/lane 搬运族 (`ROW_MOVE` insert/extract.row, `LANE_MOVE` extract/insert/broadcast); 其余 NPU 指令待逐族补充。
+Tile NPU 指令集的功能模拟器 (functional simulator), 独立 git 仓库, 远端为 `git@github.com:0x1B05/Tile-NPU-Sim`。当前为单 hart, 按程序序同步执行的库 (`tile_npu_sim` 静态库) 加 monitor 程序 `sim_run` (交互 sdb shell + batch 模式); 译码与执行已覆盖 32-bit RV64IM 整数指令、逐元素二元 (`E_BIN`)、逐元素一元 (`E_UNARY`)、比较 (`E_CMP`)、向量广播 (`E_BCAST`)、四寄存器 (`E_R4`: select/fmadd)、mask (`E_MASK`: tail/tril/triu)、类型转换 (`CVT`: acvt/vcvt/twiden)、规约 (`AREDUCE` 行规约, `VREDUCE` 向量规约与 argmax)、量化/反量化 (`QNT`)、矩阵乘/点积 (`MMA_BDOT`) 和同步/结束 (`SYS`) 各族、配置指令 (`cfg.seti/setx/copy/get`)、`M_BLK` 访存族 (block/row load/store, gather load)、`INIT_MOVE` (fill/fillx/copy/ttranspose) 和行/lane 搬运族 (`ROW_MOVE` insert/extract.row, `LANE_MOVE` extract/insert/broadcast); 手册 major4 表中的指令族已全部覆盖。
 
 配套的 ISA 手册仓库在 `../Tile-NPU-ISA/` (另一个独立 git 仓库)。
 
