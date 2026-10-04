@@ -116,6 +116,23 @@ inline constexpr std::array<std::optional<EbinInfo>, 16> EBIN_BY_FUNCT4 = [] {
   return table;
 }();
 
+// M_BLK memory access: block load/store, gather load (R2) and row load/store
+// (MR). The bound descriptor (TM/AM/BM/VM) is implied by `reg`.
+enum class MblkOp : std::uint8_t { load, store, gather, row_load, row_store };
+
+// Operand reading per op:
+//   load/store:     reg = D (load) / S (store)
+//   gather:         reg = D, gather_src = vS (the Vec32 index vector)
+//   row_load/store: reg = D/S; index is the row immediate, or the Scalar
+//                   register number when index_is_scalar (IS) is set
+struct MblkInstr {
+  MblkOp op = MblkOp::load;
+  NpuRegister reg{};
+  RegisterIndex index = 0;
+  RegisterIndex gather_src = 0;
+  bool index_is_scalar = false;
+};
+
 // The architectural configuration register types (TC/AC/BC/VC/TM/AM/BM/VM).
 // Decode derives the register type from (major4, sel2) or (sel2, MV), so
 // field access is independent of the instruction format that selected it.

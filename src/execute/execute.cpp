@@ -21,6 +21,10 @@ ExecuteResult execute_one(const EbinInstr &instr, ExecContext &ctx) {
   return execute_elementwise(instr, ctx.state);
 }
 
+ExecuteResult execute_one(const MblkInstr &, ExecContext &) {
+  return {.status = StepStatus::execution_not_implemented};
+}
+
 ExecuteResult execute_one(const CfgInstr &instr, ExecContext &ctx) {
   return execute_cfg(instr, ctx);
 }
