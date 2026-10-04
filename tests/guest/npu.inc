@@ -30,6 +30,52 @@
     E_BIN 1, 0, \dest, \src1, \xs
 .endm
 
+# M_BLK block and gather forms (R2 format), mirroring NpuR2 in
+# src/decode/encoding.h:
+#   [31:28] major4 = 0000  [27:26] dom2  [25] 0  [24:22] funct3
+#   [21:12] reserved(0)    [11:7] S5 (gather index vS)  [6:2] D5  [1:0] q = 01
+# funct3 = {form2, LS}: 000/001 = block load/store, 010 = gather load.
+# dom2: 0 = tile, 1 = acc, 2 = b (vec8), 3 = v (vec32).
+.macro M_BLK dom2, funct3, d5, s5
+    .word ((\dom2 << 26) | (\funct3 << 22) | (\s5 << 7) | (\d5 << 2) | 1)
+.endm
+
+# M_BLK row form (MR format), mirroring NpuMR in src/decode/encoding.h:
+#   [31:28] major4 = 0000  [27] TA  [26] 0  [25] IS  [24:22] funct3
+#   [21:17] reserved(0)  [16:12] index5  [11:7] reserved(0)
+#   [6:2] reg5  [1:0] q = 01
+# funct3: 100 = row load, 101 = row store. IS = 0: index5 is an immediate
+# row number; IS = 1: index5 names xS holding the row number.
+.macro M_ROW ta, is, funct3, index5, reg5
+    .word ((\ta << 27) | (\is << 25) | (\funct3 << 22) | (\index5 << 12) | (\reg5 << 2) | 1)
+.endm
+
+.macro TLOAD d5
+    M_BLK 0, 0, \d5, 0
+.endm
+
+.macro TSTORE d5
+    M_BLK 0, 1, \d5, 0
+.endm
+
+# tload.gather: rows indexed by vS lane values.
+.macro TGATHER d5, vs
+    M_BLK 0, 2, \d5, \vs
+.endm
+
+.macro VLOAD d5
+    M_BLK 3, 0, \d5, 0
+.endm
+
+.macro TLOADR reg5, index5
+    M_ROW 0, 0, 4, \index5, \reg5
+.endm
+
+# Row store with the row number in a scalar register.
+.macro TSTORERX reg5, xs
+    M_ROW 0, 1, 5, \xs, \reg5
+.endm
+
 # I format (cfg.seti), mirroring NpuI in src/decode/encoding.h:
 #   [31:28] major4 (5 = matrix side, 6 = vector side)  [27:26] sel2
 #   [25:23] field3  [22:7] imm16  [6:2] C5  [1:0] q = 10

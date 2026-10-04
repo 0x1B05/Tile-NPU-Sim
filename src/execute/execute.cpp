@@ -2,6 +2,7 @@
 
 #include "execute_cfg.h"
 #include "execute_elementwise.h"
+#include "execute_mblk.h"
 #include "execute_rv64i.h"
 #include "execute_rv64m.h"
 
@@ -19,6 +20,10 @@ constexpr bool is_rv64m(ScalarOp op) {
 // dispatch exhaustive as new instruction families are added.
 ExecuteResult execute_one(const EbinInstr &instr, ExecContext &ctx) {
   return execute_elementwise(instr, ctx.state);
+}
+
+ExecuteResult execute_one(const MblkInstr &instr, ExecContext &ctx) {
+  return execute_mblk(instr, ctx);
 }
 
 ExecuteResult execute_one(const CfgInstr &instr, ExecContext &ctx) {

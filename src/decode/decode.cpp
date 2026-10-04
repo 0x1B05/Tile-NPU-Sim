@@ -49,6 +49,40 @@ DecodeResult decode_ebin(std::uint32_t word) {
                                : NpuOperand{NpuRegister{domain, f.src2}}};
 }
 
+// M_BLK block/gather forms (R2): sel3 = {dom2, 0}; funct3 = {form2, LS} with
+// LS picking load (0) or store (1). S5 names the gather index vector (a Vec32
+// register) and the patterns pin it to 0 for the block forms.
+DecodeResult decode_mblk(std::uint32_t word) {
+  const auto f = encoding::NpuR2::from(word);
+  const auto domain = static_cast<NpuDomain>(f.sel3 >> 1);
+  const bool gather = f.funct3 == 0b010;
+  // Gather is defined for Tile/Vec8/Vec32; there is no aload.gather.
+  if (gather && domain == NpuDomain::acc) {
+    return DecodeError::illegal;
+  }
+  if (f.dest >= domain_register_count(domain)) {
+    return DecodeError::illegal;
+  }
+  const auto op = gather                ? MblkOp::gather
+                  : (f.funct3 & 1) != 0 ? MblkOp::store
+                                        : MblkOp::load;
+  const auto gather_src = gather ? f.src2 : RegisterIndex{0};
+  return DecodedNpuInstr{MblkInstr{op, {domain, f.dest}, 0, gather_src, false}};
+}
+
+// M_BLK row forms (MR): sel3 = {TA, 0, IS}; IS=0 takes the row number from
+// index5, IS=1 from the Scalar register index5 names.
+DecodeResult decode_mblk_row(std::uint32_t word) {
+  const auto f = encoding::NpuMR::from(word);
+  const auto domain = (f.sel3 & 0b100) != 0 ? NpuDomain::acc : NpuDomain::tile;
+  if (f.reg >= domain_register_count(domain)) {
+    return DecodeError::illegal;
+  }
+  const auto op = (f.funct3 & 1) != 0 ? MblkOp::row_store : MblkOp::row_load;
+  return DecodedNpuInstr{
+      MblkInstr{op, {domain, f.reg}, f.index, 0, (f.sel3 & 1) != 0}};
+}
+
 // sel2 selects the register family pair, the vector-side bit picks within it:
 // 00 -> TC/BC, 01 -> AC/VC, 10 -> TM/BM, 11 -> AM/VM.
 constexpr ConfigRegType cfg_reg_type(std::uint8_t sel2, bool vector_side) {
@@ -93,6 +127,8 @@ template <CfgOp Op> DecodeResult decode_cfg_reg(std::uint32_t word) {
 //   R3: major4 sel3 funct4 reserved4 src2 src1 dest q
 //   I:  major4 sel2 field3 imm16(4x4)  C5   q
 //   R4: major4 sel3 funct3 arg5    src2 src1 dest q
+//   R2: major4 sel3 funct3 reserved10  S5   D5  q
+//   MR: major4 sel3 funct3 reserved5 index5 reserved5 reg5 q
 // E_BIN reads sel3 as {dom2, BX}: dom tile=00 acc=01 vec8=10 vec32=11.
 constexpr DecodeEntry NPU_TABLE[] = {
     {"0000 00? ???? 0000 ????? ????? ????? 00", decode_ebin},                         // tile
@@ -101,6 +137,17 @@ constexpr DecodeEntry NPU_TABLE[] = {
     {"0000 11? ???? 0000 ????? ????? ????? 00", decode_ebin},                         // vec32
     {"0000 ??? ???? ???? ????? ????? ????? 00", fail<DecodeError::illegal>},          // reserved4 != 0
     {"???? ??? ???? ???? ????? ????? ????? 00", fail<DecodeError::not_implemented>},  // other elementwise majors
+
+    // M_BLK (R2): sel3 = {dom2, 0}; S5 is the gather index vector, 0 for the
+    // block forms. funct3 = {form2, LS}: 00x block, 010 gather.
+    {"0000 ??0 000 0000000000 00000 ????? 01", decode_mblk},                          // block load
+    {"0000 ??0 001 0000000000 00000 ????? 01", decode_mblk},                          // block store
+    {"0000 ??0 010 0000000000 ????? ????? 01", decode_mblk},                          // gather load
+    // M_BLK row forms (MR): sel3 = {TA, 0, IS}, funct3 = 10x.
+    {"0000 ?0? 100 00000 ????? 00000 ????? 01", decode_mblk_row},                     // row load
+    {"0000 ?0? 101 00000 ????? 00000 ????? 01", decode_mblk_row},                     // row store
+    {"0000 ??? ??? ????? ????? ????? ????? 01", fail<DecodeError::illegal>},          // reserved M_BLK encodings
+    {"???? ??? ???? ???? ????? ????? ????? 01", fail<DecodeError::not_implemented>},  // other data movement majors
     // CFG_MAT_SETI / CFG_VEC_SETI (I format); field3 = 111 is reserved.
     {"0101 ?? 111 ???? ???? ???? ???? ????? 10", fail<DecodeError::illegal>},
     {"0110 ?? 111 ???? ???? ???? ???? ????? 10", fail<DecodeError::illegal>},
@@ -117,7 +164,6 @@ constexpr DecodeEntry NPU_TABLE[] = {
     {"0111 ??? 010 00??? 00000 ????? ????? 10", decode_cfg_reg<CfgOp::get>},
     {"0111 ??? ??? ????? ????? ????? ????? 10", fail<DecodeError::illegal>},
 
-    {"???? ??? ???? ???? ????? ????? ????? 01", fail<DecodeError::not_implemented>},  // data movement
     {"???? ??? ???? ???? ????? ????? ????? 10", fail<DecodeError::not_implemented>},  // other cross-domain/control
 };
 
