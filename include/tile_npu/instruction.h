@@ -73,6 +73,8 @@ enum class ScalarOp {
   sllw,
   srlw,
   sraw,
+  // The M extension stays contiguous at the end: execute dispatch ranges
+  // over it (is_rv64m in execute.cpp).
   mul,
   mulh,
   mulhsu,

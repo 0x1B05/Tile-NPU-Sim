@@ -24,7 +24,7 @@ std::uint64_t signed_word(std::int32_t value) {
 }
 
 ExecuteResult fault(StepStatus status, std::uint64_t address) {
-  return {status, std::nullopt, address};
+  return {.status = status, .fault_address = address};
 }
 
 // clang-format off
@@ -76,7 +76,7 @@ ExecuteResult execute_load(const DecodedInstr &instr, ScalarState &scalar,
   }
   // clang-format on
   scalar.write_x(instr.regs.dest, value);
-  return {StepStatus::retired};
+  return {.status = StepStatus::retired};
 }
 
 ExecuteResult execute_store(const DecodedInstr &instr, ScalarState &scalar,
@@ -97,7 +97,7 @@ ExecuteResult execute_store(const DecodedInstr &instr, ScalarState &scalar,
   if (!memory.write(address, std::span<const std::byte>(bytes.data(), width))) {
     return fault(StepStatus::store_fault, address);
   }
-  return {StepStatus::retired};
+  return {.status = StepStatus::retired};
 }
 
 } // namespace
@@ -121,45 +121,48 @@ ExecuteResult execute_rv64i(const DecodedInstr &instr, ScalarState &scalar,
 
   auto write = [&](std::uint64_t value) -> ExecuteResult {
     scalar.write_x(r.dest, value);
-    return {StepStatus::retired};
+    return {.status = StepStatus::retired};
   };
 
+  // redirect/jump/branch share the target alignment rule; a misaligned jump
+  // faults without writing the link register.
+  auto redirect = [](std::uint64_t target) -> ExecuteResult {
+    if (target % 4 != 0) {
+      return fault(StepStatus::instruction_address_misaligned, target);
+    }
+    return {.status = StepStatus::retired, .redirect = target};
+  };
+
+  auto jump = [&](std::uint64_t target) -> ExecuteResult {
+    const auto result = redirect(target);
+    if (result.status == StepStatus::retired) {
+      scalar.write_x(r.dest, link);
+    }
+    return result;
+  };
+
+  auto branch = [&](bool taken) -> ExecuteResult {
+    if (!taken) {
+      return {.status = StepStatus::retired};
+    }
+    return redirect(pc + imm);
+  };
+
+  // clang-format off
   switch (instr.op) {
-  case ScalarOp::lui: return write(imm);
-  case ScalarOp::auipc: return write(pc + imm);
-  case ScalarOp::jal:
-  case ScalarOp::jalr: {
-    const auto target =
-        instr.op == ScalarOp::jal ? pc + imm : (lhs + imm) & ~std::uint64_t{1};
-    if (target % 4 != 0) {
-      return fault(StepStatus::instruction_address_misaligned, target);
-    }
-    scalar.write_x(r.dest, link);
-    return {StepStatus::retired, target};
-  }
-  case ScalarOp::beq:
-  case ScalarOp::bne:
-  case ScalarOp::blt:
-  case ScalarOp::bge:
-  case ScalarOp::bltu:
-  case ScalarOp::bgeu: {
-    bool taken = false;
-    switch (instr.op) {
-    case ScalarOp::beq: taken = lhs == rhs; break;
-    case ScalarOp::bne: taken = lhs != rhs; break;
-    case ScalarOp::blt: taken = signed_lhs < signed_rhs; break;
-    case ScalarOp::bge: taken = signed_lhs >= signed_rhs; break;
-    case ScalarOp::bltu: taken = lhs < rhs; break;
-    case ScalarOp::bgeu: taken = lhs >= rhs; break;
-    default: break;
-    }
-    if (!taken) return {StepStatus::retired};
-    const auto target = pc + imm;
-    if (target % 4 != 0) {
-      return fault(StepStatus::instruction_address_misaligned, target);
-    }
-    return {StepStatus::retired, target};
-  }
+  case ScalarOp::lui:     return write(imm);
+  case ScalarOp::auipc:   return write(pc + imm);
+
+  case ScalarOp::jal:     return jump(pc + imm);
+  case ScalarOp::jalr:    return jump((lhs + imm) & ~std::uint64_t{1});
+
+  case ScalarOp::beq:     return branch(lhs == rhs);
+  case ScalarOp::bne:     return branch(lhs != rhs);
+  case ScalarOp::blt:     return branch(signed_lhs < signed_rhs);
+  case ScalarOp::bge:     return branch(signed_lhs >= signed_rhs);
+  case ScalarOp::bltu:    return branch(lhs < rhs);
+  case ScalarOp::bgeu:    return branch(lhs >= rhs);
+
   case ScalarOp::lb:
   case ScalarOp::lh:
   case ScalarOp::lw:
@@ -170,9 +173,8 @@ ExecuteResult execute_rv64i(const DecodedInstr &instr, ScalarState &scalar,
   case ScalarOp::sb:
   case ScalarOp::sh:
   case ScalarOp::sw:
-  case ScalarOp::sd:
-    return execute_store(instr, scalar, memory);
-    // clang-format off
+  case ScalarOp::sd:  return execute_store(instr, scalar, memory);
+
   case ScalarOp::addi:    return write(lhs + imm);
   case ScalarOp::slti:    return write(signed_lhs < static_cast<std::int64_t>(instr.imm));
   case ScalarOp::sltiu:   return write(lhs < imm);
@@ -201,12 +203,14 @@ ExecuteResult execute_rv64i(const DecodedInstr &instr, ScalarState &scalar,
   case ScalarOp::sllw:    return write(signed_word(lhs_word << word_shamt));
   case ScalarOp::srlw:    return write(signed_word(lhs_word >> word_shamt));
   case ScalarOp::sraw:    return write(signed_word(signed_lhs_word >> word_shamt));
-  case ScalarOp::fence:   return {StepStatus::retired};
-  case ScalarOp::ecall:   return {StepStatus::environment_call};
-  case ScalarOp::ebreak:  return {StepStatus::breakpoint};
-  // clang-format on
-  default: return {StepStatus::execution_not_implemented};
+
+  case ScalarOp::fence:   return {.status = StepStatus::retired};
+  case ScalarOp::ecall:   return {.status = StepStatus::environment_call};
+  case ScalarOp::ebreak:  return {.status = StepStatus::breakpoint};
+
+  default: return {.status = StepStatus::execution_not_implemented};
   }
+  // clang-format on
 }
 
 } // namespace tile_npu

@@ -22,7 +22,7 @@ bool valid_tile_config(const TileConfig &config) {
 template <typename F>
 ExecuteResult elementwise_binary(const ElementwiseBinaryInstruction &instr,
                                  State &state, F &&apply) {
-  const auto fail = ExecuteResult{StepStatus::invalid_configuration};
+  const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   if (instr.dest.domain != NpuDomain::tile ||
       instr.src1.domain != NpuDomain::tile) {
     return fail;
@@ -83,7 +83,7 @@ ExecuteResult elementwise_binary(const ElementwiseBinaryInstruction &instr,
       dst.at(row, col) = static_cast<std::uint8_t>(result);
     }
   }
-  return {StepStatus::retired};
+  return {.status = StepStatus::retired};
 }
 
 } // namespace
@@ -94,7 +94,7 @@ ExecuteResult execute_elementwise(const ElementwiseBinaryInstruction &instr,
   case ElementwiseBinaryOp::add:
     return elementwise_binary(instr, state,
                               [](int left, int right) { return left + right; });
-  default: return {StepStatus::execution_not_implemented};
+  default: return {.status = StepStatus::execution_not_implemented};
   }
 }
 

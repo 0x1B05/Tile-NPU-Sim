@@ -6,24 +6,20 @@
 
 namespace tile_npu {
 
+namespace {
+
+constexpr bool is_rv64m(ScalarOp op) {
+  return op >= ScalarOp::mul && op <= ScalarOp::remuw;
+}
+
+} // namespace
+
 ExecuteResult execute_scalar(const DecodedInstr &instr, State &state,
                              Memory &memory) {
-  switch (instr.op) {
-  case ScalarOp::mul:
-  case ScalarOp::mulh:
-  case ScalarOp::mulhsu:
-  case ScalarOp::mulhu:
-  case ScalarOp::div:
-  case ScalarOp::divu:
-  case ScalarOp::rem:
-  case ScalarOp::remu:
-  case ScalarOp::mulw:
-  case ScalarOp::divw:
-  case ScalarOp::divuw:
-  case ScalarOp::remw:
-  case ScalarOp::remuw: return execute_rv64m(instr, state.scalar);
-  default: return execute_rv64i(instr, state.scalar, memory);
+  if (is_rv64m(instr.op)) {
+    return execute_rv64m(instr, state.scalar);
   }
+  return execute_rv64i(instr, state.scalar, memory);
 }
 
 ExecuteResult execute_npu(const DecodedNpuInstr &instr, State &state,
