@@ -58,9 +58,8 @@ DecodeResult match(const DecodeEntry (&table)[N], std::uint32_t word) {
   return DecodeError::illegal;
 }
 
-// Format-driven scalar operand extraction, the equivalent of NEMU's type
-// letters: the format alone determines how the word becomes a
-// DecodedScalarInstr.
+// Format-driven scalar operand extraction: the format alone determines how
+// the word becomes a DecodedScalarInstr.
 inline DecodedScalarInstr make_instr(ScalarOp op, const encoding::RiscvR &f) {
   return {op, {f.dest, f.src1, f.src2}};
 }
