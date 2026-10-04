@@ -91,3 +91,51 @@
 .macro CFG_REG sel2, mv, funct3, field5, s5, d5
     .word ((7 << 28) | (\sel2 << 26) | (\mv << 25) | (\funct3 << 22) | (\field5 << 17) | (\s5 << 7) | (\d5 << 2) | 2)
 .endm
+
+.macro ASTORE d5
+    M_BLK 1, 1, \d5, 0
+.endm
+
+.macro BSTORE d5
+    M_BLK 2, 1, \d5, 0
+.endm
+
+# INIT_MOVE fill (I format), mirroring NpuI in src/decode/encoding.h:
+#   [31:28] major4 = 2  [27:26] dom2  [25:23] funct3 = 000
+#   [22:7] imm16  [6:2] D5  [1:0] q = 01
+.macro INIT_FILL dom2, d5, imm
+    .word ((2 << 28) | (\dom2 << 26) | ((\imm & 0xffff) << 7) | (\d5 << 2) | 1)
+.endm
+
+# INIT_MOVE R2 forms, mirroring NpuR2 in src/decode/encoding.h:
+#   [31:28] major4 = 2  [27:26] dom2  [25] 0  [24:22] funct3
+#   [21:12] reserved(0)  [11:7] S5  [6:2] D5  [1:0] q = 01
+# funct3: 1 = fillx (S5 = xS), 2 = copy (S5 = same-domain source),
+#         3 = ttranspose (Tile only).
+.macro INIT_R2 dom2, funct3, d5, s5
+    .word ((2 << 28) | (\dom2 << 26) | (\funct3 << 22) | (\s5 << 7) | (\d5 << 2) | 1)
+.endm
+
+.macro TFILL d5, imm
+    INIT_FILL 0, \d5, \imm
+.endm
+
+.macro TFILLX d5, xs
+    INIT_R2 0, 1, \d5, \xs
+.endm
+
+.macro TCOPY d5, s5
+    INIT_R2 0, 2, \d5, \s5
+.endm
+
+.macro TTRANSPOSE d5, s5
+    INIT_R2 0, 3, \d5, \s5
+.endm
+
+.macro AFILLX d5, xs
+    INIT_R2 1, 1, \d5, \xs
+.endm
+
+.macro BFILL d5, imm
+    INIT_FILL 2, \d5, \imm
+.endm

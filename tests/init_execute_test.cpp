@@ -1,0 +1,205 @@
+#include "tile_npu/simulator.h"
+
+#include <cstddef>
+#include <cstdint>
+
+#include "check.h"
+#include "init_helpers.h"
+
+namespace {
+
+using tile_npu::DType;
+using tile_npu::FlatMemory;
+using tile_npu::InitOp;
+using tile_npu::NpuDomain;
+using tile_npu::Simulator;
+using tile_npu::StepStatus;
+
+constexpr std::uint64_t CODE_BASE = 0x1000;
+
+void load_one(Simulator &sim, FlatMemory &memory, std::uint32_t word) {
+  write_word(memory, CODE_BASE, word);
+  sim.reset(CODE_BASE);
+}
+
+void tile_cfg(tile_npu::State &state, std::size_t index, DType dtype,
+              std::uint8_t rows, std::uint8_t cols) {
+  state.tc[index].dtype = dtype;
+  state.tc[index].rows = rows;
+  state.tc[index].cols = cols;
+}
+
+} // namespace
+
+TEST_CASE(init_fill_tile_truncates_imm) {
+  FlatMemory memory(CODE_BASE, 4);
+  Simulator sim(memory);
+  // imm16 = 0xFF80 sign-extends to ...FF80; i8 keeps the low 8 bits (0x80).
+  load_one(sim, memory,
+           make_init_fill(NpuDomain::tile, 0, 0xff80u)); // tfill t0, -128
+  auto &state = sim.state();
+  tile_cfg(state, 0, DType::i8, 2, 2);
+  state.t[0][2] = 0xab; // outside the 2x2 effective region
+  check_eq(sim.step().status, StepStatus::retired, "tfill retires");
+  for (auto index : {0, 1, 32, 33}) {
+    check_eq(state.t[0][index], std::uint8_t{0x80},
+             "tfill lane " + std::to_string(index));
+  }
+  check_eq(state.t[0][2], std::uint8_t{0xab}, "tfill keeps invalid lanes");
+}
+
+TEST_CASE(init_fillx_acc_keeps_low32) {
+  FlatMemory memory(CODE_BASE, 4);
+  Simulator sim(memory);
+  load_one(sim, memory, make_init_r2(NpuDomain::acc, 1, 3, 5)); // afillx a3, x5
+  auto &state = sim.state();
+  state.ac[3].dtype = DType::f32;
+  state.ac[3].rows = 1;
+  state.ac[3].cols = 2;
+  state.scalar.write_x(5, 0xdeadbeefcafef00dull);
+  check_eq(sim.step().status, StepStatus::retired, "afillx retires");
+  check_eq(hex(state.a[3][0]), hex(0xcafef00du), "afillx lane 0 raw bits");
+  check_eq(hex(state.a[3][1]), hex(0xcafef00du), "afillx lane 1 raw bits");
+}
+
+TEST_CASE(init_fillx_vec8) {
+  FlatMemory memory(CODE_BASE, 4);
+  Simulator sim(memory);
+  load_one(sim, memory,
+           make_init_r2(NpuDomain::vec8, 1, 1, 2)); // bfillx b1, x2
+  auto &state = sim.state();
+  state.bc[1].dtype = DType::u8;
+  state.bc[1].len = 3;
+  state.b[1][3] = 0xab;
+  state.scalar.write_x(2, 0x10000001full);
+  check_eq(sim.step().status, StepStatus::retired, "bfillx retires");
+  for (std::size_t lane = 0; lane < 3; ++lane) {
+    check_eq(state.b[1][lane], std::uint8_t{0x1f},
+             "bfillx lane " + std::to_string(lane));
+  }
+  check_eq(state.b[1][3], std::uint8_t{0xab}, "bfillx keeps invalid lanes");
+}
+
+TEST_CASE(init_copy_matrix_effective_region) {
+  FlatMemory memory(CODE_BASE, 4);
+  Simulator sim(memory);
+  load_one(sim, memory, make_init_r2(NpuDomain::tile, 2, 0, 1)); // tcopy t0, t1
+  auto &state = sim.state();
+  for (auto index : {0, 1})
+    tile_cfg(state, index, DType::u8, 2, 2);
+  state.t[1][0] = 1;
+  state.t[1][1] = 2;
+  state.t[1][32] = 3;
+  state.t[1][33] = 4;
+  state.t[1][2] = 0xcc; // source invalid lane: not copied
+  for (auto &element : state.t[0])
+    element = 0xee;
+  check_eq(sim.step().status, StepStatus::retired, "tcopy retires");
+  check_eq(state.t[0][0], std::uint8_t{1}, "tcopy [0,0]");
+  check_eq(state.t[0][1], std::uint8_t{2}, "tcopy [0,1]");
+  check_eq(state.t[0][32], std::uint8_t{3}, "tcopy [1,0]");
+  check_eq(state.t[0][33], std::uint8_t{4}, "tcopy [1,1]");
+  check_eq(state.t[0][2], std::uint8_t{0xee}, "tcopy keeps invalid lanes");
+}
+
+TEST_CASE(init_copy_rejects_mismatch) {
+  FlatMemory memory(CODE_BASE, 4);
+  Simulator sim(memory);
+  auto &state = sim.state();
+
+  load_one(sim, memory, make_init_r2(NpuDomain::tile, 2, 0, 1)); // tcopy t0, t1
+  tile_cfg(state, 0, DType::i8, 2, 2);
+  tile_cfg(state, 1, DType::i8, 2, 3); // shape mismatch
+  state.t[0][0] = 0xee;
+  check_eq(sim.step().status, StepStatus::invalid_configuration,
+           "tcopy shape mismatch");
+  check_eq(state.t[0][0], std::uint8_t{0xee}, "failed tcopy is non-mutating");
+
+  load_one(sim, memory,
+           make_init_r2(NpuDomain::vec32, 2, 0, 1)); // vcopy v0, v1
+  state.vc[0].dtype = DType::f32;
+  state.vc[0].len = 4;
+  state.vc[1].dtype = DType::i32; // dtype mismatch
+  state.vc[1].len = 4;
+  state.v[0][0] = 0xee;
+  check_eq(sim.step().status, StepStatus::invalid_configuration,
+           "vcopy dtype mismatch");
+  check_eq(state.v[0][0], std::uint32_t{0xee}, "failed vcopy is non-mutating");
+}
+
+TEST_CASE(init_fill_rejects_invalid_config) {
+  FlatMemory memory(CODE_BASE, 4);
+  Simulator sim(memory);
+  load_one(sim, memory, make_init_fill(NpuDomain::tile, 0, 1)); // tfill t0, 1
+  auto &state = sim.state();
+  tile_cfg(state, 0, DType::i8, 0, 2); // rows = 0 is not a legal shape
+  check_eq(sim.step().status, StepStatus::invalid_configuration,
+           "tfill with zero rows");
+}
+
+TEST_CASE(init_transpose_tile) {
+  FlatMemory memory(CODE_BASE, 4);
+  Simulator sim(memory);
+  load_one(sim, memory,
+           make_init_r2(NpuDomain::tile, 3, 0, 1)); // ttranspose t0, t1
+  auto &state = sim.state();
+  tile_cfg(state, 0, DType::i8, 1, 1); // destination shape is an output
+  tile_cfg(state, 1, DType::i8, 2, 3);
+  // 1 2 3
+  // 4 5 6
+  state.t[1][0] = 1;
+  state.t[1][1] = 2;
+  state.t[1][2] = 3;
+  state.t[1][32] = 4;
+  state.t[1][33] = 5;
+  state.t[1][34] = 6;
+  state.t[0][2] = 0xab; // outside the 3x2 result
+  check_eq(sim.step().status, StepStatus::retired, "ttranspose retires");
+  check_eq(state.t[0][0], std::uint8_t{1}, "t[0,0]");
+  check_eq(state.t[0][1], std::uint8_t{4}, "t[0,1]");
+  check_eq(state.t[0][32], std::uint8_t{2}, "t[1,0]");
+  check_eq(state.t[0][33], std::uint8_t{5}, "t[1,1]");
+  check_eq(state.t[0][64], std::uint8_t{3}, "t[2,0]");
+  check_eq(state.t[0][65], std::uint8_t{6}, "t[2,1]");
+  check_eq(state.t[0][2], std::uint8_t{0xab}, "transpose keeps invalid lanes");
+  check_eq(state.tc[0].rows, std::uint8_t{3}, "tc[tD].rows <- cols(tS)");
+  check_eq(state.tc[0].cols, std::uint8_t{2}, "tc[tD].cols <- rows(tS)");
+}
+
+TEST_CASE(init_transpose_inplace) {
+  FlatMemory memory(CODE_BASE, 4);
+  Simulator sim(memory);
+  load_one(sim, memory,
+           make_init_r2(NpuDomain::tile, 3, 0, 0)); // ttranspose t0, t0
+  auto &state = sim.state();
+  tile_cfg(state, 0, DType::u8, 2, 3);
+  state.t[0][0] = 1;
+  state.t[0][1] = 2;
+  state.t[0][2] = 3;
+  state.t[0][32] = 4;
+  state.t[0][33] = 5;
+  state.t[0][34] = 6;
+  check_eq(sim.step().status, StepStatus::retired, "in-place ttranspose");
+  check_eq(state.t[0][0], std::uint8_t{1}, "t[0,0]");
+  check_eq(state.t[0][1], std::uint8_t{4}, "t[0,1]");
+  check_eq(state.t[0][32], std::uint8_t{2}, "t[1,0]");
+  check_eq(state.t[0][33], std::uint8_t{5}, "t[1,1]");
+  check_eq(state.t[0][64], std::uint8_t{3}, "t[2,0]");
+  check_eq(state.t[0][65], std::uint8_t{6}, "t[2,1]");
+  check_eq(state.tc[0].rows, std::uint8_t{3}, "rows swapped");
+  check_eq(state.tc[0].cols, std::uint8_t{2}, "cols swapped");
+}
+
+TEST_CASE(init_transpose_rejects_dtype_mismatch) {
+  FlatMemory memory(CODE_BASE, 4);
+  Simulator sim(memory);
+  load_one(sim, memory,
+           make_init_r2(NpuDomain::tile, 3, 0, 1)); // ttranspose t0, t1
+  auto &state = sim.state();
+  tile_cfg(state, 0, DType::u8, 4, 4);
+  tile_cfg(state, 1, DType::i8, 2, 3);
+  check_eq(sim.step().status, StepStatus::invalid_configuration,
+           "ttranspose dtype mismatch");
+  check_eq(state.tc[0].rows, std::uint8_t{4}, "failed transpose keeps config");
+  check_eq(state.tc[0].cols, std::uint8_t{4}, "failed transpose keeps config");
+}

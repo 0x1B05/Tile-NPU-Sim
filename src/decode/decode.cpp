@@ -83,6 +83,35 @@ DecodeResult decode_mblk_row(std::uint32_t word) {
       MblkInstr{op, {domain, f.reg}, f.index, 0, (f.sel3 & 1) != 0}};
 }
 
+// INIT_MOVE fill (I format): the sel2/field3 positions carry dom2/funct3;
+// the patterns pin funct3 = 000.
+DecodeResult decode_init_fill(std::uint32_t word) {
+  const auto f = encoding::NpuI::from(word);
+  const auto domain = static_cast<NpuDomain>(f.sel2);
+  if (f.dest >= domain_register_count(domain)) {
+    return DecodeError::illegal;
+  }
+  return DecodedNpuInstr{InitInstr{InitOp::fill, {domain, f.dest}, 0, f.imm}};
+}
+
+// INIT_MOVE R2 forms: fillx (S5 = xS), copy (S5 = same-domain source) and
+// ttranspose (Tile only), distinguished by funct3.
+DecodeResult decode_init_move(std::uint32_t word) {
+  const auto f = encoding::NpuR2::from(word);
+  const auto domain = static_cast<NpuDomain>(f.sel3 >> 1);
+  if (f.funct3 == 0b011 && domain != NpuDomain::tile) {
+    return DecodeError::illegal; // ttranspose is Tile-only
+  }
+  const auto count = domain_register_count(domain);
+  if (f.dest >= count || (f.funct3 != 0b001 && f.src2 >= count)) {
+    return DecodeError::illegal;
+  }
+  const auto op = f.funct3 == 0b001   ? InitOp::fillx
+                  : f.funct3 == 0b010 ? InitOp::copy
+                                      : InitOp::transpose;
+  return DecodedNpuInstr{InitInstr{op, {domain, f.dest}, f.src2, 0}};
+}
+
 // sel2 selects the register family pair, the vector-side bit picks within it:
 // 00 -> TC/BC, 01 -> AC/VC, 10 -> TM/BM, 11 -> AM/VM.
 constexpr ConfigRegType cfg_reg_type(std::uint8_t sel2, bool vector_side) {
@@ -147,6 +176,17 @@ constexpr DecodeEntry NPU_TABLE[] = {
     {"0000 ?0? 100 00000 ????? 00000 ????? 01", decode_mblk_row},                     // row load
     {"0000 ?0? 101 00000 ????? 00000 ????? 01", decode_mblk_row},                     // row store
     {"0000 ??? ??? ????? ????? ????? ????? 01", fail<DecodeError::illegal>},          // reserved M_BLK encodings
+    // INIT_MOVE R2 forms: sel3 = {dom2, 0}, funct3 = fillx/copy/ttranspose.
+    // They come before fill: an R2 word (reserved10 = 0) is also a valid
+    // fill word with imm16 in [0x8000, 0x801F], and the R2 reading wins —
+    // that immediate range is shadowed for fill (see the ISA manual).
+    {"0010 ??0 001 0000000000 ????? ????? 01", decode_init_move},                     // fillx
+    {"0010 ??0 010 0000000000 ????? ????? 01", decode_init_move},                     // copy
+    {"0010 ??0 011 0000000000 ????? ????? 01", decode_init_move},                     // ttranspose
+    // INIT_MOVE fill (I format): dom2 + funct3 = 000 + imm16; other funct3
+    // values in the I layout are reserved.
+    {"0010 ?? 000 ???? ???? ???? ???? ????? 01", decode_init_fill},                   // fill
+    {"0010 ??? ??? ????? ????? ????? ????? 01", fail<DecodeError::illegal>},          // reserved INIT_MOVE encodings
     {"???? ??? ???? ???? ????? ????? ????? 01", fail<DecodeError::not_implemented>},  // other data movement majors
     // CFG_MAT_SETI / CFG_VEC_SETI (I format); field3 = 111 is reserved.
     {"0101 ?? 111 ???? ???? ???? ???? ????? 10", fail<DecodeError::illegal>},

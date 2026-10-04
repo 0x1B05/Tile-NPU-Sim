@@ -195,7 +195,7 @@ TEST_CASE(mblk_decode_rejects_reserved) {
       ErrorCase{"row load reserved5[11:7]", 0x01000081u, DecodeError::illegal},
       ErrorCase{"row load bit26", 0x05000001u, DecodeError::illegal},
       // Other data-movement majors decode but are not implemented.
-      ErrorCase{"INIT_MOVE major4", 0x20000001u, DecodeError::not_implemented},
+      ErrorCase{"ROW_MOVE major4", 0x30000001u, DecodeError::not_implemented},
   };
   check_errors(cases);
 }

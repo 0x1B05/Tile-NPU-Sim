@@ -133,6 +133,22 @@ struct MblkInstr {
   bool index_is_scalar = false;
 };
 
+// INIT_MOVE data initialization and intra-domain moves: immediate fill (I),
+// scalar fill, copy and Tile transpose (R2).
+enum class InitOp : std::uint8_t { fill, fillx, copy, transpose };
+
+// Operand reading per op:
+//   fill:      reg = D, imm = sign-extended imm16
+//   fillx:     reg = D, src = xS
+//   copy:      reg = D, src = S (same domain)
+//   transpose: reg = tD, src = tS (Tile only)
+struct InitInstr {
+  InitOp op = InitOp::fill;
+  NpuRegister reg{};
+  RegisterIndex src = 0;
+  std::int32_t imm = 0;
+};
+
 // The architectural configuration register types (TC/AC/BC/VC/TM/AM/BM/VM).
 // Decode derives the register type from (major4, sel2) or (sel2, MV), so
 // field access is independent of the instruction format that selected it.

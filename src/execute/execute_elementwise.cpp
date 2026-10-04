@@ -1,5 +1,6 @@
 #include "execute_elementwise.h"
 
+#include "config_check.h"
 #include "tile_npu/matrix_view.h"
 #include "tile_npu/unreachable.h"
 
@@ -16,41 +17,18 @@
 namespace tile_npu {
 namespace {
 
-// Configuration validity per domain: a dtype the domain can hold, a
-// non-empty effective shape within the physical extent, the canonical
-// layout, and a defined arith_mode (2-3 are reserved by the ISA).
+// Elementwise adds its own constraint on top of valid_domain_config: a
+// defined arith_mode (2-3 are reserved by the ISA).
 bool valid_config(const TileConfig &config) {
-  return (config.dtype == DType::i8 || config.dtype == DType::u8) &&
-         config.rows >= 1 && config.rows <= MATRIX_EXTENT && config.cols >= 1 &&
-         config.cols <= MATRIX_EXTENT && config.layout == 0 &&
-         config.arith_mode <= ArithMode::sat;
+  return valid_domain_config(config) && config.arith_mode <= ArithMode::sat;
 }
 
 bool valid_config(const AccConfig &config) {
-  return (config.dtype == DType::i32 || config.dtype == DType::u32 ||
-          config.dtype == DType::f32) &&
-         config.rows >= 1 && config.rows <= MATRIX_EXTENT && config.cols >= 1 &&
-         config.cols <= MATRIX_EXTENT && config.layout == 0;
+  return valid_domain_config(config);
 }
 
 bool valid_config(const Vec32Config &config) {
-  return (config.dtype == DType::i32 || config.dtype == DType::u32 ||
-          config.dtype == DType::f32) &&
-         config.len >= 1 && config.len <= VECTOR_LANES;
-}
-
-// The ISA's common elementwise constraint: source and destination share the
-// dtype and the effective shape.
-bool configs_match(const TileConfig &dst, const TileConfig &src) {
-  return dst.dtype == src.dtype && dst.rows == src.rows && dst.cols == src.cols;
-}
-
-bool configs_match(const AccConfig &dst, const AccConfig &src) {
-  return dst.dtype == src.dtype && dst.rows == src.rows && dst.cols == src.cols;
-}
-
-bool configs_match(const Vec32Config &dst, const Vec32Config &src) {
-  return dst.dtype == src.dtype && dst.len == src.len;
+  return valid_domain_config(config);
 }
 
 // The overflow mode only exists on the tile domain (8-bit add/sub); the

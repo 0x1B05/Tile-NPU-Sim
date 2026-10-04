@@ -71,7 +71,7 @@ TEST_CASE(npu_decode) {
                  "reject reserved Vec8 E_BIN domain"},
       RejectCase{0x10002080u, DecodeError::not_implemented,
                  "other elementwise major remains unimplemented"},
-      RejectCase{0x20002081u, DecodeError::not_implemented,
+      RejectCase{0x10002081u, DecodeError::not_implemented,
                  "other data movement major remains unimplemented"},
       RejectCase{0x00002082u, DecodeError::not_implemented,
                  "NPU quadrant 10 remains unimplemented"},

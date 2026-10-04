@@ -1,5 +1,6 @@
 #include "execute_mblk.h"
 
+#include "config_check.h"
 #include "tile_npu/descriptor_view.h"
 #include "tile_npu/matrix_view.h"
 #include "tile_npu/unreachable.h"
@@ -12,32 +13,6 @@
 
 namespace tile_npu {
 namespace {
-
-// Memory instructions need a well-formed dtype and a non-empty effective
-// shape; arith_mode does not participate in the memory path.
-bool valid_mem_config(const TileConfig &config) {
-  return (config.dtype == DType::i8 || config.dtype == DType::u8) &&
-         config.rows >= 1 && config.rows <= MATRIX_EXTENT && config.cols >= 1 &&
-         config.cols <= MATRIX_EXTENT && config.layout == 0;
-}
-
-bool valid_mem_config(const AccConfig &config) {
-  return (config.dtype == DType::i32 || config.dtype == DType::u32 ||
-          config.dtype == DType::f32) &&
-         config.rows >= 1 && config.rows <= MATRIX_EXTENT && config.cols >= 1 &&
-         config.cols <= MATRIX_EXTENT && config.layout == 0;
-}
-
-bool valid_mem_config(const Vec8Config &config) {
-  return (config.dtype == DType::i8 || config.dtype == DType::u8) &&
-         config.len >= 1 && config.len <= VECTOR_LANES;
-}
-
-bool valid_mem_config(const Vec32Config &config) {
-  return (config.dtype == DType::i32 || config.dtype == DType::u32 ||
-          config.dtype == DType::f32) &&
-         config.len >= 1 && config.len <= VECTOR_LANES;
-}
 
 ExecuteResult config_error() {
   return {.status = StepStatus::invalid_configuration};
@@ -92,7 +67,7 @@ block_access(const MblkInstr &instr, ExecContext &ctx,
              const std::array<Config, RegCount> &configs,
              std::array<MatrixDescriptor, RegCount> &descs) {
   const auto &config = configs[instr.reg.index];
-  if (!valid_mem_config(config)) {
+  if (!valid_domain_config(config)) {
     return config_error();
   }
   MatrixDescView desc(descs[instr.reg.index]);
@@ -164,7 +139,7 @@ row_access(const MblkInstr &instr, ExecContext &ctx,
            const std::array<Config, RegCount> &configs,
            std::array<MatrixDescriptor, RegCount> &descs) {
   const auto &config = configs[instr.reg.index];
-  if (!valid_mem_config(config)) {
+  if (!valid_domain_config(config)) {
     return config_error();
   }
   MatrixDescView desc(descs[instr.reg.index]);
@@ -233,7 +208,7 @@ ExecuteResult gather_tile(const MblkInstr &instr, ExecContext &ctx,
                           const std::array<TileConfig, TILE_REGISTERS> &configs,
                           std::array<MatrixDescriptor, TILE_REGISTERS> &descs) {
   const auto &config = configs[instr.reg.index];
-  if (!valid_mem_config(config)) {
+  if (!valid_domain_config(config)) {
     return config_error();
   }
   if (instr.gather_src >= VECTOR_REGISTERS) {
@@ -301,7 +276,7 @@ vector_access(const MblkInstr &instr, ExecContext &ctx,
               const std::array<Config, RegCount> &configs,
               std::array<VectorDescriptor, RegCount> &descs) {
   const auto &config = configs[instr.reg.index];
-  if (!valid_mem_config(config)) {
+  if (!valid_domain_config(config)) {
     return config_error();
   }
   VectorDescView desc(descs[instr.reg.index]);
