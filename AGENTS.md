@@ -18,10 +18,12 @@ Tile NPU 指令集的功能模拟器 (functional simulator), 独立 git 仓库, 
 
 ```bash
 xmake                                  # 构建 tile_npu_sim 静态库与 sim_run
-xmake test                             # 构建并运行全部测试 (sim_tests)
+xmake test                             # 构建并运行全部测试 (sim_tests + guest 镜像)
 xmake run sim_run program.bin          # sdb 交互模式 (si/c/info r/x/q)
 xmake run sim_run -b a.bin b.bin       # batch 模式, 逐镜像报 PASS/FAIL
 xmake f --monitor=n && xmake           # 关闭 monitor, 只构建库
+scripts/fetch_riscv_tests.sh           # 拉取官方 riscv-tests 到 external/ (一次性)
+xmake f --rvtests=y && xmake test      # 额外跑官方 rv64ui/rv64um 套件
 xmake project -k compile_commands      # 为 clangd 生成编译数据库
 ```
 
@@ -47,7 +49,11 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `src/execute/execute_elementwise.cpp` | 逐元素 (E_BIN) 族执行器: 公共约束校验与逐元素循环抽象为模板, 每个 op 只提供算术 lambda |
 | `src/execute/execute_rv64i.cpp`, `src/execute/execute_rv64m.cpp` | RV64I 与 M 扩展语义 |
 | `src/simulator.cpp`, `src/memory.cpp` | 取指 (小端 4 字节拼字) 与步进循环, 内存实现 |
-| `tests/*.cpp` | 全部编入 `sim_tests` 一个测试程序; 无测试框架, 见"测试约定" |
+| `tests/*.cpp` | 全部编入 `sim_tests` 一个测试程序; 手卷迷你框架, 见"测试约定" |
+| `tests/guest/` | guest 测试: C 程序 (共享 `crt0.S`) 与裸 `.S` (NPU 编码宏在 `npu.inc`), 经 `link.ld` 链接成扁平 bin 到 `build/guest/` |
+| `tests/riscv-tests-env/riscv_test.h` | 官方 riscv-tests 的自定义最小 env: 无特权态/tohost, PASS/FAIL 走 `ebreak`/`a0` 约定 |
+| `scripts/fetch_riscv_tests.sh` | 拉取官方 riscv-tests (pinned commit) 到 `external/` (gitignored) |
+| `xmake/guest.lua`, `xmake/riscv_tests.lua` | 按关注点拆出的构建脚本 (guest 镜像 / 官方套件), 由根 `xmake.lua` includes; 共享汇编逻辑在 `xmake/modules/guestimg.lua` |
 | `src/monitor/monitor.cpp` | `sim_run` 主程序: 参数解析, 镜像装载, batch 模式 |
 | `src/monitor/sdb.cpp` | sdb 交互 shell: `si`/`c`/`info r`/`x`/`q`, 空行重复上一条命令 |
 
@@ -75,13 +81,15 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 1. `src/decode/encoding.h` 补充字段提取 (若无对应格式)。
 2. 译码: `include/tile_npu/instruction.h` 增加带数据域和 typed operand 的指令类型, 在对应译码表 (`src/decode/decode.cpp` 或 `src/decode/decode_rv64im.cpp`) 加一行 `{pattern, handler}`; pattern 无法表达的剩余检查 (如寄存器号边界) 写进自定义 handler, 保留编码必须报 `illegal`。
 3. 执行: `src/execute/execute.cpp` 分派到对应执行器, 语义严格按手册伪代码; 未实现的执行报 `execution_not_implemented`, 不要留静默路径。
-4. 测试: 每新增操作必须补三类用例 — 合法编码, 保留/非法编码, 边界值 (立即数边界, 寄存器编号边界, 有效 shape 边界)。
+4. 测试: 每新增操作必须补三类用例 — 合法编码, 保留/非法编码, 边界值 (立即数边界, 寄存器编号边界, 有效 shape 边界); NPU 正例优先写 guest 镜像, 负例留 host 侧表驱动 (见"测试约定")。
 
 ## 测试约定
 
-- 无测试框架: `tests/check.h` 提供共享的 `check(condition, message)` (抛 `std::runtime_error`) 和 `write_word`; 测试函数由 `tests/` 下统一的 main 驱动, 全部源文件编入 `sim_tests`。
+- 无第三方测试框架: `tests/check.h` 提供手卷迷你框架 — `TEST_CASE(name)` 静态自动注册, `tests/main.cpp` 逐用例跑并汇总; `check_eq(actual, expected, what)` 失败时带 actual/expected 值与 file:line, 指令字/地址等数值用 `hex()` 包装后按十六进制打印。
 - 指令级测试直接内联机器码常数, 行尾注释对应的汇编形式 (如 `0x002081b3u, // add x3, x1, x2`)。
-- 程序级测试 (如 `tests/rv64im_program_test.cpp`) 用小段手工汇编的程序镜像, 注释给出汇编器与选项。
+- guest 镜像: `tests/guest/**.c` 由 RISC-V 工具链交叉编译 (共享 `crt0.S` 起栈并调 `main`, 裸 `.S` 自带 `_start`), 链接成扁平 bin (构建产物, 不入库); `rv64im/` 下为自校验程序 (`main` 返回 0 即 PASS, 经 `ebreak`/`a0` 约定上报), 逐个注册为 `sim_run -b` 的 xmake 测试。需要 riscv64 工具链, 前缀可用 `xmake f --riscv_cross=` 改。镜像依赖挂在 `sim_tests` 上 (`sim_run` 二进制本身不需要交叉工具链); 过滤单跑 guest 测试前先 `xmake build guest_images` 或跑一遍完整 `xmake test`。
+- NPU 指令正例写 guest 镜像: `tests/guest/npu/*.S` 用 `npu.inc` 的编码宏 (字段布局与 `src/decode/encoding.h` 一一对应), host 侧 driver (`tests/npu_guest_test.cpp`) 装载镜像、设配置、逐条步进断言; 非法编码负例留在 host 侧表驱动。
+- 官方套件 (可选): `xmake f --rvtests=y` 后 `riscv-tests` 的 rv64ui/rv64um 逐个注册为 `sim_run -b` 测试; `fence_i` (Zifencei) 与 `ma_data` (依赖 trap 投递) 在 xmake.lua 里显式排除。
 - 外部 `.bin` 测试镜像不入库, 路径由命令行提供, 不作为构建依赖。
 
 ## 代码风格
@@ -104,7 +112,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 
 - 主分支 `main`; 开发走特性分支 (如 `feat/rv64im-sim`) 再合入。
 - 提交信息用英文 Conventional Commits: `<type>(<scope>): <imperative summary>`; 常用 type: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`; 摘要简短, 不以句号结尾。
-- 不提交构建产物: `.xmake/`, `build/`, `.cache/`, `compile_commands.json` 均已 gitignore。
+- 不提交构建产物与外部套件: `.xmake/`, `build/`, `.cache/`, `compile_commands.json`, `external/` 均已 gitignore。
 
 ## 安全注意事项
 

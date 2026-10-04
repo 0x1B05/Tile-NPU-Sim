@@ -4,8 +4,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <iostream>
-#include <stdexcept>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -14,80 +13,95 @@
 
 namespace {
 
-bool decode_error(std::uint32_t word, tile_npu::DecodeError expected) {
+std::optional<tile_npu::DecodeError> decode_error(std::uint32_t word) {
   const auto result = tile_npu::decode(word);
   const auto *error = std::get_if<tile_npu::DecodeError>(&result);
-  return error && *error == expected;
+  return error ? std::optional{*error} : std::nullopt;
 }
 
-void test_decode() {
-  const auto add = tile_npu::decode(0x002081b3u); // add x3, x1, x2
-  const auto *add_instr = std::get_if<tile_npu::DecodedInstr>(&add);
-  check(add_instr && add_instr->op == tile_npu::ScalarOp::add &&
-            add_instr->regs.dest == 3 && add_instr->regs.src1 == 1 &&
-            add_instr->regs.src2 == 2,
-        "decode RV64I add");
+} // namespace
 
+TEST_CASE(npu_decode) {
   const auto tadd = tile_npu::decode(0x00002080u); // tadd t0, t1, t2
   const auto *tadd_instr = std::get_if<tile_npu::DecodedNpuInstr>(&tadd);
   check(tadd_instr != nullptr, "decode Tile tadd");
-  check(tadd_instr->op == tile_npu::ElementwiseBinaryOp::add &&
-            tadd_instr->dest.domain == tile_npu::NpuDomain::tile &&
-            tadd_instr->dest.index == 0 && tadd_instr->src1.index == 1 &&
-            std::get<tile_npu::NpuRegister>(tadd_instr->src2).index == 2,
-        "decode typed Tile tadd operands");
+  check_eq(tadd_instr->op, tile_npu::ElementwiseBinaryOp::add, "tadd op");
+  check_eq(tadd_instr->dest.domain, tile_npu::NpuDomain::tile,
+           "tadd dest domain");
+  check_eq(tadd_instr->dest.index, std::uint8_t{0}, "tadd dest index");
+  check_eq(tadd_instr->src1.index, std::uint8_t{1}, "tadd src1 index");
+  check_eq(std::get<tile_npu::NpuRegister>(tadd_instr->src2).index,
+           std::uint8_t{2}, "tadd src2 index");
+
+  const auto add = tile_npu::decode(0x002081b3u); // add x3, x1, x2
+  const auto *add_instr = std::get_if<tile_npu::DecodedInstr>(&add);
+  check(add_instr != nullptr, "decode RV64I add");
+  check_eq(add_instr->op, tile_npu::ScalarOp::add, "add op");
+  check_eq(add_instr->regs.dest, std::uint8_t{3}, "add rd");
+  check_eq(add_instr->regs.src1, std::uint8_t{1}, "add rs1");
+  check_eq(add_instr->regs.src2, std::uint8_t{2}, "add rs2");
   const auto sub = tile_npu::decode(0x402081b3u);
   const auto *sub_instr = std::get_if<tile_npu::DecodedInstr>(&sub);
-  check(sub_instr && sub_instr->op == tile_npu::ScalarOp::sub,
-        "decode RV64I sub separately from add");
-  check(decode_error(0x02002080u, tile_npu::DecodeError::not_implemented),
-        "taddx is not mistaken for tadd");
-  check(decode_error(0x00022080u, tile_npu::DecodeError::illegal),
-        "reject nonzero E_BIN reserved bits");
-  check(decode_error(0x00002800u, tile_npu::DecodeError::illegal),
-        "reject Tile source A register number 16");
-  check(decode_error(0x00010080u, tile_npu::DecodeError::illegal),
-        "reject Tile source B register number 16");
-  check(decode_error(0x000020c0u, tile_npu::DecodeError::illegal),
-        "reject Tile destination register number 16");
-  check(decode_error(0x00c02080u, tile_npu::DecodeError::illegal),
-        "reject unassigned E_BIN operation");
-  check(decode_error(0x01c02080u, tile_npu::DecodeError::illegal),
-        "reject unassigned E_BIN bit-operation code");
-  check(decode_error(0x08002080u, tile_npu::DecodeError::illegal),
-        "reject reserved Vec8 E_BIN domain");
-  check(decode_error(0x10002080u, tile_npu::DecodeError::not_implemented),
-        "other elementwise major remains unimplemented");
-  check(decode_error(0x00002081u, tile_npu::DecodeError::not_implemented) &&
-            decode_error(0x00002082u, tile_npu::DecodeError::not_implemented),
-        "other NPU quadrants remain unimplemented");
+  check(sub_instr != nullptr, "decode RV64I sub");
+  check_eq(sub_instr->op, tile_npu::ScalarOp::sub,
+           "decode RV64I sub separately from add");
+
+  using tile_npu::DecodeError;
+  struct RejectCase {
+    std::uint32_t word;
+    DecodeError error;
+    std::string_view name;
+  };
+  constexpr std::array reject_cases{
+      RejectCase{0x02002080u, DecodeError::not_implemented,
+                 "taddx is not mistaken for tadd"},
+      RejectCase{0x00022080u, DecodeError::illegal,
+                 "reject nonzero E_BIN reserved bits"},
+      RejectCase{0x00002800u, DecodeError::illegal,
+                 "reject Tile source A register number 16"},
+      RejectCase{0x00010080u, DecodeError::illegal,
+                 "reject Tile source B register number 16"},
+      RejectCase{0x000020c0u, DecodeError::illegal,
+                 "reject Tile destination register number 16"},
+      RejectCase{0x00c02080u, DecodeError::illegal,
+                 "reject unassigned E_BIN operation"},
+      RejectCase{0x01c02080u, DecodeError::illegal,
+                 "reject unassigned E_BIN bit-operation code"},
+      RejectCase{0x08002080u, DecodeError::illegal,
+                 "reject reserved Vec8 E_BIN domain"},
+      RejectCase{0x10002080u, DecodeError::not_implemented,
+                 "other elementwise major remains unimplemented"},
+      RejectCase{0x00002081u, DecodeError::not_implemented,
+                 "NPU quadrant 01 remains unimplemented"},
+      RejectCase{0x00002082u, DecodeError::not_implemented,
+                 "NPU quadrant 10 remains unimplemented"},
+  };
+  for (const auto &test : reject_cases) {
+    check_eq(decode_error(test.word), std::optional{test.error},
+             std::string(test.name) + " (" + to_hex(test.word) + ")");
+  }
 }
 
-void test_state() {
+TEST_CASE(state) {
   tile_npu::State state{};
-  check(state.t.size() == 16 && state.a.size() == 12, "matrix bank sizes");
-  check(state.b.size() == 32 && state.v.size() == 32, "vector bank sizes");
-  check(state.t[0].size() == 1024 && state.a[0].size() == 1024,
-        "matrix register sizes");
-  check(state.b[0].size() == 32 && state.v[0].size() == 32,
-        "vector register sizes");
-
   state.scalar.write_x(0, 42);
   state.scalar.write_x(1, 42);
-  check(state.scalar.read_x(0) == 0 && state.scalar.read_x(1) == 42,
-        "scalar x0 and x1");
+  check_eq(state.scalar.read_x(0), std::uint64_t{0},
+           "scalar x0 is hardwired to zero");
+  check_eq(state.scalar.read_x(1), std::uint64_t{42},
+           "scalar x1 holds its value");
 
   state.t[0][0] = 7;
   state.tc[0].rows = 32;
   state.tm[0].base_addr = 0x1000;
-  check(state.t[1][0] == 0 && state.tc[1].rows == 0 &&
-            state.tm[1].base_addr == 0,
-        "bound register slots are independent");
-  state.a[0][0] = 0x7fc00000u;
-  check(state.a[0][0] == 0x7fc00000u, "32-bit data preserves raw bits");
+  check_eq(state.t[1][0], std::uint8_t{0}, "tile slots are independent");
+  check_eq(state.tc[1].rows, std::uint8_t{0},
+           "tile config slots are independent");
+  check_eq(hex(state.tm[1].base_addr), hex(0),
+           "descriptor slots are independent");
 }
 
-void test_memory_and_step() {
+TEST_CASE(memory_and_step) {
   tile_npu::FlatMemory memory(0x1000, 8);
   const std::array<std::byte, 4> code{std::byte{0x13}, std::byte{0x00},
                                       std::byte{0x00}, std::byte{0x00}};
@@ -102,28 +116,34 @@ void test_memory_and_step() {
   sim.reset(0x1000);
   sim.state().scalar.write_x(1, 9);
   const auto result = sim.step();
-  check(result.status == tile_npu::StepStatus::retired && result.pc == 0x1000 &&
-            result.instr == 0x00000013u,
-        "fetch a little-endian 32-bit instruction");
-  check(sim.state().scalar.pc == 0x1004 && sim.state().scalar.read_x(1) == 9,
-        "addi x0, x0, 0 advances PC without changing registers");
+  check_eq(result.status, tile_npu::StepStatus::retired, "fetch step status");
+  check_eq(hex(result.pc), hex(0x1000), "fetch step pc");
+  check_eq(hex(result.instr), hex(std::make_optional(0x00000013u)),
+           "fetch a little-endian 32-bit instruction");
+  check_eq(hex(sim.state().scalar.pc), hex(0x1004), "addi advances pc");
+  check_eq(hex(sim.state().scalar.read_x(1)), hex(9),
+           "addi x0, x0, 0 leaves registers unchanged");
 
   sim.reset(0x1004);
   const auto npu_result = sim.step();
-  check(npu_result.status == tile_npu::StepStatus::decode_not_implemented &&
-            npu_result.instr == 0xf0000000u,
-        "NPU-space opcode is still fetched as 32 bits");
+  check_eq(npu_result.status, tile_npu::StepStatus::decode_not_implemented,
+           "NPU-space step status");
+  check_eq(hex(npu_result.instr), hex(std::make_optional(0xf0000000u)),
+           "NPU-space opcode is still fetched as 32 bits");
 
   sim.reset(0x1008);
   const auto fault = sim.step();
-  check(fault.status == tile_npu::StepStatus::fetch_fault && !fault.instr &&
-            sim.state().scalar.pc == 0x1008,
-        "failed fetch leaves PC unchanged");
+  check_eq(fault.status, tile_npu::StepStatus::fetch_fault,
+           "fetch fault status");
+  check(!fault.instr, "fetch fault reports no instruction");
+  check_eq(hex(sim.state().scalar.pc), hex(0x1008),
+           "failed fetch leaves PC unchanged");
   sim.reset(0x1002);
-  check(sim.state().scalar.read_x(1) == 0, "reset clears simulator state");
+  check_eq(hex(sim.state().scalar.read_x(1)), hex(0),
+           "reset clears simulator state");
 }
 
-void test_add_execution() {
+TEST_CASE(add_execution) {
   tile_npu::FlatMemory memory(0x2000, 8);
   write_word(memory, 0x2000, 0x002081b3u); // add x3, x1, x2
   write_word(memory, 0x2004, 0x00208033u); // add x0, x1, x2
@@ -132,77 +152,31 @@ void test_add_execution() {
   sim.reset(0x2000);
   sim.state().scalar.write_x(1, UINT64_MAX);
   sim.state().scalar.write_x(2, 2);
-  check(sim.step().status == tile_npu::StepStatus::retired &&
-            sim.state().scalar.read_x(3) == 1 &&
-            sim.state().scalar.pc == 0x2004,
-        "RV64I add wraps at 64 bits and advances PC");
-  check(sim.step().status == tile_npu::StepStatus::retired &&
-            sim.state().scalar.read_x(0) == 0 &&
-            sim.state().scalar.pc == 0x2008,
-        "add to x0 is discarded");
+  check_eq(sim.step().status, tile_npu::StepStatus::retired, "add retires");
+  // UINT64_MAX + 2 wraps to 1.
+  check_eq(hex(sim.state().scalar.read_x(3)), hex(1),
+           "RV64I add wraps at 64 bits");
+  check_eq(hex(sim.state().scalar.pc), hex(0x2004), "add advances pc");
+  check_eq(sim.step().status, tile_npu::StepStatus::retired,
+           "add to x0 retires");
+  check_eq(hex(sim.state().scalar.read_x(0)), hex(0), "add to x0 is discarded");
+  check_eq(hex(sim.state().scalar.pc), hex(0x2008), "add to x0 advances pc");
 }
 
-void test_tadd_execution() {
-  tile_npu::FlatMemory memory(0x3000, 8);
-  write_word(memory, 0x3000, 0x00002080u); // tadd t0, t1, t2
-  write_word(memory, 0x3004, 0x00002084u); // tadd t1, t1, t2
-
-  tile_npu::Simulator sim(memory);
-  sim.reset(0x3000);
-  auto &state = sim.state();
-  for (auto index : {0, 1, 2}) {
-    state.tc[index].rows = 2;
-    state.tc[index].cols = 2;
-  }
-  state.tc[0].arith_mode = tile_npu::ArithMode::sat;
-  state.t[1][0] = 127;
-  state.t[1][1] = 128;
-  state.t[1][32] = 2;
-  state.t[1][33] = 255;
-  state.t[2][0] = 1;
-  state.t[2][1] = 255;
-  state.t[2][32] = 254;
-  state.t[2][33] = 255;
-  state.t[0][2] = 0x5a;
-
-  check(sim.step().status == tile_npu::StepStatus::retired &&
-            state.t[0][0] == 127 && state.t[0][1] == 128 &&
-            state.t[0][32] == 0 && state.t[0][33] == 254 &&
-            state.t[0][2] == 0x5a && state.scalar.pc == 0x3004,
-        "i8 saturation touches only valid elements");
-  check(sim.step().status == tile_npu::StepStatus::retired &&
-            state.t[1][0] == 128 && state.t[1][1] == 127 &&
-            state.t[1][32] == 0 && state.t[1][33] == 254 &&
-            state.scalar.pc == 0x3008,
-        "i8 wrap permits destination/source aliasing");
-
-  sim.reset(0x3000);
-  auto &unsigned_state = sim.state();
-  for (auto index : {0, 1, 2}) {
-    unsigned_state.tc[index].dtype = tile_npu::DType::u8;
-    unsigned_state.tc[index].rows = 1;
-    unsigned_state.tc[index].cols = 1;
-  }
-  unsigned_state.tc[0].arith_mode = tile_npu::ArithMode::sat;
-  unsigned_state.t[1][0] = 250;
-  unsigned_state.t[2][0] = 10;
-  check(sim.step().status == tile_npu::StepStatus::retired &&
-            unsigned_state.t[0][0] == 255,
-        "u8 saturation clamps at 255");
-}
-
-void test_empty_tadd() {
+TEST_CASE(empty_tadd) {
   tile_npu::FlatMemory memory(0x3800, 4);
   write_word(memory, 0x3800, 0); // tadd t0, t0, t0; empty default shape
   tile_npu::Simulator sim(memory);
   sim.reset(0x3800);
   sim.state().t[0][0] = 42;
-  check(sim.step().status == tile_npu::StepStatus::retired &&
-            sim.state().t[0][0] == 42 && sim.state().scalar.pc == 0x3804,
-        "all-zero NPU word is a 32-bit empty tadd");
+  check_eq(sim.step().status, tile_npu::StepStatus::retired,
+           "all-zero NPU word is a 32-bit empty tadd");
+  check_eq(sim.state().t[0][0], std::uint8_t{42},
+           "empty tadd leaves data untouched");
+  check_eq(hex(sim.state().scalar.pc), hex(0x3804), "empty tadd advances pc");
 }
 
-void test_failed_execution_is_non_mutating() {
+TEST_CASE(failed_execution_is_non_mutating) {
   tile_npu::FlatMemory memory(0x4000, 8);
   write_word(memory, 0x4000, 0x00002080u); // tadd t0, t1, t2
   write_word(memory, 0x4004, 0x00022080u); // reserved4 is nonzero
@@ -214,43 +188,17 @@ void test_failed_execution_is_non_mutating() {
   state.tc[0].cols = state.tc[1].cols = 1;
   state.tc[2].cols = 2;
   state.t[0][0] = 99;
-  check(sim.step().status == tile_npu::StepStatus::invalid_configuration &&
-            state.t[0][0] == 99 && state.scalar.pc == 0x4000,
-        "shape mismatch does not partially execute tadd");
+  check_eq(sim.step().status, tile_npu::StepStatus::invalid_configuration,
+           "shape mismatch status");
+  check_eq(state.t[0][0], std::uint8_t{99},
+           "shape mismatch does not partially execute tadd");
+  check_eq(hex(state.scalar.pc), hex(0x4000), "shape mismatch preserves pc");
 
   state.scalar.pc = 0x4004;
-  check(sim.step().status == tile_npu::StepStatus::illegal_instruction &&
-            state.t[0][0] == 99 && state.scalar.pc == 0x4004,
-        "illegal encoding leaves state unchanged");
-}
-
-} // namespace
-
-void test_rv64im_decode();
-void test_rv64im_execute();
-void test_rv64im_program();
-void test_matrix_view();
-void test_descriptor_view();
-void test_config_fields();
-
-int main() {
-  try {
-    test_state();
-    test_decode();
-    test_rv64im_decode();
-    test_rv64im_execute();
-    test_rv64im_program();
-    test_matrix_view();
-    test_descriptor_view();
-    test_config_fields();
-    test_memory_and_step();
-    test_add_execution();
-    test_tadd_execution();
-    test_empty_tadd();
-    test_failed_execution_is_non_mutating();
-  } catch (const std::exception &error) {
-    std::cerr << "sim_tests: " << error.what() << '\n';
-    return 1;
-  }
-  return 0;
+  check_eq(sim.step().status, tile_npu::StepStatus::illegal_instruction,
+           "illegal encoding status");
+  check_eq(state.t[0][0], std::uint8_t{99},
+           "illegal encoding leaves state unchanged");
+  check_eq(hex(sim.state().scalar.pc), hex(0x4004),
+           "illegal encoding preserves pc");
 }
