@@ -165,6 +165,35 @@ DecodeResult decode_emask(std::uint32_t word) {
                                    fill_is_scalar}};
 }
 
+// CVT (R2): sel3 = {dom2, 0}; dom2 selects the destination domain (Acc or
+// Vec32). funct3 = 000 converts i32 -> f32 with the source in the same
+// domain; funct3 = 001 widens a Tile i8 source into Acc i32 (Acc
+// destinations only). funct3 >= 010 and Vec32 widen are reserved. The dtype
+// preconditions fail at execution.
+DecodeResult decode_cvt(std::uint32_t word) {
+  const auto f = encoding::NpuR2::from(word);
+  const auto domain = static_cast<NpuDomain>(f.sel3 >> 1);
+  if (f.funct3 == 0b001 && domain != NpuDomain::acc) {
+    return DecodeError::illegal;
+  }
+  const auto count = domain_register_count(domain);
+  if (f.dest >= count) {
+    return DecodeError::illegal;
+  }
+  if (f.funct3 == 0b001) {
+    if (f.src2 >= TILE_REGISTERS) {
+      return DecodeError::illegal;
+    }
+    return DecodedNpuInstr{
+        CvtInstr{CvtOp::widen, {domain, f.dest}, {NpuDomain::tile, f.src2}}};
+  }
+  if (f.src2 >= count) {
+    return DecodeError::illegal;
+  }
+  return DecodedNpuInstr{
+      CvtInstr{CvtOp::cvt, {domain, f.dest}, {domain, f.src2}}};
+}
+
 // M_BLK block/gather forms (R2): sel3 = {dom2, 0}; funct3 = {form2, LS} with
 // LS picking load (0) or store (1). S5 names the gather index vector (a Vec32
 // register) and the patterns pin it to 0 for the block forms.
@@ -372,6 +401,11 @@ constexpr DecodeEntry NPU_TABLE[] = {
     {"0100 ??? ??? ????? ????? ????? ????? 01", fail<DecodeError::illegal>},          // reserved LANE_MOVE encodings
     // All assigned data movement majors decode above; the rest is reserved.
     {"???? ??? ???? ???? ????? ????? ????? 01", fail<DecodeError::illegal>},
+    // CVT (R2): sel3 = {dom2, 0}, dom2 = Acc/Vec32 only. funct3 = 000 cvt,
+    // 001 twiden (Acc destination only).
+    {"0011 ?10 000 0000000000 ????? ????? 10", decode_cvt},                           // acvt/vcvt
+    {"0011 010 001 0000000000 ????? ????? 10", decode_cvt},                           // twiden
+    {"0011 ??? ??? ????? ????? ????? ????? 10", fail<DecodeError::illegal>},          // reserved CVT encodings
     // CFG_MAT_SETI / CFG_VEC_SETI (I format); field3 = 111 is reserved.
     {"0101 ?? 111 ???? ???? ???? ???? ????? 10", fail<DecodeError::illegal>},
     {"0110 ?? 111 ???? ???? ???? ???? ????? 10", fail<DecodeError::illegal>},
