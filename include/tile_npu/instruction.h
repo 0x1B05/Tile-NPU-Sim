@@ -1,6 +1,8 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
+#include <optional>
 #include <variant>
 
 namespace tile_npu {
@@ -125,6 +127,37 @@ struct EbinInstr {
   NpuRegister src1{};
   NpuOperand src2 = NpuRegister{};
 };
+
+// Operation metadata for the E_BIN family, mirroring the ISA's funct4 table:
+// tile_allowed is false for mul/div (the tile domain has no 8-bit mul/div
+// encodings); integer_allowed is false for div (f32-only); f32_allowed is
+// false for the bitwise and shift operations (integer-only). Decode,
+// execution and tests share this table so a new operation is added in one
+// place.
+struct EbinInfo {
+  EbinOp op;
+  bool tile_allowed;
+  bool integer_allowed;
+  bool f32_allowed;
+};
+
+// Indexed by funct4 code; unassigned codes hold nullopt.
+inline constexpr std::array<std::optional<EbinInfo>, 16> EBIN_BY_FUNCT4 = [] {
+  std::array<std::optional<EbinInfo>, 16> table{};
+  table[0b0000] = EbinInfo{EbinOp::add, true, true, true};
+  table[0b0001] = EbinInfo{EbinOp::sub, true, true, true};
+  table[0b0010] = EbinInfo{EbinOp::mul, false, true, true};
+  table[0b0011] = EbinInfo{EbinOp::div, false, false, true};
+  table[0b0100] = EbinInfo{EbinOp::min, true, true, true};
+  table[0b0101] = EbinInfo{EbinOp::max, true, true, true};
+  table[0b1000] = EbinInfo{EbinOp::bit_and, true, true, false};
+  table[0b1001] = EbinInfo{EbinOp::bit_or, true, true, false};
+  table[0b1010] = EbinInfo{EbinOp::bit_xor, true, true, false};
+  table[0b1011] = EbinInfo{EbinOp::shl, true, true, false};
+  table[0b1100] = EbinInfo{EbinOp::shr, true, true, false};
+  table[0b1101] = EbinInfo{EbinOp::sra, true, true, false};
+  return table;
+}();
 
 // The architectural configuration register types (TC/AC/BC/VC/TM/AM/BM/VM).
 // Decode derives the register type from (major4, sel2) or (sel2, MV), so
