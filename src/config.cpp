@@ -329,22 +329,11 @@ config_field_from_code(ConfigRegType reg_type, std::uint8_t field_code) {
   return ConfigAccessError::unsupported_field;
 }
 
-std::variant<std::uint64_t, ConfigAccessError>
-config_field_as_scalar(const ConfigFieldValue &value) {
+// Every alternative converts losslessly: enums to their numeric code,
+// int32_t sign-extended so negative strides survive cfg.get.
+std::uint64_t config_field_as_scalar(const ConfigFieldValue &value) {
   return std::visit(
-      [](const auto &typed) -> std::variant<std::uint64_t, ConfigAccessError> {
-        using T = std::decay_t<decltype(typed)>;
-        if constexpr (std::is_same_v<T, DType> ||
-                      std::is_same_v<T, ArithMode>) {
-          return static_cast<std::uint64_t>(typed);
-        } else if constexpr (std::is_same_v<T, std::uint8_t>) {
-          return typed;
-        } else if constexpr (std::is_same_v<T, std::int32_t>) {
-          return static_cast<std::uint64_t>(static_cast<std::int64_t>(typed));
-        } else {
-          return typed;
-        }
-      },
+      [](const auto &typed) { return static_cast<std::uint64_t>(typed); },
       value);
 }
 

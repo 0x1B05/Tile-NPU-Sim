@@ -67,7 +67,6 @@ config_field_from_code(ConfigRegType reg_type, std::uint8_t field_code);
 // This is the value written by cfg.get. Enum fields are returned as their
 // architectural numeric code; signed fields preserve their two's-complement
 // bit pattern in the low 32 bits.
-std::variant<std::uint64_t, ConfigAccessError>
-config_field_as_scalar(const ConfigFieldValue &value);
+std::uint64_t config_field_as_scalar(const ConfigFieldValue &value);
 
 } // namespace tile_npu
