@@ -28,32 +28,6 @@ constexpr bool valid_register_index(ConfigRegType reg_type,
   return index < config_register_count(reg_type);
 }
 
-constexpr bool field_supported(ConfigRegType reg_type, ConfigField field) {
-  switch (reg_type) {
-  case ConfigRegType::tc:
-    return field == ConfigField::dtype || field == ConfigField::rows ||
-           field == ConfigField::cols || field == ConfigField::layout ||
-           field == ConfigField::arith_mode;
-  case ConfigRegType::ac:
-    return field == ConfigField::dtype || field == ConfigField::rows ||
-           field == ConfigField::cols || field == ConfigField::layout;
-  case ConfigRegType::bc:
-  case ConfigRegType::vc:
-    return field == ConfigField::dtype || field == ConfigField::len;
-  case ConfigRegType::tm:
-  case ConfigRegType::am:
-    return field == ConfigField::base_addr ||
-           field == ConfigField::row_stride_bytes ||
-           field == ConfigField::col_stride_bytes ||
-           field == ConfigField::transform || field == ConfigField::flags;
-  case ConfigRegType::bm:
-  case ConfigRegType::vm:
-    return field == ConfigField::base_addr ||
-           field == ConfigField::stride_bytes || field == ConfigField::flags;
-  }
-  return false;
-}
-
 template <typename T> const T *get_typed(const ConfigFieldValue &value) {
   return std::get_if<T>(&value);
 }
@@ -99,44 +73,62 @@ bool coerce_scalar(const ConfigFieldValue &value, T &result) {
 template <typename T>
 ConfigAccessError write_scalar(T &target, const ConfigFieldValue &value) {
   T raw;
-  return coerce_scalar(value, raw) ? (target = raw, ConfigAccessError::none)
-                                   : ConfigAccessError::invalid_value;
+  if (!coerce_scalar(value, raw)) {
+    return ConfigAccessError::invalid_value;
+  }
+  target = raw;
+  return ConfigAccessError::none;
 }
 
 template <typename T>
 ConfigAccessError write_scalar(T &target, const ConfigFieldValue &value,
                                std::type_identity_t<T> max) {
   T raw;
-  return coerce_scalar(value, raw) && raw <= max
-             ? (target = raw, ConfigAccessError::none)
-             : ConfigAccessError::invalid_value;
+  if (!coerce_scalar(value, raw) || raw > max) {
+    return ConfigAccessError::invalid_value;
+  }
+  target = raw;
+  return ConfigAccessError::none;
 }
 
 ConfigAccessError write_dtype(ConfigRegType reg_type, DType &target,
                               const ConfigFieldValue &value) {
   DType dtype;
-  return coerce_scalar(value, dtype) && valid_dtype(reg_type, dtype)
-             ? (target = dtype, ConfigAccessError::none)
-             : ConfigAccessError::invalid_value;
+  if (!coerce_scalar(value, dtype) || !valid_dtype(reg_type, dtype)) {
+    return ConfigAccessError::invalid_value;
+  }
+  target = dtype;
+  return ConfigAccessError::none;
 }
 
 template <typename Config>
 ConfigAccessError write_matrix_shape(Config &config, ConfigField field,
                                      const ConfigFieldValue &value) {
   std::uint8_t raw;
-  if (!coerce_scalar(value, raw) || raw > MATRIX_EXTENT ||
-      (field == ConfigField::layout && raw != 0)) {
+  if (!coerce_scalar(value, raw)) {
     return ConfigAccessError::invalid_value;
   }
-  // clang-format off
+  // Effective matrix dimensions range from 1 to the physical extent; the
+  // canonical layout is the only one defined.
   switch (field) {
-  case ConfigField::rows:   config.rows = raw;   break;
-  case ConfigField::cols:   config.cols = raw;   break;
-  case ConfigField::layout: config.layout = raw; break;
-  default: break;
+  case ConfigField::rows:
+    if (raw == 0 || raw > MATRIX_EXTENT) {
+      return ConfigAccessError::invalid_value;
+    }
+    config.rows = raw;
+    return ConfigAccessError::none;
+  case ConfigField::cols:
+    if (raw == 0 || raw > MATRIX_EXTENT) {
+      return ConfigAccessError::invalid_value;
+    }
+    config.cols = raw;
+    return ConfigAccessError::none;
+  case ConfigField::layout:
+    if (raw != 0) return ConfigAccessError::invalid_value;
+    config.layout = raw;
+    return ConfigAccessError::none;
+  default: return ConfigAccessError::unsupported_field;
   }
-  // clang-format on
-  return ConfigAccessError::none;
 }
 
 // clang-format off
@@ -157,7 +149,15 @@ ConfigAccessError write_acc_config(AccConfig &config, ConfigField field, const C
 
 template <typename Config>
 ConfigAccessError write_vector_config(Config &config, ConfigRegType reg_type, ConfigField field, const ConfigFieldValue &value) {
-  if (field == ConfigField::len)   return write_scalar(config.len, value, VECTOR_LANES);
+  if (field == ConfigField::len) {
+    // The effective lane count ranges from 1 to the physical lane count.
+    std::uint8_t len;
+    if (!coerce_scalar(value, len) || len == 0 || len > VECTOR_LANES) {
+      return ConfigAccessError::invalid_value;
+    }
+    config.len = len;
+    return ConfigAccessError::none;
+  }
   if (field == ConfigField::dtype) return write_dtype(reg_type, config.dtype, value);
   return ConfigAccessError::unsupported_field;
 }
@@ -238,8 +238,6 @@ ConfigReadResult read_config_field(const State &state, ConfigRegType reg_type,
                                    std::uint8_t index, ConfigField field) {
   if (!valid_register_index(reg_type, index))
     return ConfigAccessError::invalid_register;
-  if (!field_supported(reg_type, field))
-    return ConfigAccessError::unsupported_field;
 
   switch (reg_type) {
   case ConfigRegType::tc: return read_tile_config(state.tc[index], field);
@@ -260,8 +258,6 @@ ConfigAccessError write_config_field(State &state, ConfigRegType reg_type,
                                      const ConfigFieldValue &value) {
   if (!valid_register_index(reg_type, index))
     return ConfigAccessError::invalid_register;
-  if (!field_supported(reg_type, field))
-    return ConfigAccessError::unsupported_field;
 
   // clang-format off
   switch (reg_type) {
@@ -329,22 +325,11 @@ config_field_from_code(ConfigRegType reg_type, std::uint8_t field_code) {
   return ConfigAccessError::unsupported_field;
 }
 
-std::variant<std::uint64_t, ConfigAccessError>
-config_field_as_scalar(const ConfigFieldValue &value) {
+// Every alternative converts losslessly: enums to their numeric code,
+// int32_t sign-extended so negative strides survive cfg.get.
+std::uint64_t config_field_as_scalar(const ConfigFieldValue &value) {
   return std::visit(
-      [](const auto &typed) -> std::variant<std::uint64_t, ConfigAccessError> {
-        using T = std::decay_t<decltype(typed)>;
-        if constexpr (std::is_same_v<T, DType> ||
-                      std::is_same_v<T, ArithMode>) {
-          return static_cast<std::uint64_t>(typed);
-        } else if constexpr (std::is_same_v<T, std::uint8_t>) {
-          return typed;
-        } else if constexpr (std::is_same_v<T, std::int32_t>) {
-          return static_cast<std::uint64_t>(static_cast<std::int64_t>(typed));
-        } else {
-          return typed;
-        }
-      },
+      [](const auto &typed) { return static_cast<std::uint64_t>(typed); },
       value);
 }
 

@@ -364,6 +364,15 @@ TEST_CASE(mblk_rejects_invalid_configs) {
     MblkRun run(block(NpuDomain::tile, 0, 0));
     auto &state = run.sim.state();
     config_tile_2x2(state, 0);
+    state.tc[0].rows = 0; // empty effective shape
+    stride_desc(state.tm[0], DATA, 2, 1);
+    check_eq(run.sim.step().status, StepStatus::invalid_configuration,
+             "empty effective shape rejects");
+  }
+  {
+    MblkRun run(block(NpuDomain::tile, 0, 0));
+    auto &state = run.sim.state();
+    config_tile_2x2(state, 0);
     stride_desc(state.tm[0], DATA, 2, 1);
     state.tm[0].flags = 0x04; // reserved flag bit
     check_eq(run.sim.step().status, StepStatus::invalid_configuration,
@@ -395,6 +404,15 @@ TEST_CASE(mblk_rejects_invalid_configs) {
     state.vc[2].len = 33; // beyond the lane count
     check_eq(run.sim.step().status, StepStatus::invalid_configuration,
              "index vector length beyond the lane count rejects");
+  }
+  {
+    MblkRun run(block(NpuDomain::tile, 2, 0, 2)); // tload.gather t0, v2
+    auto &state = run.sim.state();
+    config_tile_2x2(state, 0);
+    stride_desc(state.tm[0], DATA, 1, 2);
+    state.vc[2].len = 0; // empty index vector
+    check_eq(run.sim.step().status, StepStatus::invalid_configuration,
+             "empty index vector rejects");
   }
   {
     MblkRun run(block(NpuDomain::tile, 0, 0));

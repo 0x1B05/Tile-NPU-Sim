@@ -13,30 +13,30 @@
 namespace tile_npu {
 namespace {
 
-// Memory instructions need a well-formed dtype and effective shape;
-// arith_mode does not participate in the memory path.
+// Memory instructions need a well-formed dtype and a non-empty effective
+// shape; arith_mode does not participate in the memory path.
 bool valid_mem_config(const TileConfig &config) {
   return (config.dtype == DType::i8 || config.dtype == DType::u8) &&
-         config.rows <= MATRIX_EXTENT && config.cols <= MATRIX_EXTENT &&
-         config.layout == 0;
+         config.rows >= 1 && config.rows <= MATRIX_EXTENT && config.cols >= 1 &&
+         config.cols <= MATRIX_EXTENT && config.layout == 0;
 }
 
 bool valid_mem_config(const AccConfig &config) {
   return (config.dtype == DType::i32 || config.dtype == DType::u32 ||
           config.dtype == DType::f32) &&
-         config.rows <= MATRIX_EXTENT && config.cols <= MATRIX_EXTENT &&
-         config.layout == 0;
+         config.rows >= 1 && config.rows <= MATRIX_EXTENT && config.cols >= 1 &&
+         config.cols <= MATRIX_EXTENT && config.layout == 0;
 }
 
 bool valid_mem_config(const Vec8Config &config) {
   return (config.dtype == DType::i8 || config.dtype == DType::u8) &&
-         config.len <= VECTOR_LANES;
+         config.len >= 1 && config.len <= VECTOR_LANES;
 }
 
 bool valid_mem_config(const Vec32Config &config) {
   return (config.dtype == DType::i32 || config.dtype == DType::u32 ||
           config.dtype == DType::f32) &&
-         config.len <= VECTOR_LANES;
+         config.len >= 1 && config.len <= VECTOR_LANES;
 }
 
 ExecuteResult config_error() {
@@ -240,7 +240,7 @@ ExecuteResult gather_tile(const MblkInstr &instr, ExecContext &ctx,
     return config_error(); // hand-constructed instruction
   }
   const auto &index_config = ctx.state.vc[instr.gather_src];
-  if (index_config.len > VECTOR_LANES) {
+  if (index_config.len == 0 || index_config.len > VECTOR_LANES) {
     return config_error();
   }
   MatrixDescView desc(descs[instr.reg.index]);
@@ -317,7 +317,7 @@ vector_access(const MblkInstr &instr, ExecContext &ctx,
       return config_error(); // hand-constructed instruction
     }
     const auto &index_config = ctx.state.vc[instr.gather_src];
-    if (index_config.len > VECTOR_LANES) {
+    if (index_config.len == 0 || index_config.len > VECTOR_LANES) {
       return config_error();
     }
     const auto &index_reg = ctx.state.v[instr.gather_src];

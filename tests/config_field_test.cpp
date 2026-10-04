@@ -52,8 +52,17 @@ TEST_CASE(config_fields) {
 
   const auto scalar = tile_npu::config_field_as_scalar(
       tile_npu::ConfigFieldValue{std::int32_t{-1}});
-  const auto *scalar_value = std::get_if<std::uint64_t>(&scalar);
-  check(scalar_value != nullptr, "signed field converts to a scalar");
-  check_eq(hex(*scalar_value), hex(UINT64_MAX),
+  check_eq(hex(scalar), hex(UINT64_MAX),
            "preserve signed field bits for cfg.get");
+
+  check_eq(tile_npu::write_config_field(state, tile_npu::ConfigRegType::tc, 0,
+                                        tile_npu::ConfigField::rows,
+                                        std::uint64_t{0}),
+           tile_npu::ConfigAccessError::invalid_value, "reject zero TC rows");
+  check_eq(state.tc[0].rows, std::uint8_t{7},
+           "rejected shape write is non-mutating");
+  check_eq(tile_npu::write_config_field(state, tile_npu::ConfigRegType::vc, 0,
+                                        tile_npu::ConfigField::len,
+                                        std::uint64_t{0}),
+           tile_npu::ConfigAccessError::invalid_value, "reject zero VC len");
 }
