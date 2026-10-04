@@ -258,6 +258,22 @@ struct BcastInstr {
   bool by_col = false;
 };
 
+// E_R4 four-register operations (R4): select (funct3 = 000) on every
+// matrix/vec32 domain, fmadd (funct3 = 001, f32 Acc/Vec32 only). arg carries
+// the fourth operand: the mask M for select, the addend C for fmadd.
+enum class Er4Op : std::uint8_t { select = 0b000, fmadd = 0b001 };
+
+// Operand reading per op:
+//   select: dest = D, arg = mask M (u8/u32 per domain), src1 = A, src2 = B
+//   fmadd:  dest = D, arg = addend C, src1 = A, src2 = B
+struct Er4Instr {
+  Er4Op op = Er4Op::select;
+  NpuRegister dest{};
+  NpuRegister arg{};
+  NpuRegister src1{};
+  NpuRegister src2{};
+};
+
 // The architectural configuration register types (TC/AC/BC/VC/TM/AM/BM/VM).
 // Decode derives the register type from (major4, sel2) or (sel2, MV), so
 // field access is independent of the instruction format that selected it.

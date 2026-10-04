@@ -65,4 +65,22 @@ inline bool configs_match(const Vec32Config &dst, const Vec32Config &src) {
   return dst.dtype == src.dtype && dst.len == src.len;
 }
 
+// Effective-shape-only comparison, for operands whose dtype is fixed per
+// instruction (masks) or checked separately from the shape.
+inline bool shapes_match(const TileConfig &a, const TileConfig &b) {
+  return a.rows == b.rows && a.cols == b.cols;
+}
+
+inline bool shapes_match(const AccConfig &a, const AccConfig &b) {
+  return a.rows == b.rows && a.cols == b.cols;
+}
+
+inline bool shapes_match(const Vec8Config &a, const Vec8Config &b) {
+  return a.len == b.len;
+}
+
+inline bool shapes_match(const Vec32Config &a, const Vec32Config &b) {
+  return a.len == b.len;
+}
+
 } // namespace tile_npu

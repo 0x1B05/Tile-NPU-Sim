@@ -4,6 +4,7 @@
 #include "execute_ebcast.h"
 #include "execute_ecmp.h"
 #include "execute_elementwise.h"
+#include "execute_er4.h"
 #include "execute_eun.h"
 #include "execute_init.h"
 #include "execute_mblk.h"
@@ -37,6 +38,10 @@ ExecuteResult execute_one(const CmpInstr &instr, ExecContext &ctx) {
 
 ExecuteResult execute_one(const BcastInstr &instr, ExecContext &ctx) {
   return execute_ebcast(instr, ctx.state);
+}
+
+ExecuteResult execute_one(const Er4Instr &instr, ExecContext &ctx) {
+  return execute_er4(instr, ctx.state);
 }
 
 ExecuteResult execute_one(const MblkInstr &instr, ExecContext &ctx) {

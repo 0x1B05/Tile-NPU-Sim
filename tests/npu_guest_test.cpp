@@ -322,6 +322,28 @@ TEST_CASE(npu_guest_ebcast) {
            "ebcast image reports success via a0");
 }
 
+TEST_CASE(npu_guest_er4) {
+  // tests/guest/npu/er4.S self-configures configs and descriptors, then
+  // exercises a Tile select (u8 mask) and a Vec32 fmadd (f32, single
+  // rounding) with store-back checks. It reaches ebreak with a0 = 0 on
+  // success; a failing check reports its stage in a0.
+  tile_npu::FlatMemory memory{IMAGE_BASE, 1024};
+  tile_npu::Simulator sim(memory);
+  load_image(memory, "er4");
+  sim.reset(IMAGE_BASE);
+  tile_npu::StepResult result{};
+  for (int steps = 0; steps < 512; ++steps) {
+    result = sim.step();
+    if (result.status == tile_npu::StepStatus::breakpoint) {
+      break;
+    }
+  }
+  check_eq(result.status, tile_npu::StepStatus::breakpoint,
+           "er4 image reaches ebreak");
+  check_eq(hex(sim.state().scalar.read_x(10)), hex(0x0u),
+           "er4 image reports success via a0");
+}
+
 TEST_CASE(npu_guest_cfg_self_check) {
   // tests/guest/npu/cfg.S programs config registers with cfg.seti/cfg.setx,
   // reads them back with cfg.get, and reaches ebreak with a0 = 0 on success.
