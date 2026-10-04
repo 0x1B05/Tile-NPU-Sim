@@ -28,12 +28,11 @@ bool op_supports_dtype(CmpOp op, DType dtype) {
 // the ISA fixes the mask dtype per instruction, so the common same-dtype
 // rule does not apply to it.
 bool mask_matches(const AccConfig &mask, const AccConfig &src) {
-  return mask.dtype == DType::u32 && mask.rows == src.rows &&
-         mask.cols == src.cols;
+  return mask.dtype == DType::u32 && shapes_match(mask, src);
 }
 
 bool mask_matches(const Vec32Config &mask, const Vec32Config &src) {
-  return mask.dtype == DType::u32 && mask.len == src.len;
+  return mask.dtype == DType::u32 && shapes_match(mask, src);
 }
 
 // Decode already guarantees this; hand-constructed instructions can violate
