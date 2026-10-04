@@ -100,6 +100,10 @@
     M_BLK 2, 1, \d5, 0
 .endm
 
+.macro BLOAD d5
+    M_BLK 2, 0, \d5, 0
+.endm
+
 # INIT_MOVE fill (I format), mirroring NpuI in src/decode/encoding.h:
 #   [31:28] major4 = 2  [27:26] dom2  [25:23] funct3 = 000
 #   [22:7] imm16  [6:2] D5  [1:0] q = 01
@@ -270,4 +274,20 @@
 
 .macro VCMPLE m5, a5, b5
     E_CMP 3, 0, 4, \m5, \a5, \b5
+.endm
+
+# E_BCAST (R3), mirroring NpuR3 in src/decode/encoding.h:
+#   [31:28] major4 = 5  [27] TA  [26] 0  [25] DIR  [24:21] funct4
+#   [20:17] reserved(0)  [16:12] S5  [11:7] A5  [6:2] D5  [1:0] q = 00
+# TA: 0 = Tile + Vec8, 1 = Acc + Vec32. DIR: 0 = byrow, 1 = bycol.
+.macro E_BCAST ta, dir, funct4, d5, a5, s5
+    .word ((5 << 28) | (\ta << 27) | (\dir << 25) | (\funct4 << 21) | (\s5 << 12) | (\a5 << 7) | (\d5 << 2))
+.endm
+
+.macro TADDB_ROW d5, a5, s5
+    E_BCAST 0, 0, 0, \d5, \a5, \s5
+.endm
+
+.macro AMULV_COL d5, a5, s5
+    E_BCAST 1, 1, 2, \d5, \a5, \s5
 .endm
