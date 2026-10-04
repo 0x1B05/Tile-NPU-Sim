@@ -310,3 +310,23 @@
 .macro VFMADD d5, a5, b5, c5
     E_R4 3, 1, \c5, \d5, \a5, \b5
 .endm
+
+# E_MASK (R4), mirroring NpuR4 in src/decode/encoding.h:
+#   [31:28] major4 = 4  [27:26] dom2  [25] FS  [24:22] funct3
+#   [21:17] arg5 (fill5 / xFill)  [16:12] B5 (xBound)  [11:7] A5 (S)
+#   [6:2] D5  [1:0] q = 00
+# funct3: 0 tail, 1 tril, 2 triu (matrix-only). FS = 0: arg5 is a fill5
+# code; FS = 1: arg5 names the xFill Scalar register.
+.macro E_MASK dom2, fs, funct3, arg5, b5, a5, d5
+    .word ((4 << 28) | (\dom2 << 26) | (\fs << 25) | (\funct3 << 22) | (\arg5 << 17) | (\b5 << 12) | (\a5 << 7) | (\d5 << 2))
+.endm
+
+# tril: asm operand order D, S, xDelta, fill5.
+.macro AMASK_TRIL d5, s5, xd, fill5
+    E_MASK 1, 0, 1, \fill5, \xd, \s5, \d5
+.endm
+
+# vector tail: asm operand order D, S, xLen, fill5.
+.macro VMASK_TAIL d5, s5, xl, fill5
+    E_MASK 3, 0, 0, \fill5, \xl, \s5, \d5
+.endm

@@ -1,0 +1,151 @@
+#include "tile_npu/decode.h"
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <variant>
+
+#include "check.h"
+#include "emask_helpers.h"
+
+namespace {
+
+using tile_npu::DecodedNpuInstr;
+using tile_npu::DecodeError;
+using tile_npu::MaskInstr;
+using tile_npu::MaskOp;
+using tile_npu::NpuDomain;
+
+struct Case {
+  const char *name;
+  std::uint32_t word;
+  MaskOp op;
+  NpuDomain domain;
+  std::uint8_t dest;
+  std::uint8_t src;
+  std::uint8_t bound;
+  std::uint8_t fill;
+  bool fill_is_scalar;
+};
+
+template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
+  for (const auto &test : cases) {
+    const auto result = tile_npu::decode(test.word);
+    const auto *npu = std::get_if<DecodedNpuInstr>(&result);
+    const std::string what =
+        std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
+    check(npu != nullptr, what);
+    const auto *decoded = std::get_if<MaskInstr>(npu);
+    check(decoded != nullptr, what);
+    check_eq(decoded->op, test.op, what + ": op");
+    check_eq(decoded->dest.domain, test.domain, what + ": dest domain");
+    check_eq(decoded->dest.index, test.dest, what + ": dest");
+    check_eq(decoded->src.domain, test.domain, what + ": src domain");
+    check_eq(decoded->src.index, test.src, what + ": src");
+    check_eq(decoded->bound, test.bound, what + ": bound");
+    check_eq(decoded->fill, test.fill, what + ": fill");
+    check_eq(decoded->fill_is_scalar, test.fill_is_scalar, what + ": FS");
+  }
+}
+
+struct ErrorCase {
+  const char *name;
+  std::uint32_t word;
+  DecodeError error;
+};
+
+template <std::size_t N>
+void check_errors(const std::array<ErrorCase, N> &cases) {
+  for (const auto &test : cases) {
+    const auto result = tile_npu::decode(test.word);
+    const auto *error = std::get_if<DecodeError>(&result);
+    const std::string what =
+        std::string(test.name) + " (" + to_hex(test.word) + ")";
+    check(error != nullptr, what + " decodes");
+    check_eq(*error, test.error, what + ": error kind");
+  }
+}
+
+} // namespace
+
+TEST_CASE(emask_decode) {
+  constexpr std::array cases{
+      // Anchor word computed by hand from the encoding figure: the asm
+      // operand order is D, S, xBound, fill; arg5 carries the fill.
+      Case{.name = "tmask.tail t0, t1, x2, +1",
+           .word = 0x40022080u,
+           .op = MaskOp::tail,
+           .domain = NpuDomain::tile,
+           .dest = 0,
+           .src = 1,
+           .bound = 2,
+           .fill = 1,
+           .fill_is_scalar = false},
+      Case{.name = "amask.tril a3, a4, x5, -1",
+           .word = make_emask(NpuDomain::acc, 1, 3, 4, 5, 2),
+           .op = MaskOp::tril,
+           .domain = NpuDomain::acc,
+           .dest = 3,
+           .src = 4,
+           .bound = 5,
+           .fill = 2,
+           .fill_is_scalar = false},
+      Case{.name = "amaskx.triu a6, a7, x8, x9",
+           .word = make_emask(NpuDomain::acc, 2, 6, 7, 8, 9, true),
+           .op = MaskOp::triu,
+           .domain = NpuDomain::acc,
+           .dest = 6,
+           .src = 7,
+           .bound = 8,
+           .fill = 9,
+           .fill_is_scalar = true},
+      Case{.name = "vmask.tail v10, v11, x12, +inf",
+           .word = make_emask(NpuDomain::vec32, 0, 10, 11, 12, 7),
+           .op = MaskOp::tail,
+           .domain = NpuDomain::vec32,
+           .dest = 10,
+           .src = 11,
+           .bound = 12,
+           .fill = 7,
+           .fill_is_scalar = false},
+      Case{.name = "bmaskx.tail b13, b14, x15, x31",
+           .word = make_emask(NpuDomain::vec8, 0, 13, 14, 15, 31, true),
+           .op = MaskOp::tail,
+           .domain = NpuDomain::vec8,
+           .dest = 13,
+           .src = 14,
+           .bound = 15,
+           .fill = 31,
+           .fill_is_scalar = true},
+  };
+  check_cases(cases);
+}
+
+TEST_CASE(emask_decode_rejects_reserved) {
+  constexpr std::array cases{
+      // funct3 >= 011 is reserved.
+      ErrorCase{"funct3 011", make_emask(NpuDomain::acc, 3, 0, 0, 0, 0),
+                DecodeError::illegal},
+      ErrorCase{"funct3 111", make_emask(NpuDomain::tile, 7, 0, 0, 0, 0),
+                DecodeError::illegal},
+      // tril/triu are matrix-only.
+      ErrorCase{"vmask.tril", make_emask(NpuDomain::vec32, 1, 0, 0, 0, 0),
+                DecodeError::illegal},
+      ErrorCase{"bmask.triu", make_emask(NpuDomain::vec8, 2, 0, 0, 0, 0),
+                DecodeError::illegal},
+      // fill5 codes 9-31 are reserved (FS = 0 only; with FS = 1 arg5 names
+      // xFill and any 5-bit number is a valid Scalar register).
+      ErrorCase{"fill5 9", make_emask(NpuDomain::tile, 0, 0, 0, 0, 9),
+                DecodeError::illegal},
+      ErrorCase{"fill5 31", make_emask(NpuDomain::acc, 0, 0, 0, 0, 31),
+                DecodeError::illegal},
+      // Register numbers are bounded per domain.
+      ErrorCase{"tmask.tail t16", make_emask(NpuDomain::tile, 0, 16, 0, 0, 0),
+                DecodeError::illegal},
+      ErrorCase{"amask.tail a12 src",
+                make_emask(NpuDomain::acc, 0, 0, 12, 0, 0),
+                DecodeError::illegal},
+  };
+  check_errors(cases);
+}
