@@ -292,6 +292,19 @@ struct MaskInstr {
   bool fill_is_scalar = false;
 };
 
+// CVT operations (R2): cvt converts i32 -> f32 within Acc or Vec32 and
+// updates the destination dtype on success; widen sign-extends a Tile i8
+// source into Acc i32. funct3 >= 010 is reserved.
+enum class CvtOp : std::uint8_t { cvt = 0b000, widen = 0b001 };
+
+// Operand reading: dest = D (Acc, or Vec32 for cvt), src = S (same domain as
+// dest for cvt; Tile for widen).
+struct CvtInstr {
+  CvtOp op = CvtOp::cvt;
+  NpuRegister dest{};
+  NpuRegister src{};
+};
+
 // The architectural configuration register types (TC/AC/BC/VC/TM/AM/BM/VM).
 // Decode derives the register type from (major4, sel2) or (sel2, MV), so
 // field access is independent of the instruction format that selected it.
