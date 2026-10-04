@@ -422,3 +422,26 @@
 .macro BDOT_NT d5, a5, b5
     MMA_BDOT 6, \d5, \a5, \b5
 .endm
+
+# SYS (Z format):
+#   [31:28] major4 = 1000  [27:25] funct3  [24:2] reserved23  [1:0] q = 10
+# funct3: 000 fence.mem, 001 fence.sa, 010 fence.all, 011 kernel.end.
+.macro SYS funct3
+    .word ((8 << 28) | (\funct3 << 25) | 2)
+.endm
+
+.macro FENCE_MEM
+    SYS 0
+.endm
+
+.macro FENCE_SA
+    SYS 1
+.endm
+
+.macro FENCE_ALL
+    SYS 2
+.endm
+
+.macro KERNEL_END
+    SYS 3
+.endm

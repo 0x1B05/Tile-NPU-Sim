@@ -16,6 +16,7 @@
 #include "execute_row_lane.h"
 #include "execute_rv64i.h"
 #include "execute_rv64m.h"
+#include "execute_sys.h"
 
 #include <variant>
 
@@ -87,6 +88,10 @@ ExecuteResult execute_one(const QntInstr &instr, ExecContext &ctx) {
 
 ExecuteResult execute_one(const MmaInstr &instr, ExecContext &ctx) {
   return execute_mma(instr, ctx.state);
+}
+
+ExecuteResult execute_one(const SysInstr &instr, ExecContext &ctx) {
+  return execute_sys(instr, ctx.state);
 }
 
 } // namespace

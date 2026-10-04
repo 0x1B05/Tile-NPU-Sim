@@ -456,6 +456,28 @@ TEST_CASE(npu_guest_mma) {
            "mma image reports success via a0");
 }
 
+TEST_CASE(npu_guest_sys) {
+  // tests/guest/npu/sys.S interleaves the three fences with a tfill/tstore
+  // pair, checks the stored bytes, then terminates with kernel.end. The step
+  // stops with StepStatus::kernel_end (a simulator convention: the ISA does
+  // not define the architectural behavior after kernel completion).
+  tile_npu::FlatMemory memory{IMAGE_BASE, 256};
+  tile_npu::Simulator sim(memory);
+  load_image(memory, "sys");
+  sim.reset(IMAGE_BASE);
+  tile_npu::StepResult result{};
+  for (int steps = 0; steps < 512; ++steps) {
+    result = sim.step();
+    if (result.status != tile_npu::StepStatus::retired) {
+      break;
+    }
+  }
+  check_eq(result.status, tile_npu::StepStatus::kernel_end,
+           "sys image stops at kernel.end");
+  check_eq(hex(sim.state().scalar.read_x(10)), hex(0x0u),
+           "sys image reports success via a0");
+}
+
 TEST_CASE(npu_guest_cfg_self_check) {
   // tests/guest/npu/cfg.S programs config registers with cfg.seti/cfg.setx,
   // reads them back with cfg.get, and reaches ebreak with a0 = 0 on success.

@@ -371,6 +371,19 @@ struct MmaInstr {
   NpuRegister src_b{};
 };
 
+// SYS operations (Z format): no explicit operands. funct3 codes 100-111 are
+// reserved.
+enum class SysOp : std::uint8_t {
+  fence_mem = 0b000,
+  fence_sa = 0b001,
+  fence_all = 0b010,
+  kernel_end = 0b011,
+};
+
+struct SysInstr {
+  SysOp op = SysOp::fence_mem;
+};
+
 // The architectural configuration register types (TC/AC/BC/VC/TM/AM/BM/VM).
 // Decode derives the register type from (major4, sel2) or (sel2, MV), so
 // field access is independent of the instruction format that selected it.

@@ -153,6 +153,7 @@ std::string_view status_name(StepStatus status) {
   case store_fault:                    return "store_fault";
   case environment_call:               return "environment_call";
   case breakpoint:                     return "breakpoint";
+  case kernel_end:                     return "kernel_end";
   }
   // clang-format on
   return "unknown";
