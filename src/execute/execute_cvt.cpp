@@ -2,6 +2,7 @@
 
 #include "config_check.h"
 #include "tile_npu/matrix_view.h"
+#include "utils/unreachable.h"
 
 #include <array>
 #include <bit>
@@ -17,10 +18,6 @@ namespace {
 // unsuccessful execution leaves architectural state unchanged.
 ExecuteResult cvt_acc(const CvtInstr &instr, State &state) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
-  if (instr.dest.index >= ACC_REGISTERS || instr.src.index >= ACC_REGISTERS ||
-      instr.src.domain != NpuDomain::acc) {
-    return fail;
-  }
   const auto &dst_config = state.ac[instr.dest.index];
   const auto &src_config = state.ac[instr.src.index];
   if (!valid_domain_config(dst_config) || !valid_domain_config(src_config) ||
@@ -47,11 +44,6 @@ ExecuteResult cvt_acc(const CvtInstr &instr, State &state) {
 
 ExecuteResult cvt_vec32(const CvtInstr &instr, State &state) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
-  if (instr.dest.index >= VECTOR_REGISTERS ||
-      instr.src.index >= VECTOR_REGISTERS ||
-      instr.src.domain != NpuDomain::vec32) {
-    return fail;
-  }
   const auto &dst_config = state.vc[instr.dest.index];
   const auto &src_config = state.vc[instr.src.index];
   if (!valid_domain_config(dst_config) || !valid_domain_config(src_config) ||
@@ -74,10 +66,6 @@ ExecuteResult cvt_vec32(const CvtInstr &instr, State &state) {
 // keeps its i32 dtype and takes the source's effective shape.
 ExecuteResult widen_tile_to_acc(const CvtInstr &instr, State &state) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
-  if (instr.dest.index >= ACC_REGISTERS || instr.src.index >= TILE_REGISTERS ||
-      instr.src.domain != NpuDomain::tile) {
-    return fail;
-  }
   const auto &dst_config = state.ac[instr.dest.index];
   const auto &src_config = state.tc[instr.src.index];
   if (!valid_domain_config(dst_config) || !valid_domain_config(src_config) ||
@@ -111,8 +99,9 @@ ExecuteResult execute_cvt(const CvtInstr &instr, State &state) {
   switch (instr.dest.domain) {
   case NpuDomain::acc: return cvt_acc(instr, state);
   case NpuDomain::vec32: return cvt_vec32(instr, state);
-  default: return {.status = StepStatus::invalid_configuration};
+  default: break; // cvt has no 8-bit-domain encoding
   }
+  unreachable("execute_cvt with an 8-bit destination");
 }
 
 } // namespace tile_npu

@@ -17,7 +17,6 @@ namespace {
 // Per-op dtype legality from the ISA encoding rules: `not` is bitwise (any
 // dtype), abs/neg are i32/f32, the approximate functions are f32-only.
 bool op_supports_dtype(EunOp op, DType dtype) {
-  if (op > EunOp::silu) return false; // hand-constructed reserved op
   switch (op) {
   case EunOp::bit_not: return true;
   case EunOp::abs:
@@ -70,10 +69,6 @@ unary_matrix(const EunInstr &instr, State &,
              std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
              const std::array<Config, RegCount> &configs) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
-  if (instr.dest.index >= RegCount || instr.src.index >= RegCount ||
-      instr.src.domain != instr.dest.domain) {
-    return fail;
-  }
   const auto &dst_config = configs[instr.dest.index];
   const auto &src_config = configs[instr.src.index];
   if (!valid_elementwise_config(dst_config) ||
@@ -103,10 +98,6 @@ unary_vector(const EunInstr &instr, State &,
              std::array<std::array<Element, VECTOR_LANES>, RegCount> &regs,
              const std::array<Config, RegCount> &configs) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
-  if (instr.dest.index >= RegCount || instr.src.index >= RegCount ||
-      instr.src.domain != instr.dest.domain) {
-    return fail;
-  }
   const auto &dst_config = configs[instr.dest.index];
   const auto &src_config = configs[instr.src.index];
   if (!valid_elementwise_config(dst_config) ||
@@ -131,9 +122,9 @@ ExecuteResult execute_eun(const EunInstr &instr, State &state) {
   case NpuDomain::tile: return unary_matrix(instr, state, state.t, state.tc);
   case NpuDomain::acc: return unary_matrix(instr, state, state.a, state.ac);
   case NpuDomain::vec32: return unary_vector(instr, state, state.v, state.vc);
-  case NpuDomain::vec8: break; // decode rejects E_UNARY on the vec8 domain
+  case NpuDomain::vec8: break; // E_UNARY has no vec8 encoding
   }
-  return {.status = StepStatus::invalid_configuration};
+  unreachable("execute_eun on the vec8 domain");
 }
 
 } // namespace tile_npu

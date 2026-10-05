@@ -22,10 +22,13 @@ inline ArithMode arith_mode_of(const Vec32Config &) { return ArithMode::wrap; }
 
 // div is f32-only; bitwise and shift operations are integer-only. Tile
 // mul/div never reaches the executors: the tile domain has no such encodings.
-// Legality comes from the shared EBIN_BY_FUNCT4 table.
+// Legality comes from the shared EBIN_BY_FUNCT4 table; the lookup stays total
+// over the raw op code so this helper never indexes out of bounds.
 inline bool ebin_op_supports_dtype(EbinOp op, DType dtype) {
-  const auto &info = EBIN_BY_FUNCT4[static_cast<std::uint8_t>(op)];
-  if (!info) return false; // hand-constructed op with an unassigned code
+  const auto code = static_cast<std::uint8_t>(op);
+  if (code >= EBIN_BY_FUNCT4.size()) return false;
+  const auto &info = EBIN_BY_FUNCT4[code];
+  if (!info) return false;
   return dtype == DType::f32 ? info->f32_allowed : info->integer_allowed;
 }
 

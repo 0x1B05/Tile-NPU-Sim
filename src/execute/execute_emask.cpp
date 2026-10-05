@@ -2,6 +2,7 @@
 
 #include "config_check.h"
 #include "tile_npu/matrix_view.h"
+#include "utils/unreachable.h"
 
 #include <array>
 #include <cstddef>
@@ -39,7 +40,6 @@ std::optional<Element> fill_value(const MaskInstr &instr, const State &state,
   if (instr.fill_is_scalar) {
     return static_cast<Element>(state.scalar.read_x(instr.fill));
   }
-  if (instr.fill > 8) return std::nullopt; // hand-constructed reserved code
   if (dtype == DType::f32) {
     return static_cast<Element>(F32_BY_FILL5[instr.fill]);
   }
@@ -57,10 +57,6 @@ mask_matrix(const MaskInstr &instr, State &state,
             std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
             const std::array<Config, RegCount> &configs) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
-  if (instr.dest.index >= RegCount || instr.src.index >= RegCount ||
-      instr.src.domain != instr.dest.domain || instr.op > MaskOp::triu) {
-    return fail;
-  }
   const auto &dst_config = configs[instr.dest.index];
   const auto &src_config = configs[instr.src.index];
   if (!valid_elementwise_config(dst_config) ||
@@ -103,10 +99,6 @@ mask_vector(const MaskInstr &instr, State &state,
             std::array<std::array<Element, VECTOR_LANES>, RegCount> &regs,
             const std::array<Config, RegCount> &configs) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
-  if (instr.dest.index >= RegCount || instr.src.index >= RegCount ||
-      instr.src.domain != instr.dest.domain || instr.op != MaskOp::tail) {
-    return fail;
-  }
   const auto &dst_config = configs[instr.dest.index];
   const auto &src_config = configs[instr.src.index];
   if (!valid_elementwise_config(dst_config) ||
@@ -135,7 +127,7 @@ ExecuteResult execute_emask(const MaskInstr &instr, State &state) {
   case NpuDomain::vec8: return mask_vector(instr, state, state.b, state.bc);
   case NpuDomain::vec32: return mask_vector(instr, state, state.v, state.vc);
   }
-  return {.status = StepStatus::invalid_configuration};
+  unreachable("execute_emask with an unknown domain");
 }
 
 } // namespace tile_npu

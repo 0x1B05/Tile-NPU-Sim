@@ -17,9 +17,12 @@ namespace tile_npu {
 namespace {
 
 // Condition legality from the shared table: ne/ge are integer-only, le/unord
-// f32-only. Hand-constructed reserved conditions fail the lookup.
+// f32-only. The lookup stays total over the raw condition code so this helper
+// never indexes out of bounds.
 bool op_supports_dtype(CmpOp op, DType dtype) {
-  const auto &info = CMP_BY_FUNCT3[static_cast<std::uint8_t>(op)];
+  const auto code = static_cast<std::uint8_t>(op);
+  if (code >= CMP_BY_FUNCT3.size()) return false;
+  const auto &info = CMP_BY_FUNCT3[code];
   if (!info) return false;
   return dtype == DType::f32 ? info->f32_allowed : info->integer_allowed;
 }
@@ -33,14 +36,6 @@ bool mask_matches(const AccConfig &mask, const AccConfig &src) {
 
 bool mask_matches(const Vec32Config &mask, const Vec32Config &src) {
   return mask.dtype == DType::u32 && shapes_match(mask, src);
-}
-
-// Decode already guarantees this; hand-constructed instructions can violate
-// it, so the executor treats cross-domain operands as a config error.
-bool domains_consistent(const CmpInstr &instr) {
-  if (instr.src1.domain != instr.dest.domain) return false;
-  const auto *rhs = std::get_if<NpuRegister>(&instr.src2);
-  return rhs == nullptr || rhs->domain == instr.dest.domain;
 }
 
 // One comparison on raw 32-bit storage bits: i32 compares signed, u32
@@ -83,7 +78,6 @@ std::uint32_t scalar_operand(const State &state, const NpuOperand &src2) {
 template <typename Config, std::size_t RegCount>
 bool sources_valid(const CmpInstr &instr,
                    const std::array<Config, RegCount> &configs) {
-  if (instr.src1.index >= RegCount) return false;
   const auto &lhs_config = configs[instr.src1.index];
   if (!valid_domain_config(lhs_config) ||
       !op_supports_dtype(instr.op, lhs_config.dtype)) {
@@ -91,7 +85,6 @@ bool sources_valid(const CmpInstr &instr,
   }
   const auto *rhs = std::get_if<NpuRegister>(&instr.src2);
   if (rhs == nullptr) return true;
-  if (rhs->index >= RegCount) return false;
   const auto &rhs_config = configs[rhs->index];
   return valid_domain_config(rhs_config) &&
          configs_match(lhs_config, rhs_config);
@@ -102,7 +95,7 @@ bool sources_valid(const CmpInstr &instr,
 // state unchanged.
 ExecuteResult cmp_acc(const CmpInstr &instr, State &state) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
-  if (instr.dest.index >= ACC_REGISTERS || !sources_valid(instr, state.ac)) {
+  if (!sources_valid(instr, state.ac)) {
     return fail;
   }
   const auto &dst_config = state.ac[instr.dest.index];
@@ -142,7 +135,7 @@ ExecuteResult cmp_acc(const CmpInstr &instr, State &state) {
 // Vec32: same constraints, flat lane loop over the effective length.
 ExecuteResult cmp_vec32(const CmpInstr &instr, State &state) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
-  if (instr.dest.index >= VECTOR_REGISTERS || !sources_valid(instr, state.vc)) {
+  if (!sources_valid(instr, state.vc)) {
     return fail;
   }
   const auto &dst_config = state.vc[instr.dest.index];
@@ -171,15 +164,12 @@ ExecuteResult cmp_vec32(const CmpInstr &instr, State &state) {
 } // namespace
 
 ExecuteResult execute_ecmp(const CmpInstr &instr, State &state) {
-  if (!domains_consistent(instr)) {
-    return {.status = StepStatus::invalid_configuration};
-  }
   switch (instr.dest.domain) {
   case NpuDomain::acc: return cmp_acc(instr, state);
   case NpuDomain::vec32: return cmp_vec32(instr, state);
-  default: break; // decode rejects E_CMP on the 8-bit domains
+  default: break; // E_CMP has no 8-bit-domain encoding
   }
-  return {.status = StepStatus::invalid_configuration};
+  unreachable("execute_ecmp on an 8-bit domain");
 }
 
 } // namespace tile_npu

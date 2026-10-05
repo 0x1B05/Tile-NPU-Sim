@@ -3,6 +3,7 @@
 #include "config_check.h"
 #include "ebin_op.h"
 #include "tile_npu/matrix_view.h"
+#include "utils/unreachable.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -20,20 +21,9 @@ Element scalar_operand(const State &state, const NpuOperand &src2) {
       state.scalar.read_x(std::get<ScalarRegister>(src2).index));
 }
 
-// Decode already guarantees this; hand-constructed instructions can violate
-// it, so the executor treats cross-domain operands as a config error.
-bool domains_consistent(const EbinInstr &instr) {
-  if (instr.src1.domain != instr.dest.domain) return false;
-  const auto *rhs = std::get_if<NpuRegister>(&instr.src2);
-  return rhs == nullptr || rhs->domain == instr.dest.domain;
-}
-
 template <typename Config, std::size_t RegCount>
 bool operands_valid(const EbinInstr &instr,
                     const std::array<Config, RegCount> &configs) {
-  if (instr.dest.index >= RegCount || instr.src1.index >= RegCount) {
-    return false;
-  }
   const auto &dst = configs[instr.dest.index];
   const auto &lhs = configs[instr.src1.index];
   if (!valid_elementwise_config(dst) || !valid_elementwise_config(lhs) ||
@@ -42,7 +32,6 @@ bool operands_valid(const EbinInstr &instr,
     return false;
   }
   if (const auto *rhs = std::get_if<NpuRegister>(&instr.src2)) {
-    if (rhs->index >= RegCount) return false;
     const auto &rhs_config = configs[rhs->index];
     return valid_elementwise_config(rhs_config) &&
            configs_match(dst, rhs_config);
@@ -59,7 +48,7 @@ ExecuteResult elementwise_matrix(
     std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
     const std::array<Config, RegCount> &configs) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
-  if (!domains_consistent(instr) || !operands_valid(instr, configs)) {
+  if (!operands_valid(instr, configs)) {
     return fail;
   }
   const auto *rhs_register = std::get_if<NpuRegister>(&instr.src2);
@@ -100,7 +89,7 @@ ExecuteResult elementwise_vector(
     std::array<std::array<Element, VECTOR_LANES>, RegCount> &regs,
     const std::array<Config, RegCount> &configs) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
-  if (!domains_consistent(instr) || !operands_valid(instr, configs)) {
+  if (!operands_valid(instr, configs)) {
     return fail;
   }
   const auto *rhs_register = std::get_if<NpuRegister>(&instr.src2);
@@ -131,9 +120,9 @@ ExecuteResult execute_ebin(const EbinInstr &instr, State &state) {
     return elementwise_matrix(instr, state, state.a, state.ac);
   case NpuDomain::vec32:
     return elementwise_vector(instr, state, state.v, state.vc);
-  case NpuDomain::vec8: break; // decode rejects E_BIN on the vec8 domain
+  case NpuDomain::vec8: break; // E_BIN has no vec8 encoding
   }
-  return {.status = StepStatus::invalid_configuration};
+  unreachable("execute_ebin on the vec8 domain");
 }
 
 } // namespace tile_npu

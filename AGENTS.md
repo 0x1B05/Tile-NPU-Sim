@@ -35,7 +35,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | ---- | ---- |
 | `include/tile_npu/state.h` | 架构状态: 五个数据域的寄存器堆 (Tile/Acc/Vec8/Vec32/Scalar), 计算配置 (TC/AC/BC/VC) 与访存描述符 (TM/AM/BM/VM), 物理尺寸常量 |
 | `include/tile_npu/memory.h` | 字节寻址内存接口; `FlatMemory` 为平坦 RAM 实现 |
-| `include/tile_npu/instruction.h` | typed instruction IR: scalar operands, NPU domains/registers, `IndexOperand` (index5 操作数: `ImmediateIndex` 或 `ScalarRegister` 的 variant; `MblkInstr` 按方向拆 `dest`/`src`), elementwise (`EbinInstr` + `EBIN_BY_FUNCT4` 操作元数据表, `EunInstr`, `CmpInstr` + `CMP_BY_FUNCT3` 条件元数据表, `BcastInstr`, `Er4Instr`, `MaskInstr`, `CvtInstr`, `ReduceInstr`, `QntInstr`, `MmaInstr`, `SysInstr`), config (`CfgInstr`, `ConfigRegType`), 访存 (`MblkInstr`), 初始化 (`InitInstr`) 与行/lane 搬运 (`RowInstr`, `LaneInstr`) 指令类型 |
+| `include/tile_npu/instruction.h` | typed instruction IR: scalar operands, NPU domains/registers (`domain_register_count`), `IndexOperand` (index5 操作数: `ImmediateIndex` 或 `ScalarRegister` 的 variant; `MblkInstr` 按方向拆 `dest`/`src`), elementwise (`EbinInstr` + `EBIN_BY_FUNCT4` 操作元数据表, `EunInstr`, `CmpInstr` + `CMP_BY_FUNCT3` 条件元数据表, `BcastInstr`, `Er4Instr`, `MaskInstr`, `CvtInstr`, `ReduceInstr`, `QntInstr`, `MmaInstr`, `SysInstr`), config (`CfgInstr`, `ConfigRegType`), 访存 (`MblkInstr`), 初始化 (`InitInstr`) 与行/lane 搬运 (`RowInstr`, `LaneInstr`) 指令类型 |
 | `include/tile_npu/decode.h` | 译码结果类型: typed scalar/NPU instructions, `DecodeError`, `DecodeResult` |
 | `include/tile_npu/config.h`, `src/config.cpp` | 统一配置/描述符字段访问、字段编号映射与写入校验 |
 | `include/tile_npu/matrix_view.h` | 逻辑矩阵坐标到物理寄存器存储的 view, 当前实现 canonical layout |
@@ -48,7 +48,8 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `src/decode/pattern.h` | INSTPAT 风格译码机制: 编译期 `Pattern` 位型解析, `DecodeEntry` 译码表, `as`/`fail`/`match` 通用 handler |
 | `src/decode/decode.cpp` | NPU 译码表 (q != 11): major4/sel3/funct4 由 pattern 直接匹配, 首条命中生效 |
 | `src/decode/decode_rv64im.cpp` | RV64IM 译码表 (q = 11): 一行一条指令的 pattern, 表尾 catch-all 划分 illegal / not_implemented |
-| `src/execute/execute.cpp` | 执行分派 (标量 / NPU 各域执行器) |
+| `src/execute/execute.cpp` | 执行分派 (标量 / NPU 各域执行器); `execute_npu` 先做结构校验再分派 |
+| `src/execute/validate.h` | 执行入口的统一结构校验 `valid_structure` (每个 IR 类型一个 overload): op code/domain/操作数 variant/寄存器号是否可能来自某个真实编码 |
 | `src/execute/config_check.h` | 各执行器共享的配置合法性 (`valid_domain_config` / `valid_elementwise_config`) 与同源同形约束 (`configs_match`) |
 | `src/execute/execute_cfg.cpp` | 配置指令 (`cfg.*`) 执行器: 经 `config.h` 字段访问器读写, 校验失败上报 `invalid_configuration` (CFG_ERROR) |
 | `src/execute/execute_ebin.cpp` | 逐元素二元 (E_BIN) 族执行器: 公共约束校验与矩阵/向量循环抽象为模板, 操作语义集中在 `apply_op` |
@@ -84,6 +85,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 - 标量执行: 64-bit 回绕算术, 小端访存, load/store 要求自然对齐; 非对齐访问只报告状态, 不改变架构状态。
 - 单 hart 模型下 RV64 `FENCE` 与 NPU `fence.*` 均为 no-op; `ECALL`/`EBREAK`/`kernel.end` 使 `step()` 停在当前 PC, 交给调用方处理。
 - 状态与诊断的区分是刻意的: `decode_not_implemented` (编码可能合法但未译码) / `illegal` (保留编码) / `execution_not_implemented` / `invalid_configuration` 都是**模拟器诊断, 不是 ISA 定义的 trap**。理论上不可达的路径 (不变式被破坏, 即模拟器自身 bug) 用 `unreachable()` 当场中止, 不走 `StepStatus`。
+- 结构合法性只校验一次: `decode()` 产生的 IR 保证结构合法 (op code、domain、操作数 variant、寄存器号都在某个真实编码允许的范围内); `execute_npu` 入口用 `valid_structure` (`src/execute/validate.h`) 统一复查, 手工构造的非法 IR (embedder bug) 报 `illegal_instruction`。各执行器不再重复结构检查, 只负责配置与数据的动态约束 (dtype/shape/len/描述符), 失败报 `invalid_configuration`。
 - `Simulator::reset(entry_pc)` 清模拟器状态并设 PC, 不清内存; ISA 手册未定义架构复位值与入口地址。`sim_run` 的装载地址 (`0x80000000`), RAM 大小 (128 MiB) 与 `EBREAK` 时 `a0 == 0` 判成功, 都是 **runner 约定, 不是架构契约**。
 - 凡是模拟器自有约定 (复位, 装载, 停机判定), 必须在代码注释或文档中明确标注为模拟器约定, 不得写成 ISA 行为。
 
@@ -99,7 +101,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 
 1. `src/decode/encoding.h` 补充字段提取 (若无对应格式)。
 2. 译码: `include/tile_npu/instruction.h` 增加带数据域和 typed operand 的指令类型, 在对应译码表 (`src/decode/decode.cpp` 或 `src/decode/decode_rv64im.cpp`) 加一行 `{pattern, handler}`; pattern 无法表达的剩余检查 (如寄存器号边界) 写进自定义 handler, 保留编码必须报 `illegal`。
-3. 执行: `src/execute/execute.cpp` 分派到对应执行器, 语义严格按手册伪代码; 未实现的执行报 `execution_not_implemented`, 不要留静默路径。
+3. 执行: `src/execute/validate.h` 为新指令类型加 `valid_structure` overload (结构契约与译码 handler 保持一致), `src/execute/execute.cpp` 分派到对应执行器, 语义严格按手册伪代码; 未实现的执行报 `execution_not_implemented`, 不要留静默路径。
 4. 测试: 每新增操作必须补三类用例 — 合法编码, 保留/非法编码, 边界值 (立即数边界, 寄存器编号边界, 有效 shape 边界); NPU 正例优先写 guest 镜像, 负例留 host 侧表驱动 (见"测试约定")。
 
 ## 测试约定

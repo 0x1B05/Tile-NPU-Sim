@@ -1,5 +1,7 @@
 #include "execute.h"
 
+#include "validate.h"
+
 #include <variant>
 
 namespace tile_npu {
@@ -87,6 +89,14 @@ ExecuteResult execute_scalar(const DecodedScalarInstr &instr,
 }
 
 ExecuteResult execute_npu(const DecodedNpuInstr &instr, ExecContext &ctx) {
+  // decode() guarantees structural legality; the visit below re-checks it so
+  // hand-constructed IR fails uniformly here instead of reaching unchecked
+  // array indexing in an executor.
+  const bool legal = std::visit(
+      [](const auto &decoded) { return valid_structure(decoded); }, instr);
+  if (!legal) {
+    return {.status = StepStatus::illegal_instruction};
+  }
   return std::visit(
       [&ctx](const auto &decoded) { return execute_one(decoded, ctx); }, instr);
 }

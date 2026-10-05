@@ -6,21 +6,10 @@
 #include "tile_npu/config.h"
 #include "tile_npu/state.h"
 
-#include <cstddef>
 #include <cstdint>
 
 namespace tile_npu {
 namespace {
-
-constexpr std::size_t domain_register_count(NpuDomain domain) {
-  switch (domain) {
-  case NpuDomain::tile: return TILE_REGISTERS;
-  case NpuDomain::acc: return ACC_REGISTERS;
-  case NpuDomain::vec8:
-  case NpuDomain::vec32: return VECTOR_REGISTERS;
-  }
-  return 0;
-}
 
 // E_BIN (R3): sel3 = {dom2, BX}; BX=0 takes src2 from the same domain, BX=1
 // from scalar xS. Unassigned funct4 values and tile mul/div are reserved;

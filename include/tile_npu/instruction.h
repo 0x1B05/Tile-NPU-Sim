@@ -1,6 +1,9 @@
 #pragma once
 
+#include "tile_npu/state.h"
+
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <variant>
@@ -56,6 +59,18 @@ struct NpuRegister {
   NpuDomain domain = NpuDomain::tile;
   RegisterIndex index = 0;
 };
+
+// Architectural register count per data domain; decode and the structural
+// validation at the execute entry both bound register numbers with it.
+inline constexpr std::size_t domain_register_count(NpuDomain domain) {
+  switch (domain) {
+  case NpuDomain::tile: return TILE_REGISTERS;
+  case NpuDomain::acc: return ACC_REGISTERS;
+  case NpuDomain::vec8:
+  case NpuDomain::vec32: return VECTOR_REGISTERS;
+  }
+  return 0;
+}
 
 using NpuOperand = std::variant<NpuRegister, ScalarRegister>;
 

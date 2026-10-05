@@ -2,6 +2,7 @@
 
 #include "config_check.h"
 #include "tile_npu/matrix_view.h"
+#include "utils/unreachable.h"
 
 #include <array>
 #include <cstddef>
@@ -33,14 +34,12 @@ ExecuteResult
 init_matrix(const InitInstr &instr, State &state,
             std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
             const std::array<Config, RegCount> &configs) {
-  if (instr.reg.index >= RegCount) return config_error();
   const auto &dst_config = configs[instr.reg.index];
   if (!valid_domain_config(dst_config)) return config_error();
 
   MatrixView<Element> dst(std::span<Element>(regs[instr.reg.index]),
                           dst_config.rows, dst_config.cols, dst_config.layout);
   if (instr.op == InitOp::copy) {
-    if (instr.src >= RegCount) return config_error();
     const auto &src_config = configs[instr.src];
     if (!valid_domain_config(src_config) ||
         !configs_match(dst_config, src_config)) {
@@ -71,13 +70,11 @@ ExecuteResult
 init_vector(const InitInstr &instr, State &state,
             std::array<std::array<Element, VECTOR_LANES>, RegCount> &regs,
             const std::array<Config, RegCount> &configs) {
-  if (instr.reg.index >= RegCount) return config_error();
   const auto &dst_config = configs[instr.reg.index];
   if (!valid_domain_config(dst_config)) return config_error();
   auto &dst_reg = regs[instr.reg.index];
 
   if (instr.op == InitOp::copy) {
-    if (instr.src >= RegCount) return config_error();
     const auto &src_config = configs[instr.src];
     if (!valid_domain_config(src_config) ||
         !configs_match(dst_config, src_config)) {
@@ -102,9 +99,6 @@ init_vector(const InitInstr &instr, State &state,
 // and layout constrain the execution. The source is staged so that an
 // in-place transpose stays safe.
 ExecuteResult transpose_tile(const InitInstr &instr, State &state) {
-  if (instr.reg.index >= TILE_REGISTERS || instr.src >= TILE_REGISTERS) {
-    return config_error();
-  }
   const auto &src_config = state.tc[instr.src];
   const auto &dst_config = state.tc[instr.reg.index];
   if (!valid_domain_config(src_config) || dst_config.layout != 0 ||
@@ -134,27 +128,18 @@ ExecuteResult transpose_tile(const InitInstr &instr, State &state) {
 
 } // namespace
 
-// Decode rejects ttranspose outside the tile domain; a hand-constructed
-// instruction can still ask for it and fails as a config error.
+// ttranspose is tile-only by the structural validation at execute_npu.
 ExecuteResult execute_init(const InitInstr &instr, State &state) {
-  switch (instr.reg.domain) {
-  case NpuDomain::tile:
-    if (instr.op == InitOp::transpose) return transpose_tile(instr, state);
-    return init_matrix(instr, state, state.t, state.tc);
-  case NpuDomain::acc:
-    if (instr.op != InitOp::transpose)
-      return init_matrix(instr, state, state.a, state.ac);
-    break;
-  case NpuDomain::vec8:
-    if (instr.op != InitOp::transpose)
-      return init_vector(instr, state, state.b, state.bc);
-    break;
-  case NpuDomain::vec32:
-    if (instr.op != InitOp::transpose)
-      return init_vector(instr, state, state.v, state.vc);
-    break;
+  if (instr.op == InitOp::transpose) {
+    return transpose_tile(instr, state);
   }
-  return config_error();
+  switch (instr.reg.domain) {
+  case NpuDomain::tile: return init_matrix(instr, state, state.t, state.tc);
+  case NpuDomain::acc: return init_matrix(instr, state, state.a, state.ac);
+  case NpuDomain::vec8: return init_vector(instr, state, state.b, state.bc);
+  case NpuDomain::vec32: return init_vector(instr, state, state.v, state.vc);
+  }
+  unreachable("execute_init with an unknown domain");
 }
 
 } // namespace tile_npu

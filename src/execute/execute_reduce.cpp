@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <limits>
 #include <span>
+#include <variant>
 
 namespace tile_npu {
 namespace {
@@ -84,14 +85,9 @@ struct ArgmaxScan {
 // execution leaves architectural state unchanged.
 ExecuteResult areduce(const ReduceInstr &instr, State &state) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
-  const auto *dst = std::get_if<NpuRegister>(&instr.dest);
-  if (dst == nullptr || dst->domain != NpuDomain::vec32 ||
-      dst->index >= VECTOR_REGISTERS || instr.src.domain != NpuDomain::acc ||
-      instr.src.index >= ACC_REGISTERS) {
-    return fail;
-  }
+  const auto &dst = std::get<NpuRegister>(instr.dest);
   const auto &src_config = state.ac[instr.src.index];
-  const auto &dst_config = state.vc[dst->index];
+  const auto &dst_config = state.vc[dst.index];
   const auto dst_dtype = instr.op == ReduceOp::argmax ? DType::i32 : DType::f32;
   if (!valid_domain_config(src_config) || src_config.dtype != DType::f32 ||
       !valid_domain_config(dst_config) || dst_config.dtype != dst_dtype ||
@@ -101,7 +97,7 @@ ExecuteResult areduce(const ReduceInstr &instr, State &state) {
   MatrixView<const std::uint32_t> src(std::span(state.a[instr.src.index]),
                                       src_config.rows, src_config.cols,
                                       src_config.layout);
-  auto &dst_reg = state.v[dst->index];
+  auto &dst_reg = state.v[dst.index];
   for (std::size_t row = 0; row < src_config.rows; ++row) {
     if (instr.op == ReduceOp::argmax) {
       ArgmaxScan scan;
@@ -126,10 +122,6 @@ ExecuteResult areduce(const ReduceInstr &instr, State &state) {
 // zeroed); argmax writes xIndex (i32, sign-extended) and xValue (f32 bits).
 ExecuteResult vreduce(const ReduceInstr &instr, State &state) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
-  if (instr.src.domain != NpuDomain::vec32 ||
-      instr.src.index >= VECTOR_REGISTERS) {
-    return fail;
-  }
   const auto &src_config = state.vc[instr.src.index];
   if (!valid_domain_config(src_config) || src_config.dtype != DType::f32) {
     return fail;
@@ -137,33 +129,27 @@ ExecuteResult vreduce(const ReduceInstr &instr, State &state) {
   const auto &src_reg = state.v[instr.src.index];
 
   if (instr.op == ReduceOp::argmax) {
-    const auto *x_index = std::get_if<ScalarRegister>(&instr.dest);
-    const auto *x_value = std::get_if<ScalarRegister>(&instr.dest2);
-    if (x_index == nullptr || x_value == nullptr) {
-      return fail;
-    }
+    const auto &x_index = std::get<ScalarRegister>(instr.dest);
+    const auto &x_value = std::get<ScalarRegister>(instr.dest2);
     ArgmaxScan scan;
     for (std::size_t lane = 0; lane < src_config.len; ++lane) {
       scan.feed(static_cast<std::uint32_t>(lane),
                 std::bit_cast<float>(src_reg[lane]));
     }
-    state.scalar.write_x(x_index->index,
+    state.scalar.write_x(x_index.index,
                          static_cast<std::uint64_t>(static_cast<std::int64_t>(
                              static_cast<std::int32_t>(scan.best_index))));
-    state.scalar.write_x(x_value->index,
+    state.scalar.write_x(x_value.index,
                          static_cast<std::uint64_t>(f32_bits(scan.best_value)));
     return {.status = StepStatus::retired};
   }
 
-  const auto *x_dst = std::get_if<ScalarRegister>(&instr.dest);
-  if (x_dst == nullptr) {
-    return fail;
-  }
+  const auto &x_dst = std::get<ScalarRegister>(instr.dest);
   float acc = fold_identity(instr.op);
   for (std::size_t lane = 0; lane < src_config.len; ++lane) {
     acc = fold_step(instr.op, acc, std::bit_cast<float>(src_reg[lane]));
   }
-  state.scalar.write_x(x_dst->index, static_cast<std::uint64_t>(f32_bits(acc)));
+  state.scalar.write_x(x_dst.index, static_cast<std::uint64_t>(f32_bits(acc)));
   return {.status = StepStatus::retired};
 }
 

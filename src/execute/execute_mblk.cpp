@@ -208,9 +208,6 @@ ExecuteResult gather_tile(const MblkInstr &instr, ExecContext &ctx,
   if (!valid_domain_config(config)) {
     return config_error();
   }
-  if (instr.gather_src >= VECTOR_REGISTERS) {
-    return config_error(); // hand-constructed instruction
-  }
   const auto &index_config = ctx.state.vc[instr.gather_src];
   if (index_config.len == 0 || index_config.len > VECTOR_LANES) {
     return config_error();
@@ -285,9 +282,6 @@ vector_access(const MblkInstr &instr, ExecContext &ctx,
   // {b,v}load.gather: lane j is indexed by vS[j] times stride_bytes; lanes
   // beyond len(vS) are zero-filled. No descriptor increment.
   if (instr.op == MblkOp::gather) {
-    if (instr.gather_src >= VECTOR_REGISTERS) {
-      return config_error(); // hand-constructed instruction
-    }
     const auto &index_config = ctx.state.vc[instr.gather_src];
     if (index_config.len == 0 || index_config.len > VECTOR_LANES) {
       return config_error();
@@ -362,53 +356,41 @@ vector_access(const MblkInstr &instr, ExecContext &ctx,
 
 } // namespace
 
+// The op/domain combinations and register bounds are checked by the
+// structural validation at execute_npu; this dispatch is exhaustive over
+// what remains.
 ExecuteResult execute_mblk(const MblkInstr &instr, ExecContext &ctx) {
   State &state = ctx.state;
-  // Decode bounds the register numbers and the op/domain combinations;
-  // hand-constructed instructions can violate both, so the executor
-  // re-checks and treats them as config errors.
   switch (access_reg(instr).domain) {
   case NpuDomain::tile:
-    if (access_reg(instr).index < TILE_REGISTERS) {
-      switch (instr.op) {
-      case MblkOp::load:
-      case MblkOp::store:
-        return block_access(instr, ctx, state.t, state.tc, state.tm);
-      case MblkOp::row_load:
-      case MblkOp::row_store:
-        return row_access(instr, ctx, state.t, state.tc, state.tm);
-      case MblkOp::gather:
-        return gather_tile(instr, ctx, state.t, state.tc, state.tm);
-      }
+    switch (instr.op) {
+    case MblkOp::load:
+    case MblkOp::store:
+      return block_access(instr, ctx, state.t, state.tc, state.tm);
+    case MblkOp::row_load:
+    case MblkOp::row_store:
+      return row_access(instr, ctx, state.t, state.tc, state.tm);
+    case MblkOp::gather:
+      return gather_tile(instr, ctx, state.t, state.tc, state.tm);
     }
     break;
   case NpuDomain::acc:
-    if (access_reg(instr).index < ACC_REGISTERS) {
-      switch (instr.op) {
-      case MblkOp::load:
-      case MblkOp::store:
-        return block_access(instr, ctx, state.a, state.ac, state.am);
-      case MblkOp::row_load:
-      case MblkOp::row_store:
-        return row_access(instr, ctx, state.a, state.ac, state.am);
-      case MblkOp::gather: break; // gather is undefined on the Acc domain
-      }
+    switch (instr.op) {
+    case MblkOp::load:
+    case MblkOp::store:
+      return block_access(instr, ctx, state.a, state.ac, state.am);
+    case MblkOp::row_load:
+    case MblkOp::row_store:
+      return row_access(instr, ctx, state.a, state.ac, state.am);
+    case MblkOp::gather: break; // gather has no Acc-domain encoding
     }
     break;
   case NpuDomain::vec8:
-    if (access_reg(instr).index < VECTOR_REGISTERS &&
-        instr.op != MblkOp::row_load && instr.op != MblkOp::row_store) {
-      return vector_access(instr, ctx, state.b, state.bc, state.bm);
-    }
-    break;
+    return vector_access(instr, ctx, state.b, state.bc, state.bm);
   case NpuDomain::vec32:
-    if (access_reg(instr).index < VECTOR_REGISTERS &&
-        instr.op != MblkOp::row_load && instr.op != MblkOp::row_store) {
-      return vector_access(instr, ctx, state.v, state.vc, state.vm);
-    }
-    break;
+    return vector_access(instr, ctx, state.v, state.vc, state.vm);
   }
-  return config_error();
+  unreachable("M_BLK op/domain combination rejected by validation");
 }
 
 } // namespace tile_npu

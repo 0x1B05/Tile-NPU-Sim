@@ -71,6 +71,8 @@ ExecuteResult execute_sys(const SysInstr &instr, State &state);
 
 // Dispatch entry points
 ExecuteResult execute_scalar(const DecodedScalarInstr &instr, ExecContext &ctx);
+// Validates the instruction's structure first (validate.h): IR that no
+// encoding can produce fails with illegal_instruction before dispatch.
 ExecuteResult execute_npu(const DecodedNpuInstr &instr, ExecContext &ctx);
 
 } // namespace tile_npu

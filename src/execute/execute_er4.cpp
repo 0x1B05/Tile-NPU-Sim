@@ -27,13 +27,6 @@ template <typename E> constexpr DType mask_dtype_of() {
 template <typename Element, typename Config, std::size_t RegCount>
 bool operands_valid(const Er4Instr &instr,
                     const std::array<Config, RegCount> &configs) {
-  if (instr.op != Er4Op::select && instr.op != Er4Op::fmadd) {
-    return false; // hand-constructed reserved op
-  }
-  if (instr.dest.index >= RegCount || instr.arg.index >= RegCount ||
-      instr.src1.index >= RegCount || instr.src2.index >= RegCount) {
-    return false;
-  }
   const auto &dst = configs[instr.dest.index];
   const auto &arg = configs[instr.arg.index];
   const auto &lhs = configs[instr.src1.index];
@@ -55,10 +48,7 @@ er4_matrix(const Er4Instr &instr,
            std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
            const std::array<Config, RegCount> &configs) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
-  if (instr.arg.domain != instr.dest.domain ||
-      instr.src1.domain != instr.dest.domain ||
-      instr.src2.domain != instr.dest.domain ||
-      !operands_valid<Element>(instr, configs)) {
+  if (!operands_valid<Element>(instr, configs)) {
     return fail;
   }
   const auto &dst_config = configs[instr.dest.index];
@@ -97,10 +87,7 @@ er4_vector(const Er4Instr &instr,
            std::array<std::array<Element, VECTOR_LANES>, RegCount> &regs,
            const std::array<Config, RegCount> &configs) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
-  if (instr.arg.domain != instr.dest.domain ||
-      instr.src1.domain != instr.dest.domain ||
-      instr.src2.domain != instr.dest.domain ||
-      !operands_valid<Element>(instr, configs)) {
+  if (!operands_valid<Element>(instr, configs)) {
     return fail;
   }
   const auto &dst_config = configs[instr.dest.index];
@@ -131,9 +118,9 @@ ExecuteResult execute_er4(const Er4Instr &instr, State &state) {
   case NpuDomain::tile: return er4_matrix(instr, state.t, state.tc);
   case NpuDomain::acc: return er4_matrix(instr, state.a, state.ac);
   case NpuDomain::vec32: return er4_vector(instr, state.v, state.vc);
-  case NpuDomain::vec8: break; // decode rejects E_R4 on the vec8 domain
+  case NpuDomain::vec8: break; // E_R4 has no vec8 encoding
   }
-  return {.status = StepStatus::invalid_configuration};
+  unreachable("execute_er4 on the vec8 domain");
 }
 
 } // namespace tile_npu

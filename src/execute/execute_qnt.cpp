@@ -2,6 +2,7 @@
 
 #include "config_check.h"
 #include "tile_npu/matrix_view.h"
+#include "utils/unreachable.h"
 
 #include <bit>
 #include <cmath>
@@ -69,10 +70,6 @@ scale_lane(const QntInstr &instr, const State &state, std::uint8_t vscale_len) {
 // unchanged.
 ExecuteResult tquant(const QntInstr &instr, State &state) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
-  if (instr.dest.index >= TILE_REGISTERS || instr.src.index >= ACC_REGISTERS ||
-      instr.src.domain != NpuDomain::acc || instr.scale >= VECTOR_REGISTERS) {
-    return fail;
-  }
   const auto &dst_config = state.tc[instr.dest.index];
   const auto &src_config = state.ac[instr.src.index];
   const auto &scale_config = state.vc[instr.scale];
@@ -110,11 +107,6 @@ ExecuteResult tquant(const QntInstr &instr, State &state) {
 // tdequant.rows.f32: aD[i,j] = f32(tS[i,j]) x vScale[i].
 ExecuteResult tdequant(const QntInstr &instr, State &state) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
-  if (instr.op != QntOp::quant || instr.dest.index >= ACC_REGISTERS ||
-      instr.src.index >= TILE_REGISTERS ||
-      instr.src.domain != NpuDomain::tile || instr.scale >= VECTOR_REGISTERS) {
-    return fail;
-  }
   const auto &dst_config = state.ac[instr.dest.index];
   const auto &src_config = state.tc[instr.src.index];
   const auto &scale_config = state.vc[instr.scale];
@@ -148,11 +140,6 @@ ExecuteResult tdequant(const QntInstr &instr, State &state) {
 // the single scale lands in vScale[index].
 ExecuteResult vquant(const QntInstr &instr, State &state) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
-  if (instr.op != QntOp::quant || instr.dest.index >= VECTOR_REGISTERS ||
-      instr.src.index >= VECTOR_REGISTERS ||
-      instr.src.domain != NpuDomain::vec32 || instr.scale >= VECTOR_REGISTERS) {
-    return fail;
-  }
   const auto &dst_config = state.bc[instr.dest.index];
   const auto &src_config = state.vc[instr.src.index];
   const auto &scale_config = state.vc[instr.scale];
@@ -187,11 +174,6 @@ ExecuteResult vquant(const QntInstr &instr, State &state) {
 // bdequant.f32: vD[j] = f32(bS[j]) x vScale[index].
 ExecuteResult bdequant(const QntInstr &instr, State &state) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
-  if (instr.op != QntOp::quant || instr.dest.index >= VECTOR_REGISTERS ||
-      instr.src.index >= VECTOR_REGISTERS ||
-      instr.src.domain != NpuDomain::vec8 || instr.scale >= VECTOR_REGISTERS) {
-    return fail;
-  }
   const auto &dst_config = state.vc[instr.dest.index];
   const auto &src_config = state.bc[instr.src.index];
   const auto &scale_config = state.vc[instr.scale];
@@ -225,7 +207,7 @@ ExecuteResult execute_qnt(const QntInstr &instr, State &state) {
   case NpuDomain::vec8: return vquant(instr, state);
   case NpuDomain::vec32: return bdequant(instr, state);
   }
-  return {.status = StepStatus::invalid_configuration};
+  unreachable("execute_qnt with an unknown domain");
 }
 
 } // namespace tile_npu

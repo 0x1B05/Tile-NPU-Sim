@@ -3,6 +3,7 @@
 #include "config_check.h"
 #include "ebin_op.h"
 #include "tile_npu/matrix_view.h"
+#include "utils/unreachable.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -24,11 +25,6 @@ ExecuteResult bcast(
     const std::array<std::array<Element, VECTOR_LANES>, VecCount> &vector_regs,
     const std::array<VecConfig, VecCount> &vector_configs) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
-  if (instr.dest.index >= MatCount || instr.src1.index >= MatCount ||
-      instr.vector.index >= VecCount ||
-      instr.src1.domain != instr.dest.domain) {
-    return fail;
-  }
   const auto &dst_config = matrix_configs[instr.dest.index];
   const auto &src_config = matrix_configs[instr.src1.index];
   const auto &vec_config = vector_configs[instr.vector.index];
@@ -62,20 +58,15 @@ ExecuteResult bcast(
 } // namespace
 
 ExecuteResult execute_ebcast(const BcastInstr &instr, State &state) {
+  // The matrix/vector domain pairing is part of the structural validation.
   switch (instr.dest.domain) {
   case NpuDomain::tile:
-    if (instr.vector.domain == NpuDomain::vec8) {
-      return bcast(instr, state.t, state.tc, state.b, state.bc);
-    }
-    break;
+    return bcast(instr, state.t, state.tc, state.b, state.bc);
   case NpuDomain::acc:
-    if (instr.vector.domain == NpuDomain::vec32) {
-      return bcast(instr, state.a, state.ac, state.v, state.vc);
-    }
-    break;
-  default: break; // decode rejects E_BCAST without a matrix destination
+    return bcast(instr, state.a, state.ac, state.v, state.vc);
+  default: break; // E_BCAST has no vector-destination encoding
   }
-  return {.status = StepStatus::invalid_configuration};
+  unreachable("execute_ebcast without a matrix destination");
 }
 
 } // namespace tile_npu

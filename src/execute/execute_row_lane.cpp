@@ -2,6 +2,7 @@
 
 #include "config_check.h"
 #include "tile_npu/matrix_view.h"
+#include "utils/unreachable.h"
 
 #include <array>
 #include <cstddef>
@@ -26,9 +27,6 @@ ExecuteResult row_insert(
     const std::array<std::array<Element, VECTOR_LANES>, VCount> &vector_regs,
     const std::array<MConfig, MCount> &matrix_configs,
     const std::array<VConfig, VCount> &vector_configs) {
-  if (instr.matrix.index >= MCount || instr.vector.index >= VCount) {
-    return config_error();
-  }
   const auto &mconfig = matrix_configs[instr.matrix.index];
   const auto &vconfig = vector_configs[instr.vector.index];
   if (!valid_domain_config(mconfig) || !valid_domain_config(vconfig) ||
@@ -57,9 +55,6 @@ ExecuteResult row_extract(
     std::array<std::array<Element, VECTOR_LANES>, VCount> &vector_regs,
     const std::array<MConfig, MCount> &matrix_configs,
     const std::array<VConfig, VCount> &vector_configs) {
-  if (instr.matrix.index >= MCount || instr.vector.index >= VCount) {
-    return config_error();
-  }
   const auto &mconfig = matrix_configs[instr.matrix.index];
   const auto &vconfig = vector_configs[instr.vector.index];
   if (!valid_domain_config(mconfig) || !valid_domain_config(vconfig) ||
@@ -101,59 +96,49 @@ lane_move(const LaneInstr &instr, State &state,
   const auto lane = resolve_index(instr.index, state);
 
   if (instr.op == LaneOp::extract) {
-    const auto *src = std::get_if<NpuRegister>(&instr.src);
-    const auto *dst = std::get_if<ScalarRegister>(&instr.dst);
-    if (src == nullptr || dst == nullptr || src->index >= Count) {
-      return config_error();
-    }
-    const auto &config = configs[src->index];
+    const auto &src = std::get<NpuRegister>(instr.src);
+    const auto &dst = std::get<ScalarRegister>(instr.dst);
+    const auto &config = configs[src.index];
     if (!valid_domain_config(config) || lane >= config.len) {
       return config_error();
     }
-    state.scalar.write_x(dst->index,
-                         extend_element(config.dtype, regs[src->index][lane]));
+    state.scalar.write_x(dst.index,
+                         extend_element(config.dtype, regs[src.index][lane]));
     return {.status = StepStatus::retired};
   }
 
   if (instr.op == LaneOp::insert) {
-    const auto *dst = std::get_if<NpuRegister>(&instr.dst);
-    const auto *src = std::get_if<ScalarRegister>(&instr.src);
-    if (dst == nullptr || src == nullptr || dst->index >= Count) {
-      return config_error();
-    }
-    const auto &config = configs[dst->index];
+    const auto &dst = std::get<NpuRegister>(instr.dst);
+    const auto &src = std::get<ScalarRegister>(instr.src);
+    const auto &config = configs[dst.index];
     if (!valid_domain_config(config) || lane >= config.len) {
       return config_error();
     }
     // Like fillx, the lane keeps the low element-width bits of the scalar.
-    regs[dst->index][lane] =
-        static_cast<Element>(state.scalar.read_x(src->index));
+    regs[dst.index][lane] =
+        static_cast<Element>(state.scalar.read_x(src.index));
     return {.status = StepStatus::retired};
   }
 
-  const auto *dst = std::get_if<NpuRegister>(&instr.dst);
-  const auto *src = std::get_if<NpuRegister>(&instr.src);
-  if (dst == nullptr || src == nullptr || dst->index >= Count ||
-      src->index >= Count) {
-    return config_error();
-  }
-  const auto &dst_config = configs[dst->index];
-  const auto &src_config = configs[src->index];
+  const auto &dst = std::get<NpuRegister>(instr.dst);
+  const auto &src = std::get<NpuRegister>(instr.src);
+  const auto &dst_config = configs[dst.index];
+  const auto &src_config = configs[src.index];
   if (!valid_domain_config(dst_config) || !valid_domain_config(src_config) ||
       dst_config.dtype != src_config.dtype || lane >= src_config.len) {
     return config_error();
   }
-  const auto value = regs[src->index][lane];
+  const auto value = regs[src.index][lane];
   for (std::size_t j = 0; j < dst_config.len; ++j) {
-    regs[dst->index][j] = value;
+    regs[dst.index][j] = value;
   }
   return {.status = StepStatus::retired};
 }
 
 } // namespace
 
-// Decode only pairs Tile <-> Vec8 and Acc <-> Vec32; a hand-constructed
-// instruction with any other domain fails as a config error.
+// The Tile <-> Vec8 and Acc <-> Vec32 pairings are part of the structural
+// validation at execute_npu.
 ExecuteResult execute_row_move(const RowInstr &instr, State &state) {
   const bool insert = instr.op == RowOp::insert;
   switch (instr.matrix.domain) {
@@ -167,28 +152,22 @@ ExecuteResult execute_row_move(const RowInstr &instr, State &state) {
                ? row_insert(instr, state, state.a, state.v, state.ac, state.vc)
                : row_extract(instr, state, state.a, state.v, state.ac,
                              state.vc);
-  default: break;
+  default: break; // ROW_MOVE has no vector-matrix encoding
   }
-  return config_error();
+  unreachable("execute_row_move without a matrix operand");
 }
 
-// The dispatched register file is the vector operand's domain; a
-// hand-constructed broadcast with mismatched domains fails below.
+// The dispatched register file is the vector operand's domain.
 ExecuteResult execute_lane_move(const LaneInstr &instr, State &state) {
-  const auto *vec = instr.op == LaneOp::extract
-                        ? std::get_if<NpuRegister>(&instr.src)
-                        : std::get_if<NpuRegister>(&instr.dst);
-  if (vec == nullptr) return config_error();
-  if (instr.op == LaneOp::broadcast) {
-    const auto *src = std::get_if<NpuRegister>(&instr.src);
-    if (src == nullptr || src->domain != vec->domain) return config_error();
-  }
-  switch (vec->domain) {
+  const auto &vec = instr.op == LaneOp::extract
+                        ? std::get<NpuRegister>(instr.src)
+                        : std::get<NpuRegister>(instr.dst);
+  switch (vec.domain) {
   case NpuDomain::vec8: return lane_move(instr, state, state.b, state.bc);
   case NpuDomain::vec32: return lane_move(instr, state, state.v, state.vc);
-  default: break;
+  default: break; // LANE_MOVE has no matrix-domain encoding
   }
-  return config_error();
+  unreachable("execute_lane_move without a vector operand");
 }
 
 } // namespace tile_npu
