@@ -1,5 +1,7 @@
 #include "execute_rv64i.h"
 
+#include "tile_npu/endian.h"
+
 #include <array>
 #include <bit>
 #include <cstddef>
@@ -62,10 +64,8 @@ ExecuteResult execute_load(const DecodedScalarInstr &instr, ExecContext &ctx) {
   if (!ctx.memory.read(address, std::span<std::byte>(bytes.data(), width))) {
     return fault(StepStatus::load_fault, address);
   }
-  std::uint64_t value = 0;
-  for (std::size_t i = 0; i < width; ++i) {
-    value |= std::uint64_t(std::to_integer<unsigned>(bytes[i])) << (i * 8);
-  }
+  std::uint64_t value =
+      load_le<std::uint64_t>(std::span<const std::byte>(bytes.data(), width));
   // clang-format off
   switch (instr.op) {
   case ScalarOp::lb: value = sign_extend(value, 8);  break;
@@ -89,9 +89,7 @@ ExecuteResult execute_store(const DecodedScalarInstr &instr, ExecContext &ctx) {
 
   const auto value = scalar.read_x(instr.regs.src2);
   std::array<std::byte, 8> bytes{};
-  for (std::size_t i = 0; i < width; ++i) {
-    bytes[i] = static_cast<std::byte>((value >> (i * 8)) & 0xffu);
-  }
+  store_le(value, std::span<std::byte>(bytes.data(), width));
   if (!ctx.memory.write(address,
                         std::span<const std::byte>(bytes.data(), width))) {
     return fault(StepStatus::store_fault, address);

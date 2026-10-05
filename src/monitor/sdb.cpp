@@ -1,5 +1,7 @@
 #include "sdb.h"
 
+#include "tile_npu/endian.h"
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -119,10 +121,7 @@ void cmd_examine(Memory &memory, std::string_view arg) {
       std::cout << "cannot read memory at " << hex64(current) << '\n';
       return;
     }
-    std::uint32_t word = 0;
-    for (std::size_t b = 0; b < bytes.size(); ++b) {
-      word |= std::uint32_t(std::to_integer<unsigned>(bytes[b])) << (8 * b);
-    }
+    const auto word = load_le<std::uint32_t>(bytes);
     if (i % 4 == 0) {
       if (i != 0) std::cout << '\n';
       std::cout << hex64(current) << ':';

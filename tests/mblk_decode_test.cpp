@@ -7,6 +7,7 @@
 #include <variant>
 
 #include "check.h"
+#include "index_helpers.h"
 #include "mblk_helpers.h"
 
 namespace {
@@ -38,11 +39,13 @@ template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
     const auto *decoded = std::get_if<MblkInstr>(npu);
     check(decoded != nullptr, what);
     check_eq(decoded->op, test.op, what + ": op");
-    check_eq(decoded->reg.domain, test.domain, what + ": domain");
-    check_eq(decoded->reg.index, test.reg, what + ": reg");
-    check_eq(decoded->index, test.index, what + ": index");
+    const auto &reg = test.op == MblkOp::store || test.op == MblkOp::row_store
+                          ? decoded->src
+                          : decoded->dest;
+    check_eq(reg.domain, test.domain, what + ": domain");
+    check_eq(reg.index, test.reg, what + ": reg");
+    check_index(decoded->index, test.index, test.index_is_scalar, what);
     check_eq(decoded->gather_src, test.gather_src, what + ": gather_src");
-    check_eq(decoded->index_is_scalar, test.index_is_scalar, what + ": IS");
   }
 }
 

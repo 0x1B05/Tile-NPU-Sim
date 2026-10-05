@@ -2,6 +2,7 @@
 
 #include "execute/execute.h"
 #include "tile_npu/decode.h"
+#include "tile_npu/endian.h"
 
 #include <array>
 #include <cstddef>
@@ -22,11 +23,7 @@ StepResult Simulator::step() {
   if (!memory_.read(pc, bytes)) {
     return {.status = StepStatus::fetch_fault, .pc = pc};
   }
-
-  std::uint32_t instr = 0;
-  for (std::size_t i = 0; i < bytes.size(); ++i) {
-    instr |= std::uint32_t(std::to_integer<unsigned>(bytes[i])) << (8 * i);
-  }
+  const auto instr = load_le<std::uint32_t>(bytes);
 
   const auto decoded = decode(instr);
   if (const auto *error = std::get_if<DecodeError>(&decoded)) {
