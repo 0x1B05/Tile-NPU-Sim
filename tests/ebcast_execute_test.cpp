@@ -4,45 +4,15 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "check.h"
 #include "ebcast_helpers.h"
+#include "support/execute_helpers.h"
 
 namespace {
-
 using tile_npu::ArithMode;
 using tile_npu::DType;
 using tile_npu::FlatMemory;
 using tile_npu::Simulator;
 using tile_npu::StepStatus;
-
-constexpr std::uint64_t CODE_BASE = 0x1000;
-
-constexpr std::uint32_t f32_bits(float value) {
-  return std::bit_cast<std::uint32_t>(value);
-}
-
-constexpr std::uint8_t i8_bits(int value) {
-  return static_cast<std::uint8_t>(static_cast<std::int8_t>(value));
-}
-
-void load_one(Simulator &sim, FlatMemory &memory, std::uint32_t word) {
-  write_word(memory, CODE_BASE, word);
-  sim.reset(CODE_BASE);
-}
-
-void tile_cfg(tile_npu::State &state, std::size_t index, DType dtype,
-              std::uint8_t rows, std::uint8_t cols) {
-  state.tc[index].dtype = dtype;
-  state.tc[index].rows = rows;
-  state.tc[index].cols = cols;
-}
-
-void acc_cfg(tile_npu::State &state, std::size_t index, DType dtype,
-             std::uint8_t rows, std::uint8_t cols) {
-  state.ac[index].dtype = dtype;
-  state.ac[index].rows = rows;
-  state.ac[index].cols = cols;
-}
 
 } // namespace
 

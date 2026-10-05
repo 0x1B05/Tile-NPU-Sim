@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <variant>
 
-#include "check.h"
+#include "framework.h"
 
 TEST_CASE(config_fields) {
   tile_npu::State state{};

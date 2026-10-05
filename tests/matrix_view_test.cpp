@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include "check.h"
+#include "framework.h"
 
 TEST_CASE(matrix_view) {
   tile_npu::Tile tile{};

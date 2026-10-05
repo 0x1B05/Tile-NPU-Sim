@@ -3,22 +3,14 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "check.h"
 #include "row_lane_helpers.h"
+#include "support/execute_helpers.h"
 
 namespace {
-
 using tile_npu::DType;
 using tile_npu::FlatMemory;
 using tile_npu::Simulator;
 using tile_npu::StepStatus;
-
-constexpr std::uint64_t CODE_BASE = 0x1000;
-
-void load_one(Simulator &sim, FlatMemory &memory, std::uint32_t word) {
-  write_word(memory, CODE_BASE, word);
-  sim.reset(CODE_BASE);
-}
 
 constexpr std::size_t tindex(std::size_t row, std::size_t col) {
   return row * 32 + col;

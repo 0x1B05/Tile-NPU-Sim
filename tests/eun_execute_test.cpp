@@ -5,33 +5,15 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "check.h"
 #include "eun_helpers.h"
+#include "support/execute_helpers.h"
 
 namespace {
-
 using tile_npu::DType;
 using tile_npu::FlatMemory;
 using tile_npu::NpuDomain;
 using tile_npu::Simulator;
 using tile_npu::StepStatus;
-
-constexpr std::uint64_t CODE_BASE = 0x1000;
-
-constexpr std::uint32_t f32_bits(float value) {
-  return std::bit_cast<std::uint32_t>(value);
-}
-
-void load_one(Simulator &sim, FlatMemory &memory, std::uint32_t word) {
-  write_word(memory, CODE_BASE, word);
-  sim.reset(CODE_BASE);
-}
-
-void vec_cfg(tile_npu::State &state, std::size_t index, DType dtype,
-             std::uint8_t len) {
-  state.vc[index].dtype = dtype;
-  state.vc[index].len = len;
-}
 
 } // namespace
 

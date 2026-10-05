@@ -9,10 +9,9 @@
 #include <string_view>
 #include <variant>
 
-#include "check.h"
+#include "support/execute_helpers.h"
 
 namespace {
-
 std::optional<tile_npu::DecodeError> decode_error(std::uint32_t word) {
   const auto result = tile_npu::decode(word);
   const auto *error = std::get_if<tile_npu::DecodeError>(&result);

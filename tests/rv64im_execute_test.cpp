@@ -7,16 +7,14 @@
 #include <string>
 #include <utility>
 
-#include "check.h"
+#include "support/execute_helpers.h"
 
 namespace {
-
 using tile_npu::FlatMemory;
 using tile_npu::Simulator;
 using tile_npu::StepResult;
 using tile_npu::StepStatus;
 
-constexpr std::uint64_t CODE_BASE = 0x1000;
 constexpr std::uint64_t DATA_BASE = 0x1040;
 constexpr std::uint64_t I32_MIN_SIGN_EXT = 0xffffffff80000000ull;
 constexpr std::uint64_t I64_MIN_BITS = 0x8000000000000000ull;

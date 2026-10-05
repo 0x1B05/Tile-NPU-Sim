@@ -5,11 +5,10 @@
 #include <cstdint>
 #include <string>
 
-#include "check.h"
 #include "mblk_helpers.h"
+#include "support/execute_helpers.h"
 
 namespace {
-
 using tile_npu::DType;
 using tile_npu::FlatMemory;
 using tile_npu::MblkOp;
@@ -17,7 +16,6 @@ using tile_npu::NpuDomain;
 using tile_npu::Simulator;
 using tile_npu::StepStatus;
 
-constexpr std::uint64_t CODE_BASE = 0x1000;
 constexpr std::uint64_t MEM_SIZE = 0x800;
 constexpr std::uint64_t DATA = CODE_BASE + 0x400;
 constexpr std::uint64_t MEM_END = CODE_BASE + MEM_SIZE;

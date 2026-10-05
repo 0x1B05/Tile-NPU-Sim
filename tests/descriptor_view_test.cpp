@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <limits>
 
-#include "check.h"
+#include "framework.h"
 
 TEST_CASE(descriptor_view) {
   tile_npu::MatrixDescriptor matrix{};

@@ -3,31 +3,16 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "check.h"
 #include "init_helpers.h"
+#include "support/execute_helpers.h"
 
 namespace {
-
 using tile_npu::DType;
 using tile_npu::FlatMemory;
 using tile_npu::InitOp;
 using tile_npu::NpuDomain;
 using tile_npu::Simulator;
 using tile_npu::StepStatus;
-
-constexpr std::uint64_t CODE_BASE = 0x1000;
-
-void load_one(Simulator &sim, FlatMemory &memory, std::uint32_t word) {
-  write_word(memory, CODE_BASE, word);
-  sim.reset(CODE_BASE);
-}
-
-void tile_cfg(tile_npu::State &state, std::size_t index, DType dtype,
-              std::uint8_t rows, std::uint8_t cols) {
-  state.tc[index].dtype = dtype;
-  state.tc[index].rows = rows;
-  state.tc[index].cols = cols;
-}
 
 } // namespace
 

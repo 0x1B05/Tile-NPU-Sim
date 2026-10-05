@@ -3,16 +3,13 @@
 #include <cstdint>
 #include <string>
 
-#include "check.h"
+#include "support/execute_helpers.h"
 
 namespace {
-
 using tile_npu::DType;
 using tile_npu::FlatMemory;
 using tile_npu::Simulator;
 using tile_npu::StepStatus;
-
-constexpr std::uint64_t CODE_BASE = 0x1000;
 
 // Same format builders as cfg_decode_test.cpp, duplicated per test file.
 constexpr std::uint32_t cfg_i(std::uint32_t major4, std::uint32_t sel2,
@@ -40,10 +37,6 @@ constexpr std::uint32_t FIELD_ROW_STRIDE = 1;
 
 // Loads one instruction and resets the simulator. reset() clears the
 // architectural state, so test fixtures poke state only after this returns.
-void load_one(Simulator &sim, FlatMemory &memory, std::uint32_t word) {
-  write_word(memory, CODE_BASE, word);
-  sim.reset(CODE_BASE);
-}
 
 } // namespace
 

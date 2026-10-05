@@ -1,10 +1,10 @@
 #pragma once
 
-#include "tile_npu/memory.h"
-
-#include "utils/endian.h"
-
-#include <array>
+// Hand-rolled mini test framework: TEST_CASE auto-registers into a registry
+// that tests/main.cpp runs; check_eq reports actual/expected values on
+// failure. There is deliberately no third-party test framework. Fixtures that
+// touch the simulator (write_word, load_one, config helpers) live in
+// tests/support/execute_helpers.h.
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -16,9 +16,6 @@
 #include <type_traits>
 #include <vector>
 
-// Hand-rolled mini test framework: TEST_CASE auto-registers into a registry
-// that tests/main.cpp runs; check_eq reports actual/expected values on
-// failure. There is deliberately no third-party test framework.
 namespace tile_npu::test {
 
 struct TestCase {
@@ -122,11 +119,4 @@ void check_eq(
             ", expected=" + tile_npu::test::render(expected) + ")",
         loc);
   }
-}
-
-inline void write_word(tile_npu::FlatMemory &memory, std::uint64_t address,
-                       std::uint32_t word) {
-  std::array<std::byte, 4> bytes{};
-  tile_npu::store_le(word, bytes);
-  check(memory.write(address, bytes), "write instruction word");
 }

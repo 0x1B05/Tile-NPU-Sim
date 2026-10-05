@@ -2,15 +2,12 @@
 
 #include <cstdint>
 
-#include "check.h"
+#include "support/execute_helpers.h"
 
 namespace {
-
 using tile_npu::FlatMemory;
 using tile_npu::Simulator;
 using tile_npu::StepStatus;
-
-constexpr std::uint64_t CODE_BASE = 0x1000;
 
 } // namespace
 

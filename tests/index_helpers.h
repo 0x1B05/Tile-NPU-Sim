@@ -7,7 +7,7 @@
 #include <string_view>
 #include <variant>
 
-#include "check.h"
+#include "framework.h"
 
 // Shared decode-side assertion for the IndexOperand variant: an immediate
 // index decodes to ImmediateIndex, an xS form to ScalarRegister.

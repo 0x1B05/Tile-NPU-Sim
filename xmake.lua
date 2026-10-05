@@ -36,7 +36,7 @@ target("sim_tests")
     set_default(false)
     add_deps("tile_npu_sim")
     add_files("tests/*.cpp")
-    add_includedirs("src")
+    add_includedirs("src", "tests")
     add_tests("core")
 target_end()
 
