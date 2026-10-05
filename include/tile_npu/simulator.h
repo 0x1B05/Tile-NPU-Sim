@@ -2,7 +2,6 @@
 
 #include "tile_npu/memory.h"
 #include "tile_npu/state.h"
-#include "tile_npu/status.h"
 
 #include <cstdint>
 #include <optional>

@@ -99,4 +99,24 @@ struct State {
   std::array<VectorDescriptor, VECTOR_REGISTERS> vm{};
 };
 
+// The step pipeline's status vocabulary, shared by the public Simulator API
+// and the execution layer below it. These are simulator diagnostics, not
+// ISA-defined traps, and are not part of the architectural State above.
+enum class StepStatus {
+  retired,
+  decode_not_implemented,
+  execution_not_implemented,
+  illegal_instruction,
+  invalid_configuration,
+  fetch_fault,
+  instruction_address_misaligned,
+  load_address_misaligned,
+  store_address_misaligned,
+  load_fault,
+  store_fault,
+  environment_call,
+  breakpoint,
+  kernel_end,
+};
+
 } // namespace tile_npu
