@@ -372,8 +372,8 @@ TEST_CASE(ebin_i32_rejects_div) {
 
 TEST_CASE(ebin_rejects_mismatched_configs) {
   // Each case perturbs one constraint of an otherwise legal tadd t0, t1, t2
-  // (1x1 i8) and gets a fresh simulator: a rejected step does not advance
-  // the pc, so sharing one would re-execute the first instruction.
+  // (1x1 i8) and gets a fresh simulator: a rejected step keeps the pc, so a
+  // shared simulator would re-execute the first instruction.
   struct Case {
     const char *name;
     void (*perturb)(tile_npu::State &);
@@ -443,8 +443,7 @@ TEST_CASE(ebin_legality_matrix) {
   // add/sub/mul/div/min/max; integers support everything but div. The op
   // list comes from the shared EBIN_BY_FUNCT4 table so a new op joins the
   // sweep automatically, while the expected legality stays an independent
-  // restatement of the manual. Tile-forbidden ops are rejected at decode
-  // time (see ebin_decode_test.cpp); vec8 has no E_BIN encoding at all.
+  // restatement of the manual.
   struct Combo {
     NpuDomain domain;
     DType dtype;

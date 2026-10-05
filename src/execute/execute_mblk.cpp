@@ -24,7 +24,7 @@ ExecuteResult access_fault(StepStatus status, std::uint64_t address) {
 }
 
 // Loads and stores are raw copies at the configured dtype width, little
-// endian; the memory path performs no type conversion.
+// endian.
 template <typename Element>
 bool load_element(const Memory &memory, std::uint64_t address, Element &out) {
   std::array<std::byte, sizeof(Element)> bytes{};
@@ -58,9 +58,8 @@ bool transform_legal(const MblkInstr &instr, const MatrixDescriptor &desc) {
 
 // Every access runs in two phases: all addresses are computed first, then
 // the transfer happens. Address overflow is a property of the descriptor
-// and shape alone, so it reports deterministically as a config error
-// instead of surfacing as a mid-access fault at whichever element happens
-// to be visited first.
+// and shape alone, so it reports deterministically as a config error before
+// any element is touched.
 template <typename Element, typename Config, std::size_t RegCount>
 ExecuteResult
 block_access(const MblkInstr &instr, ExecContext &ctx,

@@ -7,8 +7,7 @@ namespace tile_npu {
 // Domain config validity shared by the non-elementwise executors: a dtype the
 // domain can hold, a non-empty effective shape within the physical extent,
 // and the canonical layout (matrix configs only). Elementwise adds its own
-// arith_mode check on top; the memory and init/move paths do not use
-// arith_mode.
+// arith_mode check on top; the other paths ignore arith_mode.
 inline bool valid_domain_config(const TileConfig &config) {
   return (config.dtype == DType::i8 || config.dtype == DType::u8) &&
          config.rows >= 1 && config.rows <= MATRIX_EXTENT && config.cols >= 1 &&

@@ -1,9 +1,8 @@
 // Structural validation at the execute entry (src/execute/validate.h):
 // hand-constructed IR that no encoding can produce must fail with
 // illegal_instruction before dispatch, and valid hand-constructed IR must
-// execute normally. decode()-produced IR is structurally legal by
-// construction, so these cases build the IR directly instead of going
-// through step().
+// execute normally. decode() guarantees structural legality, so these cases
+// build the IR directly.
 
 #include "execute/execute.h"
 

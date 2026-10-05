@@ -8,8 +8,8 @@
 // field layout mirrors encoding::NpuR3:
 //   [31:28] major4 = 0000  [27:26] dom2  [25] BX  [24:21] funct4
 //   [20:17] reserved4 = 0  [16:12] src2  [11:7] src1  [6:2] dest  [1:0] q = 00
-// With scalar_src2 (BX=1), src2 names a scalar x register instead of a
-// same-domain register.
+// BX picks the src2 form: a same-domain register (0) or a scalar x
+// register (1).
 constexpr std::uint32_t make_ebin(tile_npu::EbinOp op,
                                   tile_npu::NpuDomain domain, bool scalar_src2,
                                   std::uint32_t dest, std::uint32_t src1,

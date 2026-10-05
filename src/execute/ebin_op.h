@@ -20,10 +20,8 @@ inline ArithMode arith_mode_of(const TileConfig &config) {
 inline ArithMode arith_mode_of(const AccConfig &) { return ArithMode::wrap; }
 inline ArithMode arith_mode_of(const Vec32Config &) { return ArithMode::wrap; }
 
-// div is f32-only; bitwise and shift operations are integer-only. Tile
-// mul/div never reaches the executors: the tile domain has no such encodings.
-// Legality comes from the shared EBIN_BY_FUNCT4 table; the lookup stays total
-// over the raw op code so this helper never indexes out of bounds.
+// div is f32-only; bitwise and shift operations are integer-only. Legality
+// comes from the shared EBIN_BY_FUNCT4 table.
 inline bool ebin_op_supports_dtype(EbinOp op, DType dtype) {
   const auto code = static_cast<std::uint8_t>(op);
   if (code >= EBIN_BY_FUNCT4.size()) return false;
@@ -51,7 +49,6 @@ E apply_ebin_op(EbinOp op, DType dtype, ArithMode arith, E lhs, E rhs) {
       case EbinOp::div: result = left / right; break;
       case EbinOp::min: result = std::fmin(left, right); break;
       case EbinOp::max: result = std::fmax(left, right); break;
-      // Integer-only ops never get here: ebin_op_supports_dtype rejects them.
       default: unreachable("f32 element with an integer-only E_BIN op");
       }
       return std::bit_cast<E>(result);
@@ -94,7 +91,6 @@ E apply_ebin_op(EbinOp op, DType dtype, ArithMode arith, E lhs, E rhs) {
   case EbinOp::shr: return static_cast<E>(lhs >> (rhs & shamt_mask));
   case EbinOp::sra:
     return static_cast<E>(static_cast<S>(lhs) >> (rhs & shamt_mask));
-    // Integer div never gets here: ebin_op_supports_dtype rejects it.
   default: unreachable("integer element with the f32-only E_BIN div");
   }
 }

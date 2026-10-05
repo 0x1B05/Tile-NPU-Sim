@@ -7,10 +7,9 @@
 
 namespace tile_npu {
 
-// A logical view over the fixed-size physical matrix register. The view owns
-// no storage and currently implements the canonical row-major layout defined
-// by the simulator. Keeping the mapping here leaves future layouts local to
-// this abstraction instead of spreading index arithmetic through executors.
+// A non-owning logical view over the fixed-size physical matrix register,
+// implementing the canonical row-major layout. The mapping lives here so
+// future layouts stay local to this abstraction.
 template <typename Element> class MatrixView {
 public:
   MatrixView(std::span<Element> storage, std::size_t rows, std::size_t cols,

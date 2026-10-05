@@ -58,9 +58,8 @@ std::string_view status_name(tile_npu::StepStatus status) {
 }
 
 // Steps until the guest stops on its own (any non-retired status), so a
-// guest fault surfaces immediately instead of burning through the step
-// budget. A hung guest fails with the budget, the current PC and the
-// instruction word at PC.
+// guest fault surfaces immediately. A hung guest fails with the budget,
+// the current PC and the instruction word at PC.
 tile_npu::StepResult run_until_stop(tile_npu::Simulator &sim,
                                     tile_npu::FlatMemory &memory,
                                     int max_steps = 512) {
@@ -77,10 +76,10 @@ tile_npu::StepResult run_until_stop(tile_npu::Simulator &sim,
   if (memory.read(pc, bytes)) {
     word = tile_npu::load_le<std::uint32_t>(bytes);
   }
-  tile_npu::test::fail("guest image did not stop within " +
-                           std::to_string(max_steps) + " steps (pc=" +
-                           to_hex(pc) + ", instr=" + to_hex(word) + ")",
-                       std::source_location::current());
+  tile_npu::test::fail(
+      "guest image did not stop within " + std::to_string(max_steps) +
+          " steps (pc=" + to_hex(pc) + ", instr=" + to_hex(word) + ")",
+      std::source_location::current());
 }
 
 // Runs a self-checking guest image until it stops, then asserts the runner

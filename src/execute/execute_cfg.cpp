@@ -59,7 +59,7 @@ ExecuteResult execute_cfg(const CfgInstr &instr, ExecContext &ctx) {
     return cfg_write(instr, state, state.scalar.read_x(instr.src));
   case CfgOp::copy: {
     // Same-type whole-register copy; the shared sel3 keeps both operands in
-    // one register type, which decode already bounded.
+    // one register type.
     // clang-format off
     switch (instr.reg_type) {
     case ConfigRegType::tc: state.tc[instr.dest] = state.tc[instr.src]; break;

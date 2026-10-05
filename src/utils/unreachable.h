@@ -8,10 +8,9 @@
 namespace tile_npu {
 
 // Marks a path that ISA- or implementation-level invariants make impossible
-// (e.g. an operation already validated as legal for the dtype). Unlike
-// assert, the check stays active in release builds: a violated invariant
-// aborts with its location instead of falling into undefined behavior.
-// Guest-visible error conditions keep reporting StepStatus and never abort.
+// (e.g. an operation already validated as legal for the dtype). The check
+// stays active in release builds: a violated invariant aborts with its
+// location. Guest-visible error conditions report StepStatus.
 [[noreturn]] inline void
 unreachable(std::string_view message,
             const std::source_location &loc = std::source_location::current()) {

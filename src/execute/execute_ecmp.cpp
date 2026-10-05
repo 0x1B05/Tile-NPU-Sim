@@ -17,8 +17,7 @@ namespace tile_npu {
 namespace {
 
 // Condition legality from the shared table: ne/ge are integer-only, le/unord
-// f32-only. The lookup stays total over the raw condition code so this helper
-// never indexes out of bounds.
+// f32-only.
 bool op_supports_dtype(CmpOp op, DType dtype) {
   const auto code = static_cast<std::uint8_t>(op);
   if (code >= CMP_BY_FUNCT3.size()) return false;

@@ -415,9 +415,8 @@ enum class CfgOp : std::uint8_t { seti, setx, copy, get };
 //   setx: dest = C,  field = field3 code, src = xS
 //   copy: dest = CD, src = CS
 //   get:  dest = xD, src = C, field = field3 code
-// `field` stays the raw 3-bit code: register types that lack the field fail
-// with CFG_ERROR at execution, while the reserved code 7 never reaches here
-// (decode rejects it as illegal).
+// `field` stays the raw 3-bit code (0-6): register types that lack the field
+// fail with CFG_ERROR at execution.
 struct CfgInstr {
   CfgOp op = CfgOp::seti;
   ConfigRegType reg_type = ConfigRegType::tc;

@@ -115,7 +115,7 @@ constexpr DecodeEntry RV64IM_TABLE[] = {
     {"0000000 00001 00000 000 00000 11100 11", no_operands<ScalarOp::ebreak>},
     {"??????? ????? ????? ??? ????? 11100 11", fail<DecodeError::not_implemented>}, // CSR and privileged
     // The all-ones encoding is always illegal; other opcodes in the scalar
-    // quadrant belong to extensions that are not implemented yet.
+    // quadrant belong to unimplemented extensions.
     {"1111111 11111 11111 111 11111 11111 11", fail<DecodeError::illegal>},
     {"??????? ????? ????? ??? ????? ????? 11", fail<DecodeError::not_implemented>},
 };

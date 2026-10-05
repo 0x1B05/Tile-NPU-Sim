@@ -11,8 +11,8 @@
 namespace tile_npu {
 namespace detail {
 
-// Rejecting base-address overflow instead of wrapping is a simulator
-// convention; the ISA manual does not define address wraparound.
+// Base-address overflow is rejected: the ISA manual leaves address
+// wraparound undefined, so rejection is a simulator convention.
 inline std::optional<std::uint64_t> add_signed_offset(std::uint64_t base,
                                                       std::int64_t offset) {
   if (offset >= 0) {
@@ -37,8 +37,7 @@ inline std::optional<std::uint64_t> add_signed_offset(std::uint64_t base,
 // base-address updates for all memory instructions.
 //
 // Element indices are bounded by the configured shape (at most 32 per
-// dimension) and strides are 32-bit, so scaled offsets always fit in int64
-// and need no intermediate overflow checks.
+// dimension) and strides are 32-bit, so scaled offsets always fit in int64.
 template <typename Descriptor> class DescriptorView {
   using Value = std::remove_const_t<Descriptor>;
 

@@ -14,8 +14,8 @@ namespace {
 // E_BIN (R3): sel3 = {dom2, BX}; BX=0 takes src2 from the same domain, BX=1
 // from scalar xS. Unassigned funct4 values and tile mul/div are reserved;
 // both come from the shared EBIN_BY_FUNCT4 table. The dtype-dependent
-// restrictions (div is f32-only, shifts/bitwise are integer-only) cannot be
-// checked here and fail at execution.
+// restrictions (div is f32-only, shifts/bitwise are integer-only) fail at
+// execution.
 DecodeResult decode_ebin(std::uint32_t word) {
   const auto f = encoding::NpuR3::from(word);
   const auto domain = static_cast<NpuDomain>(f.sel3 >> 1);
@@ -58,7 +58,7 @@ DecodeResult decode_eun(std::uint32_t word) {
 // E_CMP (R4): sel3 = {dom2, BX}; the patterns pin dom2 to Acc/Vec32 (the only
 // domains with comparisons) and the reserved5 position to 0. funct3 is the
 // condition code; the dtype-dependent restrictions (ne/ge are integer-only,
-// le/unord f32-only) cannot be checked here and fail at execution.
+// le/unord f32-only) fail at execution.
 DecodeResult decode_ecmp(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domain = static_cast<NpuDomain>(f.sel3 >> 1);
@@ -306,7 +306,7 @@ DecodeResult decode_mblk(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = static_cast<NpuDomain>(f.sel3 >> 1);
   const bool gather = f.funct3 == 0b010;
-  // Gather is defined for Tile/Vec8/Vec32; there is no aload.gather.
+  // Gather is defined for Tile/Vec8/Vec32 only.
   if (gather && domain == NpuDomain::acc) {
     return DecodeError::illegal;
   }

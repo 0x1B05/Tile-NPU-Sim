@@ -101,7 +101,7 @@ struct State {
 
 // The step pipeline's status vocabulary, shared by the public Simulator API
 // and the execution layer below it. These are simulator diagnostics, not
-// ISA-defined traps, and are not part of the architectural State above.
+// ISA-defined traps.
 enum class StepStatus {
   retired,
   decode_not_implemented,

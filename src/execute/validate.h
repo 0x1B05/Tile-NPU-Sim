@@ -4,11 +4,9 @@
 //
 // decode() produces structurally legal IR by construction (op codes,
 // domains, operand variants and register numbers are all bounded by the
-// encoding). This layer exists so that hand-constructed IR — an embedder
-// bug — fails uniformly with illegal_instruction at execute_npu instead of
-// reaching unchecked array indexing inside an executor. Executors below
-// this layer only handle the dynamic constraints (config validity, dtype,
-// shape, effective lengths).
+// encoding). Hand-constructed IR — an embedder bug — fails here with
+// illegal_instruction. Executors below this layer only handle the dynamic
+// constraints (config validity, dtype, shape, effective lengths).
 #include "tile_npu/config.h"
 #include "tile_npu/instruction.h"
 #include "tile_npu/state.h"

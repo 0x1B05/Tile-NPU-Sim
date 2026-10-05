@@ -90,8 +90,7 @@ ExecuteResult execute_scalar(const DecodedScalarInstr &instr,
 
 ExecuteResult execute_npu(const DecodedNpuInstr &instr, ExecContext &ctx) {
   // decode() guarantees structural legality; the visit below re-checks it so
-  // hand-constructed IR fails uniformly here instead of reaching unchecked
-  // array indexing in an executor.
+  // hand-constructed IR fails at this single point.
   const bool legal = std::visit(
       [](const auto &decoded) { return valid_structure(decoded); }, instr);
   if (!legal) {
