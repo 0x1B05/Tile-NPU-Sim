@@ -2,7 +2,7 @@
 
 #include "tile_npu/memory.h"
 
-#include "tile_npu/endian.h"
+#include "utils/endian.h"
 
 #include <array>
 #include <cstddef>

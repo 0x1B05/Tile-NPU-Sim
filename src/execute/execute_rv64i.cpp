@@ -1,6 +1,6 @@
 #include "execute.h"
 
-#include "tile_npu/endian.h"
+#include "utils/endian.h"
 
 #include <array>
 #include <bit>

@@ -2,7 +2,7 @@
 
 #include "execute/execute.h"
 #include "tile_npu/decode.h"
-#include "tile_npu/endian.h"
+#include "utils/endian.h"
 
 #include <array>
 #include <cstddef>

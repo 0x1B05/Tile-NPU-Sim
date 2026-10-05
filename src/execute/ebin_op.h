@@ -2,7 +2,7 @@
 
 #include "tile_npu/instruction.h"
 #include "tile_npu/state.h"
-#include "tile_npu/unreachable.h"
+#include "utils/unreachable.h"
 
 #include <algorithm>
 #include <bit>

@@ -2,9 +2,9 @@
 
 #include "config_check.h"
 #include "tile_npu/descriptor_view.h"
-#include "tile_npu/endian.h"
 #include "tile_npu/matrix_view.h"
-#include "tile_npu/unreachable.h"
+#include "utils/endian.h"
+#include "utils/unreachable.h"
 
 #include <array>
 #include <bit>

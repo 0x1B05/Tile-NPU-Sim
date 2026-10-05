@@ -41,7 +41,8 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `include/tile_npu/matrix_view.h` | 逻辑矩阵坐标到物理寄存器存储的 view, 当前实现 canonical layout |
 | `include/tile_npu/descriptor_view.h` | TM/AM/BM/VM 地址计算、保留位校验、`incremented_base` 预检与访存后 `base_addr` 自增 |
 | `include/tile_npu/simulator.h` | `Simulator` 单步 API: `reset(entry_pc)`, `step()` → `StepResult`/`StepStatus` |
-| `include/tile_npu/unreachable.h` | 不变式违背时当场中止的 `unreachable()` (始终生效, 不随 NDEBUG 消失); guest 可见错误不走这里 |
+| `src/utils/endian.h` | 内部工具: `load_le`/`store_le` 小端字节转换 (取指/load/store 共享); 不属于模型接口, `include/tile_npu/` 只放架构状态与 API |
+| `src/utils/unreachable.h` | 内部工具: 不变式违背时当场中止的 `unreachable()` (始终生效, 不随 NDEBUG 消失); guest 可见错误不走这里 |
 | `src/decode/encoding.h` | 位段提取 (`field<Hi,Lo>`) 与 RISC-V R/I/S/B/U/J/Shift, NPU 各格式的字段解析 |
 | `src/decode/pattern.h` | INSTPAT 风格译码机制: 编译期 `Pattern` 位型解析, `DecodeEntry` 译码表, `as`/`fail`/`match` 通用 handler |
 | `src/decode/decode.cpp` | NPU 译码表 (q != 11): major4/sel3/funct4 由 pattern 直接匹配, 首条命中生效 |

@@ -2,7 +2,7 @@
 
 #include "config_check.h"
 #include "tile_npu/matrix_view.h"
-#include "tile_npu/unreachable.h"
+#include "utils/unreachable.h"
 
 #include <bit>
 #include <cmath>
