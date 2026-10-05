@@ -49,7 +49,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `src/execute/execute.cpp` | 执行分派 (标量 / NPU 各域执行器) |
 | `src/execute/config_check.h` | 各执行器共享的配置合法性 (`valid_domain_config` / `valid_elementwise_config`) 与同源同形约束 (`configs_match`) |
 | `src/execute/execute_cfg.cpp` | 配置指令 (`cfg.*`) 执行器: 经 `config.h` 字段访问器读写, 校验失败上报 `invalid_configuration` (CFG_ERROR) |
-| `src/execute/execute_elementwise.cpp` | 逐元素 (E_BIN) 族执行器: 公共约束校验与矩阵/向量循环抽象为模板, 操作语义集中在 `apply_op` |
+| `src/execute/execute_ebin.cpp` | 逐元素二元 (E_BIN) 族执行器: 公共约束校验与矩阵/向量循环抽象为模板, 操作语义集中在 `apply_op` |
 | `src/execute/execute_eun.cpp` | 逐元素一元 (E_UNARY) 族执行器: not/abs/neg 为精确整数语义, exp2/rcp/rsqrt/silu 用 host libm 近似 (特殊值表现由测试锁定) |
 | `src/execute/execute_ecmp.cpp` | 比较 (E_CMP) 族执行器: Acc/Vec32 only, 目的为同形 u32 mask (全一/零); i32 有符号, u32 无符号, f32 用 IEEE 语义 (NaN 使有序条件为假, unord 查 NaN) |
 | `src/execute/ebin_op.h` | E_BIN/E_BCAST 共享的逐元素语义: 操作 dtype 合法性 (`ebin_op_supports_dtype`, 读 `EBIN_BY_FUNCT4`), 溢出模式查询 (`arith_mode_of`) 与单元素操作 (`apply_ebin_op`) |

@@ -13,7 +13,7 @@ constexpr bool is_rv64m(ScalarOp op) {
 // One overload per decoded NPU instruction type; std::visit keeps the
 // dispatch exhaustive as new instruction families are added.
 ExecuteResult execute_one(const EbinInstr &instr, ExecContext &ctx) {
-  return execute_elementwise(instr, ctx.state);
+  return execute_ebin(instr, ctx.state);
 }
 
 ExecuteResult execute_one(const EunInstr &instr, ExecContext &ctx) {

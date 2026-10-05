@@ -123,7 +123,7 @@ ExecuteResult elementwise_vector(
 
 } // namespace
 
-ExecuteResult execute_elementwise(const EbinInstr &instr, State &state) {
+ExecuteResult execute_ebin(const EbinInstr &instr, State &state) {
   switch (instr.dest.domain) {
   case NpuDomain::tile:
     return elementwise_matrix(instr, state, state.t, state.tc);

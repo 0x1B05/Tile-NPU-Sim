@@ -46,7 +46,7 @@ ExecuteResult execute_rv64m(const DecodedScalarInstr &instr,
                             ScalarState &scalar);
 
 // Elementwise execution
-ExecuteResult execute_elementwise(const EbinInstr &instr, State &state);
+ExecuteResult execute_ebin(const EbinInstr &instr, State &state);
 ExecuteResult execute_eun(const EunInstr &instr, State &state);
 ExecuteResult execute_ecmp(const CmpInstr &instr, State &state);
 ExecuteResult execute_ebcast(const BcastInstr &instr, State &state);
