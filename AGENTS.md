@@ -40,7 +40,8 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `include/tile_npu/config.h`, `src/config.cpp` | 统一配置/描述符字段访问、字段编号映射与写入校验 |
 | `include/tile_npu/matrix_view.h` | 逻辑矩阵坐标到物理寄存器存储的 view, 当前实现 canonical layout |
 | `include/tile_npu/descriptor_view.h` | TM/AM/BM/VM 地址计算、保留位校验、`incremented_base` 预检与访存后 `base_addr` 自增 |
-| `include/tile_npu/simulator.h` | `Simulator` 单步 API: `reset(entry_pc)`, `step()` → `StepResult`/`StepStatus` |
+| `include/tile_npu/status.h` | 步进流水线的状态词表 `StepStatus` (模拟器诊断, 非 ISA trap); 供 `simulator.h` 与执行层共同包含, 避免执行器反向依赖顶层 API |
+| `include/tile_npu/simulator.h` | `Simulator` 单步 API: `reset(entry_pc)`, `step()` → `StepResult` |
 | `src/utils/endian.h` | 内部工具: `load_le`/`store_le` 小端字节转换 (取指/load/store 共享); 不属于模型接口, `include/tile_npu/` 只放架构状态与 API |
 | `src/utils/unreachable.h` | 内部工具: 不变式违背时当场中止的 `unreachable()` (始终生效, 不随 NDEBUG 消失); guest 可见错误不走这里 |
 | `src/decode/encoding.h` | 位段提取 (`field<Hi,Lo>`) 与 RISC-V R/I/S/B/U/J/Shift, NPU 各格式的字段解析 |

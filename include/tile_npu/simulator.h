@@ -2,28 +2,12 @@
 
 #include "tile_npu/memory.h"
 #include "tile_npu/state.h"
+#include "tile_npu/status.h"
 
 #include <cstdint>
 #include <optional>
 
 namespace tile_npu {
-
-enum class StepStatus {
-  retired,
-  decode_not_implemented,
-  execution_not_implemented,
-  illegal_instruction,
-  invalid_configuration,
-  fetch_fault,
-  instruction_address_misaligned,
-  load_address_misaligned,
-  store_address_misaligned,
-  load_fault,
-  store_fault,
-  environment_call,
-  breakpoint,
-  kernel_end,
-};
 
 struct StepResult {
   StepStatus status;
