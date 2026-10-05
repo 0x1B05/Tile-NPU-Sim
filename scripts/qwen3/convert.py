@@ -10,13 +10,14 @@ carries a section directory so the guest locates tensors at runtime:
   sections: 16-byte aligned tensor data
 
 Modes:
-  qwen3_convert.py MODEL_DIR out.q3b --ids "1,2,3"      real weights
-  qwen3_convert.py MODEL_DIR out.q3b --prompt "..." [--chat]
-  qwen3_convert.py --tiny out.q3b out_ref.npz           random tiny model
-                                                      (+ f32 reference dump)
+  convert.py MODEL_DIR out.q3b --ids "1,2,3"      real weights
+  convert.py MODEL_DIR out.q3b --prompt "..." [--chat]
+  convert.py --tiny out.q3b out_ref.npz           random tiny model
+                                                  (+ f32 reference dump)
 """
 
 import json
+import os
 import struct
 import sys
 
@@ -266,8 +267,8 @@ def main():
         args.remove("--chat")
     if "--prompt" in args:
         k = args.index("--prompt")
-        sys.path.insert(0, "scripts")
-        from qwen3_tokenize import CHAT_WRAP, Tokenizer
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from tokenizer import CHAT_WRAP, Tokenizer
         text = args[k + 1]
         ids = Tokenizer().encode(CHAT_WRAP.format(text) if chat else text)
     elif "--ids" in args:

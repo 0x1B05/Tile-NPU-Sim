@@ -7,8 +7,8 @@ Reimplements the HuggingFace fast tokenizer pipeline from tokenizer.json:
   literally before BPE. Decoding reverses the byte-level map.
 
 Usage:
-  qwen3_tokenize.py [--chat] "prompt text"        # print token ids
-  qwen3_tokenize.py --decode 151644,9707,11       # print text
+  tokenizer.py [--chat] "prompt text"        # print token ids
+  tokenizer.py --decode 151644,9707,11       # print text
 """
 
 import json

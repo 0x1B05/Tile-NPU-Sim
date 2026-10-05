@@ -5,7 +5,7 @@ Mirrors the guest pipeline's quantized math: per-row int8 weights, dynamic
 uniform activation quantization, int64 accumulation, f32 elementwise ops.
 Compares against guest output token ids.
 
-Usage: qwen3_ref.py build/qwen3/tiny_ref.npz [n_tokens]
+Usage: ref.py build/qwen3/tiny_ref.npz [n_tokens]
 """
 
 import sys
@@ -56,7 +56,7 @@ class Ref:
         self.sin = d["rope_sin"]
         self.fin = d["fin_norm"]
         self.tokens = d["tokens"]
-        # tiny arch constants (mirror scripts/qwen3_convert.py --tiny)
+        # tiny arch constants (mirror scripts/qwen3/convert.py --tiny)
         self.n_layers = 2
         self.n_q = 2
         self.n_kv = 1

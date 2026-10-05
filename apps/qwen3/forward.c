@@ -299,7 +299,7 @@ uint32_t forward(uint32_t token, uint32_t pos, int want_logits) {
   PROBE("lnf", h1, 4);
   nq_matvec(embed, embed_s, h1, logits, VOCAB, HIDDEN);
   static int dumped = 0;
-  if (!dumped) { // numeric alignment hook: scripts/qwen3_ref.py top5
+  if (!dumped) { // numeric alignment hook: scripts/qwen3/ref.py top5
     dumped = 1;
     static const uint32_t ids[] = {7, 174, 303, 113, 133};
     print_str("logit probe: ");
