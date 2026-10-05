@@ -53,3 +53,4 @@ end
 -- sim_tests / sim_run targets defined above.
 includes("xmake/guest.lua")
 includes("xmake/riscv_tests.lua")
+includes("xmake/apps.lua")
