@@ -2,13 +2,16 @@
 
 // Qwen3 forward pass orchestration. Architecture dims come from the blob
 // header at runtime; weight pointers are cached per layer at init.
-//
-// Matvec activation buffers are 3072 f32 each and only ever written within
-// [0, k): the matvec kernel reads the zero padding up to its full panels,
-// which contributes nothing (see kernels.S).
 
-void nq_matvec(const int8_t *w, const float *w_scales, const float *x,
-               float *out, uint32_t n, uint32_t k);
+// Numeric alignment probes (fire on the last prompt token's forward pass).
+// Flip to 0 for silent runs.
+#ifndef QWEN3_PROBES
+#define QWEN3_PROBES 1
+#endif
+
+uint32_t nq_quant_act(const float *x, uint32_t k);
+void nq_matvec_q(const int8_t *w, const float *w_scales, float *out, uint32_t n,
+                 uint32_t k, uint32_t xs_bits);
 void nq_rmsnorm(float *x, const float *gamma, float *out, uint32_t n,
                 uint32_t eps_bits, uint32_t inv_n_bits);
 void nq_rope(float *x, const float *cos_h, const float *sin_h, uint32_t hd);
@@ -136,8 +139,12 @@ void forward_init(void) {
   EPS_BITS = h->eps_bits;
   Q_DIM = N_Q * HD;
   KV_DIM = N_KV * HD;
+  // the kernels require dims that are multiples of 32 and rope/score chunks
+  // that fit 32-lane vectors; anything else is rejected up front
   if (N_LAYERS > MAX_LAYERS || HIDDEN > 3072 || INTER > 3072 || Q_DIM > 2048 ||
-      KV_DIM > 1024 || MAX_POS > 512) {
+      KV_DIM > 1024 || MAX_POS > 512 || HIDDEN == 0 || INTER == 0 || N_Q == 0 ||
+      N_KV == 0 || VOCAB == 0 || HIDDEN % 32 != 0 || INTER % 32 != 0 ||
+      Q_DIM % 32 != 0 || KV_DIM % 32 != 0 || N_Q % N_KV != 0) {
     print_str("unsupported arch dims\n");
     semihost_exit(1);
   }
@@ -145,7 +152,6 @@ void forward_init(void) {
   case 128: SCALE_LOG2E_BITS = 0x3E0293EEu; break;
   case 64: SCALE_LOG2E_BITS = 0x3E38AA3Bu; break;
   case 32: SCALE_LOG2E_BITS = 0x3E8293EEu; break;
-  case 16: SCALE_LOG2E_BITS = 0x3EB8AA3Bu; break;
   default: print_str("unsupported head_dim\n"); semihost_exit(1);
   }
   kv_stride = MAX_POS * KV_DIM * 4;
@@ -185,15 +191,19 @@ static void attention(uint32_t layer, uint32_t pos) {
     for (uint32_t i = n_keys; i < n_padded; ++i) {
       ((uint32_t *)scores)[i] = 0xFF800000u;
     }
-    if (layer == 0 && pos == N_PROMPT - 1) {
-      print_str(h == 0 ? "sc_h0 " : "sc_h1 ");
+    if (QWEN3_PROBES && h < 2 && layer == 0 && pos == N_PROMPT - 1) {
+      print_str("sc_h");
+      print_u32(h);
+      semihost_putc(' ');
       for (int i = 0; i < 6; ++i)
         print_hex32(((uint32_t *)scores)[i]);
       semihost_putc('\n');
     }
     nq_softmax_exp(scores, n_padded, SCALE_LOG2E_BITS, rcp_word);
-    if (layer == 0 && pos == N_PROMPT - 1) {
-      print_str(h == 0 ? "pb_h0 " : "pb_h1 ");
+    if (QWEN3_PROBES && h < 2 && layer == 0 && pos == N_PROMPT - 1) {
+      print_str("pb_h");
+      print_u32(h);
+      semihost_putc(' ');
       for (int i = 0; i < 6; ++i)
         print_hex32(((uint32_t *)scores)[i]);
       print_hex32(rcp_word[0]);
@@ -209,7 +219,6 @@ extern char *nq_debug_qtile; // kernels.S debug hook (alignment only)
 extern int32_t nq_accbuf[];  // raw i32 matvec accumulators (kernels.S)
 static char qtile_dump[1024];
 
-// numeric alignment probes (fire on the last prompt token's forward pass)
 static void probe(const char *tag, const float *v, int n) {
   print_str(tag);
   semihost_putc(' ');
@@ -219,31 +228,35 @@ static void probe(const char *tag, const float *v, int n) {
 }
 #define PROBE(tag, v, n)                                                       \
   do {                                                                         \
-    if (want_logits && pos == N_PROMPT - 1) {                                  \
+    if (QWEN3_PROBES && want_logits && pos == N_PROMPT - 1) {                  \
       probe(tag, v, n);                                                        \
     }                                                                          \
   } while (0)
 
 uint32_t forward(uint32_t token, uint32_t pos, int want_logits) {
+  uint32_t xs;
   nq_embed(embed, embed_s, token, x_buf, HIDDEN);
   PROBE("embed", x_buf, 4);
   for (uint32_t L = 0; L < N_LAYERS; ++L) {
     const void **sec = lsec[L];
     nq_rmsnorm(x_buf, sec[LS_INLN], h1, HIDDEN, EPS_BITS, inv_n_bits(HIDDEN));
     if (L == 0) PROBE("ln0", h1, 4);
-    if (L == 0 && want_logits && pos == N_PROMPT - 1) {
+    if (QWEN3_PROBES && L == 0 && want_logits && pos == N_PROMPT - 1) {
       nq_debug_qtile = qtile_dump;
     }
-    nq_matvec(sec[LS_QW], sec[LS_QWS], h1, q_buf, Q_DIM, HIDDEN);
-    if (L == 0 && want_logits && pos == N_PROMPT - 1) {
+    // q/k/v share one activation quantization; the tiles stay resident
+    xs = nq_quant_act(h1, HIDDEN);
+    if (QWEN3_PROBES && L == 0 && want_logits && pos == N_PROMPT - 1) {
       nq_debug_qtile = 0;
       probe("qx0", (const float *)qtile_dump, 16);
+    }
+    nq_matvec_q(sec[LS_QW], sec[LS_QWS], q_buf, Q_DIM, HIDDEN, xs);
+    if (QWEN3_PROBES && L == 0 && want_logits && pos == N_PROMPT - 1) {
       probe("ac0", (const float *)nq_accbuf, 8);
     }
     if (L == 0) PROBE("q0", q_buf, 4);
-    if (L == 0) PROBE("q0h", q_buf + 16, 4);
-    nq_matvec(sec[LS_KW], sec[LS_KWS], h1, k_buf, KV_DIM, HIDDEN);
-    nq_matvec(sec[LS_VW], sec[LS_VWS], h1, v_buf, KV_DIM, HIDDEN);
+    nq_matvec_q(sec[LS_KW], sec[LS_KWS], k_buf, KV_DIM, HIDDEN, xs);
+    nq_matvec_q(sec[LS_VW], sec[LS_VWS], v_buf, KV_DIM, HIDDEN, xs);
     for (uint32_t h = 0; h < N_Q; ++h) {
       nq_rmsnorm(q_buf + h * HD, sec[LS_QN], q_buf + h * HD, HD, EPS_BITS,
                  inv_n_bits(HD));
@@ -255,27 +268,28 @@ uint32_t forward(uint32_t token, uint32_t pos, int want_logits) {
     }
     const float *cos_p = rope_cos + pos * (HD / 2);
     const float *sin_p = rope_sin + pos * (HD / 2);
-    if (L == 0) PROBE("cosr", cos_p, 4);
-    if (L == 0) PROBE("sinr", sin_p, 4);
     for (uint32_t h = 0; h < N_Q; ++h) {
       nq_rope(q_buf + h * HD, cos_p, sin_p, HD);
     }
     if (L == 0) PROBE("q0r", q_buf, 4);
-    if (L == 0) PROBE("q1r", q_buf + 32, 4);
+    if (L == 0) PROBE("q1r", q_buf + HD, 4);
     for (uint32_t h = 0; h < N_KV; ++h) {
       nq_rope(k_buf + h * HD, cos_p, sin_p, HD);
     }
     cache_append(L, pos);
     attention(L, pos);
     if (L == 0) PROBE("attn0", attn_buf, 4);
-    if (L == 0) PROBE("attn1", attn_buf + 32, 4);
-    if (L == 0 && want_logits && pos == N_PROMPT - 1) {
+    if (L == 0) PROBE("attn1", attn_buf + HD, 4);
+    if (QWEN3_PROBES && L == 0 && want_logits && pos == N_PROMPT - 1) {
       nq_debug_qtile = qtile_dump;
     }
-    nq_matvec(sec[LS_OW], sec[LS_OWS], attn_buf, h2, HIDDEN, Q_DIM);
-    if (L == 0 && want_logits && pos == N_PROMPT - 1) {
+    xs = nq_quant_act(attn_buf, Q_DIM);
+    if (QWEN3_PROBES && L == 0 && want_logits && pos == N_PROMPT - 1) {
       nq_debug_qtile = 0;
       probe("qxa", (const float *)qtile_dump, 16);
+    }
+    nq_matvec_q(sec[LS_OW], sec[LS_OWS], h2, HIDDEN, Q_DIM, xs);
+    if (QWEN3_PROBES && L == 0 && want_logits && pos == N_PROMPT - 1) {
       probe("aca", (const float *)nq_accbuf, 8);
     }
     if (L == 0) PROBE("o0", h2, 4);
@@ -283,13 +297,16 @@ uint32_t forward(uint32_t token, uint32_t pos, int want_logits) {
     if (L == 0) PROBE("xr0", x_buf, 4);
     nq_rmsnorm(x_buf, sec[LS_PTLN], h1, HIDDEN, EPS_BITS, inv_n_bits(HIDDEN));
     if (L == 0) PROBE("ln1", h1, 4);
-    nq_matvec(sec[LS_GW], sec[LS_GWS], h1, gate_buf, INTER, HIDDEN);
-    nq_matvec(sec[LS_UW], sec[LS_UWS], h1, up_buf, INTER, HIDDEN);
+    // gate/up share one activation quantization
+    xs = nq_quant_act(h1, HIDDEN);
+    nq_matvec_q(sec[LS_GW], sec[LS_GWS], gate_buf, INTER, HIDDEN, xs);
+    nq_matvec_q(sec[LS_UW], sec[LS_UWS], up_buf, INTER, HIDDEN, xs);
     if (L == 0) PROBE("g0", gate_buf, 4);
     if (L == 0) PROBE("u0", up_buf, 4);
     nq_silu_mul(gate_buf, up_buf, gate_buf, INTER);
     if (L == 0) PROBE("m0", gate_buf, 4);
-    nq_matvec(sec[LS_DW], sec[LS_DWS], gate_buf, h2, HIDDEN, INTER);
+    xs = nq_quant_act(gate_buf, INTER);
+    nq_matvec_q(sec[LS_DW], sec[LS_DWS], h2, HIDDEN, INTER, xs);
     if (L == 0) PROBE("d0", h2, 4);
     nq_add(x_buf, h2, HIDDEN);
     if (L == 0) PROBE("x_l0", x_buf, 4);
@@ -297,7 +314,8 @@ uint32_t forward(uint32_t token, uint32_t pos, int want_logits) {
   if (!want_logits) return 0;
   nq_rmsnorm(x_buf, fin_norm, h1, HIDDEN, EPS_BITS, inv_n_bits(HIDDEN));
   PROBE("lnf", h1, 4);
-  nq_matvec(embed, embed_s, h1, logits, VOCAB, HIDDEN);
+  xs = nq_quant_act(h1, HIDDEN);
+  nq_matvec_q(embed, embed_s, logits, VOCAB, HIDDEN, xs);
   static int dumped = 0;
   if (!dumped) { // numeric alignment hook: scripts/qwen3/ref.py top5
     dumped = 1;

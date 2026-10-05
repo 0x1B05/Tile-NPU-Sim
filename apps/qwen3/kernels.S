@@ -7,20 +7,6 @@
     .include "npu.inc"
     .include "kern.inc"
 
-    .text
-
-# ---------------------------------------------------------------------------
-# void nq_matvec(const int8_t *w, const float *w_scales, const float *x,
-#                float *out, uint32_t n, uint32_t k)
-#
-# out[j] = x_scale * w_scales[j] * sum_k quant(x)[k] * W[j,k]
-# W is [n, k] i8 row-major with per-row f32 scales. x (f32[k], zero-padded
-# by the caller to ceil(k/1024)*1024) is quantized once with a uniform
-# symmetric scale into ceil(k/1024) 32x32 i8 tile panels t2..t4 (k <= 3072);
-# zero x padding makes the padded tile rows contribute nothing. Cross-tile
-# accumulation runs in an i32 memory buffer (nq_accbuf).
-# ---------------------------------------------------------------------------
-
     .bss
     .align 4
     .globl nq_accbuf
@@ -32,60 +18,54 @@ nq_accbuf: .skip 151936 * 4
 nq_debug_qtile: .skip 8
 
     .text
-    .globl nq_matvec
-nq_matvec:
-    addi    sp, sp, -48
-    sd      ra, 0(sp)
-    sd      s2, 8(sp)
-    sd      s3, 16(sp)
-    sd      s4, 24(sp)
-    sd      s5, 32(sp)
-    sd      s6, 40(sp)
 
-    # shared vector configs (len 32)
+# ---------------------------------------------------------------------------
+# uint32_t nq_quant_act(const float *x, uint32_t k)
+#
+# Quantizes x (f32[k], zero-padded by the caller to ceil(k/1024)*1024) with a
+# uniform symmetric scale into ceil(k/1024) 32x32 i8 tile panels t2..t4
+# (k <= 3072); zero x padding makes the padded tile rows contribute nothing.
+# Returns the f32 activation scale bits. The panels stay resident in t2..t4
+# for nq_matvec_q.
+# ---------------------------------------------------------------------------
+    .text
+    .globl nq_quant_act
+nq_quant_act:
     SETIV   SEL_VC, CF_DTYPE, DT_F32, 0
     SETIV   SEL_VC, CF_LEN, 32, 0
     SETIV   SEL_VC, CF_DTYPE, DT_F32, 1
     SETIV   SEL_VC, CF_LEN, 32, 1
     SETIV   SEL_VC, CF_DTYPE, DT_F32, 2
     SETIV   SEL_VC, CF_LEN, 32, 2
-    SETIV   SEL_VC, CF_DTYPE, DT_I32, 4
-    SETIV   SEL_VC, CF_LEN, 32, 4
-    SETIV   SEL_VC, CF_DTYPE, DT_I32, 5
-    SETIV   SEL_VC, CF_LEN, 32, 5
-    SETIV   SEL_VC, CF_DTYPE, DT_F32, 6
-    SETIV   SEL_VC, CF_LEN, 32, 6
-    SETIV   SEL_VC, CF_DTYPE, DT_F32, 8
-    SETIV   SEL_VC, CF_LEN, 32, 8
 
-    # phase A1: activation absmax over the padded panels (v0 max, v1 chunk)
-    SETX    SEL_VM, 1, CF_BASE, 1, X_A2
+    # activation absmax over the padded panels (v0 max, v1 chunk)
+    SETX    SEL_VM, 1, CF_BASE, 1, X_A0
     SETIV   SEL_VM, CF_STRIDE, 4, 1
     SETIV   SEL_VM, CF_VFLAGS, 1, 1
     VFILL   0, 0
-    addi    t6, a5, 1023
+    addi    t6, a1, 1023
     srli    t6, t6, 10          # panels = ceil(k/1024)
     slli    t6, t6, 5           # padded chunk count = panels * 32
-.Lmv_amax:
+.Lqa_amax:
     VLOAD   1
     VABS    1, 1
     VMAX    0, 0, 1
     addi    t6, t6, -1
-    bnez    t6, .Lmv_amax
+    bnez    t6, .Lqa_amax
     VREDUCE 1, X_T0, 0          # t0 = absmax f32 bits
 
-    # v2 = broadcast(absmax) * (1/127); s6 = x_scale bits
+    # v2 = broadcast(absmax) * (1/127)
     VINSERT 2, 0, X_T0
     VBROADCAST 2, 2, 0
     li      t1, 0x3C010204      # f32 bits of 1/127
     VMULX   2, 2, X_T1
-    VEXTRACT X_S6, 2, 0
+    VEXTRACT X_T2, 2, 0         # t2 = x_scale bits
 
-    # phase A2: quantize the panels into t2..t4 (32x32 i8)
+    # quantize the panels into t2..t4 (32x32 i8)
     SETIM   SEL_AC, CF_DTYPE, DT_F32, 0
     SETIM   SEL_AC, CF_ROWS, 32, 0
     SETIM   SEL_AC, CF_COLS, 32, 0
-    SETX    SEL_AM, 0, CF_BASE, 0, X_A2
+    SETX    SEL_AM, 0, CF_BASE, 0, X_A0
     SETIM   SEL_AM, CF_RSTRIDE, 128, 0
     SETIM   SEL_AM, CF_CSTRIDE, 4, 0
     SETIM   SEL_AM, CF_FLAGS, 1, 0        # inc along rows: += 32 * 128
@@ -98,35 +78,72 @@ nq_matvec:
     SETIM   SEL_TC, CF_DTYPE, DT_I8, 4
     SETIM   SEL_TC, CF_ROWS, 32, 4
     SETIM   SEL_TC, CF_COLS, 32, 4
-    addi    s4, a5, 1023
-    srli    s4, s4, 10          # panels
-    li      s5, 0
-.Lmv_quant:
+    addi    t3, a1, 1023
+    srli    t3, t3, 10          # panels
+    li      t4, 0
+.Lqa_quant:
     ALOAD   0
-    beqz    s5, .Lmv_q0
+    beqz    t4, .Lqa_q0
     li      t5, 1
-    beq     s5, t5, .Lmv_q1
+    beq     t4, t5, .Lqa_q1
     TQUANTX 4, 2, 0
-    j       .Lmv_qnext
-.Lmv_q0:
+    j       .Lqa_next
+.Lqa_q0:
     TQUANTX 2, 2, 0
-    j       .Lmv_qnext
-.Lmv_q1:
+    j       .Lqa_next
+.Lqa_q1:
     TQUANTX 3, 2, 0
-.Lmv_qnext:
-    addi    s5, s5, 1
-    bltu    s5, s4, .Lmv_quant
+.Lqa_next:
+    addi    t4, t4, 1
+    bltu    t4, t3, .Lqa_quant
 
     # debug hook: dump the last quantized activation tile when requested
     la      t0, nq_debug_qtile
     ld      t1, 0(t0)
-    beqz    t1, .Lmv_nodump
+    beqz    t1, .Lqa_nodump
     SETX    SEL_TM, 0, CF_BASE, 2, X_T1
     SETIM   SEL_TM, CF_RSTRIDE, 32, 2
     SETIM   SEL_TM, CF_CSTRIDE, 1, 2
     SETIM   SEL_TM, CF_FLAGS, 0, 2
     TSTORE  2
-.Lmv_nodump:
+.Lqa_nodump:
+    mv      a0, t2
+    ret
+
+# ---------------------------------------------------------------------------
+# void nq_matvec_q(const int8_t *w, const float *w_scales, float *out,
+#                  uint32_t n, uint32_t k, uint32_t xs_bits)
+#
+# out[j] = xs * w_scales[j] * sum_k quant(x)[k] * W[j,k]
+# W is [n, k] i8 row-major with per-row f32 scales. quant(x) is the tile
+# panels t2..t4 left resident by nq_quant_act; nothing between the two calls
+# may clobber them. Cross-tile accumulation runs in an i32 memory buffer
+# (nq_accbuf). n % 32 == 0, 32 | k, k <= 3072.
+# ---------------------------------------------------------------------------
+    .text
+    .globl nq_matvec_q
+nq_matvec_q:
+    addi    sp, sp, -48
+    sd      s2, 0(sp)
+    sd      s3, 8(sp)
+    sd      s4, 16(sp)
+    sd      s5, 24(sp)
+    sd      s6, 32(sp)
+
+    mv      s6, a5              # x_scale bits
+    mv      a5, a4              # k
+    mv      a4, a3              # n
+    mv      a3, a2              # out
+
+    # shared vector configs (len 32)
+    SETIV   SEL_VC, CF_DTYPE, DT_I32, 4
+    SETIV   SEL_VC, CF_LEN, 32, 4
+    SETIV   SEL_VC, CF_DTYPE, DT_I32, 5
+    SETIV   SEL_VC, CF_LEN, 32, 5
+    SETIV   SEL_VC, CF_DTYPE, DT_F32, 6
+    SETIV   SEL_VC, CF_LEN, 32, 6
+    SETIV   SEL_VC, CF_DTYPE, DT_F32, 8
+    SETIV   SEL_VC, CF_LEN, 32, 8
 
     # phase B configs: weight tile t1 (tm1 row_stride = k, inc along cols)
     SETIM   SEL_TC, CF_DTYPE, DT_I8, 1
@@ -150,7 +167,10 @@ nq_matvec:
     SETIV   SEL_VM, CF_STRIDE, 4, 8
     SETIV   SEL_VM, CF_VFLAGS, 1, 8
 
-    # per panel: texrows once; per n-block: 32 tload/bdot/vadd into accbuf
+    # per panel: texrows once; per n-block: tload/bdot/vadd over the panel's
+    # valid activation rows (k/32 per panel) into accbuf
+    addi    s4, a5, 1023
+    srli    s4, s4, 10          # panels
     li      s5, 0
 .Lmv_panel:
     beqz    s5, .Lmv_tex0
@@ -170,6 +190,14 @@ nq_matvec:
     TEXROW  \R, 3, \R
     .endr
 .Lmv_texdone:
+    # t4 = valid activation rows in this panel: min(32, k/32 - panel*32)
+    srli    t4, a5, 5
+    slli    t5, s5, 5
+    sub     t4, t4, t5
+    li      t5, 32
+    bltu    t4, t5, 1f
+    mv      t4, t5
+1:
     srli    s3, a4, 5           # n/32 blocks
     li      s2, 0
 .Lmv_nblock:
@@ -191,10 +219,13 @@ nq_matvec:
     VFILL   4, 0
 .Lmv_inner:
     .irp R,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
+    li      t5, \R
+    bgeu    t5, t4, .Lmv_inner_done
     TLOAD   1
     BDOT_NT 5, \R, 1
     VADD    4, 4, 5
     .endr
+.Lmv_inner_done:
     VSTORE  4
     addi    s2, s2, 1
     bltu    s2, s3, .Lmv_nblock
@@ -219,12 +250,11 @@ nq_matvec:
     addi    s2, s2, 1
     bltu    s2, s3, .Lmv_epi
 
-    ld      ra, 0(sp)
-    ld      s2, 8(sp)
-    ld      s3, 16(sp)
-    ld      s4, 24(sp)
-    ld      s5, 32(sp)
-    ld      s6, 40(sp)
+    ld      s2, 0(sp)
+    ld      s3, 8(sp)
+    ld      s4, 16(sp)
+    ld      s5, 24(sp)
+    ld      s6, 32(sp)
     addi    sp, sp, 48
     ret
 
