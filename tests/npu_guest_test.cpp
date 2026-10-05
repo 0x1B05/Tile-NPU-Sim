@@ -30,6 +30,29 @@ constexpr std::size_t tile_index(std::size_t row, std::size_t col) {
   return row * tile_npu::MATRIX_EXTENT + col;
 }
 
+// Runs a self-checking guest image until it stops, then asserts the runner
+// conventions: the expected stop status (ebreak; kernel.end for sys.S) and
+// a0 == 0. Any non-retired status stops the loop, so a guest fault fails the
+// status check immediately instead of burning through the step budget.
+void check_guest_image(
+    std::string_view name, std::uint64_t memory_size,
+    tile_npu::StepStatus stop = tile_npu::StepStatus::breakpoint) {
+  tile_npu::FlatMemory memory{IMAGE_BASE, memory_size};
+  tile_npu::Simulator sim(memory);
+  load_image(memory, name);
+  sim.reset(IMAGE_BASE);
+  tile_npu::StepResult result{};
+  for (int steps = 0; steps < 512; ++steps) {
+    result = sim.step();
+    if (result.status != tile_npu::StepStatus::retired) {
+      break;
+    }
+  }
+  check_eq(result.status, stop, std::string(name) + " image stops");
+  check_eq(hex(sim.state().scalar.read_x(10)), hex(0x0u),
+           std::string(name) + " image reports success via a0");
+}
+
 constexpr std::uint8_t i8_bits(int value) {
   return static_cast<std::uint8_t>(static_cast<std::int8_t>(value));
 }
@@ -196,63 +219,21 @@ TEST_CASE(npu_guest_mem) {
   // exercises block/transposed/row/gather accesses with store-back checks
   // and a descriptor auto-increment readback. It reaches ebreak with
   // a0 = 0 on success; a failing check reports its stage number in a0.
-  tile_npu::FlatMemory memory{IMAGE_BASE, 1024};
-  tile_npu::Simulator sim(memory);
-  load_image(memory, "mem");
-  sim.reset(IMAGE_BASE);
-  tile_npu::StepResult result{};
-  for (int steps = 0; steps < 256; ++steps) {
-    result = sim.step();
-    if (result.status == tile_npu::StepStatus::breakpoint) {
-      break;
-    }
-  }
-  check_eq(result.status, tile_npu::StepStatus::breakpoint,
-           "mem image reaches ebreak");
-  check_eq(hex(sim.state().scalar.read_x(10)), hex(0x0u),
-           "mem image reports success via a0");
+  check_guest_image("mem", 1024);
 }
 
 TEST_CASE(npu_guest_init) {
   // tests/guest/npu/init.S self-configures configs and descriptors, then
   // exercises fill/fillx/copy/ttranspose with store-back checks. It reaches
   // ebreak with a0 = 0 on success; a failing check reports its stage in a0.
-  tile_npu::FlatMemory memory{IMAGE_BASE, 1024};
-  tile_npu::Simulator sim(memory);
-  load_image(memory, "init");
-  sim.reset(IMAGE_BASE);
-  tile_npu::StepResult result{};
-  for (int steps = 0; steps < 512; ++steps) {
-    result = sim.step();
-    if (result.status == tile_npu::StepStatus::breakpoint) {
-      break;
-    }
-  }
-  check_eq(result.status, tile_npu::StepStatus::breakpoint,
-           "init image reaches ebreak");
-  check_eq(hex(sim.state().scalar.read_x(10)), hex(0x0u),
-           "init image reports success via a0");
+  check_guest_image("init", 1024);
 }
 
 TEST_CASE(npu_guest_rowlane) {
   // tests/guest/npu/rowlane.S exercises row insert/extract and lane
   // extract/insert/broadcast with store-back checks. It reaches ebreak with
   // a0 = 0 on success; a failing check reports its stage in a0.
-  tile_npu::FlatMemory memory{IMAGE_BASE, 1024};
-  tile_npu::Simulator sim(memory);
-  load_image(memory, "rowlane");
-  sim.reset(IMAGE_BASE);
-  tile_npu::StepResult result{};
-  for (int steps = 0; steps < 512; ++steps) {
-    result = sim.step();
-    if (result.status == tile_npu::StepStatus::breakpoint) {
-      break;
-    }
-  }
-  check_eq(result.status, tile_npu::StepStatus::breakpoint,
-           "rowlane image reaches ebreak");
-  check_eq(hex(sim.state().scalar.read_x(10)), hex(0x0u),
-           "rowlane image reports success via a0");
+  check_guest_image("rowlane", 1024);
 }
 
 TEST_CASE(npu_guest_eun) {
@@ -260,21 +241,7 @@ TEST_CASE(npu_guest_eun) {
   // exercises the E_UNARY family (not/abs/neg/exp2/rcp/rsqrt/silu) with
   // store-back checks against expected values in .data. It reaches ebreak
   // with a0 = 0 on success; a failing check reports its stage in a0.
-  tile_npu::FlatMemory memory{IMAGE_BASE, 1024};
-  tile_npu::Simulator sim(memory);
-  load_image(memory, "eun");
-  sim.reset(IMAGE_BASE);
-  tile_npu::StepResult result{};
-  for (int steps = 0; steps < 512; ++steps) {
-    result = sim.step();
-    if (result.status == tile_npu::StepStatus::breakpoint) {
-      break;
-    }
-  }
-  check_eq(result.status, tile_npu::StepStatus::breakpoint,
-           "eun image reaches ebreak");
-  check_eq(hex(sim.state().scalar.read_x(10)), hex(0x0u),
-           "eun image reports success via a0");
+  check_guest_image("eun", 1024);
 }
 
 TEST_CASE(npu_guest_ecmp) {
@@ -283,21 +250,7 @@ TEST_CASE(npu_guest_ecmp) {
   // storing the u32 masks back and checking them against expected arrays.
   // It reaches ebreak with a0 = 0 on success; a failing check reports its
   // stage in a0.
-  tile_npu::FlatMemory memory{IMAGE_BASE, 1024};
-  tile_npu::Simulator sim(memory);
-  load_image(memory, "ecmp");
-  sim.reset(IMAGE_BASE);
-  tile_npu::StepResult result{};
-  for (int steps = 0; steps < 512; ++steps) {
-    result = sim.step();
-    if (result.status == tile_npu::StepStatus::breakpoint) {
-      break;
-    }
-  }
-  check_eq(result.status, tile_npu::StepStatus::breakpoint,
-           "ecmp image reaches ebreak");
-  check_eq(hex(sim.state().scalar.read_x(10)), hex(0x0u),
-           "ecmp image reports success via a0");
+  check_guest_image("ecmp", 1024);
 }
 
 TEST_CASE(npu_guest_ebcast) {
@@ -305,21 +258,7 @@ TEST_CASE(npu_guest_ebcast) {
   // exercises a Tile byrow broadcast add (i8 wrap) and an Acc bycol broadcast
   // mul (i32) with store-back checks. It reaches ebreak with a0 = 0 on
   // success; a failing check reports its stage in a0.
-  tile_npu::FlatMemory memory{IMAGE_BASE, 1024};
-  tile_npu::Simulator sim(memory);
-  load_image(memory, "ebcast");
-  sim.reset(IMAGE_BASE);
-  tile_npu::StepResult result{};
-  for (int steps = 0; steps < 512; ++steps) {
-    result = sim.step();
-    if (result.status == tile_npu::StepStatus::breakpoint) {
-      break;
-    }
-  }
-  check_eq(result.status, tile_npu::StepStatus::breakpoint,
-           "ebcast image reaches ebreak");
-  check_eq(hex(sim.state().scalar.read_x(10)), hex(0x0u),
-           "ebcast image reports success via a0");
+  check_guest_image("ebcast", 1024);
 }
 
 TEST_CASE(npu_guest_er4) {
@@ -327,21 +266,7 @@ TEST_CASE(npu_guest_er4) {
   // exercises a Tile select (u8 mask) and a Vec32 fmadd (f32, single
   // rounding) with store-back checks. It reaches ebreak with a0 = 0 on
   // success; a failing check reports its stage in a0.
-  tile_npu::FlatMemory memory{IMAGE_BASE, 1024};
-  tile_npu::Simulator sim(memory);
-  load_image(memory, "er4");
-  sim.reset(IMAGE_BASE);
-  tile_npu::StepResult result{};
-  for (int steps = 0; steps < 512; ++steps) {
-    result = sim.step();
-    if (result.status == tile_npu::StepStatus::breakpoint) {
-      break;
-    }
-  }
-  check_eq(result.status, tile_npu::StepStatus::breakpoint,
-           "er4 image reaches ebreak");
-  check_eq(hex(sim.state().scalar.read_x(10)), hex(0x0u),
-           "er4 image reports success via a0");
+  check_guest_image("er4", 1024);
 }
 
 TEST_CASE(npu_guest_emask) {
@@ -349,21 +274,7 @@ TEST_CASE(npu_guest_emask) {
   // exercises an Acc tril mask (i32, xDelta = 0, fill5 = -1) and a Vec32
   // tail mask (i32, xLen = 3, fill5 = +1) with store-back checks. It reaches
   // ebreak with a0 = 0 on success; a failing check reports its stage in a0.
-  tile_npu::FlatMemory memory{IMAGE_BASE, 1024};
-  tile_npu::Simulator sim(memory);
-  load_image(memory, "emask");
-  sim.reset(IMAGE_BASE);
-  tile_npu::StepResult result{};
-  for (int steps = 0; steps < 512; ++steps) {
-    result = sim.step();
-    if (result.status == tile_npu::StepStatus::breakpoint) {
-      break;
-    }
-  }
-  check_eq(result.status, tile_npu::StepStatus::breakpoint,
-           "emask image reaches ebreak");
-  check_eq(hex(sim.state().scalar.read_x(10)), hex(0x0u),
-           "emask image reports success via a0");
+  check_guest_image("emask", 1024);
 }
 
 TEST_CASE(npu_guest_cvt) {
@@ -372,21 +283,7 @@ TEST_CASE(npu_guest_cvt) {
   // checking the destination dtype update) and a vcvt, with store-back
   // checks. It reaches ebreak with a0 = 0 on success; a failing check
   // reports its stage in a0.
-  tile_npu::FlatMemory memory{IMAGE_BASE, 1024};
-  tile_npu::Simulator sim(memory);
-  load_image(memory, "cvt");
-  sim.reset(IMAGE_BASE);
-  tile_npu::StepResult result{};
-  for (int steps = 0; steps < 512; ++steps) {
-    result = sim.step();
-    if (result.status == tile_npu::StepStatus::breakpoint) {
-      break;
-    }
-  }
-  check_eq(result.status, tile_npu::StepStatus::breakpoint,
-           "cvt image reaches ebreak");
-  check_eq(hex(sim.state().scalar.read_x(10)), hex(0x0u),
-           "cvt image reports success via a0");
+  check_guest_image("cvt", 1024);
 }
 
 TEST_CASE(npu_guest_reduce) {
@@ -394,21 +291,7 @@ TEST_CASE(npu_guest_reduce) {
   // exercises an areduce.rows.sum (f32) and a vreduce.argmax (NaN candidate
   // wins) with store-back and in-register checks. It reaches ebreak with
   // a0 = 0 on success; a failing check reports its stage in a0.
-  tile_npu::FlatMemory memory{IMAGE_BASE, 1024};
-  tile_npu::Simulator sim(memory);
-  load_image(memory, "reduce");
-  sim.reset(IMAGE_BASE);
-  tile_npu::StepResult result{};
-  for (int steps = 0; steps < 512; ++steps) {
-    result = sim.step();
-    if (result.status == tile_npu::StepStatus::breakpoint) {
-      break;
-    }
-  }
-  check_eq(result.status, tile_npu::StepStatus::breakpoint,
-           "reduce image reaches ebreak");
-  check_eq(hex(sim.state().scalar.read_x(10)), hex(0x0u),
-           "reduce image reports success via a0");
+  check_guest_image("reduce", 1024);
 }
 
 TEST_CASE(npu_guest_qnt) {
@@ -417,21 +300,7 @@ TEST_CASE(npu_guest_qnt) {
   // tdequant, a vquant with an immediate scale lane and a bdequant, with
   // store-back checks. It reaches ebreak with a0 = 0 on success; a failing
   // check reports its stage in a0.
-  tile_npu::FlatMemory memory{IMAGE_BASE, 1024};
-  tile_npu::Simulator sim(memory);
-  load_image(memory, "qnt");
-  sim.reset(IMAGE_BASE);
-  tile_npu::StepResult result{};
-  for (int steps = 0; steps < 512; ++steps) {
-    result = sim.step();
-    if (result.status == tile_npu::StepStatus::breakpoint) {
-      break;
-    }
-  }
-  check_eq(result.status, tile_npu::StepStatus::breakpoint,
-           "qnt image reaches ebreak");
-  check_eq(hex(sim.state().scalar.read_x(10)), hex(0x0u),
-           "qnt image reports success via a0");
+  check_guest_image("qnt", 1024);
 }
 
 TEST_CASE(npu_guest_mma) {
@@ -439,21 +308,7 @@ TEST_CASE(npu_guest_mma) {
   // operands, then exercises mma.nn.zero, mma.nt.acc (accumulating onto the
   // first product) and bdot.nt, with store-back checks. It reaches ebreak
   // with a0 = 0 on success; a failing check reports its stage in a0.
-  tile_npu::FlatMemory memory{IMAGE_BASE, 1024};
-  tile_npu::Simulator sim(memory);
-  load_image(memory, "mma");
-  sim.reset(IMAGE_BASE);
-  tile_npu::StepResult result{};
-  for (int steps = 0; steps < 512; ++steps) {
-    result = sim.step();
-    if (result.status == tile_npu::StepStatus::breakpoint) {
-      break;
-    }
-  }
-  check_eq(result.status, tile_npu::StepStatus::breakpoint,
-           "mma image reaches ebreak");
-  check_eq(hex(sim.state().scalar.read_x(10)), hex(0x0u),
-           "mma image reports success via a0");
+  check_guest_image("mma", 1024);
 }
 
 TEST_CASE(npu_guest_sys) {
@@ -461,39 +316,11 @@ TEST_CASE(npu_guest_sys) {
   // pair, checks the stored bytes, then terminates with kernel.end. The step
   // stops with StepStatus::kernel_end (a simulator convention: the ISA does
   // not define the architectural behavior after kernel completion).
-  tile_npu::FlatMemory memory{IMAGE_BASE, 256};
-  tile_npu::Simulator sim(memory);
-  load_image(memory, "sys");
-  sim.reset(IMAGE_BASE);
-  tile_npu::StepResult result{};
-  for (int steps = 0; steps < 512; ++steps) {
-    result = sim.step();
-    if (result.status != tile_npu::StepStatus::retired) {
-      break;
-    }
-  }
-  check_eq(result.status, tile_npu::StepStatus::kernel_end,
-           "sys image stops at kernel.end");
-  check_eq(hex(sim.state().scalar.read_x(10)), hex(0x0u),
-           "sys image reports success via a0");
+  check_guest_image("sys", 256, tile_npu::StepStatus::kernel_end);
 }
 
 TEST_CASE(npu_guest_cfg_self_check) {
   // tests/guest/npu/cfg.S programs config registers with cfg.seti/cfg.setx,
   // reads them back with cfg.get, and reaches ebreak with a0 = 0 on success.
-  tile_npu::FlatMemory memory{IMAGE_BASE, 128};
-  tile_npu::Simulator sim(memory);
-  load_image(memory, "cfg");
-  sim.reset(IMAGE_BASE);
-  tile_npu::StepResult result{};
-  for (int steps = 0; steps < 64; ++steps) {
-    result = sim.step();
-    if (result.status == tile_npu::StepStatus::breakpoint) {
-      break;
-    }
-  }
-  check_eq(result.status, tile_npu::StepStatus::breakpoint,
-           "cfg image reaches ebreak");
-  check_eq(hex(sim.state().scalar.read_x(10)), hex(0x0u),
-           "cfg image reports success via a0");
+  check_guest_image("cfg", 128);
 }
