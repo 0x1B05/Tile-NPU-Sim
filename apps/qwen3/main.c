@@ -1,6 +1,7 @@
 #include "qwen3.h"
 
 void forward_init(void);
+void forward_prefill(const uint32_t *tokens, uint32_t n);
 uint32_t forward(uint32_t token, uint32_t pos, int want_logits);
 const void *blob_section(const char name[8]);
 const struct q3b_header *blob_header(void);
@@ -36,10 +37,8 @@ int main(void) {
   }
   semihost_putc('\n');
 
-  uint32_t pos = 0;
-  for (; pos + 1 < h->n_prompt; ++pos) {
-    forward(tokens[pos], pos, 0);
-  }
+  if (h->n_prompt > 1) forward_prefill(tokens, h->n_prompt - 1);
+  uint32_t pos = h->n_prompt - 1;
   uint32_t next = forward(tokens[pos], pos, 1);
   ++pos;
 
