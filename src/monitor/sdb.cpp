@@ -85,6 +85,9 @@ void cmd_si(Simulator &sim, std::string_view arg) {
   }
   for (std::uint64_t i = 0; i < count; ++i) {
     const auto result = sim.step();
+    if (result.status == StepStatus::environment_call && semihost(sim)) {
+      continue; // the ecall counts as a stepped instruction
+    }
     if (result.status != StepStatus::retired) {
       std::cout << stop_message(result) << '\n';
       return;
@@ -177,8 +180,19 @@ std::string stop_message(const StepResult &result) {
 StepResult run_until_stop(Simulator &sim) {
   while (true) {
     const auto result = sim.step();
+    if (result.status == StepStatus::environment_call && semihost(sim)) {
+      continue;
+    }
     if (result.status != StepStatus::retired) return result;
   }
+}
+
+bool semihost(Simulator &sim) {
+  if (sim.state().scalar.read_x(17) != 1) return false;
+  std::cout.put(static_cast<char>(sim.state().scalar.read_x(10) & 0xff));
+  std::cout.flush();
+  sim.state().scalar.pc += 4;
+  return true;
 }
 
 void sdb_loop(Simulator &sim, Memory &memory) {
