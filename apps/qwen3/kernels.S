@@ -259,6 +259,167 @@ nq_matvec_q:
     ret
 
 # ---------------------------------------------------------------------------
+# void nq_quant_rows(const float *x, uint32_t k, int8_t *xq, float *xs)
+#
+# Batched sibling of nq_quant_act: x is [32, k] f32 row-major (rows are
+# tokens, zero or garbage padding rows are quantized but never consumed).
+# Pass 1 folds per-row absmax over the k/32 chunks (areduce.absmax + vmax)
+# and stores xs = absmax * (1/127) as 32 f32 scales; pass 2 quantizes each
+# 32x32 chunk with the per-row external scales into xq, [32, k] i8 row-major.
+# Rows whose absmax is 0 quantize to 0 (NaN quotient rule).
+# ---------------------------------------------------------------------------
+    .text
+    .globl nq_quant_rows
+nq_quant_rows:
+    SETIV   SEL_VC, CF_DTYPE, DT_F32, 0
+    SETIV   SEL_VC, CF_LEN, 32, 0
+    SETIV   SEL_VC, CF_DTYPE, DT_F32, 1
+    SETIV   SEL_VC, CF_LEN, 32, 1
+    SETIM   SEL_AC, CF_DTYPE, DT_F32, 0
+    SETIM   SEL_AC, CF_ROWS, 32, 0
+    SETIM   SEL_AC, CF_COLS, 32, 0
+    SETX    SEL_AM, 0, CF_BASE, 0, X_A0
+    slli    t0, a1, 2
+    SETX    SEL_AM, 0, CF_RSTRIDE, 0, X_T0
+    SETIM   SEL_AM, CF_CSTRIDE, 4, 0
+    SETIM   SEL_AM, CF_FLAGS, 2, 0        # inc along cols: += 32 * 4
+
+    # pass 1: v0 = per-row absmax over all chunks (v1 = chunk absmax)
+    srli    t6, a1, 5
+    ALOAD   0
+    AREDUCE 5, 0, 0
+    addi    t6, t6, -1
+    beqz    t6, .Lqr_scale
+.Lqr_amax:
+    ALOAD   0
+    AREDUCE 5, 1, 0
+    VMAX    0, 0, 1
+    addi    t6, t6, -1
+    bnez    t6, .Lqr_amax
+.Lqr_scale:
+    li      t0, 0x3C010204      # f32 bits of 1/127
+    VMULX   0, 0, X_T0
+    SETX    SEL_VM, 1, CF_BASE, 0, X_A3
+    SETIV   SEL_VM, CF_STRIDE, 4, 0
+    SETIV   SEL_VM, CF_VFLAGS, 0, 0
+    VSTORE  0                   # xs scales out; v0 stays for pass 2
+
+    # pass 2: quantize chunks to xq (t0, tm0 inc along cols: += 32 * 1)
+    SETIM   SEL_TC, CF_DTYPE, DT_I8, 0
+    SETIM   SEL_TC, CF_ROWS, 32, 0
+    SETIM   SEL_TC, CF_COLS, 32, 0
+    SETX    SEL_AM, 0, CF_BASE, 0, X_A0   # rewind x
+    SETX    SEL_TM, 0, CF_BASE, 0, X_A2
+    SETX    SEL_TM, 0, CF_RSTRIDE, 0, X_A1
+    SETIM   SEL_TM, CF_CSTRIDE, 1, 0
+    SETIM   SEL_TM, CF_FLAGS, 2, 0
+    srli    t6, a1, 5
+.Lqr_quant:
+    ALOAD   0
+    TQUANTX 0, 0, 0
+    TSTORE  0
+    addi    t6, t6, -1
+    bnez    t6, .Lqr_quant
+    ret
+
+# ---------------------------------------------------------------------------
+# void nq_matmul_q(const int8_t *w, const float *w_scales, const int8_t *xq,
+#                  const float *xs, float *out, uint32_t n, uint32_t k)
+#
+# Batched sibling of nq_matvec_q: out[t,j] = xs[t] * w_scales[j] *
+# sum_c xq[t,c] * W[j,c] for t in [0,32), computing one 32-row token batch.
+# xq is [32, k] i8 row-major (nq_quant_rows output), xs its 32 row scales.
+# Per 32-column block of out: mma.nt accumulates the k/32 chunks in acc a0,
+# then acc -> f32, * ws (bycol), * xs (byrow), stored via am0 (auto-advances
+# one block per store). n % 32 == 0, 32 | k, k <= 3072.
+# ---------------------------------------------------------------------------
+    .text
+    .globl nq_matmul_q
+nq_matmul_q:
+    addi    sp, sp, -48
+    sd      s2, 0(sp)
+    sd      s3, 8(sp)
+    sd      s4, 16(sp)
+    sd      s5, 24(sp)
+    sd      s6, 32(sp)
+
+    mv      s6, a2              # xq base
+
+    SETIM   SEL_TC, CF_DTYPE, DT_I8, 0
+    SETIM   SEL_TC, CF_ROWS, 32, 0
+    SETIM   SEL_TC, CF_COLS, 32, 0
+    SETIM   SEL_TC, CF_DTYPE, DT_I8, 1
+    SETIM   SEL_TC, CF_ROWS, 32, 1
+    SETIM   SEL_TC, CF_COLS, 32, 1
+    SETX    SEL_TM, 0, CF_RSTRIDE, 0, X_A6
+    SETIM   SEL_TM, CF_CSTRIDE, 1, 0
+    SETIM   SEL_TM, CF_FLAGS, 2, 0      # inc along cols: += 32 * 1
+    SETX    SEL_TM, 0, CF_RSTRIDE, 1, X_A6
+    SETIM   SEL_TM, CF_CSTRIDE, 1, 1
+    SETIM   SEL_TM, CF_FLAGS, 2, 1
+    SETIM   SEL_AC, CF_DTYPE, DT_I32, 0
+    SETIM   SEL_AC, CF_ROWS, 32, 0
+    SETIM   SEL_AC, CF_COLS, 32, 0
+    SETIM   SEL_AC, CF_DTYPE, DT_I32, 1
+    SETIM   SEL_AC, CF_ROWS, 32, 1
+    SETIM   SEL_AC, CF_COLS, 32, 1
+    SETX    SEL_AM, 0, CF_BASE, 1, X_A4
+    slli    t0, a5, 2
+    SETX    SEL_AM, 0, CF_RSTRIDE, 1, X_T0
+    SETIM   SEL_AM, CF_CSTRIDE, 4, 1
+    SETIM   SEL_AM, CF_FLAGS, 2, 1      # inc along cols: += 32 * 4
+    SETIV   SEL_VC, CF_DTYPE, DT_F32, 29
+    SETIV   SEL_VC, CF_LEN, 32, 29
+    SETX    SEL_VM, 1, CF_BASE, 29, X_A1
+    SETIV   SEL_VM, CF_STRIDE, 4, 29
+    SETIV   SEL_VM, CF_VFLAGS, 1, 29    # ws stream, one block per load
+    SETIV   SEL_VC, CF_DTYPE, DT_F32, 30
+    SETIV   SEL_VC, CF_LEN, 32, 30
+    SETX    SEL_VM, 1, CF_BASE, 30, X_A3
+    SETIV   SEL_VM, CF_STRIDE, 4, 30
+    SETIV   SEL_VM, CF_VFLAGS, 0, 30
+    VLOAD   30                          # xs stays resident in v30
+
+    srli    s3, a5, 5           # n/32 blocks
+    srli    s4, a6, 5           # k/32 chunks
+    li      s2, 0
+.Lmm_nblock:
+    # tm1 base = w + nb*32*k; tm0 rewinds to xq
+    mul     t0, s2, a6
+    slli    t0, t0, 5
+    add     t0, a0, t0
+    SETX    SEL_TM, 0, CF_BASE, 1, X_T0
+    SETX    SEL_TM, 0, CF_BASE, 0, X_S6
+    TLOAD   0
+    TLOAD   1
+    MMA_NT_ZERO 0, 0, 1
+    li      s5, 1
+.Lmm_kloop:
+    bgeu    s5, s4, .Lmm_epi
+    TLOAD   0
+    TLOAD   1
+    MMA_NT_ACC 0, 0, 1
+    addi    s5, s5, 1
+    j       .Lmm_kloop
+.Lmm_epi:
+    VLOAD   29                  # 32 weight scales
+    SETIM   SEL_AC, CF_DTYPE, DT_I32, 1   # acvt flips it to f32 on success
+    ACVT    1, 0                # i32 -> f32
+    AMULV_COL 1, 1, 29          # * ws[j]
+    AMULV_ROW 1, 1, 30          # * xs[t]
+    ASTORE  1
+    addi    s2, s2, 1
+    bltu    s2, s3, .Lmm_nblock
+
+    ld      s2, 0(sp)
+    ld      s3, 8(sp)
+    ld      s4, 16(sp)
+    ld      s5, 24(sp)
+    ld      s6, 32(sp)
+    addi    sp, sp, 48
+    ret
+
+# ---------------------------------------------------------------------------
 # void nq_rmsnorm(float *x, const float *gamma, float *out, uint32_t n,
 #                 uint32_t eps_bits, uint32_t inv_n_bits)
 # out = x * rsqrt(mean(x^2) + eps) * gamma, n % 32 == 0.
