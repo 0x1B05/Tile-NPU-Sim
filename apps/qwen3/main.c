@@ -48,6 +48,9 @@ int main(void) {
     print_u32(next);
     semihost_putc(' ');
     if (next == EOS_IM_END || next == EOS_ENDOFTEXT) break;
+    // skip the forward when the next iteration would not run; its result
+    // would never be printed
+    if (i + 1 == MAX_NEW_TOKENS || pos + 1 >= h->max_pos) break;
     next = forward(next, pos, 1);
     ++pos;
   }
