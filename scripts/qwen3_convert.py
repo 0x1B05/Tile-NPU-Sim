@@ -189,8 +189,8 @@ def convert_real(model_dir, prompt_ids, max_pos):
 
 def convert_tiny(ref_path):
     rng = np.random.default_rng(0)
-    arch = {"n_layers": 2, "hidden": 64, "inter": 128, "n_q_heads": 4,
-            "n_kv_heads": 2, "head_dim": 16, "vocab": 320, "max_pos": 64,
+    arch = {"n_layers": 2, "hidden": 64, "inter": 128, "n_q_heads": 2,
+            "n_kv_heads": 1, "head_dim": 32, "vocab": 320, "max_pos": 64,
             "eps": 1e-6}
 
     def mat(rows, cols):
@@ -214,8 +214,9 @@ def convert_tiny(ref_path):
         else:
             q, s = quantize_rows(w)
             blob.add(sec, q.tobytes())
-            blob.add(sec + "s", s.tobytes())
-            ref[sec] = w  # f32 golden weights for the numpy reference
+            blob.add("embed_s" if sec == "embed" else sec + "s", s.tobytes())
+            # the reference consumes the same dequantized weights as the guest
+            ref[sec] = q.astype(np.float32) * s[:, None]
 
     emit("embed", mat(arch["vocab"], arch["hidden"]), "q8")
 
