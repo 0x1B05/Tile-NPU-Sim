@@ -19,6 +19,16 @@ int main(void) {
   }
   forward_init();
   const uint32_t *tokens = blob_section("tokens\0\0");
+  if (h->n_prompt == 0 || h->n_prompt > h->max_pos) {
+    print_str("prompt length out of range\n");
+    return 1;
+  }
+  for (uint32_t i = 0; i < h->n_prompt; ++i) {
+    if (tokens[i] >= h->vocab) {
+      print_str("prompt token id out of range\n");
+      return 1;
+    }
+  }
   print_str("prompt tokens: ");
   for (uint32_t i = 0; i < h->n_prompt; ++i) {
     print_u32(tokens[i]);

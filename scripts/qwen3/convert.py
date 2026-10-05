@@ -143,6 +143,16 @@ LAYER_TENSORS = [
 
 def convert_real(model_dir, prompt_ids, max_pos):
     cfg = json.load(open(f"{model_dir}/config.json"))
+    if not prompt_ids:
+        sys.exit("error: prompt is empty")
+    if len(prompt_ids) > max_pos:
+        sys.exit(f"error: prompt has {len(prompt_ids)} tokens, "
+                 f"context capacity is {max_pos}")
+    vocab = cfg["vocab_size"]
+    bad = [i for i in prompt_ids if not 0 <= i < vocab]
+    if bad:
+        sys.exit(f"error: prompt token id {bad[0]} out of range "
+                 f"[0, {vocab})")
     arch = {
         "n_layers": cfg["num_hidden_layers"],
         "hidden": cfg["hidden_size"],
