@@ -2,6 +2,8 @@
 
 #include "tile_npu/memory.h"
 
+#include "tile_npu/endian.h"
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -125,8 +127,6 @@ void check_eq(
 inline void write_word(tile_npu::FlatMemory &memory, std::uint64_t address,
                        std::uint32_t word) {
   std::array<std::byte, 4> bytes{};
-  for (std::size_t i = 0; i < bytes.size(); ++i) {
-    bytes[i] = static_cast<std::byte>((word >> (8 * i)) & 0xffu);
-  }
+  tile_npu::store_le(word, bytes);
   check(memory.write(address, bytes), "write instruction word");
 }

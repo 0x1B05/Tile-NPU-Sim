@@ -2,6 +2,7 @@
 
 #include "config_check.h"
 #include "tile_npu/descriptor_view.h"
+#include "tile_npu/endian.h"
 #include "tile_npu/matrix_view.h"
 #include "tile_npu/unreachable.h"
 
@@ -30,21 +31,14 @@ bool load_element(const Memory &memory, std::uint64_t address, Element &out) {
   if (!memory.read(address, bytes)) {
     return false;
   }
-  auto value = std::uint32_t{0};
-  for (std::size_t i = 0; i < sizeof(Element); ++i) {
-    value |= static_cast<std::uint32_t>(bytes[i]) << (8 * i);
-  }
-  out = static_cast<Element>(value);
+  out = load_le<Element>(bytes);
   return true;
 }
 
 template <typename Element>
 bool store_element(Memory &memory, std::uint64_t address, Element value) {
   std::array<std::byte, sizeof(Element)> bytes{};
-  const auto raw = static_cast<std::uint32_t>(value);
-  for (std::size_t i = 0; i < sizeof(Element); ++i) {
-    bytes[i] = static_cast<std::byte>(raw >> (8 * i));
-  }
+  store_le(value, bytes);
   return memory.write(address, bytes);
 }
 
