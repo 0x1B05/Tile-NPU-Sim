@@ -7,6 +7,7 @@
 #include <variant>
 
 #include "check.h"
+#include "index_helpers.h"
 #include "row_lane_helpers.h"
 
 namespace {
@@ -50,8 +51,7 @@ void check_row_cases(const std::array<RowCase, N> &cases) {
     check_eq(decoded->vector.domain, test.vector_domain,
              what + ": vector domain");
     check_eq(decoded->vector.index, test.vector, what + ": vector");
-    check_eq(decoded->index, test.index, what + ": index");
-    check_eq(decoded->index_is_scalar, test.index_is_scalar, what + ": IS");
+    check_index(decoded->index, test.index, test.index_is_scalar, what);
   }
 }
 
@@ -78,8 +78,7 @@ void check_lane_cases(const std::array<LaneCase, N> &cases) {
     const auto *decoded = std::get_if<LaneInstr>(npu);
     check(decoded != nullptr, what);
     check_eq(decoded->op, test.op, what + ": op");
-    check_eq(decoded->index, test.index, what + ": index");
-    check_eq(decoded->index_is_scalar, test.index_is_scalar, what + ": IS");
+    check_index(decoded->index, test.index, test.index_is_scalar, what);
     if (test.dst_is_scalar) {
       const auto *dst = std::get_if<ScalarRegister>(&decoded->dst);
       check(dst != nullptr, what + ": dst is scalar");

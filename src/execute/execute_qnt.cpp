@@ -56,8 +56,7 @@ float row_amax(MatrixView<const Element> src, std::size_t row,
 // length.
 std::optional<std::uint32_t>
 scale_lane(const QntInstr &instr, const State &state, std::uint8_t vscale_len) {
-  const std::uint64_t lane =
-      instr.index_is_scalar ? state.scalar.read_x(instr.index) : instr.index;
+  const auto lane = resolve_index(instr.index, state);
   if (lane >= vscale_len) {
     return std::nullopt;
   }

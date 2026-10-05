@@ -242,6 +242,12 @@ DecodeResult decode_vreduce_argmax(std::uint32_t word) {
 // exists for Tile destinations only; funct3 >= 010 is reserved. IS/index5
 // carry the scale lane for the vector forms and are reserved (0) for the
 // matrix forms. All dtype/shape constraints fail at execution.
+// index5 with the IS bit: an immediate index, or the named Scalar register.
+IndexOperand decode_index(RegisterIndex raw, bool is_scalar) {
+  return is_scalar ? IndexOperand{ScalarRegister{raw}}
+                   : IndexOperand{ImmediateIndex{raw}};
+}
+
 DecodeResult decode_qnt(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domain = static_cast<NpuDomain>(f.sel3 >> 1);
@@ -268,8 +274,7 @@ DecodeResult decode_qnt(std::uint32_t word) {
                                   {domain, f.dest},
                                   {src_domain, f.src1},
                                   f.arg,
-                                  f.src2,
-                                  index_is_scalar}};
+                                  decode_index(f.src2, index_is_scalar)}};
 }
 
 // MMA_BDOT (R4): funct3 bit2 picks mma (Acc destination) or bdot (Vec32
@@ -323,7 +328,11 @@ DecodeResult decode_mblk(std::uint32_t word) {
                   : (f.funct3 & 1) != 0 ? MblkOp::store
                                         : MblkOp::load;
   const auto gather_src = gather ? f.src2 : RegisterIndex{0};
-  return DecodedNpuInstr{MblkInstr{op, {domain, f.dest}, 0, gather_src, false}};
+  const NpuRegister reg{domain, f.dest};
+  return DecodedNpuInstr{
+      op == MblkOp::store
+          ? MblkInstr{op, {}, reg, ImmediateIndex{}, gather_src}
+          : MblkInstr{op, reg, {}, ImmediateIndex{}, gather_src}};
 }
 
 // M_BLK row forms (MR): sel3 = {TA, 0, IS}; IS=0 takes the row number from
@@ -335,8 +344,11 @@ DecodeResult decode_mblk_row(std::uint32_t word) {
     return DecodeError::illegal;
   }
   const auto op = (f.funct3 & 1) != 0 ? MblkOp::row_store : MblkOp::row_load;
-  return DecodedNpuInstr{
-      MblkInstr{op, {domain, f.reg}, f.index, 0, (f.sel3 & 1) != 0}};
+  const NpuRegister reg{domain, f.reg};
+  const auto index = decode_index(f.index, (f.sel3 & 1) != 0);
+  return DecodedNpuInstr{op == MblkOp::row_store
+                             ? MblkInstr{op, {}, reg, index, 0}
+                             : MblkInstr{op, reg, {}, index, 0}};
 }
 
 // INIT_MOVE fill (I format): the sel2/field3 positions carry dom2/funct3;
@@ -385,8 +397,7 @@ DecodeResult decode_row_move(std::uint32_t word) {
   return DecodedNpuInstr{RowInstr{insert ? RowOp::insert : RowOp::extract,
                                   {matrix_domain, matrix_index},
                                   {vector_domain, insert ? f.src1 : f.dest},
-                                  f.src2,
-                                  (f.sel3 & 1) != 0}};
+                                  decode_index(f.src2, (f.sel3 & 1) != 0)}};
 }
 
 // LANE_MOVE (R4): sel3 = {EW, 0, IS}; EW picks Vec8 (0) or Vec32 (1). Both
@@ -402,7 +413,8 @@ DecodeResult decode_lane_move(std::uint32_t word) {
                                    : NpuOperand{NpuRegister{domain, f.dest}};
   auto src = op == LaneOp::insert ? NpuOperand{ScalarRegister{f.src1}}
                                   : NpuOperand{NpuRegister{domain, f.src1}};
-  return DecodedNpuInstr{LaneInstr{op, dst, src, f.src2, (f.sel3 & 1) != 0}};
+  return DecodedNpuInstr{
+      LaneInstr{op, dst, src, decode_index(f.src2, (f.sel3 & 1) != 0)}};
 }
 
 // sel2 selects the register family pair, the vector-side bit picks within it:

@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <variant>
 
 namespace tile_npu {
 
@@ -26,6 +27,16 @@ struct ExecContext {
   State &state;
   Memory &memory;
 };
+
+// Resolves an IndexOperand: the immediate value, or the named Scalar
+// register's value.
+inline std::uint64_t resolve_index(const IndexOperand &index,
+                                   const State &state) {
+  if (const auto *imm = std::get_if<ImmediateIndex>(&index)) {
+    return imm->value;
+  }
+  return state.scalar.read_x(std::get<ScalarRegister>(index).index);
+}
 
 // An unsuccessful execution leaves architectural state unchanged.
 ExecuteResult execute_scalar(const DecodedScalarInstr &instr, ExecContext &ctx);

@@ -16,13 +16,6 @@ ExecuteResult config_error() {
   return {.status = StepStatus::invalid_configuration};
 }
 
-// The row/lane number is the index5 immediate, or the Scalar register value
-// when IS is set.
-std::uint64_t move_index(const State &state, RegisterIndex index,
-                         bool is_scalar) {
-  return is_scalar ? state.scalar.read_x(index) : index;
-}
-
 // insert.row copies the source vector over one matrix row: the vector length
 // must equal the matrix column count and the row number must be in range.
 template <typename Element, typename MConfig, typename VConfig,
@@ -42,7 +35,7 @@ ExecuteResult row_insert(
       mconfig.dtype != vconfig.dtype || vconfig.len != mconfig.cols) {
     return config_error();
   }
-  const auto row = move_index(state, instr.index, instr.index_is_scalar);
+  const auto row = resolve_index(instr.index, state);
   if (row >= mconfig.rows) return config_error();
 
   MatrixView<Element> dst(std::span<Element>(matrix_regs[instr.matrix.index]),
@@ -73,7 +66,7 @@ ExecuteResult row_extract(
       mconfig.dtype != vconfig.dtype || vconfig.len != mconfig.cols) {
     return config_error();
   }
-  const auto row = move_index(state, instr.index, instr.index_is_scalar);
+  const auto row = resolve_index(instr.index, state);
   if (row >= mconfig.rows) return config_error();
 
   MatrixView<const Element> src(
@@ -105,7 +98,7 @@ ExecuteResult
 lane_move(const LaneInstr &instr, State &state,
           std::array<std::array<Element, VECTOR_LANES>, Count> &regs,
           const std::array<Config, Count> &configs) {
-  const auto lane = move_index(state, instr.index, instr.index_is_scalar);
+  const auto lane = resolve_index(instr.index, state);
 
   if (instr.op == LaneOp::extract) {
     const auto *src = std::get_if<NpuRegister>(&instr.src);

@@ -59,6 +59,14 @@ struct NpuRegister {
 
 using NpuOperand = std::variant<NpuRegister, ScalarRegister>;
 
+// An index5-style operand: either an immediate index or the name of the
+// Scalar register holding the index (the IS encoding bit selects the form).
+struct ImmediateIndex {
+  std::uint8_t value = 0;
+};
+
+using IndexOperand = std::variant<ImmediateIndex, ScalarRegister>;
+
 enum class EbinOp : std::uint8_t {
   // clang-format off
   add     = 0b0000,
@@ -121,16 +129,16 @@ inline constexpr std::array<std::optional<EbinInfo>, 16> EBIN_BY_FUNCT4 = [] {
 enum class MblkOp : std::uint8_t { load, store, gather, row_load, row_store };
 
 // Operand reading per op:
-//   load/store:     reg = D (load) / S (store)
-//   gather:         reg = D, gather_src = vS (the Vec32 index vector)
-//   row_load/store: reg = D/S; index is the row immediate, or the Scalar
-//                   register number when index_is_scalar (IS) is set
+//   load/gather/row_load: dest = D (gather adds gather_src = vS, the Vec32
+//                         index vector)
+//   store/row_store:      src = S
+//   row_load/row_store:   index is the row number (immediate or Scalar)
 struct MblkInstr {
   MblkOp op = MblkOp::load;
-  NpuRegister reg{};
-  RegisterIndex index = 0;
+  NpuRegister dest{};
+  NpuRegister src{};
+  IndexOperand index = ImmediateIndex{};
   RegisterIndex gather_src = 0;
-  bool index_is_scalar = false;
 };
 
 // INIT_MOVE data initialization and intra-domain moves: immediate fill (I),
@@ -150,21 +158,19 @@ struct InitInstr {
 };
 
 // ROW_MOVE between a matrix register and its paired vector register
-// (EW = 0: Tile <-> Vec8, EW = 1: Acc <-> Vec32). The row number comes from
-// index5, or from the Scalar register index5 names when index_is_scalar.
+// (EW = 0: Tile <-> Vec8, EW = 1: Acc <-> Vec32). index is the row number
+// (immediate or Scalar register).
 enum class RowOp : std::uint8_t { insert, extract };
 
 struct RowInstr {
   RowOp op = RowOp::insert;
   NpuRegister matrix{}; // destination for insert, source for extract
   NpuRegister vector{}; // source for insert, destination for extract
-  RegisterIndex index = 0;
-  bool index_is_scalar = false;
+  IndexOperand index = ImmediateIndex{};
 };
 
 // LANE_MOVE lane access on a vector register (EW = 0: Vec8, EW = 1: Vec32).
-// The lane number comes from index5, or from the Scalar register index5
-// names when index_is_scalar.
+// index is the lane number (immediate or Scalar register).
 enum class LaneOp : std::uint8_t { extract, insert, broadcast };
 
 // Operand reading per op:
@@ -175,8 +181,7 @@ struct LaneInstr {
   LaneOp op = LaneOp::extract;
   NpuOperand dst{};
   NpuOperand src{};
-  RegisterIndex index = 0;
-  bool index_is_scalar = false;
+  IndexOperand index = ImmediateIndex{};
 };
 
 // E_UNARY single-source elementwise operations (R2): bitwise not, abs, neg
@@ -338,15 +343,13 @@ enum class QntOp : std::uint8_t { quant = 0b000, quant_ext_scale = 0b001 };
 // Operand reading: dest = D and src = S are the main operands (tquant:
 // tD/aS; tdequant: aD/tS; vquant: bD/vS; bdequant: vD/bS); scale is the
 // vScale Vec32 register (destination for quant, source otherwise); index is
-// the scale lane (vector forms only: an immediate when index_is_scalar is
-// false, a Scalar register number when true).
+// the scale lane (vector forms only, immediate or Scalar register).
 struct QntInstr {
   QntOp op = QntOp::quant;
   NpuRegister dest{};
   NpuRegister src{};
   RegisterIndex scale = 0;
-  std::uint8_t index = 0;
-  bool index_is_scalar = false;
+  IndexOperand index = ImmediateIndex{};
 };
 
 // MMA_BDOT operations (R4): funct3 bit2 picks matrix multiply (0, mma.*) or

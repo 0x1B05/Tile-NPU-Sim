@@ -7,6 +7,7 @@
 #include <variant>
 
 #include "check.h"
+#include "index_helpers.h"
 #include "qnt_helpers.h"
 
 namespace {
@@ -45,8 +46,7 @@ template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
     check_eq(decoded->src.domain, test.src_domain, what + ": src domain");
     check_eq(decoded->src.index, test.src, what + ": src");
     check_eq(decoded->scale, test.scale, what + ": scale");
-    check_eq(decoded->index, test.index, what + ": index");
-    check_eq(decoded->index_is_scalar, test.index_is_scalar, what + ": IS");
+    check_index(decoded->index, test.index, test.index_is_scalar, what);
   }
 }
 
