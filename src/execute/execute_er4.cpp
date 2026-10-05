@@ -1,4 +1,4 @@
-#include "execute_er4.h"
+#include "execute.h"
 
 #include "config_check.h"
 #include "tile_npu/matrix_view.h"

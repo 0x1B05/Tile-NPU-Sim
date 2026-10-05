@@ -1,4 +1,4 @@
-#include "execute_cfg.h"
+#include "execute.h"
 
 #include "tile_npu/config.h"
 

@@ -1,4 +1,4 @@
-#include "execute_rv64m.h"
+#include "execute.h"
 
 #include <bit>
 #include <cstdint>

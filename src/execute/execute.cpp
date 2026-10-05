@@ -1,23 +1,5 @@
 #include "execute.h"
 
-#include "execute_cfg.h"
-#include "execute_cvt.h"
-#include "execute_ebcast.h"
-#include "execute_ecmp.h"
-#include "execute_elementwise.h"
-#include "execute_emask.h"
-#include "execute_er4.h"
-#include "execute_eun.h"
-#include "execute_init.h"
-#include "execute_mblk.h"
-#include "execute_mma.h"
-#include "execute_qnt.h"
-#include "execute_reduce.h"
-#include "execute_row_lane.h"
-#include "execute_rv64i.h"
-#include "execute_rv64m.h"
-#include "execute_sys.h"
-
 #include <variant>
 
 namespace tile_npu {

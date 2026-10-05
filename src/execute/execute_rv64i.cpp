@@ -1,4 +1,4 @@
-#include "execute_rv64i.h"
+#include "execute.h"
 
 #include "tile_npu/endian.h"
 
