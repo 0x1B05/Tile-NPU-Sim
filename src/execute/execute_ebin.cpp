@@ -3,11 +3,11 @@
 #include "config_check.h"
 #include "ebin_op.h"
 #include "tile_npu/matrix_view.h"
+#include "utils/overloaded.h"
 #include "utils/unreachable.h"
 
 #include <cstddef>
 #include <cstdint>
-#include <optional>
 #include <span>
 #include <variant>
 
@@ -16,9 +16,8 @@ namespace {
 
 // decode_scalar(xS, TYPE) keeps the low element-width bits of xS.
 template <typename Element>
-Element scalar_operand(const State &state, const NpuOperand &src2) {
-  return static_cast<Element>(
-      state.scalar.read_x(std::get<ScalarRegister>(src2).index));
+Element scalar_operand(const State &state, ScalarRegister reg) {
+  return static_cast<Element>(state.scalar.read_x(reg.index));
 }
 
 template <typename Config, std::size_t RegCount>
@@ -31,31 +30,23 @@ bool operands_valid(const EbinInstr &instr,
       !ebin_op_supports_dtype(instr.op, dst.dtype)) {
     return false;
   }
-  if (const auto *rhs = std::get_if<NpuRegister>(&instr.src2)) {
-    const auto &rhs_config = configs[rhs->index];
-    return valid_elementwise_config(rhs_config) &&
-           configs_match(dst, rhs_config);
-  }
-  return true;
+  return std::visit(Overloaded{[&](NpuRegister rhs) {
+                                 const auto &rhs_config = configs[rhs.index];
+                                 return valid_elementwise_config(rhs_config) &&
+                                        configs_match(dst, rhs_config);
+                               },
+                               [](ScalarRegister) { return true; }},
+                    instr.src2);
 }
 
 // Shared matrix-domain loop (tile, acc): runs the operation over the
-// destination's effective shape after the common constraint checks. An
-// unsuccessful execution leaves architectural state unchanged.
-template <typename Element, typename Config, std::size_t RegCount>
-ExecuteResult elementwise_matrix(
-    const EbinInstr &instr, State &state,
-    std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
-    const std::array<Config, RegCount> &configs) {
-  const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
-  if (!operands_valid(instr, configs)) {
-    return fail;
-  }
-  const auto *rhs_register = std::get_if<NpuRegister>(&instr.src2);
-  const auto scalar_rhs = rhs_register == nullptr
-                              ? scalar_operand<Element>(state, instr.src2)
-                              : Element{0};
-
+// destination's effective shape; right_at(row, col) yields the second source.
+template <typename Element, typename Config, std::size_t RegCount,
+          typename RightAt>
+ExecuteResult
+run_matrix(const EbinInstr &instr,
+           std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
+           const std::array<Config, RegCount> &configs, RightAt right_at) {
   const auto &dst_config = configs[instr.dest.index];
   const auto &lhs_config = configs[instr.src1.index];
   MatrixView<Element> dst(std::span<Element>(regs[instr.dest.index]),
@@ -63,51 +54,84 @@ ExecuteResult elementwise_matrix(
   MatrixView<const Element> lhs(
       std::span<const Element>(regs[instr.src1.index]), lhs_config.rows,
       lhs_config.cols, lhs_config.layout);
-  std::optional<MatrixView<const Element>> rhs;
-  if (rhs_register != nullptr) {
-    const auto &rhs_config = configs[rhs_register->index];
-    rhs.emplace(std::span<const Element>(regs[rhs_register->index]),
-                rhs_config.rows, rhs_config.cols, rhs_config.layout);
-  }
-
   const auto arith = arith_mode_of(dst_config);
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
-      const auto right =
-          rhs_register != nullptr ? rhs->at(row, col) : scalar_rhs;
       dst.at(row, col) = apply_ebin_op(instr.op, dst_config.dtype, arith,
-                                       lhs.at(row, col), right);
+                                       lhs.at(row, col), right_at(row, col));
     }
   }
   return {.status = StepStatus::retired};
 }
 
-// Vec32: same constraints, flat lane loop over the effective length.
+// An unsuccessful execution leaves architectural state unchanged.
 template <typename Element, typename Config, std::size_t RegCount>
-ExecuteResult elementwise_vector(
+ExecuteResult elementwise_matrix(
     const EbinInstr &instr, State &state,
-    std::array<std::array<Element, VECTOR_LANES>, RegCount> &regs,
+    std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
     const std::array<Config, RegCount> &configs) {
-  const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   if (!operands_valid(instr, configs)) {
-    return fail;
+    return {.status = StepStatus::invalid_configuration};
   }
-  const auto *rhs_register = std::get_if<NpuRegister>(&instr.src2);
-  const auto scalar_rhs = rhs_register == nullptr
-                              ? scalar_operand<Element>(state, instr.src2)
-                              : Element{0};
+  return std::visit(
+      Overloaded{[&](NpuRegister rhs) {
+                   const auto &rhs_config = configs[rhs.index];
+                   MatrixView<const Element> right(
+                       std::span<const Element>(regs[rhs.index]),
+                       rhs_config.rows, rhs_config.cols, rhs_config.layout);
+                   return run_matrix(instr, regs, configs,
+                                     [&](std::size_t row, std::size_t col) {
+                                       return right.at(row, col);
+                                     });
+                 },
+                 [&](ScalarRegister reg) {
+                   const auto value = scalar_operand<Element>(state, reg);
+                   return run_matrix(
+                       instr, regs, configs,
+                       [value](std::size_t, std::size_t) { return value; });
+                 }},
+      instr.src2);
+}
 
+// Vec32: same constraints, flat lane loop over the effective length.
+template <typename Element, typename Config, std::size_t RegCount,
+          typename RightAt>
+ExecuteResult
+run_vector(const EbinInstr &instr,
+           std::array<std::array<Element, VECTOR_LANES>, RegCount> &regs,
+           const std::array<Config, RegCount> &configs, RightAt right_at) {
   const auto &dst_config = configs[instr.dest.index];
   auto &dst_reg = regs[instr.dest.index];
   const auto &lhs_reg = regs[instr.src1.index];
   const auto arith = arith_mode_of(dst_config);
   for (std::size_t lane = 0; lane < dst_config.len; ++lane) {
-    const auto right =
-        rhs_register != nullptr ? regs[rhs_register->index][lane] : scalar_rhs;
-    dst_reg[lane] =
-        apply_ebin_op(instr.op, dst_config.dtype, arith, lhs_reg[lane], right);
+    dst_reg[lane] = apply_ebin_op(instr.op, dst_config.dtype, arith,
+                                  lhs_reg[lane], right_at(lane));
   }
   return {.status = StepStatus::retired};
+}
+
+template <typename Element, typename Config, std::size_t RegCount>
+ExecuteResult elementwise_vector(
+    const EbinInstr &instr, State &state,
+    std::array<std::array<Element, VECTOR_LANES>, RegCount> &regs,
+    const std::array<Config, RegCount> &configs) {
+  if (!operands_valid(instr, configs)) {
+    return {.status = StepStatus::invalid_configuration};
+  }
+  return std::visit(
+      Overloaded{[&](NpuRegister rhs) {
+                   const auto &rhs_reg = regs[rhs.index];
+                   return run_vector(
+                       instr, regs, configs,
+                       [&](std::size_t lane) { return rhs_reg[lane]; });
+                 },
+                 [&](ScalarRegister reg) {
+                   const auto value = scalar_operand<Element>(state, reg);
+                   return run_vector(instr, regs, configs,
+                                     [value](std::size_t) { return value; });
+                 }},
+      instr.src2);
 }
 
 } // namespace

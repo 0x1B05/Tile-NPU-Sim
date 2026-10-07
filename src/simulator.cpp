@@ -3,6 +3,7 @@
 #include "execute/execute.h"
 #include "tile_npu/decode.h"
 #include "utils/endian.h"
+#include "utils/overloaded.h"
 
 #include <array>
 #include <cstddef>
@@ -18,29 +19,34 @@ void Simulator::reset(std::uint64_t entry_pc) {
 }
 
 StepResult Simulator::step() {
+  // fetch instr
   const std::uint64_t pc = state_.scalar.pc;
-  std::array<std::byte, 4> bytes{};
-  if (!memory_.read(pc, bytes)) {
+  std::array<std::byte, 4> instr_bytes{};
+  if (!memory_.read(pc, instr_bytes)) {
     return {.status = StepStatus::fetch_fault, .pc = pc};
   }
-  const auto instr = load_le<std::uint32_t>(bytes);
+  const auto instr = load_le<std::uint32_t>(instr_bytes);
 
-  const auto decoded = decode(instr);
-  if (const auto *error = std::get_if<DecodeError>(&decoded)) {
-    return {.status = *error == DecodeError::illegal
-                          ? StepStatus::illegal_instruction
-                          : StepStatus::decode_not_implemented,
-            .pc = pc,
-            .instr = instr};
-  }
-  const auto *scalar_instr = std::get_if<DecodedScalarInstr>(&decoded);
+  // decode && execute
   ExecContext ctx{state_, memory_};
-  const auto execution =
-      scalar_instr ? execute_scalar(*scalar_instr, ctx)
-                   : execute_npu(std::get<DecodedNpuInstr>(decoded), ctx);
+  const auto execution = std::visit(
+      Overloaded{[](DecodeError error) {
+                   return ExecuteResult{
+                       .status = error == DecodeError::illegal
+                                     ? StepStatus::illegal_instruction
+                                     : StepStatus::decode_not_implemented};
+                 },
+                 [&ctx](const DecodedScalarInstr &decoded) {
+                   return execute_scalar(decoded, ctx);
+                 },
+                 [&ctx](const DecodedNpuInstr &decoded) {
+                   return execute_npu(decoded, ctx);
+                 }},
+      decode(instr));
   if (execution.status == StepStatus::retired) {
     state_.scalar.pc = execution.redirect.value_or(pc + 4);
   }
+
   return {.status = execution.status,
           .pc = pc,
           .instr = instr,

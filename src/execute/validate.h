@@ -10,6 +10,7 @@
 #include "tile_npu/config.h"
 #include "tile_npu/instruction.h"
 #include "tile_npu/state.h"
+#include "utils/overloaded.h"
 
 #include <array>
 #include <cstdint>
@@ -28,17 +29,29 @@ inline bool in_range(ScalarRegister reg) {
 
 // E_BIN/E_CMP src2: a same-domain register or a Scalar register.
 inline bool src2_in_range(const NpuOperand &src2, NpuDomain domain) {
-  if (const auto *reg = std::get_if<NpuRegister>(&src2)) {
-    return reg->domain == domain && in_range(*reg);
-  }
-  return in_range(std::get<ScalarRegister>(src2));
+  return std::visit(
+      Overloaded{[domain](NpuRegister reg) {
+                   return reg.domain == domain && in_range(reg);
+                 },
+                 [](ScalarRegister reg) { return in_range(reg); }},
+      src2);
 }
 
 // The register-numbered index form names a Scalar register; the immediate
 // form carries no structure to check (row/lane bounds are dynamic).
 inline bool index_in_range(const IndexOperand &index) {
-  const auto *scalar = std::get_if<ScalarRegister>(&index);
-  return scalar == nullptr || in_range(*scalar);
+  return std::visit(
+      Overloaded{[](ImmediateIndex) { return true; },
+                 [](ScalarRegister reg) { return in_range(reg); }},
+      index);
+}
+
+// The matrix forms reserve IS/index5: the encoding carries immediate 0.
+inline bool index_is_immediate_zero(const IndexOperand &index) {
+  return std::visit(
+      Overloaded{[](ImmediateIndex imm) { return imm.value == 0; },
+                 [](ScalarRegister) { return false; }},
+      index);
 }
 
 template <typename Op, typename Info, std::size_t Size>
@@ -221,22 +234,27 @@ inline bool valid_structure(const CvtInstr &instr) {
 
 inline bool valid_structure(const ReduceInstr &instr) {
   if (instr.op > ReduceOp::absmax) return false;
-  if (const auto *dst = std::get_if<NpuRegister>(&instr.dest)) {
-    // areduce.rows.*: Vec32 destination, Acc source.
-    return dst->domain == NpuDomain::vec32 && in_range(*dst) &&
-           instr.src.domain == NpuDomain::acc && in_range(instr.src);
-  }
-  const auto &x_dst = std::get<ScalarRegister>(instr.dest);
-  // vreduce.*: Scalar destination, Vec32 source; absmax is AREDUCE-only.
-  if (instr.op == ReduceOp::absmax || !in_range(x_dst) ||
-      instr.src.domain != NpuDomain::vec32 || !in_range(instr.src)) {
-    return false;
-  }
-  if (instr.op == ReduceOp::argmax) {
-    const auto *x_value = std::get_if<ScalarRegister>(&instr.dest2);
-    return x_value != nullptr && in_range(*x_value);
-  }
-  return true;
+  return std::visit(
+      Overloaded{
+          // areduce.rows.*: Vec32 destination, Acc source.
+          [&](NpuRegister dst) {
+            return dst.domain == NpuDomain::vec32 && in_range(dst) &&
+                   instr.src.domain == NpuDomain::acc && in_range(instr.src);
+          },
+          // vreduce.*: Scalar destination, Vec32 source; absmax is
+          // AREDUCE-only.
+          [&](ScalarRegister x_dst) {
+            if (instr.op == ReduceOp::absmax || !in_range(x_dst) ||
+                instr.src.domain != NpuDomain::vec32 || !in_range(instr.src)) {
+              return false;
+            }
+            if (instr.op == ReduceOp::argmax) {
+              const auto *x_value = std::get_if<ScalarRegister>(&instr.dest2);
+              return x_value != nullptr && in_range(*x_value);
+            }
+            return true;
+          }},
+      instr.dest);
 }
 
 inline bool valid_structure(const QntInstr &instr) {
@@ -248,14 +266,11 @@ inline bool valid_structure(const QntInstr &instr) {
   case NpuDomain::tile:
     // tquant[.scale]: the matrix forms reserve IS/index5 (immediate 0).
     return instr.src.domain == NpuDomain::acc && in_range(instr.dest) &&
-           in_range(instr.src) &&
-           std::get_if<ImmediateIndex>(&index) != nullptr &&
-           std::get<ImmediateIndex>(index).value == 0;
+           in_range(instr.src) && index_is_immediate_zero(index);
   case NpuDomain::acc:
     return instr.op == QntOp::quant && instr.src.domain == NpuDomain::tile &&
            in_range(instr.dest) && in_range(instr.src) &&
-           std::get_if<ImmediateIndex>(&index) != nullptr &&
-           std::get<ImmediateIndex>(index).value == 0;
+           index_is_immediate_zero(index);
   case NpuDomain::vec8:
     return instr.op == QntOp::quant && instr.src.domain == NpuDomain::vec32 &&
            in_range(instr.dest) && in_range(instr.src) && index_in_range(index);

@@ -2,6 +2,7 @@
 
 #include "config_check.h"
 #include "tile_npu/matrix_view.h"
+#include "utils/overloaded.h"
 #include "utils/unreachable.h"
 
 #include <array>
@@ -9,7 +10,6 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <optional>
 #include <span>
 #include <variant>
 
@@ -69,9 +69,8 @@ constexpr std::uint32_t mask_word(bool holds) {
 }
 
 // decode_scalar(xS, u32) keeps the low 32 bits of xS.
-std::uint32_t scalar_operand(const State &state, const NpuOperand &src2) {
-  return static_cast<std::uint32_t>(
-      state.scalar.read_x(std::get<ScalarRegister>(src2).index));
+std::uint32_t scalar_operand(const State &state, ScalarRegister reg) {
+  return static_cast<std::uint32_t>(state.scalar.read_x(reg.index));
 }
 
 template <typename Config, std::size_t RegCount>
@@ -82,82 +81,104 @@ bool sources_valid(const CmpInstr &instr,
       !op_supports_dtype(instr.op, lhs_config.dtype)) {
     return false;
   }
-  const auto *rhs = std::get_if<NpuRegister>(&instr.src2);
-  if (rhs == nullptr) return true;
-  const auto &rhs_config = configs[rhs->index];
-  return valid_domain_config(rhs_config) &&
-         configs_match(lhs_config, rhs_config);
+  return std::visit(Overloaded{[&](NpuRegister rhs) {
+                                 const auto &rhs_config = configs[rhs.index];
+                                 return valid_domain_config(rhs_config) &&
+                                        configs_match(lhs_config, rhs_config);
+                               },
+                               [](ScalarRegister) { return true; }},
+                    instr.src2);
 }
 
-// Acc: runs the comparison over the destination's effective shape after the
-// common constraint checks. An unsuccessful execution leaves architectural
-// state unchanged.
-ExecuteResult cmp_acc(const CmpInstr &instr, State &state) {
+// Acc: runs the comparison over the destination's effective shape;
+// right_at(row, col) yields the second source.
+template <typename RightAt>
+ExecuteResult run_cmp_acc(const CmpInstr &instr, State &state,
+                          RightAt right_at) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
-  if (!sources_valid(instr, state.ac)) {
-    return fail;
-  }
   const auto &dst_config = state.ac[instr.dest.index];
   const auto &lhs_config = state.ac[instr.src1.index];
   if (!valid_domain_config(dst_config) ||
       !mask_matches(dst_config, lhs_config)) {
     return fail;
   }
-  const auto *rhs_register = std::get_if<NpuRegister>(&instr.src2);
-  const auto scalar_rhs = rhs_register == nullptr
-                              ? scalar_operand(state, instr.src2)
-                              : std::uint32_t{0};
-
   MatrixView<std::uint32_t> dst(std::span(state.a[instr.dest.index]),
                                 dst_config.rows, dst_config.cols,
                                 dst_config.layout);
   MatrixView<const std::uint32_t> lhs(
       std::span<const std::uint32_t>(state.a[instr.src1.index]),
       lhs_config.rows, lhs_config.cols, lhs_config.layout);
-  std::optional<MatrixView<const std::uint32_t>> rhs;
-  if (rhs_register != nullptr) {
-    const auto &rhs_config = state.ac[rhs_register->index];
-    rhs.emplace(std::span<const std::uint32_t>(state.a[rhs_register->index]),
-                rhs_config.rows, rhs_config.cols, rhs_config.layout);
-  }
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
-      const auto right =
-          rhs_register != nullptr ? rhs->at(row, col) : scalar_rhs;
-      dst.at(row, col) = mask_word(
-          compare(instr.op, lhs_config.dtype, lhs.at(row, col), right));
+      dst.at(row, col) = mask_word(compare(
+          instr.op, lhs_config.dtype, lhs.at(row, col), right_at(row, col)));
     }
   }
   return {.status = StepStatus::retired};
 }
 
-// Vec32: same constraints, flat lane loop over the effective length.
-ExecuteResult cmp_vec32(const CmpInstr &instr, State &state) {
-  const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
-  if (!sources_valid(instr, state.vc)) {
-    return fail;
+// An unsuccessful execution leaves architectural state unchanged.
+ExecuteResult cmp_acc(const CmpInstr &instr, State &state) {
+  if (!sources_valid(instr, state.ac)) {
+    return {.status = StepStatus::invalid_configuration};
   }
+  return std::visit(
+      Overloaded{[&](NpuRegister rhs) {
+                   const auto &rhs_config = state.ac[rhs.index];
+                   MatrixView<const std::uint32_t> right(
+                       std::span<const std::uint32_t>(state.a[rhs.index]),
+                       rhs_config.rows, rhs_config.cols, rhs_config.layout);
+                   return run_cmp_acc(instr, state,
+                                      [&](std::size_t row, std::size_t col) {
+                                        return right.at(row, col);
+                                      });
+                 },
+                 [&](ScalarRegister reg) {
+                   const auto value = scalar_operand(state, reg);
+                   return run_cmp_acc(
+                       instr, state,
+                       [value](std::size_t, std::size_t) { return value; });
+                 }},
+      instr.src2);
+}
+
+// Vec32: same constraints, flat lane loop over the effective length.
+template <typename RightAt>
+ExecuteResult run_cmp_vec32(const CmpInstr &instr, State &state,
+                            RightAt right_at) {
+  const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   const auto &dst_config = state.vc[instr.dest.index];
   const auto &lhs_config = state.vc[instr.src1.index];
   if (!valid_domain_config(dst_config) ||
       !mask_matches(dst_config, lhs_config)) {
     return fail;
   }
-  const auto *rhs_register = std::get_if<NpuRegister>(&instr.src2);
-  const auto scalar_rhs = rhs_register == nullptr
-                              ? scalar_operand(state, instr.src2)
-                              : std::uint32_t{0};
-
   auto &dst_reg = state.v[instr.dest.index];
   const auto &lhs_reg = state.v[instr.src1.index];
   for (std::size_t lane = 0; lane < dst_config.len; ++lane) {
-    const auto right = rhs_register != nullptr
-                           ? state.v[rhs_register->index][lane]
-                           : scalar_rhs;
-    dst_reg[lane] =
-        mask_word(compare(instr.op, lhs_config.dtype, lhs_reg[lane], right));
+    dst_reg[lane] = mask_word(
+        compare(instr.op, lhs_config.dtype, lhs_reg[lane], right_at(lane)));
   }
   return {.status = StepStatus::retired};
+}
+
+ExecuteResult cmp_vec32(const CmpInstr &instr, State &state) {
+  if (!sources_valid(instr, state.vc)) {
+    return {.status = StepStatus::invalid_configuration};
+  }
+  return std::visit(
+      Overloaded{[&](NpuRegister rhs) {
+                   const auto &rhs_reg = state.v[rhs.index];
+                   return run_cmp_vec32(instr, state, [&](std::size_t lane) {
+                     return rhs_reg[lane];
+                   });
+                 },
+                 [&](ScalarRegister reg) {
+                   const auto value = scalar_operand(state, reg);
+                   return run_cmp_vec32(instr, state,
+                                        [value](std::size_t) { return value; });
+                 }},
+      instr.src2);
 }
 
 } // namespace

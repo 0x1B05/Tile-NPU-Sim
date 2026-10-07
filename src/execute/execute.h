@@ -3,6 +3,7 @@
 #include "tile_npu/decode.h"
 #include "tile_npu/memory.h"
 #include "tile_npu/state.h"
+#include "utils/overloaded.h"
 
 #include <cstdint>
 #include <optional>
@@ -31,10 +32,13 @@ struct ExecContext {
 // register's value.
 inline std::uint64_t resolve_index(const IndexOperand &index,
                                    const State &state) {
-  if (const auto *imm = std::get_if<ImmediateIndex>(&index)) {
-    return imm->value;
-  }
-  return state.scalar.read_x(std::get<ScalarRegister>(index).index);
+  return std::visit(Overloaded{[](ImmediateIndex imm) {
+                                 return static_cast<std::uint64_t>(imm.value);
+                               },
+                               [&state](ScalarRegister reg) {
+                                 return state.scalar.read_x(reg.index);
+                               }},
+                    index);
 }
 
 // An unsuccessful execution leaves architectural state unchanged.
