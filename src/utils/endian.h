@@ -9,8 +9,7 @@ namespace tile_npu {
 
 // Little-endian conversion between unsigned integers and raw bytes, shared
 // by the fetch/load/store paths. The byte span must not exceed sizeof(T);
-// leading (most significant) value bytes are treated as zero. Conversion
-// only — access failures, alignment and sign extension stay with callers.
+// leading (most significant) value bytes are treated as zero.
 template <typename T> constexpr T load_le(std::span<const std::byte> bytes) {
   static_assert(std::is_unsigned_v<T>);
   T value = 0;
