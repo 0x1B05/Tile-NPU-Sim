@@ -12,6 +12,9 @@
 uint32_t nq_quant_act(const float *x, uint32_t k);
 void nq_matvec_q(const int8_t *w, const float *w_scales, float *out, uint32_t n,
                  uint32_t k, uint32_t xs_bits);
+void nq_quant_rows(const float *x, uint32_t k, int8_t *xq, float *xs);
+void nq_matmul_q(const int8_t *w, const float *w_scales, const int8_t *xq,
+                 const float *xs, float *out, uint32_t n, uint32_t k);
 void nq_rmsnorm(float *x, const float *gamma, float *out, uint32_t n,
                 uint32_t eps_bits, uint32_t inv_n_bits);
 void nq_rope(float *x, const float *cos_h, const float *sin_h, uint32_t hd);
@@ -79,6 +82,20 @@ static float v_buf[1024];
 static float scores[512 + 32];
 static float logits[151936];
 static uint32_t rcp_word[1];
+
+// prefill batch buffers: 32 token rows each, row stride = the vector dim
+#define BATCH_ROWS 32
+static float pf_x[BATCH_ROWS * 3072];
+static float pf_h1[BATCH_ROWS * 3072];
+static float pf_h2[BATCH_ROWS * 3072];
+static float pf_gate[BATCH_ROWS * 3072];
+static float pf_up[BATCH_ROWS * 3072];
+static float pf_q[BATCH_ROWS * 2048];
+static float pf_attn[BATCH_ROWS * 2048];
+static float pf_k[BATCH_ROWS * 1024];
+static float pf_v[BATCH_ROWS * 1024];
+static int8_t pf_xq[BATCH_ROWS * 3072];
+static float pf_xs[BATCH_ROWS];
 
 static char *const kv_region = (char *)KV_REGION_BASE;
 static uint32_t kv_stride; // bytes per layer per cache (max_pos * kv_dim * 4)
@@ -168,16 +185,18 @@ void forward_init(void) {
     cache_layer_sections(i);
 }
 
-static void cache_append(uint32_t layer, uint32_t pos) {
+static void cache_append(uint32_t layer, uint32_t pos, const float *k,
+                         const float *v) {
   float *kd = (float *)(k_layer(layer) + pos * KV_DIM * 4);
   float *vd = (float *)(v_layer(layer) + pos * KV_DIM * 4);
   for (uint32_t i = 0; i < KV_DIM; ++i) {
-    kd[i] = k_buf[i];
-    vd[i] = v_buf[i];
+    kd[i] = k[i];
+    vd[i] = v[i];
   }
 }
 
-static void attention(uint32_t layer, uint32_t pos) {
+static void attention(uint32_t layer, uint32_t pos, const float *q,
+                      float *attn) {
   const uint32_t group = N_Q / N_KV;
   const uint32_t n_keys = pos + 1;
   const uint32_t n_padded = (n_keys + 31) & ~31u;
@@ -185,7 +204,7 @@ static void attention(uint32_t layer, uint32_t pos) {
     const uint32_t kvh = h / group;
     const char *kb = k_layer(layer) + kvh * HD * 4;
     const char *vb = v_layer(layer) + kvh * HD * 4;
-    nq_scores(q_buf + h * HD, kb, KV_DIM * 4, scores, n_keys, HD);
+    nq_scores(q + h * HD, kb, KV_DIM * 4, scores, n_keys, HD);
     // each head's softmax overwrites the whole padded block, so the -inf
     // tail must be re-applied per head
     for (uint32_t i = n_keys; i < n_padded; ++i) {
@@ -209,7 +228,7 @@ static void attention(uint32_t layer, uint32_t pos) {
       print_hex32(rcp_word[0]);
       semihost_putc('\n');
     }
-    nq_pv(vb, KV_DIM * 4, scores, attn_buf + h * HD, n_keys, HD, rcp_word[0]);
+    nq_pv(vb, KV_DIM * 4, scores, attn + h * HD, n_keys, HD, rcp_word[0]);
   }
 }
 
@@ -276,8 +295,8 @@ uint32_t forward(uint32_t token, uint32_t pos, int want_logits) {
     for (uint32_t h = 0; h < N_KV; ++h) {
       nq_rope(k_buf + h * HD, cos_p, sin_p, HD);
     }
-    cache_append(L, pos);
-    attention(L, pos);
+    cache_append(L, pos, k_buf, v_buf);
+    attention(L, pos, q_buf, attn_buf);
     if (L == 0) PROBE("attn0", attn_buf, 4);
     if (L == 0) PROBE("attn1", attn_buf + HD, 4);
     if (QWEN3_PROBES && L == 0 && want_logits && pos == N_PROMPT - 1) {
@@ -326,4 +345,61 @@ uint32_t forward(uint32_t token, uint32_t pos, int want_logits) {
     semihost_putc('\n');
   }
   return nq_argmax(logits, VOCAB);
+}
+
+// Prefill for the first n prompt tokens (positions [0, n)): projections run
+// as batched MMA over 32-row token batches; rmsnorm/rope/attention/silu/add
+// keep the per-row vector kernels. Rows [bt, 32) of the quantized buffers
+// are never consumed. The numerics match the per-token path bit for bit
+// (same per-row scales, exact i32 accumulation, same epilogue order).
+void forward_prefill(const uint32_t *tokens, uint32_t n) {
+  for (uint32_t base = 0; base < n; base += BATCH_ROWS) {
+    const uint32_t bt = n - base < BATCH_ROWS ? n - base : BATCH_ROWS;
+    for (uint32_t t = 0; t < bt; ++t)
+      nq_embed(embed, embed_s, tokens[base + t], pf_x + t * HIDDEN, HIDDEN);
+    for (uint32_t L = 0; L < N_LAYERS; ++L) {
+      const void **sec = lsec[L];
+      for (uint32_t t = 0; t < bt; ++t)
+        nq_rmsnorm(pf_x + t * HIDDEN, sec[LS_INLN], pf_h1 + t * HIDDEN, HIDDEN,
+                   EPS_BITS, inv_n_bits(HIDDEN));
+      nq_quant_rows(pf_h1, HIDDEN, pf_xq, pf_xs);
+      nq_matmul_q(sec[LS_QW], sec[LS_QWS], pf_xq, pf_xs, pf_q, Q_DIM, HIDDEN);
+      nq_matmul_q(sec[LS_KW], sec[LS_KWS], pf_xq, pf_xs, pf_k, KV_DIM, HIDDEN);
+      nq_matmul_q(sec[LS_VW], sec[LS_VWS], pf_xq, pf_xs, pf_v, KV_DIM, HIDDEN);
+      for (uint32_t t = 0; t < bt; ++t) {
+        for (uint32_t h = 0; h < N_Q; ++h)
+          nq_rmsnorm(pf_q + t * Q_DIM + h * HD, sec[LS_QN],
+                     pf_q + t * Q_DIM + h * HD, HD, EPS_BITS, inv_n_bits(HD));
+        for (uint32_t h = 0; h < N_KV; ++h)
+          nq_rmsnorm(pf_k + t * KV_DIM + h * HD, sec[LS_KN],
+                     pf_k + t * KV_DIM + h * HD, HD, EPS_BITS, inv_n_bits(HD));
+        const float *cos_p = rope_cos + (base + t) * (HD / 2);
+        const float *sin_p = rope_sin + (base + t) * (HD / 2);
+        for (uint32_t h = 0; h < N_Q; ++h)
+          nq_rope(pf_q + t * Q_DIM + h * HD, cos_p, sin_p, HD);
+        for (uint32_t h = 0; h < N_KV; ++h)
+          nq_rope(pf_k + t * KV_DIM + h * HD, cos_p, sin_p, HD);
+        cache_append(L, base + t, pf_k + t * KV_DIM, pf_v + t * KV_DIM);
+        attention(L, base + t, pf_q + t * Q_DIM, pf_attn + t * Q_DIM);
+      }
+      nq_quant_rows(pf_attn, Q_DIM, pf_xq, pf_xs);
+      nq_matmul_q(sec[LS_OW], sec[LS_OWS], pf_xq, pf_xs, pf_h2, HIDDEN, Q_DIM);
+      for (uint32_t t = 0; t < bt; ++t)
+        nq_add(pf_x + t * HIDDEN, pf_h2 + t * HIDDEN, HIDDEN);
+      for (uint32_t t = 0; t < bt; ++t)
+        nq_rmsnorm(pf_x + t * HIDDEN, sec[LS_PTLN], pf_h1 + t * HIDDEN, HIDDEN,
+                   EPS_BITS, inv_n_bits(HIDDEN));
+      nq_quant_rows(pf_h1, HIDDEN, pf_xq, pf_xs);
+      nq_matmul_q(sec[LS_GW], sec[LS_GWS], pf_xq, pf_xs, pf_gate, INTER,
+                  HIDDEN);
+      nq_matmul_q(sec[LS_UW], sec[LS_UWS], pf_xq, pf_xs, pf_up, INTER, HIDDEN);
+      for (uint32_t t = 0; t < bt; ++t)
+        nq_silu_mul(pf_gate + t * INTER, pf_up + t * INTER, pf_gate + t * INTER,
+                    INTER);
+      nq_quant_rows(pf_gate, INTER, pf_xq, pf_xs);
+      nq_matmul_q(sec[LS_DW], sec[LS_DWS], pf_xq, pf_xs, pf_h2, HIDDEN, INTER);
+      for (uint32_t t = 0; t < bt; ++t)
+        nq_add(pf_x + t * HIDDEN, pf_h2 + t * HIDDEN, HIDDEN);
+    }
+  }
 }

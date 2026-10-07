@@ -292,6 +292,10 @@
     E_BCAST 1, 1, 2, \d5, \a5, \s5
 .endm
 
+.macro AMULV_ROW d5, a5, s5
+    E_BCAST 1, 0, 2, \d5, \a5, \s5
+.endm
+
 # E_R4 (R4), mirroring NpuR4 in src/decode/encoding.h:
 #   [31:28] major4 = 3  [27:26] dom2  [25] 0  [24:22] funct3
 #   [21:17] arg5 (mask M / addend C)  [16:12] B5  [11:7] A5  [6:2] D5
