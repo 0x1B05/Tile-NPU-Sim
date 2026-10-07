@@ -45,7 +45,8 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `src/utils/unreachable.h` | 内部工具: 不变式违背时当场中止的 `unreachable()` (始终生效, 不随 NDEBUG 消失); guest 可见错误不走这里 |
 | `src/decode/encoding.h` | 位段提取 (`field<Hi,Lo>`) 与 RISC-V R/I/S/B/U/J/Shift, NPU 各格式的字段解析 |
 | `src/decode/pattern.h` | INSTPAT 风格译码机制: 编译期 `Pattern` 位型解析, `DecodeEntry` 译码表, `as`/`fail`/`match` 通用 handler |
-| `src/decode/decode.cpp` | NPU 译码表 (q != 11): major4/sel3/funct4 由 pattern 直接匹配, 首条命中生效 |
+| `src/decode/decode.cpp` | 顶层译码分派: `q = 11` 走 RV64IM 译码表, 其余 quadrant 走 NPU 译码表 |
+| `src/decode/decode_npu.cpp` | NPU 译码表 (q != 11): major4/sel3/funct4 由 pattern 直接匹配, 首条命中生效 |
 | `src/decode/decode_rv64im.cpp` | RV64IM 译码表 (q = 11): 一行一条指令的 pattern, 表尾 catch-all 划分 illegal / not_implemented |
 | `src/execute/execute.cpp` | 执行分派 (标量 / NPU 各域执行器); `execute_npu` 先做结构校验再分派 |
 | `src/execute/validate.h` | 执行入口的统一结构校验 `valid_structure` (每个 IR 类型一个 overload): op code/domain/操作数 variant/寄存器号是否可能来自某个真实编码 |
@@ -101,7 +102,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 ## 新增指令的实现流程
 
 1. `src/decode/encoding.h` 补充字段提取 (若无对应格式)。
-2. 译码: `include/tile_npu/instruction.h` 增加带数据域和 typed operand 的指令类型, 在对应译码表 (`src/decode/decode.cpp` 或 `src/decode/decode_rv64im.cpp`) 加一行 `{pattern, handler}`; pattern 无法表达的剩余检查 (如寄存器号边界) 写进自定义 handler, 保留编码必须报 `illegal`。
+2. 译码: `include/tile_npu/instruction.h` 增加带数据域和 typed operand 的指令类型, 在对应译码表 (`src/decode/decode_npu.cpp` 或 `src/decode/decode_rv64im.cpp`) 加一行 `{pattern, handler}`; pattern 无法表达的剩余检查 (如寄存器号边界) 写进自定义 handler, 保留编码必须报 `illegal`。
 3. 执行: `src/execute/validate.h` 为新指令类型加 `valid_structure` overload (结构契约与译码 handler 保持一致), `src/execute/execute.cpp` 分派到对应执行器, 语义严格按手册伪代码; 未实现的执行报 `execution_not_implemented`, 不要留静默路径。
 4. 测试: 每新增操作必须补三类用例 — 合法编码, 保留/非法编码, 边界值 (立即数边界, 寄存器编号边界, 有效 shape 边界); NPU 正例优先写 guest 镜像, 负例留 host 侧表驱动 (见"测试约定")。
 
