@@ -1,6 +1,7 @@
 #include "execute.h"
 
 #include "config_check.h"
+#include "f32_util.h"
 #include "tile_npu/matrix_view.h"
 #include "utils/unreachable.h"
 
@@ -15,10 +16,6 @@
 namespace tile_npu {
 namespace {
 
-constexpr std::uint32_t f32_bits(float value) {
-  return std::bit_cast<std::uint32_t>(value);
-}
-
 // One fold step over f32 values; the accumulation order and per-step
 // rounding follow the ISA pseudocode (sumsq squares each element before the
 // add). NaN handling for max/min is the host comparison semantic: a NaN
@@ -29,10 +26,7 @@ float fold_step(ReduceOp op, float acc, float x) {
   case ReduceOp::max: return x > acc ? x : acc;
   case ReduceOp::min: return x < acc ? x : acc;
   case ReduceOp::sumsq: return acc + x * x;
-  case ReduceOp::absmax: {
-    const float magnitude = std::fabs(x);
-    return magnitude > acc ? magnitude : acc;
-  }
+  case ReduceOp::absmax: return f32_absmax_step(acc, x);
   case ReduceOp::argmax: break;
   }
   unreachable("fold_step called with argmax");

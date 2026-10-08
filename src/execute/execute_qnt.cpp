@@ -1,6 +1,7 @@
 #include "execute.h"
 
 #include "config_check.h"
+#include "f32_util.h"
 #include "tile_npu/matrix_view.h"
 #include "utils/unreachable.h"
 
@@ -13,10 +14,6 @@
 
 namespace tile_npu {
 namespace {
-
-constexpr std::uint32_t f32_bits(float value) {
-  return std::bit_cast<std::uint32_t>(value);
-}
 
 // q8s32 element rule: round-to-nearest-even of value / scale, saturated to
 // [-127, 127]; a NaN quotient (0/0, inf/inf, NaN input) yields 0. An
@@ -36,18 +33,14 @@ std::int8_t quantize_lane(float value, float scale) {
   return static_cast<std::int8_t>(rounded);
 }
 
-// The dynamic scale of one row/vector: the absmax fold (NaN candidates never
-// win) divided by 127. An all-zero or all-NaN input yields +0.0, which in
-// turn quantizes every lane to 0 through the NaN rule.
-template <typename Element>
-float row_amax(MatrixView<const Element> src, std::size_t row,
+// The absmax scan of one source row. An all-zero or all-NaN row yields
+// +0.0, whose derived scale quantizes every element of the row to 0 through
+// the NaN quotient rule.
+float row_amax(MatrixView<const std::uint32_t> src, std::size_t row,
                std::size_t cols) {
   float amax = 0.0f;
   for (std::size_t col = 0; col < cols; ++col) {
-    const float magnitude = std::fabs(std::bit_cast<float>(src.at(row, col)));
-    if (magnitude > amax) {
-      amax = magnitude;
-    }
+    amax = f32_absmax_step(amax, std::bit_cast<float>(src.at(row, col)));
   }
   return amax;
 }
@@ -155,13 +148,7 @@ ExecuteResult vquant(const QntInstr &instr, State &state) {
   }
   const auto &src_reg = state.v[instr.src.index];
   auto &dst_reg = state.b[instr.dest.index];
-  float amax = 0.0f;
-  for (std::size_t j = 0; j < src_config.len; ++j) {
-    const float magnitude = std::fabs(std::bit_cast<float>(src_reg[j]));
-    if (magnitude > amax) {
-      amax = magnitude;
-    }
-  }
+  const float amax = f32_absmax(std::span(src_reg).first(src_config.len));
   const float scale = amax / 127.0f;
   for (std::size_t j = 0; j < src_config.len; ++j) {
     dst_reg[j] = static_cast<std::uint8_t>(

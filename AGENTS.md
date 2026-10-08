@@ -56,6 +56,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `src/execute/execute_eun.cpp` | 逐元素一元 (E_UNARY) 族执行器: not/abs/neg 为精确整数语义, exp2/rcp/rsqrt/silu 用 host libm 近似 (特殊值表现由测试锁定) |
 | `src/execute/execute_ecmp.cpp` | 比较 (E_CMP) 族执行器: Acc/Vec32 only, 目的为同形 u32 mask (全一/零); i32 有符号, u32 无符号, f32 用 IEEE 语义 (NaN 使有序条件为假, unord 查 NaN) |
 | `src/execute/ebin_op.h` | E_BIN/E_BCAST 共享的逐元素语义: 操作 dtype 合法性 (`ebin_op_supports_dtype`, 读 `EBIN_BY_FUNCT4`), 溢出模式查询 (`arith_mode_of`) 与单元素操作 (`apply_ebin_op`) |
+| `src/execute/f32_util.h` | 执行器共享的 f32 工具: 位模式转换 `f32_bits` 与 absmax 扫描 (`f32_absmax_step`/`f32_absmax`, NaN 候选不胜出), 规约与量化族共用 |
 | `src/execute/execute_ebcast.cpp` | 向量广播 (E_BCAST) 族执行器: 矩阵二元操作, 第二源为配对向量按行/列广播; 向量 dtype 同矩阵, len 等于 rows (byrow) 或 cols (bycol) |
 | `src/execute/execute_er4.cpp` | 四寄存器 (E_R4) 族执行器: select 按 mask 位选 (mask dtype 固定 u8/u32, 数据 dtype 无关), fmadd 为 f32 单次舍入融合乘加 (`std::fma`) |
 | `src/execute/execute_emask.cpp` | mask (E_MASK) 族执行器: tail 按打包 nRows/nCols (矩阵) 或 xLen (向量) 保留头部, tril/triu 按有符号 xDelta 保留下/上三角; 保留区域之外写 fill (fill5 码表或 xFill 低元素位宽位), fill5 码 5..8 (±0.5/±inf) 仅 f32 目的 |
