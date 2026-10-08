@@ -12,10 +12,6 @@
 namespace tile_npu {
 namespace {
 
-ExecuteResult config_error() {
-  return {.status = StepStatus::invalid_configuration};
-}
-
 // fill takes the sign-extended imm16, fillx the scalar register; both keep
 // the low element-width bits of the 64-bit value.
 template <typename Element>

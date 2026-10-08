@@ -12,21 +12,17 @@ namespace {
 // A failed config access is the ISA's CFG_ERROR. The manual leaves the
 // architectural consequence of CFG_ERROR open, so surfacing it as
 // invalid_configuration is a simulator convention.
-ExecuteResult cfg_error() {
-  return {.status = StepStatus::invalid_configuration};
-}
-
 ExecuteResult cfg_write(const CfgInstr &instr, State &state,
                         std::uint64_t value) {
   const auto field = config_field_from_code(instr.reg_type, instr.field);
   const auto *resolved = std::get_if<ConfigField>(&field);
   if (resolved == nullptr) {
-    return cfg_error();
+    return config_error();
   }
   return write_config_field(state, instr.reg_type, instr.dest, *resolved,
                             value) == ConfigAccessError::none
              ? ExecuteResult{.status = StepStatus::retired}
-             : cfg_error();
+             : config_error();
 }
 
 std::variant<std::uint64_t, ConfigAccessError>
@@ -78,7 +74,7 @@ ExecuteResult execute_cfg(const CfgInstr &instr, ExecContext &ctx) {
     const auto field = config_field_from_code(instr.reg_type, instr.field);
     const auto *resolved = std::get_if<ConfigField>(&field);
     if (resolved == nullptr) {
-      return cfg_error();
+      return config_error();
     }
     const auto value =
         read_as_scalar(state, instr.reg_type, instr.src, *resolved);
@@ -86,7 +82,7 @@ ExecuteResult execute_cfg(const CfgInstr &instr, ExecContext &ctx) {
       state.scalar.write_x(instr.dest, *bits);
       return {.status = StepStatus::retired};
     }
-    return cfg_error();
+    return config_error();
   }
   }
   return {.status = StepStatus::execution_not_implemented};

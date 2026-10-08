@@ -25,10 +25,6 @@ std::uint64_t signed_word(std::int32_t value) {
   return static_cast<std::uint64_t>(static_cast<std::int64_t>(value));
 }
 
-ExecuteResult fault(StepStatus status, std::uint64_t address) {
-  return {.status = status, .fault_address = address};
-}
-
 // clang-format off
 std::size_t load_width(ScalarOp op) {
   switch (op) {
@@ -57,12 +53,12 @@ ExecuteResult execute_load(const DecodedScalarInstr &instr, ExecContext &ctx) {
   const auto address =
       scalar.read_x(instr.regs.src1) + static_cast<std::uint64_t>(instr.imm);
   if (address % width != 0) {
-    return fault(StepStatus::load_address_misaligned, address);
+    return access_fault(StepStatus::load_address_misaligned, address);
   }
 
   std::array<std::byte, 8> bytes{};
   if (!ctx.memory.read(address, std::span<std::byte>(bytes.data(), width))) {
-    return fault(StepStatus::load_fault, address);
+    return access_fault(StepStatus::load_fault, address);
   }
   std::uint64_t value =
       load_le<std::uint64_t>(std::span<const std::byte>(bytes.data(), width));
@@ -84,7 +80,7 @@ ExecuteResult execute_store(const DecodedScalarInstr &instr, ExecContext &ctx) {
   const auto address =
       scalar.read_x(instr.regs.src1) + static_cast<std::uint64_t>(instr.imm);
   if (address % width != 0) {
-    return fault(StepStatus::store_address_misaligned, address);
+    return access_fault(StepStatus::store_address_misaligned, address);
   }
 
   const auto value = scalar.read_x(instr.regs.src2);
@@ -92,7 +88,7 @@ ExecuteResult execute_store(const DecodedScalarInstr &instr, ExecContext &ctx) {
   store_le(value, std::span<std::byte>(bytes.data(), width));
   if (!ctx.memory.write(address,
                         std::span<const std::byte>(bytes.data(), width))) {
-    return fault(StepStatus::store_fault, address);
+    return access_fault(StepStatus::store_fault, address);
   }
   return {.status = StepStatus::retired};
 }
@@ -125,7 +121,7 @@ ExecuteResult execute_rv64i(const DecodedScalarInstr &instr, ExecContext &ctx) {
   // faults without writing the link register.
   auto redirect = [](std::uint64_t target) -> ExecuteResult {
     if (target % 4 != 0) {
-      return fault(StepStatus::instruction_address_misaligned, target);
+      return access_fault(StepStatus::instruction_address_misaligned, target);
     }
     return {.status = StepStatus::retired, .redirect = target};
   };

@@ -17,14 +17,6 @@
 namespace tile_npu {
 namespace {
 
-ExecuteResult config_error() {
-  return {.status = StepStatus::invalid_configuration};
-}
-
-ExecuteResult access_fault(StepStatus status, std::uint64_t address) {
-  return {.status = status, .fault_address = address};
-}
-
 // Loads and stores are raw copies at the configured dtype width, little
 // endian.
 template <typename Element>

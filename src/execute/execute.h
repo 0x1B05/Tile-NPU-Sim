@@ -41,6 +41,16 @@ inline std::uint64_t resolve_index(const IndexOperand &index,
                     index);
 }
 
+// The shared failure constructors: a dynamic constraint violation reports
+// invalid_configuration, and a faulting access carries its address.
+inline ExecuteResult config_error() {
+  return {.status = StepStatus::invalid_configuration};
+}
+
+inline ExecuteResult access_fault(StepStatus status, std::uint64_t address) {
+  return {.status = status, .fault_address = address};
+}
+
 // An unsuccessful execution leaves architectural state unchanged.
 
 // Scalar execution

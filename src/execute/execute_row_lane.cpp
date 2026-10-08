@@ -13,10 +13,6 @@
 namespace tile_npu {
 namespace {
 
-ExecuteResult config_error() {
-  return {.status = StepStatus::invalid_configuration};
-}
-
 // insert.row copies the source vector over one matrix row: the vector length
 // must equal the matrix column count and the row number must be in range.
 template <typename Element, typename MConfig, typename VConfig,
