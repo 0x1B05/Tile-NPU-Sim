@@ -357,17 +357,22 @@ struct ReduceInstr {
   NpuRegister src{};
 };
 
-// QNT operations (R4): quant covers tquant.rows.q8s32, vquant.q8s32,
-// tdequant.rows.f32 and bdequant.f32 (dom2 picks the main destination
-// domain, and with it the direction); quant_ext_scale is the external-scale
-// row quantize tquant.rows.scale.q8s32 (Tile destination only). funct3 >=
-// 010 is reserved.
-enum class QntOp : std::uint8_t { quant = 0b000, quant_ext_scale = 0b001 };
+// QNT operations (R4): the semantic direction, resolved at decode from
+// (funct3, dom2). quant is the dynamic-scale quantization (tquant.rows.q8s32,
+// vquant.q8s32), dequant is tdequant.rows.f32 / bdequant.f32, and
+// quant_ext_scale is the external-scale row quantization
+// tquant.rows.scale.q8s32 (Tile destination only). funct3 >= 010 is
+// reserved.
+enum class QntOp : std::uint8_t {
+  quant,
+  dequant,
+  quant_ext_scale,
+};
 
 // Operand reading: dest = D and src = S are the main operands (tquant:
 // tD/aS; tdequant: aD/tS; vquant: bD/vS; bdequant: vD/bS); scale is the
-// vScale Vec32 register (destination for quant, source otherwise); index is
-// the scale lane (vector forms only, immediate or Scalar register).
+// vScale Vec32 register (written by quant, read otherwise); index is the
+// scale lane (vector forms only, immediate or Scalar register).
 struct QntInstr {
   QntOp op = QntOp::quant;
   NpuRegister dest{};

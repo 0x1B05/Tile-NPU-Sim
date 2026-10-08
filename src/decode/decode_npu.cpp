@@ -227,7 +227,7 @@ DecodeResult decode_vreduce_argmax(std::uint32_t word) {
 
 // QNT (R4): sel3 = {dom2, IS}; dom2 selects the main destination domain and
 // with it the direction (Tile = tquant, Acc = tdequant, Vec8 = vquant,
-// Vec32 = bdequant). funct3 = 001 is the external-scale row quantize and
+// Vec32 = bdequant). funct3 = 001 is the external-scale row quantization and
 // exists for Tile destinations only; funct3 >= 010 is reserved. IS/index5
 // carry the scale lane for the vector forms and are reserved (0) for the
 // matrix forms. All dtype/shape constraints fail at execution.
@@ -250,8 +250,14 @@ DecodeResult decode_qnt(std::uint32_t word) {
   if (f.dest >= domain_register_count(domain)) {
     return DecodeError::illegal;
   }
-  // The main source domain is fixed per form: Acc for tquant, Tile for
-  // tdequant, Vec32 for vquant, Vec8 for bdequant.
+  // funct3 = 000 quantizes into Tile/Vec8 destinations and dequantizes into
+  // Acc/Vec32 destinations. The main source domain is fixed per form: Acc
+  // for tquant, Tile for tdequant, Vec32 for vquant, Vec8 for bdequant.
+  const bool quantize_dest =
+      domain == NpuDomain::tile || domain == NpuDomain::vec8;
+  const auto op = f.funct3 == 0b001 ? QntOp::quant_ext_scale
+                  : quantize_dest   ? QntOp::quant
+                                    : QntOp::dequant;
   const auto src_domain = domain == NpuDomain::tile   ? NpuDomain::acc
                           : domain == NpuDomain::acc  ? NpuDomain::tile
                           : domain == NpuDomain::vec8 ? NpuDomain::vec32
@@ -259,7 +265,7 @@ DecodeResult decode_qnt(std::uint32_t word) {
   if (f.src1 >= domain_register_count(src_domain)) {
     return DecodeError::illegal;
   }
-  return DecodedNpuInstr{QntInstr{static_cast<QntOp>(f.funct3),
+  return DecodedNpuInstr{QntInstr{op,
                                   {domain, f.dest},
                                   {src_domain, f.src1},
                                   f.arg,

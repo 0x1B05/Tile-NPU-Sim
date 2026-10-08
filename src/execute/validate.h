@@ -263,25 +263,33 @@ inline bool valid_structure(const ReduceInstr &instr) {
 }
 
 inline bool valid_structure(const QntInstr &instr) {
-  if (instr.op > QntOp::quant_ext_scale || instr.scale >= VECTOR_REGISTERS) {
+  if (instr.op > QntOp::quant_ext_scale ||
+      instr.scale >= VECTOR_REGISTERS) {
     return false;
   }
   const auto &index = instr.index;
-  switch (instr.dest.domain) {
-  case NpuDomain::tile:
-    // tquant[.scale]: the matrix forms reserve IS/index5 (immediate 0).
-    return instr.src.domain == NpuDomain::acc && in_range(instr.dest) &&
+  // The matrix forms reserve IS/index5: the encoding carries immediate 0.
+  switch (instr.op) {
+  case QntOp::quant:
+    if (instr.dest.domain == NpuDomain::tile) {
+      return instr.src.domain == NpuDomain::acc && in_range(instr.dest) &&
+             in_range(instr.src) && index_is_immediate_zero(index);
+    }
+    return instr.dest.domain == NpuDomain::vec8 &&
+           instr.src.domain == NpuDomain::vec32 && in_range(instr.dest) &&
+           in_range(instr.src) && index_in_range(index);
+  case QntOp::quant_ext_scale:
+    return instr.dest.domain == NpuDomain::tile &&
+           instr.src.domain == NpuDomain::acc && in_range(instr.dest) &&
            in_range(instr.src) && index_is_immediate_zero(index);
-  case NpuDomain::acc:
-    return instr.op == QntOp::quant && instr.src.domain == NpuDomain::tile &&
-           in_range(instr.dest) && in_range(instr.src) &&
-           index_is_immediate_zero(index);
-  case NpuDomain::vec8:
-    return instr.op == QntOp::quant && instr.src.domain == NpuDomain::vec32 &&
-           in_range(instr.dest) && in_range(instr.src) && index_in_range(index);
-  case NpuDomain::vec32:
-    return instr.op == QntOp::quant && instr.src.domain == NpuDomain::vec8 &&
-           in_range(instr.dest) && in_range(instr.src) && index_in_range(index);
+  case QntOp::dequant:
+    if (instr.dest.domain == NpuDomain::acc) {
+      return instr.src.domain == NpuDomain::tile && in_range(instr.dest) &&
+             in_range(instr.src) && index_is_immediate_zero(index);
+    }
+    return instr.dest.domain == NpuDomain::vec32 &&
+           instr.src.domain == NpuDomain::vec8 && in_range(instr.dest) &&
+           in_range(instr.src) && index_in_range(index);
   }
   return false;
 }

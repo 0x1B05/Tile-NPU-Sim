@@ -200,14 +200,19 @@ ExecuteResult bdequant(const QntInstr &instr, State &state) {
 
 } // namespace
 
+// The op fixes the direction; the destination domain only picks the matrix
+// or vector shape of the form (validated structurally at execute_npu).
 ExecuteResult execute_qnt(const QntInstr &instr, State &state) {
-  switch (instr.dest.domain) {
-  case NpuDomain::tile: return tquant(instr, state);
-  case NpuDomain::acc: return tdequant(instr, state);
-  case NpuDomain::vec8: return vquant(instr, state);
-  case NpuDomain::vec32: return bdequant(instr, state);
+  switch (instr.op) {
+  case QntOp::quant:
+    return instr.dest.domain == NpuDomain::tile ? tquant(instr, state)
+                                                : vquant(instr, state);
+  case QntOp::quant_ext_scale: return tquant(instr, state);
+  case QntOp::dequant:
+    return instr.dest.domain == NpuDomain::acc ? tdequant(instr, state)
+                                               : bdequant(instr, state);
   }
-  unreachable("execute_qnt with an unknown domain");
+  unreachable("execute_qnt with an unknown op");
 }
 
 } // namespace tile_npu

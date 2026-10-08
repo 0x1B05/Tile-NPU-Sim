@@ -222,12 +222,17 @@ TEST_CASE(validate_rejects_bad_qnt) {
   check_illegal(QntInstr{QntOp::quant, T(0), A(0), 0, ScalarRegister{0}},
                 "matrix form with a scalar index");
   check_illegal(
-      QntInstr{QntOp::quant_ext_scale, A(0), T(0), 0, ImmediateIndex{0}},
+      QntInstr{QntOp::quant_ext_scale, A(0), T(0), 0,
+               ImmediateIndex{0}},
       "ext_scale with an acc dest");
   check_illegal(QntInstr{QntOp::quant, B(0), B(1), 0, ImmediateIndex{0}},
                 "vquant with a vec8 src");
   check_illegal(QntInstr{QntOp::quant, B(0), V(1), 32, ImmediateIndex{0}},
                 "scale index 32");
+  check_illegal(QntInstr{QntOp::quant, A(0), T(0), 0, ImmediateIndex{0}},
+                "quant with an acc dest");
+  check_illegal(QntInstr{QntOp::dequant, T(0), A(0), 0, ImmediateIndex{0}},
+                "dequant with a tile dest");
 }
 
 TEST_CASE(validate_rejects_bad_mma) {
