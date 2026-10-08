@@ -1,5 +1,6 @@
 #include "execute.h"
 
+#include "fp_env.h"
 #include "validate.h"
 
 #include <variant>
@@ -91,6 +92,7 @@ ExecuteResult execute_scalar(const DecodedScalarInstr &instr,
 ExecuteResult execute_npu(const DecodedNpuInstr &instr, ExecContext &ctx) {
   // decode() guarantees structural legality; the visit re-checks it so
   // hand-constructed IR fails at this single point.
+  const FpEnvGuard fp_env;
   return std::visit(
       [&ctx](const auto &decoded) {
         if (!valid_structure(decoded)) {

@@ -93,6 +93,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 - Tile 按行主序存储, 对应 canonical layout。
 - 标量执行: 64-bit 回绕算术, 小端访存, load/store 要求自然对齐; 非对齐访问只报告状态, 不改变架构状态。
 - 单 hart 模型下 RV64 `FENCE` 与 NPU `fence.*` 均为 no-op; `ECALL`/`EBREAK`/`kernel.end` 使 `step()` 停在当前 PC, 交给调用方处理。
+- NPU 指令统一在默认浮点环境 (RNE 舍入, 默认 subnormal 处理) 下执行: `execute_npu` 入口的 `FpEnvGuard` (`src/execute/fp_env.h`) 保存并恢复宿主的浮点环境, 执行结果只取决于架构输入。
 - 状态与诊断的区分是刻意的: `decode_not_implemented` (编码可能合法但未译码) / `illegal` (保留编码) / `execution_not_implemented` / `invalid_configuration` 都是**模拟器诊断, 不是 ISA 定义的 trap**。理论上不可达的路径 (不变式被破坏, 即模拟器自身 bug) 用 `unreachable()` 当场中止, 不走 `StepStatus`。
 - 结构合法性只校验一次: `decode()` 产生的 IR 保证结构合法 (op code、domain、操作数 variant、寄存器号都在某个真实编码允许的范围内); `execute_npu` 入口用 `valid_structure` (`src/execute/validate.h`) 统一复查, 手工构造的非法 IR (embedder bug) 报 `illegal_instruction`。各执行器不再重复结构检查, 只负责配置与数据的动态约束 (dtype/shape/len/描述符), 失败报 `invalid_configuration`。
 - `Simulator::reset(entry_pc)` 清模拟器状态并设 PC, 不清内存; ISA 手册未定义架构复位值与入口地址。`sim_run` 的装载地址 (`0x80000000`), RAM 大小 (128 MiB), 串口控制台 MMIO 地址 (`0x10000000`) 与 `EBREAK` 时 `a0 == 0` 判成功, 都是 **runner 约定, 不是架构契约**。

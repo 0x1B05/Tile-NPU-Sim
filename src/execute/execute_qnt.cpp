@@ -24,7 +24,7 @@ std::int8_t quantize_lane(float value, float scale) {
   if (std::isnan(quotient)) {
     return 0;
   }
-  const float rounded = std::nearbyint(quotient); // RNE (default FP mode)
+  const float rounded = std::nearbyint(quotient); // RNE
   if (rounded > 127.0f) {
     return 127;
   }

@@ -1,6 +1,8 @@
 #include "tile_npu/simulator.h"
 
+#include <array>
 #include <bit>
+#include <cfenv>
 #include <cstddef>
 #include <cstdint>
 
@@ -211,4 +213,36 @@ TEST_CASE(qnt_rejects_invalid) {
   vec32_f32(state, 2, 2);
   check_eq(sim.step().status, StepStatus::invalid_configuration,
            "bdequant rejects a u8 source");
+}
+
+TEST_CASE(qnt_rounding_ignores_host_fp_mode) {
+  // +0.5 and -0.5 with an external scale of 1.0 are exact RNE ties; both
+  // quantize to 0 whatever rounding mode the host program left active.
+  const auto quantize_ties = [](int rounding_mode) {
+    FlatMemory memory(CODE_BASE, 4);
+    Simulator sim(memory);
+    load_one(sim, memory, make_qnt(NpuDomain::tile, 1, 0, 1, 0));
+    auto &state = sim.state();
+    tile_i8(state, 0, 1, 2);
+    acc_f32(state, 1, 1, 2);
+    vec32_f32(state, 0, 1);
+    state.v[0][0] = f32_bits(1.0f);
+    state.a[1][0] = f32_bits(0.5f);
+    state.a[1][1] = f32_bits(-0.5f);
+
+    std::fesetround(rounding_mode);
+    const auto status = sim.step().status;
+    std::fesetround(FE_TONEAREST); // restore before any check can bail out
+    check_eq(status, StepStatus::retired, "tquant retires");
+    return std::array{state.t[0][0], state.t[0][1]};
+  };
+
+  const auto upward = quantize_ties(FE_UPWARD);
+  check_eq(hex(upward[0]), hex(0x00u), "+0.5 rounds to even under FE_UPWARD");
+  check_eq(hex(upward[1]), hex(0x00u), "-0.5 rounds to even under FE_UPWARD");
+  const auto downward = quantize_ties(FE_DOWNWARD);
+  check_eq(hex(downward[0]), hex(0x00u),
+           "+0.5 rounds to even under FE_DOWNWARD");
+  check_eq(hex(downward[1]), hex(0x00u),
+           "-0.5 rounds to even under FE_DOWNWARD");
 }
