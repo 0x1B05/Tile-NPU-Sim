@@ -38,8 +38,8 @@ struct q3b_section {
   uint32_t size;
 };
 
-// Semihosting ecalls (see src/monitor/sdb.h): a7 = 1 prints a0's low byte,
-// a7 = 93 exits with a0 as the process exit code.
+// Semihosting ecalls (see src/monitor/runner.h): a7 = 1 prints a0's low
+// byte, a7 = 93 exits with a0 as the process exit code.
 static inline void semihost_putc(int c) {
   register long a0 asm("a0") = c;
   register long a7 asm("a7") = 1;

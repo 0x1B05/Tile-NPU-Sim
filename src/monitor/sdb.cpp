@@ -1,6 +1,7 @@
 #include "sdb.h"
 
 #include "parse.h"
+#include "runner.h"
 #include "utils/endian.h"
 
 #include <array>
@@ -55,9 +56,9 @@ void cmd_help() {
 }
 
 void cmd_continue(Simulator &sim) {
-  const auto result = run_until_stop(sim);
-  std::cout << stop_message(result) << '\n';
-  if (result.status == StepStatus::breakpoint) {
+  const auto outcome = run(sim, UNLIMITED_STEPS);
+  std::cout << stop_message(outcome.result) << '\n';
+  if (outcome.reason == StopReason::breakpoint) {
     std::cout << "a0 = " << sim.state().scalar.read_x(10) << '\n';
   }
 }
@@ -70,15 +71,9 @@ void cmd_si(Simulator &sim, std::string_view arg) {
       return;
     }
   }
-  for (std::uint64_t i = 0; i < count; ++i) {
-    const auto result = sim.step();
-    if (result.status == StepStatus::environment_call && semihost(sim)) {
-      continue; // the ecall counts as a stepped instruction
-    }
-    if (result.status != StepStatus::retired) {
-      std::cout << stop_message(result) << '\n';
-      return;
-    }
+  const auto outcome = run(sim, count);
+  if (outcome.reason != StopReason::step_limit) {
+    std::cout << stop_message(outcome.result) << '\n';
   }
 }
 
@@ -161,24 +156,6 @@ std::string stop_message(const StepResult &result) {
     out << " address=" << hex64(*result.fault_address);
   }
   return out.str();
-}
-
-StepResult run_until_stop(Simulator &sim) {
-  while (true) {
-    const auto result = sim.step();
-    if (result.status == StepStatus::environment_call && semihost(sim)) {
-      continue;
-    }
-    if (result.status != StepStatus::retired) return result;
-  }
-}
-
-bool semihost(Simulator &sim) {
-  if (sim.state().scalar.read_x(17) != 1) return false;
-  std::cout.put(static_cast<char>(sim.state().scalar.read_x(10) & 0xff));
-  std::cout.flush();
-  sim.state().scalar.pc += 4;
-  return true;
 }
 
 void sdb_loop(Simulator &sim, Memory &memory) {

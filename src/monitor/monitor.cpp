@@ -1,11 +1,11 @@
 #include "parse.h"
+#include "runner.h"
 #include "sdb.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
 #include <iostream>
-#include <limits>
 #include <span>
 #include <string>
 #include <string_view>
@@ -16,10 +16,6 @@ namespace {
 // Monitor conventions, not ISA-defined behavior.
 constexpr std::uint64_t MEMORY_BASE = 0x80000000;
 constexpr std::size_t DEFAULT_MEMORY_MIB = 128;
-// The step budget counts retired instructions, so 0 runs none. The maximum
-// value is "no limit" in practice, and parse_u64 wraps a literal "-1" to it.
-constexpr std::uint64_t DEFAULT_STEP_LIMIT =
-    std::numeric_limits<std::uint64_t>::max();
 
 struct Image {
   std::string path;
@@ -31,7 +27,7 @@ enum class Mode { interactive, batch, plain };
 struct Options {
   Mode mode = Mode::interactive;
   std::size_t memory_mib = DEFAULT_MEMORY_MIB;
-  std::uint64_t step_limit = DEFAULT_STEP_LIMIT;
+  std::uint64_t step_limit = tile_npu::monitor::UNLIMITED_STEPS;
   std::vector<Image> images;
 };
 
@@ -118,30 +114,26 @@ bool run_batch(const Image &image, const Options &options) {
   tile_npu::Simulator sim(memory);
   sim.reset(MEMORY_BASE);
 
-  for (std::uint64_t steps = 0; steps < options.step_limit; ++steps) {
-    const auto result = sim.step();
-    if (result.status == tile_npu::StepStatus::retired) continue;
-    if (result.status == tile_npu::StepStatus::environment_call &&
-        tile_npu::monitor::semihost(sim)) {
-      continue;
-    }
-    if (result.status == tile_npu::StepStatus::breakpoint ||
-        result.status == tile_npu::StepStatus::kernel_end) {
-      // Monitor convention: a0 == 0 at ebreak/kernel.end means the program
-      // passed.
-      const auto exit_code = sim.state().scalar.read_x(10);
-      report_exit(result.status == tile_npu::StepStatus::breakpoint
-                      ? "ebreak"
-                      : "kernel.end",
-                  image.path, exit_code, steps);
-      return exit_code == 0;
-    }
+  const auto outcome = tile_npu::monitor::run(sim, options.step_limit);
+  using enum tile_npu::monitor::StopReason;
+  switch (outcome.reason) {
+  case breakpoint:
+  case kernel_end: {
+    // Monitor convention: a0 == 0 at ebreak/kernel.end means the program
+    // passed.
+    const auto exit_code = sim.state().scalar.read_x(10);
+    report_exit(outcome.reason == breakpoint ? "ebreak" : "kernel.end",
+                image.path, exit_code, outcome.steps);
+    return exit_code == 0;
+  }
+  case step_limit:
+    std::cerr << "FAIL " << image.path << ": step limit reached\n";
+    return false;
+  default:
     std::cerr << "FAIL " << image.path << ": "
-              << tile_npu::monitor::stop_message(result) << '\n';
+              << tile_npu::monitor::stop_message(outcome.result) << '\n';
     return false;
   }
-  std::cerr << "FAIL " << image.path << ": step limit reached\n";
-  return false;
 }
 
 // Plain run for full programs: semihosting prints guest output, and an
@@ -155,20 +147,18 @@ int run_plain(const Options &options) {
   tile_npu::Simulator sim(memory);
   sim.reset(MEMORY_BASE);
 
-  for (std::uint64_t steps = 0; steps < options.step_limit; ++steps) {
-    const auto result = sim.step();
-    if (result.status == tile_npu::StepStatus::retired) continue;
-    if (result.status == tile_npu::StepStatus::environment_call) {
-      if (tile_npu::monitor::semihost(sim)) continue;
-      if (sim.state().scalar.read_x(17) == 93) {
-        return static_cast<int>(sim.state().scalar.read_x(10));
-      }
-    }
-    std::cerr << tile_npu::monitor::stop_message(result) << '\n';
+  const auto outcome = tile_npu::monitor::run(sim, options.step_limit);
+  using enum tile_npu::monitor::StopReason;
+  switch (outcome.reason) {
+  case semihost_exit:
+    return static_cast<int>(outcome.exit_code);
+  case step_limit:
+    std::cerr << "step limit reached\n";
+    return 1;
+  default:
+    std::cerr << tile_npu::monitor::stop_message(outcome.result) << '\n';
     return 1;
   }
-  std::cerr << "step limit reached\n";
-  return 1;
 }
 
 } // namespace
