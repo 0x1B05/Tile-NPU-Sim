@@ -5,7 +5,6 @@
 # every streamed vector keeps its own descriptor.
 
     .include "npu.inc"
-    .include "kern.inc"
 
     .bss
     .align 4

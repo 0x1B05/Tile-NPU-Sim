@@ -20,15 +20,16 @@ target("qwen3_app")
         table.join2(sources, os.files(path.join(app_srcdir, "*.S")))
         local elf = path.join(app_bindir, "qwen3.elf")
         local bin = path.join(app_bindir, "qwen3.bin")
+        -- Shared NPU bindings live with the guest tests (see xmake/guest.lua).
+        local guest_incdir = path.join(os.projectdir(), "tests", "guest",
+                                       "include")
         local deps = {linkscript, path.join(app_srcdir, "qwen3.h"),
-                      path.join(app_srcdir, "kern.inc"),
-                      path.join(os.projectdir(), "tests", "guest", "npu.inc")}
+                      path.join(guest_incdir, "npu.inc")}
         table.join2(deps, sources)
         depend.on_changed(function()
             local args = {"-march=rv64im", "-mabi=lp64", "-O2",
                           "-ffreestanding", "-nostdlib", "-static",
-                          "-no-pie", "-I", app_srcdir, "-I",
-                          path.join(os.projectdir(), "tests", "guest"),
+                          "-no-pie", "-I", app_srcdir, "-I", guest_incdir,
                           "-T", linkscript, "-o", elf}
             table.join2(args, sources)
             os.vrunv(gcc, args)

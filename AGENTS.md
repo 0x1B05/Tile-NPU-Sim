@@ -73,7 +73,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `src/execute/rv64_util.h` | RV64 执行器共享的 *W 结果符号扩展 (`signed_word`) |
 | `src/simulator.cpp`, `src/memory.cpp` | 取指 (小端 4 字节拼字) 与步进循环, 内存实现 |
 | `tests/*.cpp` | 全部编入 `sim_tests` 一个测试程序; 手卷迷你框架, 见"测试约定" |
-| `tests/guest/` | guest 测试: C 程序 (共享 `crt0.S`) 与裸 `.S` (NPU 编码宏在 `npu.inc`), 经 `link.ld` 链接成扁平 bin 到 `build/guest/` |
+| `tests/guest/` | guest 测试: C 程序 (共享 `crt0.S`) 与裸 `.S`, 经 `link.ld` 链接成扁平 bin 到 `build/guest/`; `include/npu.inc` 为共享的 NPU 编码宏与配置常量 (供 tests/guest 与 apps/qwen3 共同使用) |
 | `tests/riscv-tests-env/riscv_test.h` | 官方 riscv-tests 的自定义最小 env: 无特权态/tohost, PASS/FAIL 走 `ebreak`/`a0` 约定 |
 | `scripts/fetch_riscv_tests.sh` | 拉取官方 riscv-tests (pinned commit) 到 `external/` (gitignored) |
 | `apps/qwen3/` | Qwen3-0.6B 推理 guest 程序 (rv64im 裸机, NPU kernel 库 + forward 编排, 末位 prompt token 上带数值对齐探针); `xmake build qwen3_app` 交叉编译, 模型 blob 由 `scripts/qwen3/` 生成 |

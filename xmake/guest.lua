@@ -24,7 +24,10 @@ target("guest_images")
         os.mkdir(bindir)
         local linkscript = path.join(srcdir, "link.ld")
         local crt0 = path.join(srcdir, "crt0.S")
-        local npumacros = path.join(srcdir, "npu.inc")
+        -- Shared NPU bindings (encoding macros + config constants), also
+        -- used by apps/qwen3.
+        local incdir = path.join(srcdir, "include")
+        local npumacros = path.join(incdir, "npu.inc")
         -- Per-image incremental assembly: rebuild only when the source, the
         -- shared include/linker inputs, or the toolchain change.
         local function build_guest_image(src, extra, deps)
@@ -40,7 +43,7 @@ target("guest_images")
         end
         for _, src in ipairs(os.files(path.join(srcdir, "**.S"))) do
             if path.filename(src) ~= "crt0.S" then
-                build_guest_image(src, {"-I", srcdir}, {src, linkscript, npumacros})
+                build_guest_image(src, {"-I", incdir}, {src, linkscript, npumacros})
             end
         end
     end)
