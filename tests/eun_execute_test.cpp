@@ -147,18 +147,27 @@ TEST_CASE(eun_silu) {
   load_one(sim, memory, make_eun(NpuDomain::vec32, 6, 0, 1)); // vsilu v0, v1
   auto &state = sim.state();
   for (auto index : {0, 1})
-    vec_cfg(state, index, DType::f32, 3);
+    vec_cfg(state, index, DType::f32, 5);
   state.v[1][0] = f32_bits(0.0f);
   state.v[1][1] = f32_bits(1.0f);
   state.v[1][2] = f32_bits(std::numeric_limits<float>::infinity());
+  state.v[1][3] = f32_bits(-89.0f);
+  state.v[1][4] = f32_bits(-0.0f);
   check_eq(sim.step().status, StepStatus::retired, "vsilu retires");
   check_eq(hex(state.v[0][0]), hex(0x0u), "silu(+0) = +0");
-  // silu(1) = 1/(1+e^-1); the simulator definition is the IEEE expression.
-  check_eq(hex(state.v[0][1]), hex(f32_bits(1.0f / (1.0f + std::exp(-1.0f)))),
+  // silu is evaluated in double precision, then rounded once to f32.
+  check_eq(hex(state.v[0][1]),
+           hex(f32_bits(static_cast<float>(1.0 / (1.0 + std::exp(-1.0))))),
            "silu(1)");
   check_eq(hex(state.v[0][2]),
            hex(f32_bits(std::numeric_limits<float>::infinity())),
            "silu(+inf) = +inf");
+  // silu(-89) ~= -1.98e-37 is a normal f32; a single-precision exp(89)
+  // overflows and would flush it to -0.
+  check_eq(hex(state.v[0][3]),
+           hex(f32_bits(static_cast<float>(-89.0 / (1.0 + std::exp(89.0))))),
+           "silu(-89) stays normal");
+  check_eq(hex(state.v[0][4]), hex(0x80000000u), "silu(-0) = -0");
 }
 
 TEST_CASE(eun_rejects_invalid) {
