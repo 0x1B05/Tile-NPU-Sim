@@ -157,6 +157,18 @@ struct MblkInstr {
   RegisterIndex gather_src = 0;
 };
 
+// The store forms read the transferred register from src; every other form
+// writes dest. Decode, the structural validation, the executor and tests
+// share this reading.
+inline constexpr bool is_store_form(MblkOp op) {
+  return op == MblkOp::store || op == MblkOp::row_store;
+}
+
+// The register the access transfers.
+inline constexpr const NpuRegister &accessed_reg(const MblkInstr &instr) {
+  return is_store_form(instr.op) ? instr.src : instr.dest;
+}
+
 // INIT_MOVE data initialization and intra-domain moves: immediate fill (I),
 // scalar fill, copy and Tile transpose (R2).
 enum class InitOp : std::uint8_t { fill, fillx, copy, transpose };
@@ -381,6 +393,34 @@ struct QntInstr {
   IndexOperand index = ImmediateIndex{};
 };
 
+// QNT pairs a quantized 8-bit domain with its f32 counterpart: Tile with Acc
+// (the matrix forms) and Vec8 with Vec32 (the vector forms). Decode and the
+// structural validation share the pairing so it is stated once.
+inline constexpr bool qnt_domain_is_quantized(NpuDomain domain) {
+  return domain == NpuDomain::tile || domain == NpuDomain::vec8;
+}
+
+inline constexpr NpuDomain qnt_paired_domain(NpuDomain domain) {
+  switch (domain) {
+  case NpuDomain::tile: return NpuDomain::acc;
+  case NpuDomain::acc: return NpuDomain::tile;
+  case NpuDomain::vec8: return NpuDomain::vec32;
+  case NpuDomain::vec32: return NpuDomain::vec8;
+  }
+  return NpuDomain::tile;
+}
+
+// The destination domains an op can write: quant writes the quantized
+// side, dequant the f32 side; the external-scale form is Tile-only.
+inline constexpr bool qnt_dest_legal(QntOp op, NpuDomain dest) {
+  switch (op) {
+  case QntOp::quant: return qnt_domain_is_quantized(dest);
+  case QntOp::dequant: return !qnt_domain_is_quantized(dest);
+  case QntOp::quant_ext_scale: return dest == NpuDomain::tile;
+  }
+  return false;
+}
+
 // MMA_BDOT operations (R4): funct3 bit2 picks matrix multiply (0, mma.*) or
 // vector-matrix dot (1, bdot.*); bit1 picks the right-operand orientation
 // (nn = 0, nt = 1); bit0 picks zero-fill or accumulate for mma (bdot only
@@ -402,6 +442,30 @@ struct MmaInstr {
   NpuRegister src_a{};
   NpuRegister src_b{};
 };
+
+// Operation metadata for the MMA_BDOT family, mirroring the ISA's funct3
+// table: each entry carries the operation and its destination/left-source
+// domains. Decode and the structural validation share this table so a new
+// operation is added in one place.
+struct MmaInfo {
+  MmaOp op;
+  NpuDomain dest_domain;
+  NpuDomain lhs_domain;
+};
+
+// Indexed by funct3 code; the reserved codes 101/111 hold nullopt.
+inline constexpr std::array<std::optional<MmaInfo>, 8> MMA_BY_FUNCT3 = [] {
+  std::array<std::optional<MmaInfo>, 8> table{};
+  // clang-format off
+  table[0b000] = MmaInfo{MmaOp::nn_zero, NpuDomain::acc  , NpuDomain::tile};
+  table[0b001] = MmaInfo{MmaOp::nn_acc , NpuDomain::acc  , NpuDomain::tile};
+  table[0b010] = MmaInfo{MmaOp::nt_zero, NpuDomain::acc  , NpuDomain::tile};
+  table[0b011] = MmaInfo{MmaOp::nt_acc , NpuDomain::acc  , NpuDomain::tile};
+  table[0b100] = MmaInfo{MmaOp::bdot_nn, NpuDomain::vec32, NpuDomain::vec8};
+  table[0b110] = MmaInfo{MmaOp::bdot_nt, NpuDomain::vec32, NpuDomain::vec8};
+  // clang-format on
+  return table;
+}();
 
 // SYS operations (Z format): no explicit operands. funct3 codes 100-111 are
 // reserved.

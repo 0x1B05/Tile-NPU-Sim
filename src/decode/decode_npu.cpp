@@ -243,26 +243,18 @@ DecodeResult decode_qnt(std::uint32_t word) {
   const bool index_is_scalar = (f.sel3 & 1) != 0;
   const bool vector_form =
       domain == NpuDomain::vec8 || domain == NpuDomain::vec32;
-  if (f.funct3 > 0b001 || (f.funct3 == 0b001 && domain != NpuDomain::tile) ||
+  // funct3 = 000 quantizes into Tile/Vec8 destinations and dequantizes into
+  // Acc/Vec32 destinations; the source is the paired domain.
+  const auto op = f.funct3 == 0b001 ? QntOp::quant_ext_scale
+                  : qnt_domain_is_quantized(domain) ? QntOp::quant
+                                                    : QntOp::dequant;
+  if (f.funct3 > 0b001 || !qnt_dest_legal(op, domain) ||
       (!vector_form && (index_is_scalar || f.src2 != 0))) {
     return DecodeError::illegal;
   }
-  if (f.dest >= domain_register_count(domain)) {
-    return DecodeError::illegal;
-  }
-  // funct3 = 000 quantizes into Tile/Vec8 destinations and dequantizes into
-  // Acc/Vec32 destinations. The main source domain is fixed per form: Acc
-  // for tquant, Tile for tdequant, Vec32 for vquant, Vec8 for bdequant.
-  const bool quantize_dest =
-      domain == NpuDomain::tile || domain == NpuDomain::vec8;
-  const auto op = f.funct3 == 0b001 ? QntOp::quant_ext_scale
-                  : quantize_dest   ? QntOp::quant
-                                    : QntOp::dequant;
-  const auto src_domain = domain == NpuDomain::tile   ? NpuDomain::acc
-                          : domain == NpuDomain::acc  ? NpuDomain::tile
-                          : domain == NpuDomain::vec8 ? NpuDomain::vec32
-                                                      : NpuDomain::vec8;
-  if (f.src1 >= domain_register_count(src_domain)) {
+  const auto src_domain = qnt_paired_domain(domain);
+  if (f.dest >= domain_register_count(domain) ||
+      f.src1 >= domain_register_count(src_domain)) {
     return DecodeError::illegal;
   }
   return DecodedNpuInstr{QntInstr{op,
@@ -274,24 +266,23 @@ DecodeResult decode_qnt(std::uint32_t word) {
 
 // MMA_BDOT (R4): funct3 bit2 picks mma (Acc destination) or bdot (Vec32
 // destination); bdot has no accumulate form, so funct3 codes 101/111 are
-// reserved (the pattern pins reserved3/reserved5 to 0). The left source is a
-// Tile for mma and a Vec8 for bdot; the right source is always a Tile. All
-// dtype/shape constraints fail at execution.
+// reserved (the pattern pins reserved3/reserved5 to 0). The operation and
+// its operand domains come from the shared MMA_BY_FUNCT3 table; the right
+// source is always a Tile. All dtype/shape constraints fail at execution.
 DecodeResult decode_mma(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
-  const bool bdot = (f.funct3 & 0b100) != 0;
-  if (f.funct3 == 0b101 || f.funct3 == 0b111) {
+  const auto &info = MMA_BY_FUNCT3[f.funct3];
+  if (!info) {
     return DecodeError::illegal;
   }
-  const auto dest_domain = bdot ? NpuDomain::vec32 : NpuDomain::acc;
-  const auto lhs_domain = bdot ? NpuDomain::vec8 : NpuDomain::tile;
-  if (f.dest >= domain_register_count(dest_domain) ||
-      f.src1 >= domain_register_count(lhs_domain) || f.src2 >= TILE_REGISTERS) {
+  if (f.dest >= domain_register_count(info->dest_domain) ||
+      f.src1 >= domain_register_count(info->lhs_domain) ||
+      f.src2 >= TILE_REGISTERS) {
     return DecodeError::illegal;
   }
-  return DecodedNpuInstr{MmaInstr{static_cast<MmaOp>(f.funct3),
-                                  {dest_domain, f.dest},
-                                  {lhs_domain, f.src1},
+  return DecodedNpuInstr{MmaInstr{info->op,
+                                  {info->dest_domain, f.dest},
+                                  {info->lhs_domain, f.src1},
                                   {NpuDomain::tile, f.src2}}};
 }
 
@@ -325,7 +316,7 @@ DecodeResult decode_mblk(std::uint32_t word) {
   const auto gather_src = gather ? f.src2 : RegisterIndex{0};
   const NpuRegister reg{domain, f.dest};
   return DecodedNpuInstr{
-      op == MblkOp::store
+      is_store_form(op)
           ? MblkInstr{op, {}, reg, ImmediateIndex{}, gather_src}
           : MblkInstr{op, reg, {}, ImmediateIndex{}, gather_src}};
 }
@@ -341,9 +332,8 @@ DecodeResult decode_mblk_row(std::uint32_t word) {
   const auto op = (f.funct3 & 1) != 0 ? MblkOp::row_store : MblkOp::row_load;
   const NpuRegister reg{domain, f.reg};
   const auto index = decode_index(f.index, (f.sel3 & 1) != 0);
-  return DecodedNpuInstr{op == MblkOp::row_store
-                             ? MblkInstr{op, {}, reg, index, 0}
-                             : MblkInstr{op, reg, {}, index, 0}};
+  return DecodedNpuInstr{is_store_form(op) ? MblkInstr{op, {}, reg, index, 0}
+                                           : MblkInstr{op, reg, {}, index, 0}};
 }
 
 // INIT_MOVE fill (I format): the sel2/field3 positions carry dom2/funct3;

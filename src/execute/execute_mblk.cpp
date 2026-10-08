@@ -42,18 +42,11 @@ bool store_element(Memory &memory, std::uint64_t address, Element value) {
   return memory.write(address, bytes);
 }
 
-// The register being transferred: dest for the load forms, src for stores.
-const NpuRegister &access_reg(const MblkInstr &instr) {
-  return (instr.op == MblkOp::store || instr.op == MblkOp::row_store)
-             ? instr.src
-             : instr.dest;
-}
-
 // The ISA defines the transpose transform only for a full tload; any other
 // access with transform != 0 is an undefined combination.
 bool transform_legal(const MblkInstr &instr, const MatrixDescriptor &desc) {
   return desc.transform == 0 || (instr.op == MblkOp::load &&
-                                 access_reg(instr).domain == NpuDomain::tile);
+                                 accessed_reg(instr).domain == NpuDomain::tile);
 }
 
 // Every access runs in two phases: all addresses are computed first, then
@@ -66,11 +59,11 @@ block_access(const MblkInstr &instr, ExecContext &ctx,
              std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
              const std::array<Config, RegCount> &configs,
              std::array<MatrixDescriptor, RegCount> &descs) {
-  const auto &config = configs[access_reg(instr).index];
+  const auto &config = configs[accessed_reg(instr).index];
   if (!valid_domain_config(config)) {
     return config_error();
   }
-  MatrixDescView desc(descs[access_reg(instr).index]);
+  MatrixDescView desc(descs[accessed_reg(instr).index]);
   if (!desc.valid() || !transform_legal(instr, desc.descriptor())) {
     return config_error();
   }
@@ -98,7 +91,7 @@ block_access(const MblkInstr &instr, ExecContext &ctx,
   // Loads stage into a copy of the register and stores probe the whole
   // range before writing, so a mid-transfer fault leaves state unchanged.
   const bool load = instr.op == MblkOp::load;
-  auto staging = regs[access_reg(instr).index];
+  auto staging = regs[accessed_reg(instr).index];
   MatrixView<Element> view(std::span<Element>(staging), rows, cols, 0);
   if (load) {
     std::size_t n = 0;
@@ -110,7 +103,7 @@ block_access(const MblkInstr &instr, ExecContext &ctx,
         }
       }
     }
-    regs[access_reg(instr).index] = staging;
+    regs[accessed_reg(instr).index] = staging;
   } else {
     for (std::size_t n = 0; n < rows * cols; ++n) {
       if (!ctx.memory.contains(addrs[n], sizeof(Element))) {
@@ -138,11 +131,11 @@ row_access(const MblkInstr &instr, ExecContext &ctx,
            std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
            const std::array<Config, RegCount> &configs,
            std::array<MatrixDescriptor, RegCount> &descs) {
-  const auto &config = configs[access_reg(instr).index];
+  const auto &config = configs[accessed_reg(instr).index];
   if (!valid_domain_config(config)) {
     return config_error();
   }
-  MatrixDescView desc(descs[access_reg(instr).index]);
+  MatrixDescView desc(descs[accessed_reg(instr).index]);
   if (!desc.valid() || !transform_legal(instr, desc.descriptor())) {
     return config_error();
   }
@@ -168,7 +161,7 @@ row_access(const MblkInstr &instr, ExecContext &ctx,
   }
 
   const bool load = instr.op == MblkOp::row_load;
-  auto staging = regs[access_reg(instr).index];
+  auto staging = regs[accessed_reg(instr).index];
   MatrixView<Element> view(std::span<Element>(staging), config.rows, cols, 0);
   if (load) {
     for (std::size_t j = 0; j < cols; ++j) {
@@ -176,7 +169,7 @@ row_access(const MblkInstr &instr, ExecContext &ctx,
         return access_fault(StepStatus::load_fault, addrs[j]);
       }
     }
-    regs[access_reg(instr).index] = staging;
+    regs[accessed_reg(instr).index] = staging;
   } else {
     for (std::size_t j = 0; j < cols; ++j) {
       if (!ctx.memory.contains(addrs[j], sizeof(Element))) {
@@ -203,7 +196,7 @@ ExecuteResult gather_tile(const MblkInstr &instr, ExecContext &ctx,
                           std::array<Tile, TILE_REGISTERS> &regs,
                           const std::array<TileConfig, TILE_REGISTERS> &configs,
                           std::array<MatrixDescriptor, TILE_REGISTERS> &descs) {
-  const auto &config = configs[access_reg(instr).index];
+  const auto &config = configs[accessed_reg(instr).index];
   if (!valid_domain_config(config)) {
     return config_error();
   }
@@ -211,7 +204,7 @@ ExecuteResult gather_tile(const MblkInstr &instr, ExecContext &ctx,
   if (index_config.len == 0 || index_config.len > VECTOR_LANES) {
     return config_error();
   }
-  MatrixDescView desc(descs[access_reg(instr).index]);
+  MatrixDescView desc(descs[accessed_reg(instr).index]);
   if (!desc.valid() || !transform_legal(instr, desc.descriptor())) {
     return config_error();
   }
@@ -243,7 +236,7 @@ ExecuteResult gather_tile(const MblkInstr &instr, ExecContext &ctx,
     }
   }
 
-  auto staging = regs[access_reg(instr).index];
+  auto staging = regs[accessed_reg(instr).index];
   MatrixView<std::uint8_t> view(std::span<std::uint8_t>(staging), rows, cols,
                                 0);
   for (std::size_t i = 0; i < rows; ++i) {
@@ -258,7 +251,7 @@ ExecuteResult gather_tile(const MblkInstr &instr, ExecContext &ctx,
       }
     }
   }
-  regs[access_reg(instr).index] = staging;
+  regs[accessed_reg(instr).index] = staging;
   return {.status = StepStatus::retired};
 }
 
@@ -268,11 +261,11 @@ vector_access(const MblkInstr &instr, ExecContext &ctx,
               std::array<std::array<Element, VECTOR_LANES>, RegCount> &regs,
               const std::array<Config, RegCount> &configs,
               std::array<VectorDescriptor, RegCount> &descs) {
-  const auto &config = configs[access_reg(instr).index];
+  const auto &config = configs[accessed_reg(instr).index];
   if (!valid_domain_config(config)) {
     return config_error();
   }
-  VectorDescView desc(descs[access_reg(instr).index]);
+  VectorDescView desc(descs[accessed_reg(instr).index]);
   if (!desc.valid()) {
     return config_error();
   }
@@ -300,7 +293,7 @@ vector_access(const MblkInstr &instr, ExecContext &ctx,
       }
       addrs[j] = *addr;
     }
-    auto staging = regs[access_reg(instr).index];
+    auto staging = regs[accessed_reg(instr).index];
     for (std::size_t j = 0; j < len; ++j) {
       if (j >= index_config.len) {
         staging[j] = Element{0};
@@ -310,7 +303,7 @@ vector_access(const MblkInstr &instr, ExecContext &ctx,
         return access_fault(StepStatus::load_fault, addrs[j]);
       }
     }
-    regs[access_reg(instr).index] = staging;
+    regs[accessed_reg(instr).index] = staging;
     return {.status = StepStatus::retired};
   }
 
@@ -327,14 +320,14 @@ vector_access(const MblkInstr &instr, ExecContext &ctx,
   }
 
   const bool load = instr.op == MblkOp::load;
-  auto staging = regs[access_reg(instr).index];
+  auto staging = regs[accessed_reg(instr).index];
   if (load) {
     for (std::size_t j = 0; j < len; ++j) {
       if (!load_element(ctx.memory, addrs[j], staging[j])) {
         return access_fault(StepStatus::load_fault, addrs[j]);
       }
     }
-    regs[access_reg(instr).index] = staging;
+    regs[accessed_reg(instr).index] = staging;
   } else {
     for (std::size_t j = 0; j < len; ++j) {
       if (!ctx.memory.contains(addrs[j], sizeof(Element))) {
@@ -360,7 +353,7 @@ vector_access(const MblkInstr &instr, ExecContext &ctx,
 // what remains.
 ExecuteResult execute_mblk(const MblkInstr &instr, ExecContext &ctx) {
   State &state = ctx.state;
-  switch (access_reg(instr).domain) {
+  switch (accessed_reg(instr).domain) {
   case NpuDomain::tile:
     switch (instr.op) {
     case MblkOp::load:

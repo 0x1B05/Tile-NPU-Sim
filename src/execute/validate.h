@@ -141,9 +141,7 @@ inline bool valid_structure(const MaskInstr &instr) {
 
 inline bool valid_structure(const MblkInstr &instr) {
   if (instr.op > MblkOp::row_store) return false;
-  const auto &reg = (instr.op == MblkOp::store || instr.op == MblkOp::row_store)
-                        ? instr.src
-                        : instr.dest;
+  const auto &reg = accessed_reg(instr);
   const bool row_form =
       instr.op == MblkOp::row_load || instr.op == MblkOp::row_store;
   if (row_form && reg.domain != NpuDomain::tile &&
@@ -267,42 +265,23 @@ inline bool valid_structure(const QntInstr &instr) {
       instr.scale >= VECTOR_REGISTERS) {
     return false;
   }
-  const auto &index = instr.index;
-  // The matrix forms reserve IS/index5: the encoding carries immediate 0.
-  switch (instr.op) {
-  case QntOp::quant:
-    if (instr.dest.domain == NpuDomain::tile) {
-      return instr.src.domain == NpuDomain::acc && in_range(instr.dest) &&
-             in_range(instr.src) && index_is_immediate_zero(index);
-    }
-    return instr.dest.domain == NpuDomain::vec8 &&
-           instr.src.domain == NpuDomain::vec32 && in_range(instr.dest) &&
-           in_range(instr.src) && index_in_range(index);
-  case QntOp::quant_ext_scale:
-    return instr.dest.domain == NpuDomain::tile &&
-           instr.src.domain == NpuDomain::acc && in_range(instr.dest) &&
-           in_range(instr.src) && index_is_immediate_zero(index);
-  case QntOp::dequant:
-    if (instr.dest.domain == NpuDomain::acc) {
-      return instr.src.domain == NpuDomain::tile && in_range(instr.dest) &&
-             in_range(instr.src) && index_is_immediate_zero(index);
-    }
-    return instr.dest.domain == NpuDomain::vec32 &&
-           instr.src.domain == NpuDomain::vec8 && in_range(instr.dest) &&
-           in_range(instr.src) && index_in_range(index);
+  if (!qnt_dest_legal(instr.op, instr.dest.domain) ||
+      instr.src.domain != qnt_paired_domain(instr.dest.domain)) {
+    return false;
   }
-  return false;
+  // The matrix forms reserve IS/index5: the encoding carries immediate 0.
+  const bool vector_form = instr.dest.domain == NpuDomain::vec8 ||
+                           instr.dest.domain == NpuDomain::vec32;
+  const auto &index = instr.index;
+  return in_range(instr.dest) && in_range(instr.src) &&
+         (vector_form ? index_in_range(index) : index_is_immediate_zero(index));
 }
 
 inline bool valid_structure(const MmaInstr &instr) {
-  const auto code = static_cast<std::uint8_t>(instr.op);
-  if (code > 0b110) return false;
-  const bool bdot = (code & 0b100) != 0;
-  if (bdot && (code & 1) != 0) return false; // bdot has no acc form
-  const auto dest_domain = bdot ? NpuDomain::vec32 : NpuDomain::acc;
-  const auto lhs_domain = bdot ? NpuDomain::vec8 : NpuDomain::tile;
-  return instr.dest.domain == dest_domain && in_range(instr.dest) &&
-         instr.src_a.domain == lhs_domain && in_range(instr.src_a) &&
+  if (!assigned_op(instr.op, MMA_BY_FUNCT3)) return false;
+  const auto &info = *MMA_BY_FUNCT3[static_cast<std::uint8_t>(instr.op)];
+  return instr.dest.domain == info.dest_domain && in_range(instr.dest) &&
+         instr.src_a.domain == info.lhs_domain && in_range(instr.src_a) &&
          instr.src_b.domain == NpuDomain::tile && in_range(instr.src_b);
 }
 

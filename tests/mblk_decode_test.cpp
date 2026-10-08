@@ -12,6 +12,7 @@
 
 namespace {
 
+using tile_npu::accessed_reg;
 using tile_npu::DecodedNpuInstr;
 using tile_npu::DecodeError;
 using tile_npu::MblkInstr;
@@ -39,9 +40,7 @@ template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
     const auto *decoded = std::get_if<MblkInstr>(npu);
     check(decoded != nullptr, what);
     check_eq(decoded->op, test.op, what + ": op");
-    const auto &reg = test.op == MblkOp::store || test.op == MblkOp::row_store
-                          ? decoded->src
-                          : decoded->dest;
+    const auto &reg = accessed_reg(*decoded);
     check_eq(reg.domain, test.domain, what + ": domain");
     check_eq(reg.index, test.reg, what + ": reg");
     check_index(decoded->index, test.index, test.index_is_scalar, what);
