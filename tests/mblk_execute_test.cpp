@@ -464,3 +464,160 @@ TEST_CASE(mblk_faults_leave_state_unchanged) {
              "range probe prevents partial memory writes");
   }
 }
+
+TEST_CASE(mblk_row_faults_leave_state_unchanged) {
+  // Row form with increment enabled: addr(0, 1) = MEM_END faults.
+  {
+    MblkRun run(make_mrow(false, false, 4, 0, 0)); // tload.row t0[0]
+    auto &state = run.sim.state();
+    config_tile_2x2(state, 0);
+    stride_desc(state.tm[0], MEM_END - 1, 2, 1);
+    state.tm[0].flags = 1; // increment along rows
+    state.t[0][tile_index(0, 0)] = 0x5a;
+    state.t[0][tile_index(0, 1)] = 0xa5;
+
+    const auto result = run.sim.step();
+    check_eq(result.status, StepStatus::load_fault, "mid-row load faults");
+    check_eq(hex(*result.fault_address), hex(MEM_END), "fault address");
+    check_eq(state.t[0][tile_index(0, 0)], std::uint8_t{0x5a},
+             "staged row elements are discarded on fault");
+    check_eq(state.t[0][tile_index(0, 1)], std::uint8_t{0xa5},
+             "staged row elements are discarded on fault");
+    check_eq(hex(state.tm[0].base_addr), hex(MEM_END - 1),
+             "fault leaves base_addr unincremented");
+  }
+  {
+    MblkRun run(make_mrow(false, false, 5, 0, 0)); // tstore.row t0[0]
+    auto &state = run.sim.state();
+    config_tile_2x2(state, 0);
+    stride_desc(state.tm[0], MEM_END - 1, 2, 1);
+    state.tm[0].flags = 1;
+    state.t[0][tile_index(0, 0)] = 0x11;
+    state.t[0][tile_index(0, 1)] = 0x22;
+    poke(run.memory, MEM_END - 1, {0xee});
+
+    const auto result = run.sim.step();
+    check_eq(result.status, StepStatus::store_fault, "mid-row store faults");
+    check_eq(hex(*result.fault_address), hex(MEM_END), "fault address");
+    const auto byte = peek<1>(run.memory, MEM_END - 1);
+    check_eq(byte[0], std::uint8_t{0xee},
+             "range probe prevents partial memory writes");
+    check_eq(hex(state.tm[0].base_addr), hex(MEM_END - 1),
+             "fault leaves base_addr unincremented");
+  }
+}
+
+TEST_CASE(mblk_vector_faults_leave_state_unchanged) {
+  // vload/vstore with increment enabled: lane 1 at MEM_END faults.
+  {
+    MblkRun run(block(NpuDomain::vec32, 0, 0)); // vload v0
+    auto &state = run.sim.state();
+    state.vc[0].dtype = DType::u32;
+    state.vc[0].len = 2;
+    state.vm[0].base_addr = MEM_END - 4;
+    state.vm[0].stride_bytes = 4;
+    state.vm[0].flags = 1;
+    state.v[0][0] = 0xdeadbeefu;
+    state.v[0][1] = 0xcafebabeu;
+
+    const auto result = run.sim.step();
+    check_eq(result.status, StepStatus::load_fault, "mid-vector load faults");
+    check_eq(hex(*result.fault_address), hex(MEM_END), "fault address");
+    check_eq(hex(state.v[0][0]), hex(0xdeadbeefu),
+             "staged lanes are discarded on fault");
+    check_eq(hex(state.v[0][1]), hex(0xcafebabeu),
+             "staged lanes are discarded on fault");
+    check_eq(hex(state.vm[0].base_addr), hex(MEM_END - 4),
+             "fault leaves base_addr unincremented");
+  }
+  {
+    MblkRun run(block(NpuDomain::vec32, 1, 0)); // vstore v0
+    auto &state = run.sim.state();
+    state.vc[0].dtype = DType::u32;
+    state.vc[0].len = 2;
+    state.vm[0].base_addr = MEM_END - 4;
+    state.vm[0].stride_bytes = 4;
+    state.vm[0].flags = 1;
+    state.v[0][0] = 0x11223344u;
+    state.v[0][1] = 0x55667788u;
+    poke(run.memory, MEM_END - 4, {0xee, 0xee, 0xee, 0xee});
+
+    const auto result = run.sim.step();
+    check_eq(result.status, StepStatus::store_fault, "mid-vector store faults");
+    check_eq(hex(*result.fault_address), hex(MEM_END), "fault address");
+    const auto bytes = peek<4>(run.memory, MEM_END - 4);
+    const std::array<std::uint8_t, 4> old{0xee, 0xee, 0xee, 0xee};
+    check(bytes == old, "range probe prevents partial memory writes");
+    check_eq(hex(state.vm[0].base_addr), hex(MEM_END - 4),
+             "fault leaves base_addr unincremented");
+  }
+}
+
+TEST_CASE(mblk_gather_faults_leave_state_unchanged) {
+  // tload.gather: gaddr(0, 1) = MEM_END faults; the short index vector would
+  // zero-fill row 1 on success, so a fault also proves no fill ran.
+  {
+    MblkRun run(block(NpuDomain::tile, 2, 0, 2)); // tload.gather t0, v2
+    auto &state = run.sim.state();
+    config_tile_2x2(state, 0);
+    stride_desc(state.tm[0], MEM_END - 1, 1, 2);
+    state.v[2][0] = 0;
+    state.vc[2].len = 1;
+    state.t[0][tile_index(0, 0)] = 0x11;
+    state.t[0][tile_index(0, 1)] = 0x22;
+    state.t[0][tile_index(1, 0)] = 0x33;
+    state.t[0][tile_index(1, 1)] = 0x44;
+
+    const auto result = run.sim.step();
+    check_eq(result.status, StepStatus::load_fault, "mid-gather load faults");
+    check_eq(hex(*result.fault_address), hex(MEM_END), "fault address");
+    check_eq(state.t[0][tile_index(0, 0)], std::uint8_t{0x11},
+             "staged elements are discarded on fault");
+    check_eq(state.t[0][tile_index(0, 1)], std::uint8_t{0x22},
+             "staged elements are discarded on fault");
+    check_eq(state.t[0][tile_index(1, 0)], std::uint8_t{0x33},
+             "fault runs no zero-fill");
+    check_eq(state.t[0][tile_index(1, 1)], std::uint8_t{0x44},
+             "fault runs no zero-fill");
+  }
+  {
+    MblkRun run(block(NpuDomain::vec32, 2, 3, 2)); // vload.gather v3, v2
+    auto &state = run.sim.state();
+    state.vc[3].dtype = DType::i32;
+    state.vc[3].len = 2;
+    state.vm[3].base_addr = MEM_END - 4;
+    state.vm[3].stride_bytes = 4;
+    state.v[2][0] = 1; // lane 0 gathers at MEM_END
+    state.vc[2].len = 1;
+    state.v[3][0] = 0xdeadbeefu;
+    state.v[3][1] = 0xcafebabeu;
+
+    const auto result = run.sim.step();
+    check_eq(result.status, StepStatus::load_fault,
+             "mid-vector-gather load faults");
+    check_eq(hex(*result.fault_address), hex(MEM_END), "fault address");
+    check_eq(hex(state.v[3][0]), hex(0xdeadbeefu),
+             "staged lanes are discarded on fault");
+    check_eq(hex(state.v[3][1]), hex(0xcafebabeu), "fault runs no zero-fill");
+  }
+}
+
+TEST_CASE(mblk_gather_aliased_index_vector) {
+  // vload.gather v2, v2: all addresses come from the index vector's old
+  // values even though the destination overwrites it.
+  MblkRun run(block(NpuDomain::vec32, 2, 2, 2)); // vload.gather v2, v2
+  auto &state = run.sim.state();
+  state.vc[2].dtype = DType::i32;
+  state.vc[2].len = 2;
+  state.vm[2].base_addr = DATA;
+  state.vm[2].stride_bytes = 4;
+  state.v[2][0] = 1;
+  state.v[2][1] = 2;
+  // u32 table {100, 200, 300}, little-endian.
+  poke(run.memory, DATA, {100, 0, 0, 0, 200, 0, 0, 0, 0x2c, 0x01, 0, 0});
+
+  check_eq(run.sim.step().status, StepStatus::retired,
+           "aliased vload.gather retires");
+  check_eq(hex(state.v[2][0]), hex(0x0c8u), "lane 0 = table[old v2[0]]");
+  check_eq(hex(state.v[2][1]), hex(0x12cu), "lane 1 = table[old v2[1]]");
+}
