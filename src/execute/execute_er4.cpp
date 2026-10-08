@@ -42,6 +42,21 @@ bool operands_valid(const Er4Instr &instr,
   return dst.dtype == DType::f32 && configs_match(dst, arg);
 }
 
+// One E_R4 element on raw storage bits. fmadd is f32-only by validation:
+// one fused multiply-add, one rounding.
+template <typename E>
+E apply_er4_op(Er4Op op, E arg, E lhs, E rhs) {
+  if (op == Er4Op::select) {
+    return arg != 0 ? lhs : rhs;
+  }
+  if constexpr (sizeof(E) == sizeof(float)) {
+    return std::bit_cast<E>(std::fma(std::bit_cast<float>(lhs),
+                                     std::bit_cast<float>(rhs),
+                                     std::bit_cast<float>(arg)));
+  }
+  unreachable("fmadd on an 8-bit domain");
+}
+
 template <typename Element, typename Config, std::size_t RegCount>
 ExecuteResult
 er4_matrix(const Er4Instr &instr,
@@ -64,18 +79,8 @@ er4_matrix(const Er4Instr &instr,
   const auto rhs = view(instr.src2.index);
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
-      if (instr.op == Er4Op::select) {
-        dst.at(row, col) =
-            arg.at(row, col) != 0 ? lhs.at(row, col) : rhs.at(row, col);
-      } else if constexpr (sizeof(Element) == sizeof(float)) {
-        // f32-only by validation; one fused multiply-add, one rounding.
-        dst.at(row, col) = std::bit_cast<Element>(
-            std::fma(std::bit_cast<float>(lhs.at(row, col)),
-                     std::bit_cast<float>(rhs.at(row, col)),
-                     std::bit_cast<float>(arg.at(row, col))));
-      } else {
-        unreachable("fmadd on an 8-bit domain");
-      }
+      dst.at(row, col) = apply_er4_op(instr.op, arg.at(row, col),
+                                      lhs.at(row, col), rhs.at(row, col));
     }
   }
   return {.status = StepStatus::retired};
@@ -96,17 +101,8 @@ er4_vector(const Er4Instr &instr,
   const auto &lhs_reg = regs[instr.src1.index];
   const auto &rhs_reg = regs[instr.src2.index];
   for (std::size_t lane = 0; lane < dst_config.len; ++lane) {
-    if (instr.op == Er4Op::select) {
-      dst_reg[lane] = arg_reg[lane] != 0 ? lhs_reg[lane] : rhs_reg[lane];
-    } else if constexpr (sizeof(Element) == sizeof(float)) {
-      // f32-only by validation; one fused multiply-add, one rounding.
-      dst_reg[lane] =
-          std::bit_cast<Element>(std::fma(std::bit_cast<float>(lhs_reg[lane]),
-                                          std::bit_cast<float>(rhs_reg[lane]),
-                                          std::bit_cast<float>(arg_reg[lane])));
-    } else {
-      unreachable("fmadd on an 8-bit domain");
-    }
+    dst_reg[lane] = apply_er4_op(instr.op, arg_reg[lane], lhs_reg[lane],
+                                 rhs_reg[lane]);
   }
   return {.status = StepStatus::retired};
 }
