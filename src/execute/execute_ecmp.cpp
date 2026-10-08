@@ -1,6 +1,7 @@
 #include "execute.h"
 
 #include "config_check.h"
+#include "operand.h"
 #include "tile_npu/matrix_view.h"
 #include "utils/overloaded.h"
 #include "utils/unreachable.h"
@@ -68,23 +69,23 @@ constexpr std::uint32_t mask_word(bool holds) {
   return holds ? 0xffffffffu : 0u;
 }
 
-// decode_scalar(xS, u32) keeps the low 32 bits of xS.
-std::uint32_t scalar_operand(const State &state, ScalarRegister reg) {
-  return static_cast<std::uint32_t>(state.scalar.read_x(reg.index));
-}
-
+// The full E_CMP operand constraint: a u32 destination mask shaped like the
+// first source, an op-legal source dtype, and a register second source
+// matching the first (a scalar src2 has no config to check).
 template <typename Config, std::size_t RegCount>
-bool sources_valid(const CmpInstr &instr,
-                   const std::array<Config, RegCount> &configs) {
-  const auto &lhs_config = configs[instr.src1.index];
-  if (!valid_domain_config(lhs_config) ||
-      !op_supports_dtype(instr.op, lhs_config.dtype)) {
+bool operands_valid(const CmpInstr &instr,
+                    const std::array<Config, RegCount> &configs) {
+  const auto &dst = configs[instr.dest.index];
+  const auto &lhs = configs[instr.src1.index];
+  if (!valid_domain_config(dst) || !mask_matches(dst, lhs) ||
+      !valid_domain_config(lhs) ||
+      !op_supports_dtype(instr.op, lhs.dtype)) {
     return false;
   }
   return std::visit(Overloaded{[&](NpuRegister rhs) {
                                  const auto &rhs_config = configs[rhs.index];
                                  return valid_domain_config(rhs_config) &&
-                                        configs_match(lhs_config, rhs_config);
+                                        configs_match(lhs, rhs_config);
                                },
                                [](ScalarRegister) { return true; }},
                     instr.src2);
@@ -95,13 +96,8 @@ bool sources_valid(const CmpInstr &instr,
 template <typename RightAt>
 ExecuteResult run_cmp_acc(const CmpInstr &instr, State &state,
                           RightAt right_at) {
-  const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   const auto &dst_config = state.ac[instr.dest.index];
   const auto &lhs_config = state.ac[instr.src1.index];
-  if (!valid_domain_config(dst_config) ||
-      !mask_matches(dst_config, lhs_config)) {
-    return fail;
-  }
   MatrixView<std::uint32_t> dst(std::span(state.a[instr.dest.index]),
                                 dst_config.rows, dst_config.cols,
                                 dst_config.layout);
@@ -119,40 +115,21 @@ ExecuteResult run_cmp_acc(const CmpInstr &instr, State &state,
 
 // An unsuccessful execution leaves architectural state unchanged.
 ExecuteResult cmp_acc(const CmpInstr &instr, State &state) {
-  if (!sources_valid(instr, state.ac)) {
+  if (!operands_valid(instr, state.ac)) {
     return {.status = StepStatus::invalid_configuration};
   }
-  return std::visit(
-      Overloaded{[&](NpuRegister rhs) {
-                   const auto &rhs_config = state.ac[rhs.index];
-                   MatrixView<const std::uint32_t> right(
-                       std::span<const std::uint32_t>(state.a[rhs.index]),
-                       rhs_config.rows, rhs_config.cols, rhs_config.layout);
-                   return run_cmp_acc(instr, state,
-                                      [&](std::size_t row, std::size_t col) {
-                                        return right.at(row, col);
-                                      });
-                 },
-                 [&](ScalarRegister reg) {
-                   const auto value = scalar_operand(state, reg);
-                   return run_cmp_acc(
-                       instr, state,
-                       [value](std::size_t, std::size_t) { return value; });
-                 }},
-      instr.src2);
+  return with_src2_matrix(instr.src2, state, state.a, state.ac,
+                          [&](auto right_at) {
+                            return run_cmp_acc(instr, state, right_at);
+                          });
 }
 
-// Vec32: same constraints, flat lane loop over the effective length.
+// Vec32: the flat lane-loop form over the effective length.
 template <typename RightAt>
 ExecuteResult run_cmp_vec32(const CmpInstr &instr, State &state,
                             RightAt right_at) {
-  const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   const auto &dst_config = state.vc[instr.dest.index];
   const auto &lhs_config = state.vc[instr.src1.index];
-  if (!valid_domain_config(dst_config) ||
-      !mask_matches(dst_config, lhs_config)) {
-    return fail;
-  }
   auto &dst_reg = state.v[instr.dest.index];
   const auto &lhs_reg = state.v[instr.src1.index];
   for (std::size_t lane = 0; lane < dst_config.len; ++lane) {
@@ -163,22 +140,12 @@ ExecuteResult run_cmp_vec32(const CmpInstr &instr, State &state,
 }
 
 ExecuteResult cmp_vec32(const CmpInstr &instr, State &state) {
-  if (!sources_valid(instr, state.vc)) {
+  if (!operands_valid(instr, state.vc)) {
     return {.status = StepStatus::invalid_configuration};
   }
-  return std::visit(
-      Overloaded{[&](NpuRegister rhs) {
-                   const auto &rhs_reg = state.v[rhs.index];
-                   return run_cmp_vec32(instr, state, [&](std::size_t lane) {
-                     return rhs_reg[lane];
-                   });
-                 },
-                 [&](ScalarRegister reg) {
-                   const auto value = scalar_operand(state, reg);
-                   return run_cmp_vec32(instr, state,
-                                        [value](std::size_t) { return value; });
-                 }},
-      instr.src2);
+  return with_src2_vector(instr.src2, state, state.v, [&](auto right_at) {
+    return run_cmp_vec32(instr, state, right_at);
+  });
 }
 
 } // namespace

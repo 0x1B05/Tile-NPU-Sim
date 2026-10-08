@@ -2,6 +2,7 @@
 
 #include "config_check.h"
 #include "ebin_op.h"
+#include "operand.h"
 #include "tile_npu/matrix_view.h"
 #include "utils/overloaded.h"
 #include "utils/unreachable.h"
@@ -13,12 +14,6 @@
 
 namespace tile_npu {
 namespace {
-
-// decode_scalar(xS, TYPE) keeps the low element-width bits of xS.
-template <typename Element>
-Element scalar_operand(const State &state, ScalarRegister reg) {
-  return static_cast<Element>(state.scalar.read_x(reg.index));
-}
 
 template <typename Config, std::size_t RegCount>
 bool operands_valid(const EbinInstr &instr,
@@ -73,24 +68,10 @@ ExecuteResult elementwise_matrix(
   if (!operands_valid(instr, configs)) {
     return {.status = StepStatus::invalid_configuration};
   }
-  return std::visit(
-      Overloaded{[&](NpuRegister rhs) {
-                   const auto &rhs_config = configs[rhs.index];
-                   MatrixView<const Element> right(
-                       std::span<const Element>(regs[rhs.index]),
-                       rhs_config.rows, rhs_config.cols, rhs_config.layout);
-                   return run_matrix(instr, regs, configs,
-                                     [&](std::size_t row, std::size_t col) {
-                                       return right.at(row, col);
-                                     });
-                 },
-                 [&](ScalarRegister reg) {
-                   const auto value = scalar_operand<Element>(state, reg);
-                   return run_matrix(
-                       instr, regs, configs,
-                       [value](std::size_t, std::size_t) { return value; });
-                 }},
-      instr.src2);
+  return with_src2_matrix(instr.src2, state, regs, configs,
+                          [&](auto right_at) {
+                            return run_matrix(instr, regs, configs, right_at);
+                          });
 }
 
 // Vec32: same constraints, flat lane loop over the effective length.
@@ -119,19 +100,9 @@ ExecuteResult elementwise_vector(
   if (!operands_valid(instr, configs)) {
     return {.status = StepStatus::invalid_configuration};
   }
-  return std::visit(
-      Overloaded{[&](NpuRegister rhs) {
-                   const auto &rhs_reg = regs[rhs.index];
-                   return run_vector(
-                       instr, regs, configs,
-                       [&](std::size_t lane) { return rhs_reg[lane]; });
-                 },
-                 [&](ScalarRegister reg) {
-                   const auto value = scalar_operand<Element>(state, reg);
-                   return run_vector(instr, regs, configs,
-                                     [value](std::size_t) { return value; });
-                 }},
-      instr.src2);
+  return with_src2_vector(instr.src2, state, regs, [&](auto right_at) {
+    return run_vector(instr, regs, configs, right_at);
+  });
 }
 
 } // namespace
