@@ -6,10 +6,12 @@
 #include "utils/endian.h"
 #include "utils/unreachable.h"
 
+#include <algorithm>
 #include <array>
 #include <bit>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 
 namespace tile_npu {
@@ -50,9 +52,75 @@ bool transform_legal(const MblkInstr &instr, const MatrixDescriptor &desc) {
 }
 
 // Every access runs in two phases: all addresses are computed first, then
-// the transfer happens. Address overflow is a property of the descriptor
-// and shape alone, so it reports deterministically as a config error before
-// any element is touched.
+// the transfer happens. Address overflow is a property of the descriptor and
+// shape alone, so it reports deterministically as a config error before any
+// element is touched.
+template <std::size_t Max, typename Next>
+std::optional<std::array<std::uint64_t, Max>> fill_addresses(std::size_t count,
+                                                             Next next) {
+  std::array<std::uint64_t, Max> addrs{};
+  for (std::size_t n = 0; n < count; ++n) {
+    const auto addr = next(n);
+    if (!addr) {
+      return std::nullopt;
+    }
+    addrs[n] = *addr;
+  }
+  return addrs;
+}
+
+// A load stages a copy of the destination register and commits it only after
+// the last element arrived, so a mid-transfer fault leaves architectural
+// state unchanged.
+template <typename Reg, typename At>
+ExecuteResult staged_load(const Memory &memory, Reg &reg,
+                          std::span<const std::uint64_t> addrs, At at) {
+  auto staging = reg;
+  for (std::size_t n = 0; n < addrs.size(); ++n) {
+    if (!load_element(memory, addrs[n], at(staging, n))) {
+      return access_fault(StepStatus::load_fault, addrs[n]);
+    }
+  }
+  reg = staging;
+  return {.status = StepStatus::retired};
+}
+
+// A store reads the source register in place; the whole range is probed
+// before the first write, so a faulting store leaves architectural state
+// unchanged.
+template <typename Reg, typename At>
+ExecuteResult probed_store(Memory &memory, const Reg &reg,
+                           std::span<const std::uint64_t> addrs, At at) {
+  using Element = typename Reg::value_type;
+  for (const auto addr : addrs) {
+    if (!memory.contains(addr, sizeof(Element))) {
+      return access_fault(StepStatus::store_fault, addr);
+    }
+  }
+  for (std::size_t n = 0; n < addrs.size(); ++n) {
+    if (!store_element(memory, addrs[n], at(reg, n))) {
+      unreachable("store failed after the range probe passed");
+    }
+  }
+  return {.status = StepStatus::retired};
+}
+
+// The element accessor for a matrix transfer: position n is the logical
+// coordinate (n / cols, n % cols), read through the canonical-layout view.
+auto matrix_at(std::size_t rows, std::size_t cols) {
+  return [rows, cols](auto &storage, std::size_t n) -> decltype(auto) {
+    MatrixView view{std::span(storage), rows, cols, 0};
+    return view.at(n / cols, n % cols);
+  };
+}
+
+// The element accessor for a vector transfer: position n is lane n.
+auto vector_at() {
+  return [](auto &storage, std::size_t n) -> decltype(auto) {
+    return storage[n];
+  };
+}
+
 template <typename Element, typename Config, std::size_t RegCount>
 ExecuteResult
 block_access(const MblkInstr &instr, ExecContext &ctx,
@@ -73,56 +141,30 @@ block_access(const MblkInstr &instr, ExecContext &ctx,
     return config_error();
   }
 
+  // A transpose load swaps the coordinates handed to the descriptor.
   const bool transpose = desc.descriptor().transform != 0;
-  std::array<std::uint64_t, MATRIX_ELEMENTS> addrs{};
-  {
-    std::size_t n = 0;
-    for (std::size_t i = 0; i < rows; ++i) {
-      for (std::size_t j = 0; j < cols; ++j) {
-        const auto addr = transpose ? desc.address(j, i) : desc.address(i, j);
-        if (!addr) {
-          return config_error();
-        }
-        addrs[n++] = *addr;
-      }
-    }
+  const auto addrs = fill_addresses<MATRIX_ELEMENTS>(
+      rows * cols, [&](std::size_t n) {
+        return transpose ? desc.address(n % cols, n / cols)
+                         : desc.address(n / cols, n % cols);
+      });
+  if (!addrs) {
+    return config_error();
   }
 
-  // Loads stage into a copy of the register and stores probe the whole
-  // range before writing, so a mid-transfer fault leaves state unchanged.
-  const bool load = instr.op == MblkOp::load;
-  auto staging = regs[accessed_reg(instr).index];
-  MatrixView<Element> view(std::span<Element>(staging), rows, cols, 0);
-  if (load) {
-    std::size_t n = 0;
-    for (std::size_t i = 0; i < rows; ++i) {
-      for (std::size_t j = 0; j < cols; ++j) {
-        const auto addr = addrs[n++];
-        if (!load_element(ctx.memory, addr, view.at(i, j))) {
-          return access_fault(StepStatus::load_fault, addr);
-        }
-      }
-    }
-    regs[accessed_reg(instr).index] = staging;
-  } else {
-    for (std::size_t n = 0; n < rows * cols; ++n) {
-      if (!ctx.memory.contains(addrs[n], sizeof(Element))) {
-        return access_fault(StepStatus::store_fault, addrs[n]);
-      }
-    }
-    std::size_t n = 0;
-    for (std::size_t i = 0; i < rows; ++i) {
-      for (std::size_t j = 0; j < cols; ++j) {
-        if (!store_element(ctx.memory, addrs[n++], view.at(i, j))) {
-          unreachable("store failed after the range probe passed");
-        }
-      }
-    }
+  auto &reg = regs[accessed_reg(instr).index];
+  const std::span<const std::uint64_t> range(addrs->data(), rows * cols);
+  const auto at = matrix_at(rows, cols);
+  const auto result = is_store_form(instr.op)
+                          ? probed_store(ctx.memory, reg, range, at)
+                          : staged_load(ctx.memory, reg, range, at);
+  if (result.status != StepStatus::retired) {
+    return result;
   }
   if (!desc.post_increment(rows, cols)) {
     unreachable("increment failed after the pre-validation passed");
   }
-  return {.status = StepStatus::retired};
+  return result;
 }
 
 template <typename Element, typename Config, std::size_t RegCount>
@@ -151,41 +193,31 @@ row_access(const MblkInstr &instr, ExecContext &ctx,
     return config_error();
   }
 
-  std::array<std::uint64_t, MATRIX_EXTENT> addrs{};
-  for (std::size_t j = 0; j < cols; ++j) {
-    const auto addr = desc.address(0, j);
-    if (!addr) {
-      return config_error();
-    }
-    addrs[j] = *addr;
+  const auto addrs = fill_addresses<MATRIX_EXTENT>(
+      cols, [&](std::size_t j) { return desc.address(0, j); });
+  if (!addrs) {
+    return config_error();
   }
 
-  const bool load = instr.op == MblkOp::row_load;
-  auto staging = regs[accessed_reg(instr).index];
-  MatrixView<Element> view(std::span<Element>(staging), config.rows, cols, 0);
-  if (load) {
-    for (std::size_t j = 0; j < cols; ++j) {
-      if (!load_element(ctx.memory, addrs[j], view.at(row, j))) {
-        return access_fault(StepStatus::load_fault, addrs[j]);
-      }
-    }
-    regs[accessed_reg(instr).index] = staging;
-  } else {
-    for (std::size_t j = 0; j < cols; ++j) {
-      if (!ctx.memory.contains(addrs[j], sizeof(Element))) {
-        return access_fault(StepStatus::store_fault, addrs[j]);
-      }
-    }
-    for (std::size_t j = 0; j < cols; ++j) {
-      if (!store_element(ctx.memory, addrs[j], view.at(row, j))) {
-        unreachable("store failed after the range probe passed");
-      }
-    }
+  auto &reg = regs[accessed_reg(instr).index];
+  const std::span<const std::uint64_t> range(addrs->data(), cols);
+  // The view spans the whole matrix; only row `row` is transferred.
+  const auto view_rows = std::size_t{config.rows};
+  const auto at = [view_rows, cols, row](auto &storage,
+                                         std::size_t n) -> decltype(auto) {
+    MatrixView view{std::span(storage), view_rows, cols, 0};
+    return view.at(row, n);
+  };
+  const auto result = is_store_form(instr.op)
+                          ? probed_store(ctx.memory, reg, range, at)
+                          : staged_load(ctx.memory, reg, range, at);
+  if (result.status != StepStatus::retired) {
+    return result;
   }
   if (!desc.post_increment(1, cols)) {
     unreachable("increment failed after the pre-validation passed");
   }
-  return {.status = StepStatus::retired};
+  return result;
 }
 
 // tload.gather: row i is indexed by vS[i] (an i32 lane value) times
@@ -211,17 +243,16 @@ ExecuteResult gather_tile(const MblkInstr &instr, ExecContext &ctx,
 
   const auto rows = std::size_t{config.rows};
   const auto cols = std::size_t{config.cols};
+  const auto indexed_rows = std::min(rows, std::size_t{index_config.len});
   const auto &index_reg = ctx.state.v[instr.gather_src];
   const auto &descriptor = desc.descriptor();
   std::array<std::uint64_t, MATRIX_ELEMENTS> addrs{};
-  for (std::size_t i = 0; i < rows; ++i) {
-    if (i >= index_config.len) {
-      continue; // zero-filled rows have no addresses
-    }
+  for (std::size_t i = 0; i < indexed_rows; ++i) {
     const auto element = std::bit_cast<std::int32_t>(index_reg[i]);
-    const auto row_base = detail::add_signed_offset(
-        descriptor.base_addr,
-        std::int64_t{element} * descriptor.col_stride_bytes);
+    const auto row_base =
+        detail::add_signed_offset(descriptor.base_addr,
+                                  std::int64_t{element} *
+                                      descriptor.col_stride_bytes);
     if (!row_base) {
       return config_error();
     }
@@ -236,22 +267,20 @@ ExecuteResult gather_tile(const MblkInstr &instr, ExecContext &ctx,
     }
   }
 
-  auto staging = regs[accessed_reg(instr).index];
-  MatrixView<std::uint8_t> view(std::span<std::uint8_t>(staging), rows, cols,
-                                0);
-  for (std::size_t i = 0; i < rows; ++i) {
+  auto &reg = regs[accessed_reg(instr).index];
+  const std::span<const std::uint64_t> range(addrs.data(),
+                                             indexed_rows * cols);
+  const auto result =
+      staged_load(ctx.memory, reg, range, matrix_at(rows, cols));
+  if (result.status != StepStatus::retired) {
+    return result;
+  }
+  MatrixView<std::uint8_t> dst(std::span<std::uint8_t>(reg), rows, cols, 0);
+  for (std::size_t i = indexed_rows; i < rows; ++i) {
     for (std::size_t j = 0; j < cols; ++j) {
-      if (i >= index_config.len) {
-        view.at(i, j) = 0;
-        continue;
-      }
-      const auto addr = addrs[i * cols + j];
-      if (!load_element(ctx.memory, addr, view.at(i, j))) {
-        return access_fault(StepStatus::load_fault, addr);
-      }
+      dst.at(i, j) = 0;
     }
   }
-  regs[accessed_reg(instr).index] = staging;
   return {.status = StepStatus::retired};
 }
 
@@ -270,6 +299,7 @@ vector_access(const MblkInstr &instr, ExecContext &ctx,
     return config_error();
   }
   const auto len = std::size_t{config.len};
+  auto &reg = regs[accessed_reg(instr).index];
 
   // {b,v}load.gather: lane j is indexed by vS[j] times stride_bytes; lanes
   // beyond len(vS) are zero-filled. No descriptor increment.
@@ -278,72 +308,49 @@ vector_access(const MblkInstr &instr, ExecContext &ctx,
     if (index_config.len == 0 || index_config.len > VECTOR_LANES) {
       return config_error();
     }
+    const auto indexed = std::min(len, std::size_t{index_config.len});
     const auto &index_reg = ctx.state.v[instr.gather_src];
-    std::array<std::uint64_t, VECTOR_LANES> addrs{};
-    for (std::size_t j = 0; j < len; ++j) {
-      if (j >= index_config.len) {
-        continue; // zero-filled lanes have no addresses
-      }
-      const auto element = std::bit_cast<std::int32_t>(index_reg[j]);
-      const auto addr = detail::add_signed_offset(
-          desc.descriptor().base_addr,
-          std::int64_t{element} * desc.descriptor().stride_bytes);
-      if (!addr) {
-        return config_error();
-      }
-      addrs[j] = *addr;
+    const auto addrs =
+        fill_addresses<VECTOR_LANES>(indexed, [&](std::size_t j) {
+          const auto element = std::bit_cast<std::int32_t>(index_reg[j]);
+          return detail::add_signed_offset(
+              desc.descriptor().base_addr,
+              std::int64_t{element} * desc.descriptor().stride_bytes);
+        });
+    if (!addrs) {
+      return config_error();
     }
-    auto staging = regs[accessed_reg(instr).index];
-    for (std::size_t j = 0; j < len; ++j) {
-      if (j >= index_config.len) {
-        staging[j] = Element{0};
-        continue;
-      }
-      if (!load_element(ctx.memory, addrs[j], staging[j])) {
-        return access_fault(StepStatus::load_fault, addrs[j]);
-      }
+    const std::span<const std::uint64_t> range(addrs->data(), indexed);
+    const auto result = staged_load(ctx.memory, reg, range, vector_at());
+    if (result.status != StepStatus::retired) {
+      return result;
     }
-    regs[accessed_reg(instr).index] = staging;
+    for (std::size_t j = indexed; j < len; ++j) {
+      reg[j] = Element{0};
+    }
     return {.status = StepStatus::retired};
   }
 
   if (!desc.incremented_base(len)) {
     return config_error();
   }
-  std::array<std::uint64_t, VECTOR_LANES> addrs{};
-  for (std::size_t j = 0; j < len; ++j) {
-    const auto addr = desc.address(j);
-    if (!addr) {
-      return config_error();
-    }
-    addrs[j] = *addr;
+  const auto addrs = fill_addresses<VECTOR_LANES>(
+      len, [&](std::size_t j) { return desc.address(j); });
+  if (!addrs) {
+    return config_error();
   }
 
-  const bool load = instr.op == MblkOp::load;
-  auto staging = regs[accessed_reg(instr).index];
-  if (load) {
-    for (std::size_t j = 0; j < len; ++j) {
-      if (!load_element(ctx.memory, addrs[j], staging[j])) {
-        return access_fault(StepStatus::load_fault, addrs[j]);
-      }
-    }
-    regs[accessed_reg(instr).index] = staging;
-  } else {
-    for (std::size_t j = 0; j < len; ++j) {
-      if (!ctx.memory.contains(addrs[j], sizeof(Element))) {
-        return access_fault(StepStatus::store_fault, addrs[j]);
-      }
-    }
-    for (std::size_t j = 0; j < len; ++j) {
-      if (!store_element(ctx.memory, addrs[j], staging[j])) {
-        unreachable("store failed after the range probe passed");
-      }
-    }
+  const std::span<const std::uint64_t> range(addrs->data(), len);
+  const auto result = is_store_form(instr.op)
+                          ? probed_store(ctx.memory, reg, range, vector_at())
+                          : staged_load(ctx.memory, reg, range, vector_at());
+  if (result.status != StepStatus::retired) {
+    return result;
   }
   if (!desc.post_increment(len)) {
     unreachable("increment failed after the pre-validation passed");
   }
-  return {.status = StepStatus::retired};
+  return result;
 }
 
 } // namespace

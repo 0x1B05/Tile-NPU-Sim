@@ -48,4 +48,8 @@ private:
   std::uint8_t layout_;
 };
 
+template <typename Element, std::size_t N>
+MatrixView(std::span<Element, N>, std::size_t, std::size_t, std::uint8_t)
+    -> MatrixView<Element>;
+
 } // namespace tile_npu
