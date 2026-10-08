@@ -139,9 +139,9 @@ bool run_batch(const Image &image, const Options &options) {
   }
 }
 
-// Plain run for full programs: semihosting prints guest output, and an
-// ecall with a7 = 93 exits with a0 as the process exit code. A stop on any
-// other status is an error.
+// Plain run for full programs: guest output goes over the serial console,
+// and an ecall with a7 = 93 exits with a0 as the process exit code. A stop
+// on any other status is an error.
 int run_plain(const Options &options) {
   tile_npu::FlatMemory ram(MEMORY_BASE, options.memory_mib * 1024 * 1024);
   for (const auto &image : options.images) {
@@ -175,8 +175,8 @@ int main(int argc, char **argv) {
                  "       sim_run --run [-m MiB] [-s STEPS] "
                  "image.bin[@0xADDR] ...\n"
                  "  default (interactive): sdb shell on the first image\n"
-                 "  --run: plain run with semihosting (ecall a7=1 putchar, "
-                 "a7=93 exit)\n"
+                 "  --run: plain run (guest prints over the serial console, "
+                 "ecall a7=93 exits)\n"
                  "  -s STEPS: retired-instruction budget; 0 runs none, "
                  "default is unlimited\n";
     return 2;

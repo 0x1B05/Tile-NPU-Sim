@@ -24,20 +24,15 @@ struct RunOutcome {
   StopReason reason;
   // The stopping step; a step_limit stop has none.
   StepResult result{};
-  // Retired instructions so far; a semihosted ecall counts as one.
+  // Retired instructions so far.
   std::uint64_t steps = 0;
   std::uint64_t exit_code = 0;
 };
 
 // One step loop shared by batch mode, plain runs, and the sdb shell: all
-// three retire instructions, pass semihosting output through, and classify
-// the stop, while Simulator::step() itself stays a single-step API. Runs
-// until the simulator stops or the step budget is spent.
+// three retire instructions and classify the stop, while Simulator::step()
+// itself stays a single-step API. Runs until the simulator stops or the
+// step budget is spent.
 RunOutcome run(Simulator &sim, std::uint64_t step_limit);
-
-// Semihosting convention (a monitor contract, not ISA behavior): an ecall
-// with a7 = 1 prints the low byte of a0 to stdout and resumes past the
-// ecall. Returns false for any other a7, leaving the stop for the caller.
-bool semihost(Simulator &sim);
 
 } // namespace tile_npu::monitor

@@ -121,10 +121,10 @@ static char qtile_dump[1024];
 
 static void probe(const char *tag, const float *v, int n) {
   print_str(tag);
-  semihost_putc(' ');
+  serial_putc(' ');
   for (int i = 0; i < n; ++i)
     print_hex32(((const uint32_t *)v)[i]);
-  semihost_putc('\n');
+  serial_putc('\n');
 }
 
 // Head-indexed probe line "<tag><h> w0 ...": ref.py's sc_hN / pb_hN.
@@ -132,10 +132,10 @@ static void probe_head(const char *tag, uint32_t h, const uint32_t *words,
                        int n) {
   print_str(tag);
   print_u32(h);
-  semihost_putc(' ');
+  serial_putc(' ');
   for (int i = 0; i < n; ++i)
     print_hex32(words[i]);
-  semihost_putc('\n');
+  serial_putc('\n');
 }
 
 // attention() probe gate: layer 0, heads 0/1, last prompt token.

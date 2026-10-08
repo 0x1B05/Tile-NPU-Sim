@@ -15,7 +15,7 @@ int main(void) {
   if (h->magic != 0x31423351u) { // "Q3B1" little-endian
     print_str("bad blob magic: ");
     print_hex32(h->magic);
-    semihost_putc('\n');
+    serial_putc('\n');
     return 1;
   }
   forward_init();
@@ -33,9 +33,9 @@ int main(void) {
   print_str("prompt tokens: ");
   for (uint32_t i = 0; i < h->n_prompt; ++i) {
     print_u32(tokens[i]);
-    semihost_putc(' ');
+    serial_putc(' ');
   }
-  semihost_putc('\n');
+  serial_putc('\n');
 
   if (h->n_prompt > 1) forward_prefill(tokens, h->n_prompt - 1);
   uint32_t pos = h->n_prompt - 1;
@@ -45,7 +45,7 @@ int main(void) {
   print_str("generated: ");
   for (uint32_t i = 0; i < MAX_NEW_TOKENS && pos < h->max_pos; ++i) {
     print_u32(next);
-    semihost_putc(' ');
+    serial_putc(' ');
     if (next == EOS_IM_END || next == EOS_ENDOFTEXT) break;
     // skip the forward when the next iteration would not run; its result
     // would never be printed
@@ -53,6 +53,6 @@ int main(void) {
     next = forward(next, pos, 1);
     ++pos;
   }
-  semihost_putc('\n');
+  serial_putc('\n');
   return 0;
 }

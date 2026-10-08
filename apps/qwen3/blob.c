@@ -20,8 +20,8 @@ const void *blob_section(const char name[8]) {
   }
   print_str("missing blob section: ");
   for (int i = 0; i < 8 && name[i]; ++i)
-    semihost_putc(name[i]);
-  semihost_putc('\n');
+    serial_putc(name[i]);
+  serial_putc('\n');
   semihost_exit(1);
 }
 

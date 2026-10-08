@@ -1,7 +1,7 @@
 #pragma once
 
 // Qwen3 inference app for the Tile-NPU simulator: shared layout constants,
-// the Q3B1 blob format view, and semihosting I/O (monitor conventions, not
+// the Q3B1 blob format view, and console I/O (platform conventions, not
 // ISA behavior).
 //
 // Guest memory map (sim_run --run -m 2048):
@@ -38,13 +38,12 @@ struct q3b_section {
   uint32_t size;
 };
 
-// Semihosting ecalls (see src/monitor/runner.h): a7 = 1 prints a0's low
-// byte, a7 = 93 exits with a0 as the process exit code.
-static inline void semihost_putc(int c) {
-  register long a0 asm("a0") = c;
-  register long a7 asm("a7") = 1;
-  asm volatile("ecall" : "+r"(a0) : "r"(a7) : "memory");
-}
+// Console I/O (platform conventions, not ISA behavior): storing a byte at
+// the serial THR prints it on the host (see include/tile_npu/serial.h); an
+// ecall with a7 = 93 exits with a0 as the process exit code.
+#define SERIAL_THR ((volatile unsigned char *)0x10000000ull)
+
+static inline void serial_putc(int c) { *SERIAL_THR = (unsigned char)c; }
 
 static inline void semihost_exit(long code) {
   register long a0 asm("a0") = code;
@@ -55,14 +54,14 @@ static inline void semihost_exit(long code) {
 
 static inline void print_str(const char *s) {
   while (*s)
-    semihost_putc(*s++);
+    serial_putc(*s++);
 }
 
 static inline void print_u32(uint32_t v) {
   char buf[10];
   int n = 0;
   if (v == 0) {
-    semihost_putc('0');
+    serial_putc('0');
     return;
   }
   while (v) {
@@ -70,12 +69,12 @@ static inline void print_u32(uint32_t v) {
     v /= 10;
   }
   while (n)
-    semihost_putc(buf[--n]);
+    serial_putc(buf[--n]);
 }
 
 static inline void print_hex32(uint32_t v) {
   for (int shift = 28; shift >= 0; shift -= 4) {
-    semihost_putc("0123456789abcdef"[(v >> shift) & 0xf]);
+    serial_putc("0123456789abcdef"[(v >> shift) & 0xf]);
   }
-  semihost_putc(' ');
+  serial_putc(' ');
 }

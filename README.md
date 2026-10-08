@@ -9,7 +9,7 @@ and post-access base-address increments. Configuration fields are accessed
 through the shared `read_config_field` and `write_config_field` API, including
 field-number mapping and value validation.
 
-The runner loads the raw image at `0x80000000` into 128 MiB of RAM and starts execution at that address. An EBREAK with `a0 == 0` reports success; other stop conditions report failure. These are runner conventions, not ISA-defined behavior.
+The runner loads the raw image at `0x80000000` into 128 MiB of RAM and starts execution at that address. An EBREAK with `a0 == 0` reports success; other stop conditions report failure. A 16550-lite serial console is MMIO-mapped at `0x10000000`: storing a byte prints it on the host and the status register always reads ready. These are runner conventions, not ISA-defined behavior.
 
 Build and test from this directory:
 
@@ -87,9 +87,9 @@ blob, which must land at the address the guest is linked against
     build/apps/qwen3.bin model.q3b@0x81000000
 ```
 
-The default 128 MiB RAM does not fit the real blob, hence `-m 1024`. In
-`--run` mode the app prints the prompt and generated token ids over
-semihosting and stops after 32 new tokens or an EOS. Numerical alignment
+The default 128 MiB RAM does not fit the real blob, hence `-m 1024`. The app
+prints the prompt and generated token ids over the serial console and stops
+after 32 new tokens or an EOS. Numerical alignment
 probes in `forward.c` are compiled in by default; cross-compile with
 `-DQWEN3_PROBES=0` to silence them.
 
