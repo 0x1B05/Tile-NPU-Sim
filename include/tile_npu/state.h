@@ -62,6 +62,17 @@ struct VectorDescriptor {
   std::uint8_t flags = 0;
 };
 
+// Descriptor flags bit layout, shared by the write validation in config.cpp
+// and the reserved-bit checks in DescriptorView: a matrix descriptor holds
+// the post-access increment mode in the low two bits (the mode value 3 is
+// reserved), a vector descriptor a single increment-enable bit; all higher
+// bits are reserved.
+inline constexpr std::uint8_t MATRIX_INC_MODE_MASK = 0x3u;
+inline constexpr std::uint8_t MATRIX_INC_MODE_RESERVED = 0x3u;
+inline constexpr std::uint8_t MATRIX_DESC_FLAGS_MAX = 0x2u;
+inline constexpr std::uint8_t VECTOR_INC_ENABLE_MASK = 0x1u;
+inline constexpr std::uint8_t VECTOR_DESC_FLAGS_MAX = 0x1u;
+
 class ScalarState {
 public:
   std::uint64_t pc = 0;

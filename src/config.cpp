@@ -163,7 +163,7 @@ ConfigAccessError write_vector_config(Config &config, ConfigRegType reg_type, Co
 }
 
 ConfigAccessError write_matrix_descriptor(MatrixDescriptor &descriptor, ConfigField field, const ConfigFieldValue &value) {
-  if (field == ConfigField::flags)            return write_scalar(descriptor.flags, value, std::uint8_t{2});
+  if (field == ConfigField::flags)            return write_scalar(descriptor.flags, value, MATRIX_DESC_FLAGS_MAX);
   if (field == ConfigField::transform)        return write_scalar(descriptor.transform, value, std::uint8_t{1});
   if (field == ConfigField::base_addr)        return write_scalar(descriptor.base_addr, value);
   if (field == ConfigField::row_stride_bytes) return write_scalar(descriptor.row_stride_bytes, value);
@@ -172,7 +172,7 @@ ConfigAccessError write_matrix_descriptor(MatrixDescriptor &descriptor, ConfigFi
 }
 
 ConfigAccessError write_vector_descriptor(VectorDescriptor &descriptor, ConfigField field, const ConfigFieldValue &value) {
-  if (field == ConfigField::flags)        return write_scalar(descriptor.flags, value, std::uint8_t{1});
+  if (field == ConfigField::flags)        return write_scalar(descriptor.flags, value, VECTOR_DESC_FLAGS_MAX);
   if (field == ConfigField::base_addr)    return write_scalar(descriptor.base_addr, value);
   if (field == ConfigField::stride_bytes) return write_scalar(descriptor.stride_bytes, value);
   return ConfigAccessError::unsupported_field;

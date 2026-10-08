@@ -50,11 +50,13 @@ public:
   bool valid() const {
     if constexpr (std::is_same_v<Value, MatrixDescriptor>) {
       const auto flags = descriptor_->flags;
-      const auto inc_mode = static_cast<std::uint8_t>(flags & 0x3u);
-      return (flags & ~std::uint8_t{0x3u}) == 0 && inc_mode != 0x3u &&
+      const auto inc_mode =
+          static_cast<std::uint8_t>(flags & MATRIX_INC_MODE_MASK);
+      return (flags & ~MATRIX_INC_MODE_MASK) == 0 &&
+             inc_mode != MATRIX_INC_MODE_RESERVED &&
              descriptor_->transform <= 1;
     } else {
-      return (descriptor_->flags & ~std::uint8_t{0x1u}) == 0;
+      return (descriptor_->flags & ~VECTOR_INC_ENABLE_MASK) == 0;
     }
   }
 
@@ -120,7 +122,8 @@ public:
                                                 std::size_t cols) const {
     static_assert(std::is_same_v<std::remove_const_t<D>, MatrixDescriptor>);
     if (!valid()) return std::nullopt;
-    const auto mode = static_cast<std::uint8_t>(descriptor_->flags & 0x3u);
+    const auto mode =
+        static_cast<std::uint8_t>(descriptor_->flags & MATRIX_INC_MODE_MASK);
     if (mode == 0) return descriptor_->base_addr;
     const auto index = mode == 1 ? rows : cols;
     const auto stride = mode == 1 ? descriptor_->row_stride_bytes
@@ -134,7 +137,8 @@ public:
   std::optional<std::uint64_t> incremented_base(std::size_t len) const {
     static_assert(std::is_same_v<std::remove_const_t<D>, VectorDescriptor>);
     if (!valid()) return std::nullopt;
-    if ((descriptor_->flags & 0x1u) == 0) return descriptor_->base_addr;
+    if ((descriptor_->flags & VECTOR_INC_ENABLE_MASK) == 0)
+      return descriptor_->base_addr;
     return detail::add_signed_offset(descriptor_->base_addr,
                                      std::int64_t{descriptor_->stride_bytes} *
                                          static_cast<std::int64_t>(len));
