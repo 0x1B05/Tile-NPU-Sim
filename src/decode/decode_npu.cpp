@@ -6,9 +6,41 @@
 #include "tile_npu/state.h"
 
 #include <cstdint>
+#include <optional>
 
 namespace tile_npu {
 namespace {
+
+// sel3 = {dom2, ...}: the two high bits name the data domain directly.
+constexpr NpuDomain sel3_domain(std::uint8_t sel3) {
+  return static_cast<NpuDomain>(sel3 >> 1);
+}
+
+// sel3 bit 2 pairs a matrix domain with a vector domain: Tile with Vec8 (0),
+// Acc with Vec32 (1).
+struct PairedDomains {
+  NpuDomain matrix;
+  NpuDomain vector;
+};
+
+constexpr PairedDomains paired_domains(std::uint8_t sel3) {
+  return (sel3 & 0b100) != 0
+             ? PairedDomains{NpuDomain::acc, NpuDomain::vec32}
+             : PairedDomains{NpuDomain::tile, NpuDomain::vec8};
+}
+
+// The BX bit selects the second source: BX = 0 a same-domain register, BX = 1
+// the Scalar register xS. The register form fails on an out-of-range number.
+std::optional<NpuOperand> decode_bx_src2(std::uint8_t sel3, std::uint8_t src2,
+                                         NpuDomain domain) {
+  if ((sel3 & 1) != 0) {
+    return NpuOperand{ScalarRegister{src2}};
+  }
+  if (src2 >= domain_register_count(domain)) {
+    return std::nullopt;
+  }
+  return NpuOperand{NpuRegister{domain, src2}};
+}
 
 // E_BIN (R3): sel3 = {dom2, BX}; BX=0 takes src2 from the same domain, BX=1
 // from scalar xS. Unassigned funct4 values and tile mul/div are reserved;
@@ -17,7 +49,7 @@ namespace {
 // execution.
 DecodeResult decode_ebin(std::uint32_t word) {
   const auto f = encoding::NpuR3::from(word);
-  const auto domain = static_cast<NpuDomain>(f.sel3 >> 1);
+  const auto domain = sel3_domain(f.sel3);
   const auto &info = EBIN_BY_FUNCT4[f.funct4];
   if (!info || (domain == NpuDomain::tile && !info->tile_allowed)) {
     return DecodeError::illegal;
@@ -26,15 +58,12 @@ DecodeResult decode_ebin(std::uint32_t word) {
   if (f.dest >= count || f.src1 >= count) {
     return DecodeError::illegal;
   }
-  const bool scalar_src2 = (f.sel3 & 1) != 0;
-  if (!scalar_src2 && f.src2 >= count) {
+  const auto src2 = decode_bx_src2(f.sel3, f.src2, domain);
+  if (!src2) {
     return DecodeError::illegal;
   }
-  return EbinInstr{info->op,
-                   {domain, f.dest},
-                   {domain, f.src1},
-                   scalar_src2 ? NpuOperand{ScalarRegister{f.src2}}
-                               : NpuOperand{NpuRegister{domain, f.src2}}};
+  return DecodedNpuInstr{
+      EbinInstr{info->op, {domain, f.dest}, {domain, f.src1}, *src2}};
 }
 
 // E_UNARY (R2): sel3 = {dom2, 0}. dom2 = 10 (Vec8) is reserved, funct3 = 111
@@ -42,7 +71,7 @@ DecodeResult decode_ebin(std::uint32_t word) {
 // pins funct3 = 000 for tile and vec8).
 DecodeResult decode_eun(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
-  const auto domain = static_cast<NpuDomain>(f.sel3 >> 1);
+  const auto domain = sel3_domain(f.sel3);
   if (domain == NpuDomain::vec8 || f.funct3 == 0b111) {
     return DecodeError::illegal;
   }
@@ -60,7 +89,7 @@ DecodeResult decode_eun(std::uint32_t word) {
 // le/unord f32-only) fail at execution.
 DecodeResult decode_ecmp(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
-  const auto domain = static_cast<NpuDomain>(f.sel3 >> 1);
+  const auto domain = sel3_domain(f.sel3);
   const auto &info = CMP_BY_FUNCT3[f.funct3];
   if (!info) {
     return DecodeError::illegal;
@@ -69,16 +98,12 @@ DecodeResult decode_ecmp(std::uint32_t word) {
   if (f.src1 >= count || f.dest >= count) {
     return DecodeError::illegal;
   }
-  const bool scalar_src2 = (f.sel3 & 1) != 0;
-  if (!scalar_src2 && f.src2 >= count) {
+  const auto src2 = decode_bx_src2(f.sel3, f.src2, domain);
+  if (!src2) {
     return DecodeError::illegal;
   }
   return DecodedNpuInstr{
-      CmpInstr{info->op,
-               {domain, f.dest},
-               {domain, f.src1},
-               scalar_src2 ? NpuOperand{ScalarRegister{f.src2}}
-                           : NpuOperand{NpuRegister{domain, f.src2}}}};
+      CmpInstr{info->op, {domain, f.dest}, {domain, f.src1}, *src2}};
 }
 
 // E_BCAST (R3): sel3 = {TA, 0, DIR}; TA pairs Tile with Vec8 (0) or Acc with
@@ -87,22 +112,19 @@ DecodeResult decode_ecmp(std::uint32_t word) {
 // restrictions fail at execution.
 DecodeResult decode_ebcast(std::uint32_t word) {
   const auto f = encoding::NpuR3::from(word);
-  const auto matrix_domain =
-      (f.sel3 & 0b100) != 0 ? NpuDomain::acc : NpuDomain::tile;
-  const auto vector_domain =
-      (f.sel3 & 0b100) != 0 ? NpuDomain::vec32 : NpuDomain::vec8;
+  const auto domains = paired_domains(f.sel3);
   const auto &info = EBIN_BY_FUNCT4[f.funct4];
-  if (!info || (matrix_domain == NpuDomain::tile && !info->tile_allowed)) {
+  if (!info || (domains.matrix == NpuDomain::tile && !info->tile_allowed)) {
     return DecodeError::illegal;
   }
-  const auto count = domain_register_count(matrix_domain);
+  const auto count = domain_register_count(domains.matrix);
   if (f.dest >= count || f.src1 >= count) {
     return DecodeError::illegal;
   }
   return DecodedNpuInstr{BcastInstr{info->op,
-                                    {matrix_domain, f.dest},
-                                    {matrix_domain, f.src1},
-                                    {vector_domain, f.src2},
+                                    {domains.matrix, f.dest},
+                                    {domains.matrix, f.src1},
+                                    {domains.vector, f.src2},
                                     (f.sel3 & 1) != 0}};
 }
 
@@ -111,7 +133,7 @@ DecodeResult decode_ebcast(std::uint32_t word) {
 // dtype restriction on fmadd fails at execution.
 DecodeResult decode_er4(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
-  const auto domain = static_cast<NpuDomain>(f.sel3 >> 1);
+  const auto domain = sel3_domain(f.sel3);
   if (domain == NpuDomain::vec8 || f.funct3 > 0b001 ||
       (f.funct3 == 0b001 && domain == NpuDomain::tile)) {
     return DecodeError::illegal;
@@ -133,7 +155,7 @@ DecodeResult decode_er4(std::uint32_t word) {
 // restriction (codes 5-8 are f32-only) fails at execution.
 DecodeResult decode_emask(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
-  const auto domain = static_cast<NpuDomain>(f.sel3 >> 1);
+  const auto domain = sel3_domain(f.sel3);
   const bool fill_is_scalar = (f.sel3 & 1) != 0;
   const bool vector_domain =
       domain == NpuDomain::vec8 || domain == NpuDomain::vec32;
@@ -161,15 +183,13 @@ DecodeResult decode_emask(std::uint32_t word) {
 // preconditions fail at execution.
 DecodeResult decode_cvt(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
-  const auto domain = static_cast<NpuDomain>(f.sel3 >> 1);
-  if (f.funct3 == 0b001 && domain != NpuDomain::acc) {
-    return DecodeError::illegal;
-  }
+  const auto domain = sel3_domain(f.sel3);
   const auto count = domain_register_count(domain);
   if (f.dest >= count) {
     return DecodeError::illegal;
   }
   if (f.funct3 == 0b001) {
+    // The twiden pattern pins sel3 = 010, so the destination is an Acc.
     if (f.src2 >= TILE_REGISTERS) {
       return DecodeError::illegal;
     }
@@ -184,12 +204,12 @@ DecodeResult decode_cvt(std::uint32_t word) {
 }
 
 // AREDUCE (R2): reserved3/reserved10 are pinned by the pattern; S5 is the
-// Acc source, D5 the Vec32 destination. funct3 >= 110 is reserved. The f32
-// dtype and length constraints fail at execution.
+// Acc source, D5 the Vec32 destination (any 5-bit number is a valid Vec32
+// register). funct3 >= 110 is reserved. The f32 dtype and length constraints
+// fail at execution.
 DecodeResult decode_areduce(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
-  if (f.funct3 > 0b101 || f.src2 >= ACC_REGISTERS ||
-      f.dest >= VECTOR_REGISTERS) {
+  if (f.funct3 > 0b101 || f.src2 >= ACC_REGISTERS) {
     return DecodeError::illegal;
   }
   return DecodedNpuInstr{
@@ -199,13 +219,11 @@ DecodeResult decode_areduce(std::uint32_t word) {
                   {NpuDomain::acc, f.src2}}};
 }
 
-// VREDUCE sum/max/min/sumsq (R2): D5 is the Scalar destination, S5 the
-// Vec32 source. The f32 dtype constraint fails at execution.
+// VREDUCE sum/max/min/sumsq (R2): D5 is the Scalar destination, S5 the Vec32
+// source; any 5-bit number is a valid register on both sides. The f32 dtype
+// constraint fails at execution.
 DecodeResult decode_vreduce(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
-  if (f.src2 >= VECTOR_REGISTERS) {
-    return DecodeError::illegal;
-  }
   return DecodedNpuInstr{ReduceInstr{static_cast<ReduceOp>(f.funct3),
                                      NpuOperand{ScalarRegister{f.dest}},
                                      {},
@@ -213,12 +231,10 @@ DecodeResult decode_vreduce(std::uint32_t word) {
 }
 
 // vreduce.argmax (R4 two-destination variant): D5 = xIndex, the src2
-// position carries xVal5 (xValue); reserved5 is pinned by the pattern.
+// position carries xVal5 (xValue); reserved5 is pinned by the pattern. All
+// register fields are 5-bit Scalar/Vec32 positions, always in range.
 DecodeResult decode_vreduce_argmax(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
-  if (f.src1 >= VECTOR_REGISTERS) {
-    return DecodeError::illegal;
-  }
   return DecodedNpuInstr{ReduceInstr{ReduceOp::argmax,
                                      NpuOperand{ScalarRegister{f.dest}},
                                      NpuOperand{ScalarRegister{f.src2}},
@@ -239,7 +255,7 @@ IndexOperand decode_index(RegisterIndex raw, bool is_scalar) {
 
 DecodeResult decode_qnt(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
-  const auto domain = static_cast<NpuDomain>(f.sel3 >> 1);
+  const auto domain = sel3_domain(f.sel3);
   const bool index_is_scalar = (f.sel3 & 1) != 0;
   const bool vector_form =
       domain == NpuDomain::vec8 || domain == NpuDomain::vec32;
@@ -301,7 +317,7 @@ DecodeResult decode_sys(std::uint32_t word) {
 // register) and the patterns pin it to 0 for the block forms.
 DecodeResult decode_mblk(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
-  const auto domain = static_cast<NpuDomain>(f.sel3 >> 1);
+  const auto domain = sel3_domain(f.sel3);
   const bool gather = f.funct3 == 0b010;
   // Gather is defined for Tile/Vec8/Vec32 only.
   if (gather && domain == NpuDomain::acc) {
@@ -325,7 +341,7 @@ DecodeResult decode_mblk(std::uint32_t word) {
 // index5, IS=1 from the Scalar register index5 names.
 DecodeResult decode_mblk_row(std::uint32_t word) {
   const auto f = encoding::NpuMR::from(word);
-  const auto domain = (f.sel3 & 0b100) != 0 ? NpuDomain::acc : NpuDomain::tile;
+  const auto domain = paired_domains(f.sel3).matrix;
   if (f.reg >= domain_register_count(domain)) {
     return DecodeError::illegal;
   }
@@ -351,7 +367,7 @@ DecodeResult decode_init_fill(std::uint32_t word) {
 // ttranspose (Tile only), distinguished by funct3.
 DecodeResult decode_init_move(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
-  const auto domain = static_cast<NpuDomain>(f.sel3 >> 1);
+  const auto domain = sel3_domain(f.sel3);
   if (f.funct3 == 0b011 && domain != NpuDomain::tile) {
     return DecodeError::illegal; // ttranspose is Tile-only
   }
@@ -370,18 +386,15 @@ DecodeResult decode_init_move(std::uint32_t word) {
 // register number needs a bounds check.
 DecodeResult decode_row_move(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
-  const auto matrix_domain =
-      (f.sel3 & 0b100) != 0 ? NpuDomain::acc : NpuDomain::tile;
-  const auto vector_domain =
-      (f.sel3 & 0b100) != 0 ? NpuDomain::vec32 : NpuDomain::vec8;
+  const auto domains = paired_domains(f.sel3);
   const bool insert = f.funct3 == 0b000;
   const auto matrix_index = insert ? f.dest : f.src1;
-  if (matrix_index >= domain_register_count(matrix_domain)) {
+  if (matrix_index >= domain_register_count(domains.matrix)) {
     return DecodeError::illegal;
   }
   return DecodedNpuInstr{RowInstr{insert ? RowOp::insert : RowOp::extract,
-                                  {matrix_domain, matrix_index},
-                                  {vector_domain, insert ? f.src1 : f.dest},
+                                  {domains.matrix, matrix_index},
+                                  {domains.vector, insert ? f.src1 : f.dest},
                                   decode_index(f.src2, (f.sel3 & 1) != 0)}};
 }
 
@@ -389,8 +402,7 @@ DecodeResult decode_row_move(std::uint32_t word) {
 // sides take any 5-bit register number.
 DecodeResult decode_lane_move(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
-  const auto domain =
-      (f.sel3 & 0b100) != 0 ? NpuDomain::vec32 : NpuDomain::vec8;
+  const auto domain = paired_domains(f.sel3).vector;
   const auto op = f.funct3 == 0b000   ? LaneOp::extract
                   : f.funct3 == 0b001 ? LaneOp::insert
                                       : LaneOp::broadcast;
