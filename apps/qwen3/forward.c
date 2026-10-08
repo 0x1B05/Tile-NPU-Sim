@@ -3,8 +3,10 @@
 // Qwen3 forward pass orchestration. Architecture dims come from the blob
 // header at runtime; weight pointers are cached per layer at init.
 
-// Numeric alignment probes (fire on the last prompt token's forward pass).
-// Flip to 0 for silent runs.
+// Numeric alignment probes, fired on the last prompt token's forward pass:
+// tagged hex dumps mirrored line for line by scripts/qwen3/ref.py (the numpy
+// reference), so the host can align guest numerics against it. Flip to 0 for
+// silent runs.
 #ifndef QWEN3_PROBES
 #define QWEN3_PROBES 1
 #endif
@@ -108,6 +110,61 @@ static char *v_layer(uint32_t layer) {
   return kv_region + (layer * 2 + 1) * kv_stride;
 }
 
+// ---- numeric alignment probes ---------------------------------------------
+// All probe output goes through probe()/probe_head() under the single
+// QWEN3_PROBES switch. Fires on the last prompt token's forward pass only,
+// the pass ref.py prints.
+
+extern char *nq_debug_qtile; // kernels.S debug hook (alignment only)
+extern int32_t nq_accbuf[];  // raw i32 matvec accumulators (kernels.S)
+static char qtile_dump[1024];
+
+static void probe(const char *tag, const float *v, int n) {
+  print_str(tag);
+  semihost_putc(' ');
+  for (int i = 0; i < n; ++i)
+    print_hex32(((const uint32_t *)v)[i]);
+  semihost_putc('\n');
+}
+
+// Head-indexed probe line "<tag><h> w0 ...": ref.py's sc_hN / pb_hN.
+static void probe_head(const char *tag, uint32_t h, const uint32_t *words,
+                       int n) {
+  print_str(tag);
+  print_u32(h);
+  semihost_putc(' ');
+  for (int i = 0; i < n; ++i)
+    print_hex32(words[i]);
+  semihost_putc('\n');
+}
+
+// attention() probe gate: layer 0, heads 0/1, last prompt token.
+static int attn_probing(uint32_t layer, uint32_t h, uint32_t pos) {
+  return QWEN3_PROBES && layer == 0 && h < 2 && pos == N_PROMPT - 1;
+}
+
+// nq_quant_act with the packed-tile dump hooked around it; active only on
+// the probed pass's layer 0. The tag tells the q/k/v and the o-projection
+// quantization sites apart.
+static uint32_t quant_act(const float *x, uint32_t k, const char *tag,
+                          int active) {
+  if (active)
+    nq_debug_qtile = qtile_dump;
+  uint32_t xs = nq_quant_act(x, k);
+  if (active) {
+    nq_debug_qtile = 0;
+    probe(tag, (const float *)qtile_dump, 16);
+  }
+  return xs;
+}
+
+// PROBE sites all sit in forward(), gated on its `probing` local.
+#define PROBE(tag, v, n)                                                       \
+  do {                                                                         \
+    if (probing)                                                               \
+      probe(tag, v, n);                                                        \
+  } while (0)
+
 static uint32_t inv_n_bits(uint32_t n) {
   // n is a power of two: 1/n = 2^-ctz(n) in f32.
   uint32_t e = 0;
@@ -210,49 +267,23 @@ static void attention(uint32_t layer, uint32_t pos, const float *q,
     for (uint32_t i = n_keys; i < n_padded; ++i) {
       ((uint32_t *)scores)[i] = 0xFF800000u;
     }
-    if (QWEN3_PROBES && h < 2 && layer == 0 && pos == N_PROMPT - 1) {
-      print_str("sc_h");
-      print_u32(h);
-      semihost_putc(' ');
-      for (int i = 0; i < 6; ++i)
-        print_hex32(((uint32_t *)scores)[i]);
-      semihost_putc('\n');
-    }
+    if (attn_probing(layer, h, pos))
+      probe_head("sc_h", h, (const uint32_t *)scores, 6);
     nq_softmax_exp(scores, n_padded, SCALE_LOG2E_BITS, rcp_word);
-    if (QWEN3_PROBES && h < 2 && layer == 0 && pos == N_PROMPT - 1) {
-      print_str("pb_h");
-      print_u32(h);
-      semihost_putc(' ');
-      for (int i = 0; i < 6; ++i)
-        print_hex32(((uint32_t *)scores)[i]);
-      print_hex32(rcp_word[0]);
-      semihost_putc('\n');
+    // pb_h appends the softmax rcp as a 7th word (ref.py prints it inline)
+    if (attn_probing(layer, h, pos)) {
+      uint32_t words[7];
+      __builtin_memcpy(words, scores, 6 * sizeof(uint32_t));
+      words[6] = rcp_word[0];
+      probe_head("pb_h", h, words, 7);
     }
     nq_pv(vb, KV_DIM * 4, scores, attn + h * HD, n_keys, HD, rcp_word[0]);
   }
 }
 
-uint32_t forward(uint32_t token, uint32_t pos, int want_logits);
-
-extern char *nq_debug_qtile; // kernels.S debug hook (alignment only)
-extern int32_t nq_accbuf[];  // raw i32 matvec accumulators (kernels.S)
-static char qtile_dump[1024];
-
-static void probe(const char *tag, const float *v, int n) {
-  print_str(tag);
-  semihost_putc(' ');
-  for (int i = 0; i < n; ++i)
-    print_hex32(((const uint32_t *)v)[i]);
-  semihost_putc('\n');
-}
-#define PROBE(tag, v, n)                                                       \
-  do {                                                                         \
-    if (QWEN3_PROBES && want_logits && pos == N_PROMPT - 1) {                  \
-      probe(tag, v, n);                                                        \
-    }                                                                          \
-  } while (0)
-
 uint32_t forward(uint32_t token, uint32_t pos, int want_logits) {
+  // probes fire on the last prompt token's logits-producing pass
+  const int probing = QWEN3_PROBES && want_logits && pos == N_PROMPT - 1;
   uint32_t xs;
   nq_embed(embed, embed_s, token, x_buf, HIDDEN);
   PROBE("embed", x_buf, 4);
@@ -260,19 +291,10 @@ uint32_t forward(uint32_t token, uint32_t pos, int want_logits) {
     const void **sec = lsec[L];
     nq_rmsnorm(x_buf, sec[LS_INLN], h1, HIDDEN, EPS_BITS, inv_n_bits(HIDDEN));
     if (L == 0) PROBE("ln0", h1, 4);
-    if (QWEN3_PROBES && L == 0 && want_logits && pos == N_PROMPT - 1) {
-      nq_debug_qtile = qtile_dump;
-    }
     // q/k/v share one activation quantization; the tiles stay resident
-    xs = nq_quant_act(h1, HIDDEN);
-    if (QWEN3_PROBES && L == 0 && want_logits && pos == N_PROMPT - 1) {
-      nq_debug_qtile = 0;
-      probe("qx0", (const float *)qtile_dump, 16);
-    }
+    xs = quant_act(h1, HIDDEN, "qx0", probing && L == 0);
     nq_matvec_q(sec[LS_QW], sec[LS_QWS], q_buf, Q_DIM, HIDDEN, xs);
-    if (QWEN3_PROBES && L == 0 && want_logits && pos == N_PROMPT - 1) {
-      probe("ac0", (const float *)nq_accbuf, 8);
-    }
+    if (L == 0) PROBE("ac0", (const float *)nq_accbuf, 8);
     if (L == 0) PROBE("q0", q_buf, 4);
     nq_matvec_q(sec[LS_KW], sec[LS_KWS], k_buf, KV_DIM, HIDDEN, xs);
     nq_matvec_q(sec[LS_VW], sec[LS_VWS], v_buf, KV_DIM, HIDDEN, xs);
@@ -299,18 +321,9 @@ uint32_t forward(uint32_t token, uint32_t pos, int want_logits) {
     attention(L, pos, q_buf, attn_buf);
     if (L == 0) PROBE("attn0", attn_buf, 4);
     if (L == 0) PROBE("attn1", attn_buf + HD, 4);
-    if (QWEN3_PROBES && L == 0 && want_logits && pos == N_PROMPT - 1) {
-      nq_debug_qtile = qtile_dump;
-    }
-    xs = nq_quant_act(attn_buf, Q_DIM);
-    if (QWEN3_PROBES && L == 0 && want_logits && pos == N_PROMPT - 1) {
-      nq_debug_qtile = 0;
-      probe("qxa", (const float *)qtile_dump, 16);
-    }
+    xs = quant_act(attn_buf, Q_DIM, "qxa", probing && L == 0);
     nq_matvec_q(sec[LS_OW], sec[LS_OWS], h2, HIDDEN, Q_DIM, xs);
-    if (QWEN3_PROBES && L == 0 && want_logits && pos == N_PROMPT - 1) {
-      probe("aca", (const float *)nq_accbuf, 8);
-    }
+    if (L == 0) PROBE("aca", (const float *)nq_accbuf, 8);
     if (L == 0) PROBE("o0", h2, 4);
     nq_add(x_buf, h2, HIDDEN);
     if (L == 0) PROBE("xr0", x_buf, 4);
@@ -335,14 +348,16 @@ uint32_t forward(uint32_t token, uint32_t pos, int want_logits) {
   PROBE("lnf", h1, 4);
   xs = nq_quant_act(h1, HIDDEN);
   nq_matvec_q(embed, embed_s, logits, VOCAB, HIDDEN, xs);
+  // numeric alignment hook: ref.py prints its logits top5; the guest dumps
+  // the logits at the same fixed ids on the first logits-producing pass
   static int dumped = 0;
-  if (!dumped) { // numeric alignment hook: scripts/qwen3/ref.py top5
+  if (QWEN3_PROBES && !dumped) {
     dumped = 1;
     static const uint32_t ids[] = {7, 174, 303, 113, 133};
-    print_str("logit probe: ");
+    uint32_t words[5];
     for (int i = 0; i < 5; ++i)
-      print_hex32(((uint32_t *)logits)[ids[i]]);
-    semihost_putc('\n');
+      words[i] = ((const uint32_t *)logits)[ids[i]];
+    probe("logit probe:", (const float *)words, 5);
   }
   return nq_argmax(logits, VOCAB);
 }
