@@ -1,16 +1,13 @@
 #include "execute.h"
 
+#include "rv64_util.h"
+
 #include <bit>
 #include <cstdint>
 #include <limits>
 
 namespace tile_npu {
 namespace {
-
-std::uint64_t signed_word(std::uint32_t value) {
-  return static_cast<std::uint64_t>(
-      static_cast<std::int64_t>(std::bit_cast<std::int32_t>(value)));
-}
 
 std::uint64_t multiply_high_unsigned(std::uint64_t lhs, std::uint64_t rhs) {
   const auto a0 = lhs & 0xffffffffu;

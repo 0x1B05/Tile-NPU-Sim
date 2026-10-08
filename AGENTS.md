@@ -70,6 +70,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `src/execute/execute_init.cpp` | INIT_MOVE 族执行器: fill/fillx 按目的 dtype 截取元素位宽, copy 要求同 dtype 同有效 shape, ttranspose 先 stage 源再写回并更新目的配置行列 |
 | `src/execute/execute_row_lane.cpp` | ROW_MOVE/LANE_MOVE 执行器: 行搬运要求向量长度等于矩阵列数且行号有效, lane extract 按源 dtype 扩展, insert 截取低位, broadcast 写入目的有效 lane |
 | `src/execute/execute_rv64i.cpp`, `src/execute/execute_rv64m.cpp` | RV64I 与 M 扩展语义 |
+| `src/execute/rv64_util.h` | RV64 执行器共享的 *W 结果符号扩展 (`signed_word`) |
 | `src/simulator.cpp`, `src/memory.cpp` | 取指 (小端 4 字节拼字) 与步进循环, 内存实现 |
 | `tests/*.cpp` | 全部编入 `sim_tests` 一个测试程序; 手卷迷你框架, 见"测试约定" |
 | `tests/guest/` | guest 测试: C 程序 (共享 `crt0.S`) 与裸 `.S` (NPU 编码宏在 `npu.inc`), 经 `link.ld` 链接成扁平 bin 到 `build/guest/` |

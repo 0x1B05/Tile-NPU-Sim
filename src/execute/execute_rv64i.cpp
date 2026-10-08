@@ -1,5 +1,6 @@
 #include "execute.h"
 
+#include "rv64_util.h"
 #include "utils/endian.h"
 
 #include <array>
@@ -15,14 +16,6 @@ std::uint64_t sign_extend(std::uint64_t value, unsigned bits) {
   const auto mask = (std::uint64_t{1} << bits) - 1;
   const auto sign = std::uint64_t{1} << (bits - 1);
   return ((value & mask) ^ sign) - sign;
-}
-
-std::uint64_t signed_word(std::uint32_t value) {
-  return sign_extend(value, 32);
-}
-
-std::uint64_t signed_word(std::int32_t value) {
-  return static_cast<std::uint64_t>(static_cast<std::int64_t>(value));
 }
 
 // clang-format off
