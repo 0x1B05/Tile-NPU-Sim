@@ -214,11 +214,14 @@ void forward_init(void) {
   Q_DIM = N_Q * HD;
   KV_DIM = N_KV * HD;
   // the kernels require dims that are multiples of 32 and rope/score chunks
-  // that fit 32-lane vectors; anything else is rejected up front
+  // that fit 32-lane vectors; inv_n_bits() computes 1/n as 2^-ctz(n), exact
+  // only when n is a power of two; logits[] and the kernels.S accumulator
+  // buffer are sized 151936. Anything else is rejected up front.
   if (N_LAYERS > MAX_LAYERS || HIDDEN > 3072 || INTER > 3072 || Q_DIM > 2048 ||
-      KV_DIM > 1024 || MAX_POS > 512 || HIDDEN == 0 || INTER == 0 || N_Q == 0 ||
-      N_KV == 0 || VOCAB == 0 || HIDDEN % 32 != 0 || INTER % 32 != 0 ||
-      Q_DIM % 32 != 0 || KV_DIM % 32 != 0 || N_Q % N_KV != 0) {
+      KV_DIM > 1024 || MAX_POS > 512 || VOCAB > 151936 || HIDDEN == 0 ||
+      INTER == 0 || N_Q == 0 || N_KV == 0 || VOCAB == 0 || HIDDEN % 32 != 0 ||
+      INTER % 32 != 0 || Q_DIM % 32 != 0 || KV_DIM % 32 != 0 ||
+      VOCAB % 32 != 0 || N_Q % N_KV != 0 || (HIDDEN & (HIDDEN - 1)) != 0) {
     print_str("unsupported arch dims\n");
     semihost_exit(1);
   }
