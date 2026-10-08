@@ -2,6 +2,8 @@
 #include "runner.h"
 #include "sdb.h"
 
+#include "tile_npu/serial.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
@@ -109,8 +111,9 @@ void report_exit(const char *tag, const std::string &path,
 }
 
 bool run_batch(const Image &image, const Options &options) {
-  tile_npu::FlatMemory memory(MEMORY_BASE, options.memory_mib * 1024 * 1024);
-  if (!load_image(image, memory)) return false;
+  tile_npu::FlatMemory ram(MEMORY_BASE, options.memory_mib * 1024 * 1024);
+  if (!load_image(image, ram)) return false;
+  tile_npu::SerialMemory memory(ram, std::cout);
   tile_npu::Simulator sim(memory);
   sim.reset(MEMORY_BASE);
 
@@ -140,10 +143,11 @@ bool run_batch(const Image &image, const Options &options) {
 // ecall with a7 = 93 exits with a0 as the process exit code. A stop on any
 // other status is an error.
 int run_plain(const Options &options) {
-  tile_npu::FlatMemory memory(MEMORY_BASE, options.memory_mib * 1024 * 1024);
+  tile_npu::FlatMemory ram(MEMORY_BASE, options.memory_mib * 1024 * 1024);
   for (const auto &image : options.images) {
-    if (!load_image(image, memory)) return 1;
+    if (!load_image(image, ram)) return 1;
   }
+  tile_npu::SerialMemory memory(ram, std::cout);
   tile_npu::Simulator sim(memory);
   sim.reset(MEMORY_BASE);
 
@@ -192,8 +196,9 @@ int main(int argc, char **argv) {
     break;
   }
 
-  tile_npu::FlatMemory memory(MEMORY_BASE, options.memory_mib * 1024 * 1024);
-  if (!load_image(options.images.front(), memory)) return 1;
+  tile_npu::FlatMemory ram(MEMORY_BASE, options.memory_mib * 1024 * 1024);
+  if (!load_image(options.images.front(), ram)) return 1;
+  tile_npu::SerialMemory memory(ram, std::cout);
   tile_npu::Simulator sim(memory);
   sim.reset(MEMORY_BASE);
   std::cout << "tile-npu monitor: loaded " << options.images.front().path
