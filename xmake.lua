@@ -22,6 +22,12 @@ option("rvtests")
     set_description("Run the official riscv-tests suite (needs external/riscv-tests, see scripts/fetch_riscv_tests.sh)")
 option_end()
 
+option("qwen3test")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Run the tiny Qwen3 guest/numpy alignment test (needs python3 with numpy)")
+option_end()
+
 target("tile_npu_sim")
     set_kind("static")
     add_files("src/*.cpp", "src/decode/*.cpp", "src/execute/*.cpp")

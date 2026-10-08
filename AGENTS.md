@@ -24,6 +24,7 @@ xmake run sim_run -b a.bin b.bin       # batch 模式, 逐镜像报 PASS/FAIL
 xmake f --monitor=n && xmake           # 关闭 monitor, 只构建库
 scripts/fetch_riscv_tests.sh           # 拉取官方 riscv-tests 到 external/ (一次性)
 xmake f --rvtests=y && xmake test      # 额外跑官方 rv64ui/rv64um 套件
+xmake f --qwen3test=y && xmake test    # 额外跑 tiny Qwen3 guest/numpy 对齐回归 (需 python3+numpy)
 xmake project -k compile_commands      # 为 clangd 生成编译数据库
 ```
 
@@ -77,8 +78,8 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `tests/riscv-tests-env/riscv_test.h` | 官方 riscv-tests 的自定义最小 env: 无特权态/tohost, PASS/FAIL 走 `ebreak`/`a0` 约定 |
 | `scripts/fetch_riscv_tests.sh` | 拉取官方 riscv-tests (pinned commit) 到 `external/` (gitignored) |
 | `apps/qwen3/` | Qwen3-0.6B 推理 guest 程序 (rv64im 裸机, NPU kernel 库 + forward 编排, 末位 prompt token 上带数值对齐探针); `xmake build qwen3_app` 交叉编译, 模型 blob 由 `scripts/qwen3/` 生成 |
-| `scripts/qwen3/` | Qwen3 宿主工具: `fetch_model.sh` 下载模型权重/分词器到 `external/qwen3` (sha256 固定), `convert.py` safetensors→q8s32 模型 blob (含 `--tiny` 随机小模型), `ref.py` tiny 模型 numpy 对齐参考, `tokenizer.py` 纯 Python 分词器 |
-| `xmake/guest.lua`, `xmake/riscv_tests.lua` | 按关注点拆出的构建脚本 (guest 镜像 / 官方套件), 由根 `xmake.lua` includes; 共享汇编逻辑在 `xmake/modules/guestimg.lua` |
+| `scripts/qwen3/` | Qwen3 宿主工具: `fetch_model.sh` 下载模型权重/分词器到 `external/qwen3` (sha256 固定), `convert.py` safetensors→q8s32 模型 blob (含 `--tiny` 随机小模型), `ref.py` tiny 模型 numpy 对齐参考, `tokenizer.py` 纯 Python 分词器, `tiny_check.py` guest 输出与 ref.py 的逐探针对齐比较 (由 `--qwen3test=y` 的 xmake 测试驱动) |
+| `xmake/guest.lua`, `xmake/riscv_tests.lua`, `xmake/apps.lua` | 按关注点拆出的构建脚本 (guest 镜像 / 官方套件 / Qwen3 应用与 tiny 回归), 由根 `xmake.lua` includes; 共享汇编逻辑在 `xmake/modules/guestimg.lua` |
 | `src/monitor/monitor.cpp` | `sim_run` 主程序: 参数解析, 镜像装载, batch/plain 模式的结果解释与展示 |
 | `src/monitor/parse.h` | 命令行参数与 sdb 命令共享的数值解析 `parse_u64` (base 0, 全串消费) |
 | `src/monitor/runner.h`, `src/monitor/runner.cpp` | monitor 运行层: 统一步进循环 (步数预算, semihost 穿透) 与停止原因分类 (`StopReason`/`RunOutcome`); semihosting 约定 (a7=1 putchar / a7=93 exit) 在此实现, 属模拟器约定 |
@@ -118,6 +119,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 - guest 镜像: `tests/guest/**.c` 由 RISC-V 工具链交叉编译 (共享 `crt0.S` 起栈并调 `main`, 裸 `.S` 自带 `_start`), 链接成扁平 bin (构建产物, 不入库); `rv64im/` 下为自校验程序 (`main` 返回 0 即 PASS, 经 `ebreak`/`a0` 约定上报), 逐个注册为 `sim_run -b` 的 xmake 测试。需要 riscv64 工具链, 前缀可用 `xmake f --riscv_cross=` 改。镜像依赖挂在 `sim_tests` 上 (`sim_run` 二进制本身不需要交叉工具链); 过滤单跑 guest 测试前先 `xmake build guest_images` 或跑一遍完整 `xmake test`。
 - NPU 指令正例写 guest 镜像: `tests/guest/npu/*.S` 用 `npu.inc` 的编码宏 (字段布局与 `src/decode/encoding.h` 一一对应), host 侧 driver (`tests/npu_guest_test.cpp`) 装载镜像、设配置、逐条步进断言; "跑到停止并检查 a0" 的自校验镜像统一走 `check_guest_image()` helper (停止状态默认 `breakpoint`, `kernel.end` 见 sys 用例), 步进循环本身由 `run_until_stop()` 提供 — 超过步数预算会报告 timeout, 步数, PC 与 PC 处指令字; 非法编码负例留在 host 侧表驱动。
 - 官方套件 (可选): `xmake f --rvtests=y` 后 `riscv-tests` 的 rv64ui/rv64um 逐个注册为 `sim_run -b` 测试; `fence_i` (Zifencei) 与 `ma_data` (依赖 trap 投递) 在 xmake.lua 里显式排除。
+- tiny Qwen3 对齐回归 (可选): `xmake f --qwen3test=y` 后注册 `qwen3_tiny/forward` 测试 — `convert.py --tiny` 生成固定 seed 随机模型, `sim_run --run` 跑 guest forward, `scripts/qwen3/tiny_check.py` 与 `ref.py` 的 numpy 参考逐探针比较 (整数探针位精确, f32 探针走容差, 生成 token 精确); python3 或 numpy 不可用时打印警告并跳过注册, 不影响其余测试。
 - 外部 `.bin` 测试镜像不入库, 路径由命令行提供, 不作为构建依赖。
 
 ## 代码风格
