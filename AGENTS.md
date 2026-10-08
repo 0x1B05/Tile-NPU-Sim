@@ -80,6 +80,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `scripts/qwen3/` | Qwen3 宿主工具: `fetch_model.sh` 下载模型权重/分词器到 `external/qwen3` (sha256 固定), `convert.py` safetensors→q8s32 模型 blob (含 `--tiny` 随机小模型), `ref.py` tiny 模型 numpy 对齐参考, `tokenizer.py` 纯 Python 分词器 |
 | `xmake/guest.lua`, `xmake/riscv_tests.lua` | 按关注点拆出的构建脚本 (guest 镜像 / 官方套件), 由根 `xmake.lua` includes; 共享汇编逻辑在 `xmake/modules/guestimg.lua` |
 | `src/monitor/monitor.cpp` | `sim_run` 主程序: 参数解析, 镜像装载, batch 模式 |
+| `src/monitor/parse.h` | 命令行参数与 sdb 命令共享的数值解析 `parse_u64` (base 0, 全串消费) |
 | `src/monitor/sdb.cpp` | sdb 交互 shell: `si`/`c`/`info r`/`x`/`q`, 空行重复上一条命令 |
 
 ## 建模约定 (修改前必读)

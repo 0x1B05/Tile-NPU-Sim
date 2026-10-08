@@ -1,3 +1,4 @@
+#include "parse.h"
 #include "sdb.h"
 
 #include <cstddef>
@@ -25,23 +26,14 @@ struct Image {
   std::uint64_t address;
 };
 
+enum class Mode { interactive, batch, plain };
+
 struct Options {
-  bool batch = false;
-  bool plain_run = false;
+  Mode mode = Mode::interactive;
   std::size_t memory_mib = DEFAULT_MEMORY_MIB;
   std::uint64_t step_limit = DEFAULT_STEP_LIMIT;
   std::vector<Image> images;
 };
-
-bool parse_u64(std::string_view text, std::uint64_t &value) {
-  try {
-    std::size_t used = 0;
-    value = std::stoull(std::string(text), &used, 0);
-    return used == text.size();
-  } catch (...) {
-    return false;
-  }
-}
 
 // An image argument is "path" (loaded at the entry address) or
 // "path@0xADDR" (loaded at ADDR).
@@ -50,22 +42,26 @@ bool parse_image(std::string_view arg, Image &image) {
   image.path = std::string(arg.substr(0, at));
   image.address = MEMORY_BASE;
   if (at == std::string_view::npos) return true;
-  return parse_u64(arg.substr(at + 1), image.address);
+  return tile_npu::monitor::parse_u64(arg.substr(at + 1), image.address);
 }
 
 bool parse_args(int argc, char **argv, Options &options) {
+  bool batch = false;
+  bool plain = false;
   for (int i = 1; i < argc; ++i) {
     const std::string_view arg{argv[i]};
     if (arg == "-b" || arg == "--batch") {
-      options.batch = true;
+      batch = true;
     } else if (arg == "--run") {
-      options.plain_run = true;
+      plain = true;
     } else if (arg == "-m" && i + 1 < argc) {
       std::uint64_t mib = 0;
-      if (!parse_u64(argv[++i], mib) || mib == 0) return false;
+      if (!tile_npu::monitor::parse_u64(argv[++i], mib) || mib == 0)
+        return false;
       options.memory_mib = static_cast<std::size_t>(mib);
     } else if (arg == "-s" && i + 1 < argc) {
-      if (!parse_u64(argv[++i], options.step_limit)) return false;
+      if (!tile_npu::monitor::parse_u64(argv[++i], options.step_limit))
+        return false;
     } else if (!arg.empty() && arg[0] == '-') {
       return false;
     } else {
@@ -74,7 +70,13 @@ bool parse_args(int argc, char **argv, Options &options) {
       options.images.push_back(std::move(image));
     }
   }
-  return !options.images.empty() && !(options.batch && options.plain_run);
+  if (options.images.empty() || (batch && plain)) return false;
+  if (batch) {
+    options.mode = Mode::batch;
+  } else if (plain) {
+    options.mode = Mode::plain;
+  }
+  return true;
 }
 
 bool load_image(const Image &image, tile_npu::FlatMemory &memory) {
@@ -185,15 +187,19 @@ int main(int argc, char **argv) {
                  "default is unlimited\n";
     return 2;
   }
-  if (options.batch) {
+  using enum Mode;
+  switch (options.mode) {
+  case batch: {
     bool passed = true;
     for (const auto &image : options.images) {
       passed = run_batch(image, options) && passed;
     }
     return passed ? 0 : 1;
   }
-  if (options.plain_run) {
+  case plain:
     return run_plain(options);
+  case interactive:
+    break;
   }
 
   tile_npu::FlatMemory memory(MEMORY_BASE, options.memory_mib * 1024 * 1024);

@@ -1,5 +1,6 @@
 #include "sdb.h"
 
+#include "parse.h"
 #include "utils/endian.h"
 
 #include <array>
@@ -27,18 +28,6 @@ std::string hex64(std::uint64_t value) {
   std::ostringstream out;
   out << "0x" << std::hex << std::setw(16) << std::setfill('0') << value;
   return out.str();
-}
-
-std::uint64_t parse_u64(std::string_view text, bool &ok) {
-  ok = false;
-  try {
-    std::size_t used = 0;
-    const auto value = std::stoull(std::string(text), &used, 0);
-    ok = used == text.size();
-    return value;
-  } catch (...) {
-    return 0;
-  }
 }
 
 std::pair<std::string_view, std::string_view>
@@ -76,9 +65,7 @@ void cmd_continue(Simulator &sim) {
 void cmd_si(Simulator &sim, std::string_view arg) {
   std::uint64_t count = 1;
   if (!arg.empty()) {
-    bool ok = false;
-    count = parse_u64(arg, ok);
-    if (!ok || count == 0) {
+    if (!parse_u64(arg, count) || count == 0) {
       std::cout << "usage: si [N]\n";
       return;
     }
@@ -109,11 +96,10 @@ void cmd_info(Simulator &sim, std::string_view arg) {
 
 void cmd_examine(Memory &memory, std::string_view arg) {
   const auto [count_text, address_text] = split_command(arg);
-  bool ok_count = false;
-  bool ok_address = false;
-  const auto count = parse_u64(count_text, ok_count);
-  const auto address = parse_u64(address_text, ok_address);
-  if (!ok_count || !ok_address || count == 0) {
+  std::uint64_t count = 0;
+  std::uint64_t address = 0;
+  if (!parse_u64(count_text, count) || !parse_u64(address_text, address) ||
+      count == 0) {
     std::cout << "usage: x N ADDR\n";
     return;
   }
