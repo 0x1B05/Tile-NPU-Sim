@@ -60,3 +60,52 @@ The suite is assembled against a minimal custom env
 (`tests/riscv-tests-env/riscv_test.h`) that reports pass/fail through the
 runner's `ebreak`/`a0` convention; `fence_i` and `ma_data` are excluded
 (Zifencei and trap delivery are not modeled).
+
+An inference guest for Qwen3-0.6B lives in `apps/qwen3/` (bare-metal rv64im,
+NPU kernels in `kernels.S`), cross-compiled with the same RISC-V toolchain:
+
+```sh
+xmake build qwen3_app        # build/apps/qwen3.bin
+```
+
+Running it needs a converted model blob. Fetch the pinned weights and
+tokenizer into `external/qwen3/`, then convert to the flat q8s32 blob
+(per-row symmetric int8 weights, f32 scales) with a baked-in prompt:
+
+```sh
+scripts/qwen3/fetch_model.sh   # set HF_BASE=... for another mirror
+python3 scripts/qwen3/convert.py external/qwen3 model.q3b --prompt "Hi" --chat
+```
+
+`--ids "1,2,3"` supplies token ids directly; `--max-pos N` caps positions.
+Conversion needs python3 with numpy. Run the app image together with the
+blob, which must land at the address the guest is linked against
+(`BLOB_BASE` in `apps/qwen3/qwen3.h`):
+
+```sh
+./build/linux/x86_64/release/sim_run --run -m 1024 \
+    build/apps/qwen3.bin model.q3b@0x81000000
+```
+
+The default 128 MiB RAM does not fit the real blob, hence `-m 1024`. In
+`--run` mode the app prints the prompt and generated token ids over
+semihosting and stops after 32 new tokens or an EOS. Numerical alignment
+probes in `forward.c` are compiled in by default; cross-compile with
+`-DQWEN3_PROBES=0` to silence them.
+
+A fixed-seed random tiny model exercises the same path without any download:
+
+```sh
+python3 scripts/qwen3/convert.py --tiny tiny.q3b tiny_ref.npz
+```
+
+and the opt-in regression wraps the whole chain — convert, guest forward
+under `sim_run`, then compare against the numpy reference `ref.py` (integer
+probes bit-exact, f32 probes within tolerance, generated tokens exact):
+
+```sh
+xmake f --qwen3test=y && xmake test
+```
+
+The test requires `--monitor=y` and is skipped with a warning when python3
+with numpy is unavailable.
