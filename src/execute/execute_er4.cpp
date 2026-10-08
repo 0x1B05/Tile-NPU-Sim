@@ -8,7 +8,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <span>
+#include <utility>
 
 namespace tile_npu {
 namespace {
@@ -68,12 +68,9 @@ er4_matrix(const Er4Instr &instr,
   }
   const auto &dst_config = configs[instr.dest.index];
   const auto view = [&](RegisterIndex index) {
-    const auto &config = configs[index];
-    return MatrixView<const Element>(std::span<const Element>(regs[index]),
-                                     config.rows, config.cols, config.layout);
+    return matrix_view(std::as_const(regs[index]), configs[index]);
   };
-  MatrixView<Element> dst(std::span<Element>(regs[instr.dest.index]),
-                          dst_config.rows, dst_config.cols, dst_config.layout);
+  auto dst = matrix_view(regs[instr.dest.index], dst_config);
   const auto arg = view(instr.arg.index);
   const auto lhs = view(instr.src1.index);
   const auto rhs = view(instr.src2.index);

@@ -7,7 +7,7 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <span>
+#include <utility>
 
 namespace tile_npu {
 namespace {
@@ -38,11 +38,9 @@ ExecuteResult bcast(
     return fail;
   }
 
-  MatrixView<Element> dst(std::span<Element>(matrix_regs[instr.dest.index]),
-                          dst_config.rows, dst_config.cols, dst_config.layout);
-  MatrixView<const Element> src(
-      std::span<const Element>(matrix_regs[instr.src1.index]), src_config.rows,
-      src_config.cols, src_config.layout);
+  auto dst = matrix_view(matrix_regs[instr.dest.index], dst_config);
+  auto src = matrix_view(std::as_const(matrix_regs[instr.src1.index]),
+                         src_config);
   const auto &vec_reg = vector_regs[instr.vector.index];
   const auto arith = arith_mode_of(dst_config);
   for (std::size_t row = 0; row < dst_config.rows; ++row) {

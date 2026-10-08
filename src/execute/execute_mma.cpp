@@ -6,7 +6,7 @@
 #include <bit>
 #include <cstddef>
 #include <cstdint>
-#include <span>
+#include <utility>
 
 namespace tile_npu {
 namespace {
@@ -48,15 +48,9 @@ ExecuteResult mma(const MmaInstr &instr, State &state) {
       dst_config.cols != n) {
     return fail;
   }
-  MatrixView<std::uint32_t> dst(std::span(state.a[instr.dest.index]),
-                                dst_config.rows, dst_config.cols,
-                                dst_config.layout);
-  MatrixView<const std::uint8_t> lhs(std::span(state.t[instr.src_a.index]),
-                                     lhs_config.rows, lhs_config.cols,
-                                     lhs_config.layout);
-  MatrixView<const std::uint8_t> rhs(std::span(state.t[instr.src_b.index]),
-                                     rhs_config.rows, rhs_config.cols,
-                                     rhs_config.layout);
+  auto dst = matrix_view(state.a[instr.dest.index], dst_config);
+  auto lhs = matrix_view(std::as_const(state.t[instr.src_a.index]), lhs_config);
+  auto rhs = matrix_view(std::as_const(state.t[instr.src_b.index]), rhs_config);
   for (std::size_t i = 0; i < m; ++i) {
     for (std::size_t j = 0; j < n; ++j) {
       std::int32_t partial = 0;
@@ -90,9 +84,7 @@ ExecuteResult bdot(const MmaInstr &instr, State &state) {
   if (lhs_config.len != k || dst_config.len != n) {
     return fail;
   }
-  MatrixView<const std::uint8_t> rhs(std::span(state.t[instr.src_b.index]),
-                                     rhs_config.rows, rhs_config.cols,
-                                     rhs_config.layout);
+  auto rhs = matrix_view(std::as_const(state.t[instr.src_b.index]), rhs_config);
   const auto &lhs = state.b[instr.src_a.index];
   auto &dst = state.v[instr.dest.index];
   for (std::size_t j = 0; j < n; ++j) {

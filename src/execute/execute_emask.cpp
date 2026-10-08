@@ -8,7 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
-#include <span>
+#include <utility>
 #include <variant>
 
 namespace tile_npu {
@@ -74,11 +74,8 @@ mask_matrix(const MaskInstr &instr, State &state,
   const auto n_rows = static_cast<std::uint32_t>(bound);
   const auto n_cols = static_cast<std::uint32_t>(bound >> 32);
   const auto delta = static_cast<std::int64_t>(bound);
-  MatrixView<Element> dst(std::span<Element>(regs[instr.dest.index]),
-                          dst_config.rows, dst_config.cols, dst_config.layout);
-  MatrixView<const Element> src(std::span<const Element>(regs[instr.src.index]),
-                                src_config.rows, src_config.cols,
-                                src_config.layout);
+  auto dst = matrix_view(regs[instr.dest.index], dst_config);
+  auto src = matrix_view(std::as_const(regs[instr.src.index]), src_config);
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
       const auto signed_diff =

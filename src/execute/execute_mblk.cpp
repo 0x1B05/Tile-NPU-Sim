@@ -99,10 +99,11 @@ ExecuteResult probed_store(Memory &memory, const Reg &reg,
 
 // The element accessor for a matrix transfer: position n is the logical
 // coordinate (n / cols, n % cols), read through the canonical-layout view.
-auto matrix_at(std::size_t rows, std::size_t cols) {
-  return [rows, cols](auto &storage, std::size_t n) -> decltype(auto) {
-    MatrixView view{std::span(storage), rows, cols, 0};
-    return view.at(n / cols, n % cols);
+template <typename Config>
+auto matrix_at(const Config &config) {
+  return [&config](auto &storage, std::size_t n) -> decltype(auto) {
+    const auto view = matrix_view(storage, config);
+    return view.at(n / config.cols, n % config.cols);
   };
 }
 
@@ -156,7 +157,7 @@ block_access(const MblkInstr &instr, ExecContext &ctx,
 
   auto &reg = regs[accessed_reg(instr).index];
   const std::span<const std::uint64_t> range(addrs->data(), rows * cols);
-  const auto at = matrix_at(rows, cols);
+  const auto at = matrix_at(config);
   const auto result = is_store_form(instr.op)
                           ? probed_store(ctx.memory, reg, range, at)
                           : staged_load(ctx.memory, reg, range, at);
@@ -204,10 +205,9 @@ row_access(const MblkInstr &instr, ExecContext &ctx,
   auto &reg = regs[accessed_reg(instr).index];
   const std::span<const std::uint64_t> range(addrs->data(), cols);
   // The view spans the whole matrix; only row `row` is transferred.
-  const auto view_rows = std::size_t{config.rows};
-  const auto at = [view_rows, cols, row](auto &storage,
-                                         std::size_t n) -> decltype(auto) {
-    MatrixView view{std::span(storage), view_rows, cols, 0};
+  const auto at = [&config, row](auto &storage,
+                                 std::size_t n) -> decltype(auto) {
+    const auto view = matrix_view(storage, config);
     return view.at(row, n);
   };
   const auto result = is_store_form(instr.op)
@@ -265,11 +265,11 @@ ExecuteResult gather_tile(const MblkInstr &instr, ExecContext &ctx,
   const std::span<const std::uint64_t> range(addrs.data(),
                                              indexed_rows * cols);
   const auto result =
-      staged_load(ctx.memory, reg, range, matrix_at(rows, cols));
+      staged_load(ctx.memory, reg, range, matrix_at(config));
   if (result.status != StepStatus::retired) {
     return result;
   }
-  MatrixView<std::uint8_t> dst(std::span<std::uint8_t>(reg), rows, cols, 0);
+  auto dst = matrix_view(reg, config);
   for (std::size_t i = indexed_rows; i < rows; ++i) {
     for (std::size_t j = 0; j < cols; ++j) {
       dst.at(i, j) = 0;

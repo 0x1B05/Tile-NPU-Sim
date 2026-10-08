@@ -10,7 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
-#include <span>
+#include <utility>
 #include <variant>
 
 namespace tile_npu {
@@ -88,9 +88,7 @@ ExecuteResult areduce(const ReduceInstr &instr, State &state) {
       dst_config.len != src_config.rows) {
     return fail;
   }
-  MatrixView<const std::uint32_t> src(std::span(state.a[instr.src.index]),
-                                      src_config.rows, src_config.cols,
-                                      src_config.layout);
+  auto src = matrix_view(std::as_const(state.a[instr.src.index]), src_config);
   auto &dst_reg = state.v[dst.index];
   for (std::size_t row = 0; row < src_config.rows; ++row) {
     if (instr.op == ReduceOp::argmax) {

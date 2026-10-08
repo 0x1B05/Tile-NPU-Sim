@@ -9,7 +9,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <span>
+#include <utility>
 
 namespace tile_npu {
 namespace {
@@ -86,11 +86,8 @@ unary_matrix(const EunInstr &instr, State &,
     return fail;
   }
 
-  MatrixView<Element> dst(std::span<Element>(regs[instr.dest.index]),
-                          dst_config.rows, dst_config.cols, dst_config.layout);
-  MatrixView<const Element> src(std::span<const Element>(regs[instr.src.index]),
-                                src_config.rows, src_config.cols,
-                                src_config.layout);
+  auto dst = matrix_view(regs[instr.dest.index], dst_config);
+  auto src = matrix_view(std::as_const(regs[instr.src.index]), src_config);
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
       dst.at(row, col) =

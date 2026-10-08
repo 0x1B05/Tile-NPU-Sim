@@ -9,7 +9,7 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <span>
+#include <utility>
 #include <variant>
 
 namespace tile_npu {
@@ -44,11 +44,8 @@ run_matrix(const EbinInstr &instr,
            const std::array<Config, RegCount> &configs, RightAt right_at) {
   const auto &dst_config = configs[instr.dest.index];
   const auto &lhs_config = configs[instr.src1.index];
-  MatrixView<Element> dst(std::span<Element>(regs[instr.dest.index]),
-                          dst_config.rows, dst_config.cols, dst_config.layout);
-  MatrixView<const Element> lhs(
-      std::span<const Element>(regs[instr.src1.index]), lhs_config.rows,
-      lhs_config.cols, lhs_config.layout);
+  auto dst = matrix_view(regs[instr.dest.index], dst_config);
+  auto lhs = matrix_view(std::as_const(regs[instr.src1.index]), lhs_config);
   const auto arith = arith_mode_of(dst_config);
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     for (std::size_t col = 0; col < dst_config.cols; ++col) {

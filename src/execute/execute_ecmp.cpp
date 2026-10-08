@@ -11,7 +11,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <span>
+#include <utility>
 #include <variant>
 
 namespace tile_npu {
@@ -98,12 +98,8 @@ ExecuteResult run_cmp_acc(const CmpInstr &instr, State &state,
                           RightAt right_at) {
   const auto &dst_config = state.ac[instr.dest.index];
   const auto &lhs_config = state.ac[instr.src1.index];
-  MatrixView<std::uint32_t> dst(std::span(state.a[instr.dest.index]),
-                                dst_config.rows, dst_config.cols,
-                                dst_config.layout);
-  MatrixView<const std::uint32_t> lhs(
-      std::span<const std::uint32_t>(state.a[instr.src1.index]),
-      lhs_config.rows, lhs_config.cols, lhs_config.layout);
+  auto dst = matrix_view(state.a[instr.dest.index], dst_config);
+  auto lhs = matrix_view(std::as_const(state.a[instr.src1.index]), lhs_config);
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
       dst.at(row, col) = mask_word(compare(

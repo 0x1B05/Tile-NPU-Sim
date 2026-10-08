@@ -7,7 +7,6 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <span>
 #include <variant>
 
 namespace tile_npu {
@@ -31,9 +30,7 @@ with_src2_matrix(const NpuOperand &src2, const State &state,
   return std::visit(
       Overloaded{[&](NpuRegister rhs) {
                    const auto &rhs_config = configs[rhs.index];
-                   MatrixView<const Element> right(
-                       std::span<const Element>(regs[rhs.index]),
-                       rhs_config.rows, rhs_config.cols, rhs_config.layout);
+                   auto right = matrix_view(regs[rhs.index], rhs_config);
                    return body([&](std::size_t row, std::size_t col) {
                      return right.at(row, col);
                    });

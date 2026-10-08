@@ -7,7 +7,6 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <span>
 #include <variant>
 
 namespace tile_npu {
@@ -32,8 +31,7 @@ ExecuteResult row_insert(
   const auto row = resolve_index(instr.index, state);
   if (row >= mconfig.rows) return config_error();
 
-  MatrixView<Element> dst(std::span<Element>(matrix_regs[instr.matrix.index]),
-                          mconfig.rows, mconfig.cols, mconfig.layout);
+  auto dst = matrix_view(matrix_regs[instr.matrix.index], mconfig);
   const auto &src = vector_regs[instr.vector.index];
   for (std::size_t col = 0; col < mconfig.cols; ++col) {
     dst.at(row, col) = src[col];
@@ -60,9 +58,7 @@ ExecuteResult row_extract(
   const auto row = resolve_index(instr.index, state);
   if (row >= mconfig.rows) return config_error();
 
-  MatrixView<const Element> src(
-      std::span<const Element>(matrix_regs[instr.matrix.index]), mconfig.rows,
-      mconfig.cols, mconfig.layout);
+  auto src = matrix_view(matrix_regs[instr.matrix.index], mconfig);
   auto &dst = vector_regs[instr.vector.index];
   for (std::size_t col = 0; col < mconfig.cols; ++col) {
     dst[col] = src.at(row, col);

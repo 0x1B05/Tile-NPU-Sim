@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <utility>
 
 namespace tile_npu {
 namespace {
@@ -33,17 +34,14 @@ init_matrix(const InitInstr &instr, State &state,
   const auto &dst_config = configs[instr.reg.index];
   if (!valid_domain_config(dst_config)) return config_error();
 
-  MatrixView<Element> dst(std::span<Element>(regs[instr.reg.index]),
-                          dst_config.rows, dst_config.cols, dst_config.layout);
+  auto dst = matrix_view(regs[instr.reg.index], dst_config);
   if (instr.op == InitOp::copy) {
     const auto &src_config = configs[instr.src];
     if (!valid_domain_config(src_config) ||
         !configs_match(dst_config, src_config)) {
       return config_error();
     }
-    MatrixView<const Element> src(std::span<const Element>(regs[instr.src]),
-                                  src_config.rows, src_config.cols,
-                                  src_config.layout);
+    auto src = matrix_view(std::as_const(regs[instr.src]), src_config);
     for (std::size_t row = 0; row < dst_config.rows; ++row) {
       for (std::size_t col = 0; col < dst_config.cols; ++col) {
         dst.at(row, col) = src.at(row, col);
@@ -107,11 +105,10 @@ ExecuteResult transpose_tile(const InitInstr &instr, State &state) {
   // writes below would otherwise alias src_config.
   const auto src_rows = src_config.rows;
   const auto src_cols = src_config.cols;
-  MatrixView<const std::uint8_t> src(std::span<const std::uint8_t>(staged),
-                                     src_rows, src_cols, src_config.layout);
-  MatrixView<std::uint8_t> dst(
-      std::span<std::uint8_t>(state.t[instr.reg.index]), src_cols, src_rows,
-      dst_config.layout);
+  const auto src = matrix_view(staged, src_config);
+  // The destination takes the transposed shape, which no config holds yet.
+  MatrixView dst(std::span<std::uint8_t>(state.t[instr.reg.index]), src_cols,
+                 src_rows, dst_config.layout);
   for (std::size_t row = 0; row < src_cols; ++row) {
     for (std::size_t col = 0; col < src_rows; ++col) {
       dst.at(row, col) = src.at(col, row);

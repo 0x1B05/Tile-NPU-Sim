@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <utility>
 
 namespace tile_npu {
 namespace {
@@ -74,12 +75,8 @@ ExecuteResult tquant(const QntInstr &instr, State &state) {
       scale_config.len != src_config.rows) {
     return fail;
   }
-  MatrixView<std::uint8_t> dst(std::span(state.t[instr.dest.index]),
-                               dst_config.rows, dst_config.cols,
-                               dst_config.layout);
-  MatrixView<const std::uint32_t> src(std::span(state.a[instr.src.index]),
-                                      src_config.rows, src_config.cols,
-                                      src_config.layout);
+  auto dst = matrix_view(state.t[instr.dest.index], dst_config);
+  auto src = matrix_view(std::as_const(state.a[instr.src.index]), src_config);
   auto &scale_reg = state.v[instr.scale];
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     float scale;
@@ -111,12 +108,8 @@ ExecuteResult tdequant(const QntInstr &instr, State &state) {
       scale_config.len != src_config.rows) {
     return fail;
   }
-  MatrixView<std::uint32_t> dst(std::span(state.a[instr.dest.index]),
-                                dst_config.rows, dst_config.cols,
-                                dst_config.layout);
-  MatrixView<const std::uint8_t> src(std::span(state.t[instr.src.index]),
-                                     src_config.rows, src_config.cols,
-                                     src_config.layout);
+  auto dst = matrix_view(state.a[instr.dest.index], dst_config);
+  auto src = matrix_view(std::as_const(state.t[instr.src.index]), src_config);
   const auto &scale_reg = state.v[instr.scale];
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     const float scale = std::bit_cast<float>(scale_reg[row]);
