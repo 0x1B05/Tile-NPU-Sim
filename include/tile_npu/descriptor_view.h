@@ -79,6 +79,38 @@ public:
     return detail::add_signed_offset(descriptor_->base_addr, offset);
   }
 
+  // Gather addressing (the ISA's gaddr): a lane of the index vector, read as
+  // i32, selects the indexed element. The matrix form locates the gathered
+  // row's first element through col_stride_bytes, then walks the row along
+  // row_stride_bytes.
+  template <typename D = Descriptor>
+  std::optional<std::uint64_t> gather_row_base(std::int32_t index) const {
+    static_assert(std::is_same_v<std::remove_const_t<D>, MatrixDescriptor>);
+    if (!valid()) return std::nullopt;
+    return detail::add_signed_offset(descriptor_->base_addr,
+                                     std::int64_t{index} *
+                                         descriptor_->col_stride_bytes);
+  }
+
+  template <typename D = Descriptor>
+  std::optional<std::uint64_t> gather_address(std::uint64_t row_base,
+                                              std::size_t col) const {
+    static_assert(std::is_same_v<std::remove_const_t<D>, MatrixDescriptor>);
+    if (!valid()) return std::nullopt;
+    const auto offset = std::int64_t{descriptor_->row_stride_bytes} *
+                        static_cast<std::int64_t>(col);
+    return detail::add_signed_offset(row_base, offset);
+  }
+
+  template <typename D = Descriptor>
+  std::optional<std::uint64_t> gather_address(std::int32_t index) const {
+    static_assert(std::is_same_v<std::remove_const_t<D>, VectorDescriptor>);
+    if (!valid()) return std::nullopt;
+    return detail::add_signed_offset(descriptor_->base_addr,
+                                     std::int64_t{index} *
+                                         descriptor_->stride_bytes);
+  }
+
   // The base address after the post-access increment, or nullopt when the
   // descriptor is invalid or the increment overflows. With the increment
   // disabled this is the current base, so callers can pre-validate the update

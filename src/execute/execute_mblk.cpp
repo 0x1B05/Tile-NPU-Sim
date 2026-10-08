@@ -121,6 +121,16 @@ auto vector_at() {
   };
 }
 
+// The gather index vector: the ISA bounds the index lanes by len(vS) and
+// leaves out-of-range index behavior open, so only the length is checked.
+bool valid_gather_index(const Vec32Config &config) {
+  return config.len != 0 && config.len <= VECTOR_LANES;
+}
+
+std::int32_t gather_index(const Vec32 &reg, std::size_t lane) {
+  return std::bit_cast<std::int32_t>(reg[lane]);
+}
+
 template <typename Element, typename Config, std::size_t RegCount>
 ExecuteResult
 block_access(const MblkInstr &instr, ExecContext &ctx,
@@ -220,10 +230,9 @@ row_access(const MblkInstr &instr, ExecContext &ctx,
   return result;
 }
 
-// tload.gather: row i is indexed by vS[i] (an i32 lane value) times
-// col_stride_bytes, then walks row_stride_bytes along the row; rows beyond
-// len(vS) are zero-filled. Gather never increments the descriptor, and index
-// legality is software's contract.
+// tload.gather: rows beyond the index vector's effective length are
+// zero-filled. Gather never increments the descriptor, and index legality is
+// software's contract.
 ExecuteResult gather_tile(const MblkInstr &instr, ExecContext &ctx,
                           std::array<Tile, TILE_REGISTERS> &regs,
                           const std::array<TileConfig, TILE_REGISTERS> &configs,
@@ -233,7 +242,7 @@ ExecuteResult gather_tile(const MblkInstr &instr, ExecContext &ctx,
     return config_error();
   }
   const auto &index_config = ctx.state.vc[instr.gather_src];
-  if (index_config.len == 0 || index_config.len > VECTOR_LANES) {
+  if (!valid_gather_index(index_config)) {
     return config_error();
   }
   MatrixDescView desc(descs[accessed_reg(instr).index]);
@@ -245,21 +254,14 @@ ExecuteResult gather_tile(const MblkInstr &instr, ExecContext &ctx,
   const auto cols = std::size_t{config.cols};
   const auto indexed_rows = std::min(rows, std::size_t{index_config.len});
   const auto &index_reg = ctx.state.v[instr.gather_src];
-  const auto &descriptor = desc.descriptor();
   std::array<std::uint64_t, MATRIX_ELEMENTS> addrs{};
   for (std::size_t i = 0; i < indexed_rows; ++i) {
-    const auto element = std::bit_cast<std::int32_t>(index_reg[i]);
-    const auto row_base =
-        detail::add_signed_offset(descriptor.base_addr,
-                                  std::int64_t{element} *
-                                      descriptor.col_stride_bytes);
+    const auto row_base = desc.gather_row_base(gather_index(index_reg, i));
     if (!row_base) {
       return config_error();
     }
     for (std::size_t j = 0; j < cols; ++j) {
-      const auto addr = detail::add_signed_offset(
-          *row_base, std::int64_t{descriptor.row_stride_bytes} *
-                         static_cast<std::int64_t>(j));
+      const auto addr = desc.gather_address(*row_base, j);
       if (!addr) {
         return config_error();
       }
@@ -301,21 +303,18 @@ vector_access(const MblkInstr &instr, ExecContext &ctx,
   const auto len = std::size_t{config.len};
   auto &reg = regs[accessed_reg(instr).index];
 
-  // {b,v}load.gather: lane j is indexed by vS[j] times stride_bytes; lanes
-  // beyond len(vS) are zero-filled. No descriptor increment.
+  // {b,v}load.gather: lanes beyond the index vector's effective length are
+  // zero-filled. No descriptor increment.
   if (instr.op == MblkOp::gather) {
     const auto &index_config = ctx.state.vc[instr.gather_src];
-    if (index_config.len == 0 || index_config.len > VECTOR_LANES) {
+    if (!valid_gather_index(index_config)) {
       return config_error();
     }
     const auto indexed = std::min(len, std::size_t{index_config.len});
     const auto &index_reg = ctx.state.v[instr.gather_src];
     const auto addrs =
         fill_addresses<VECTOR_LANES>(indexed, [&](std::size_t j) {
-          const auto element = std::bit_cast<std::int32_t>(index_reg[j]);
-          return detail::add_signed_offset(
-              desc.descriptor().base_addr,
-              std::int64_t{element} * desc.descriptor().stride_bytes);
+          return desc.gather_address(gather_index(index_reg, j));
         });
     if (!addrs) {
       return config_error();
