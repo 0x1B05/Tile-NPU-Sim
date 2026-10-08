@@ -1,7 +1,10 @@
 #include "tile_npu/config.h"
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <type_traits>
 
 namespace tile_npu {
@@ -232,6 +235,31 @@ ConfigReadResult read_vector_descriptor(const VectorDescriptor &descriptor, Conf
   }
 }
 
+// Field code to semantic field, indexed [ConfigRegType][field code]. Codes
+// are dense from 0 per register type; a nullopt hole is a code the type has
+// no field for, so a new field appends to its type's row.
+constexpr auto FIELD_BY_TYPE_AND_CODE = [] {
+  using enum ConfigField;
+  using Row = std::array<std::optional<ConfigField>, 5>;
+  std::array<Row, static_cast<std::size_t>(ConfigRegType::vm) + 1> table{};
+  auto row = [&](ConfigRegType type) -> Row & {
+    return table[static_cast<std::uint8_t>(type)];
+  };
+  // clang-format off
+  row(ConfigRegType::tc) = {dtype,     rows, cols, layout, arith_mode};
+  row(ConfigRegType::ac) = {dtype,     rows, cols, layout};
+  row(ConfigRegType::bc) = {dtype,     len};
+  row(ConfigRegType::vc) = {dtype,     len};
+  row(ConfigRegType::tm) = {base_addr, row_stride_bytes, col_stride_bytes,
+                            transform, flags};
+  row(ConfigRegType::am) = {base_addr, row_stride_bytes, col_stride_bytes,
+                            transform, flags};
+  row(ConfigRegType::bm) = {base_addr, stride_bytes, flags};
+  row(ConfigRegType::vm) = {base_addr, stride_bytes, flags};
+  // clang-format on
+  return table;
+}();
+
 } // namespace
 
 ConfigReadResult read_config_field(const State &state, ConfigRegType reg_type,
@@ -276,53 +304,15 @@ ConfigAccessError write_config_field(State &state, ConfigRegType reg_type,
 
 std::variant<ConfigField, ConfigAccessError>
 config_field_from_code(ConfigRegType reg_type, std::uint8_t field_code) {
-  // clang-format off
-  switch (reg_type) {
-  case ConfigRegType::tc:
-    switch (field_code) {
-    case 0: return ConfigField::dtype;
-    case 1: return ConfigField::rows;
-    case 2: return ConfigField::cols;
-    case 3: return ConfigField::layout;
-    case 4: return ConfigField::arith_mode;
-    default: return ConfigAccessError::unsupported_field;
-    }
-  case ConfigRegType::ac:
-    switch (field_code) {
-    case 0: return ConfigField::dtype;
-    case 1: return ConfigField::rows;
-    case 2: return ConfigField::cols;
-    case 3: return ConfigField::layout;
-    default: return ConfigAccessError::unsupported_field;
-    }
-  case ConfigRegType::bc:
-  case ConfigRegType::vc:
-    switch (field_code) {
-    case 0: return ConfigField::dtype;
-    case 1: return ConfigField::len;
-    default: return ConfigAccessError::unsupported_field;
-    }
-  case ConfigRegType::tm:
-  case ConfigRegType::am:
-    switch (field_code) {
-    case 0: return ConfigField::base_addr;
-    case 1: return ConfigField::row_stride_bytes;
-    case 2: return ConfigField::col_stride_bytes;
-    case 3: return ConfigField::transform;
-    case 4: return ConfigField::flags;
-    default: return ConfigAccessError::unsupported_field;
-    }
-  case ConfigRegType::bm:
-  case ConfigRegType::vm:
-    switch (field_code) {
-    case 0: return ConfigField::base_addr;
-    case 1: return ConfigField::stride_bytes;
-    case 2: return ConfigField::flags;
-    default: return ConfigAccessError::unsupported_field;
-    }
+  const auto type = static_cast<std::uint8_t>(reg_type);
+  if (type >= FIELD_BY_TYPE_AND_CODE.size()) {
+    return ConfigAccessError::unsupported_field;
   }
-  // clang-format on
-  return ConfigAccessError::unsupported_field;
+  const auto &fields = FIELD_BY_TYPE_AND_CODE[type];
+  if (field_code >= fields.size() || !fields[field_code]) {
+    return ConfigAccessError::unsupported_field;
+  }
+  return *fields[field_code];
 }
 
 // Every alternative converts losslessly: enums to their numeric code,
