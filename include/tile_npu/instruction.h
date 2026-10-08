@@ -302,15 +302,23 @@ struct Er4Instr {
 // for tril/triu). tril/triu are matrix-only.
 enum class MaskOp : std::uint8_t { tail = 0b000, tril = 0b001, triu = 0b010 };
 
-// Operand reading: dest = D, src = S, bound = xB (Scalar register), fill =
-// fill5 code (fill_is_scalar = false) or xFill register number (true).
+// An E_MASK fill operand (the FS encoding bit selects the form): either a
+// code into the fill5 immediate table or the Scalar register xFill whose low
+// element-width bits supply the fill.
+struct Fill5Code {
+  std::uint8_t code = 0;
+};
+
+using FillOperand = std::variant<Fill5Code, ScalarRegister>;
+
+// Operand reading: dest = D, src = S, bound = xB (Scalar register), fill per
+// FS (see FillOperand).
 struct MaskInstr {
   MaskOp op = MaskOp::tail;
   NpuRegister dest{};
   NpuRegister src{};
   RegisterIndex bound = 0;
-  std::uint8_t fill = 0;
-  bool fill_is_scalar = false;
+  FillOperand fill = Fill5Code{};
 };
 
 // CVT operations (R2): cvt converts i32 -> f32 within Acc or Vec32 and

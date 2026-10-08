@@ -54,6 +54,15 @@ inline bool index_is_immediate_zero(const IndexOperand &index) {
       index);
 }
 
+// The register form names a Scalar register; the fill5 form is legal for
+// codes 0-8 (codes 5-8 are f32-only, a dynamic dtype check).
+inline bool fill_in_range(const FillOperand &fill) {
+  return std::visit(
+      Overloaded{[](Fill5Code code) { return code.code <= 8; },
+                 [](ScalarRegister reg) { return in_range(reg); }},
+      fill);
+}
+
 template <typename Op, typename Info, std::size_t Size>
 bool assigned_op(Op op, const std::array<std::optional<Info>, Size> &table) {
   const auto code = static_cast<std::uint8_t>(op);
@@ -125,11 +134,7 @@ inline bool valid_structure(const MaskInstr &instr) {
   const bool vector = instr.dest.domain == NpuDomain::vec8 ||
                       instr.dest.domain == NpuDomain::vec32;
   if (vector && instr.op != MaskOp::tail) return false;
-  if (instr.fill_is_scalar ? !in_range(ScalarRegister{instr.fill})
-                           : instr.fill > 8) {
-    return false;
-  }
-  return in_range(ScalarRegister{instr.bound}) &&
+  return fill_in_range(instr.fill) && in_range(ScalarRegister{instr.bound}) &&
          instr.src.domain == instr.dest.domain && in_range(instr.dest) &&
          in_range(instr.src);
 }

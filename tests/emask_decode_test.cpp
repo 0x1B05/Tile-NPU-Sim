@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <variant>
 
 #include "emask_helpers.h"
@@ -29,6 +30,26 @@ struct Case {
   bool fill_is_scalar;
 };
 
+// The fill operand decodes to Fill5Code for FS = 0 and to ScalarRegister for
+// FS = 1.
+void check_fill(const tile_npu::FillOperand &fill, std::uint8_t expected,
+                bool is_scalar, std::string_view what) {
+  const std::string context(what);
+  if (is_scalar) {
+    const auto *reg = std::get_if<tile_npu::ScalarRegister>(&fill);
+    check(reg != nullptr, context + ": fill is scalar");
+    if (reg != nullptr) {
+      check_eq(reg->index, expected, context + ": fill");
+    }
+    return;
+  }
+  const auto *code = std::get_if<tile_npu::Fill5Code>(&fill);
+  check(code != nullptr, context + ": fill is a fill5 code");
+  if (code != nullptr) {
+    check_eq(code->code, expected, context + ": fill");
+  }
+}
+
 template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
@@ -44,8 +65,7 @@ template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
     check_eq(decoded->src.domain, test.domain, what + ": src domain");
     check_eq(decoded->src.index, test.src, what + ": src");
     check_eq(decoded->bound, test.bound, what + ": bound");
-    check_eq(decoded->fill, test.fill, what + ": fill");
-    check_eq(decoded->fill_is_scalar, test.fill_is_scalar, what + ": FS");
+    check_fill(decoded->fill, test.fill, test.fill_is_scalar, what);
   }
 }
 

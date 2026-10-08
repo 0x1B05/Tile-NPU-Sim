@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <variant>
 
 namespace tile_npu {
 namespace {
@@ -31,21 +32,23 @@ constexpr std::array<std::uint32_t, 9> F32_BY_FILL5 = {
 // fill5 codes 0-4 as integer constants.
 constexpr std::array<std::int8_t, 5> INT_BY_FILL5 = {0, 1, -1, 2, -2};
 
-// Resolves the fill operand to raw element bits: maskx keeps the low
-// element-width bits of xFill; mask decodes fill5 and converts to the
-// destination dtype (codes 5-8, ±0.5 and ±inf, are f32-only).
+// Resolves the fill operand to raw element bits: the register form keeps the
+// low element-width bits of xFill; the fill5 form decodes the immediate table
+// and converts to the destination dtype (codes 5-8, ±0.5 and ±inf, are
+// f32-only).
 template <typename Element>
 std::optional<Element> fill_value(const MaskInstr &instr, const State &state,
                                   DType dtype) {
-  if (instr.fill_is_scalar) {
-    return static_cast<Element>(state.scalar.read_x(instr.fill));
+  if (const auto *reg = std::get_if<ScalarRegister>(&instr.fill)) {
+    return static_cast<Element>(state.scalar.read_x(reg->index));
   }
+  const auto code = std::get<Fill5Code>(instr.fill).code;
   if (dtype == DType::f32) {
-    return static_cast<Element>(F32_BY_FILL5[instr.fill]);
+    return static_cast<Element>(F32_BY_FILL5[code]);
   }
-  if (instr.fill > 4) return std::nullopt;
+  if (code > 4) return std::nullopt;
   return static_cast<Element>(
-      static_cast<std::int64_t>(INT_BY_FILL5[instr.fill]));
+      static_cast<std::int64_t>(INT_BY_FILL5[code]));
 }
 
 // Matrix mask over the destination's effective shape: tail reads the packed

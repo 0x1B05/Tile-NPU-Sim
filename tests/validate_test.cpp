@@ -34,6 +34,7 @@ using tile_npu::EunInstr;
 using tile_npu::EunOp;
 using tile_npu::ExecContext;
 using tile_npu::execute_npu;
+using tile_npu::Fill5Code;
 using tile_npu::FlatMemory;
 using tile_npu::ImmediateIndex;
 using tile_npu::InitInstr;
@@ -128,15 +129,15 @@ TEST_CASE(validate_rejects_bad_er4) {
 }
 
 TEST_CASE(validate_rejects_bad_emask) {
-  check_illegal(MaskInstr{static_cast<MaskOp>(3), A(0), A(1), 0, 0, false},
+  check_illegal(MaskInstr{static_cast<MaskOp>(3), A(0), A(1), 0, Fill5Code{0}},
                 "reserved op");
-  check_illegal(MaskInstr{MaskOp::tril, B(0), B(1), 0, 0, false},
+  check_illegal(MaskInstr{MaskOp::tril, B(0), B(1), 0, Fill5Code{0}},
                 "tril on a vector domain");
-  check_illegal(MaskInstr{MaskOp::tail, A(0), A(1), 0, 9, false},
+  check_illegal(MaskInstr{MaskOp::tail, A(0), A(1), 0, Fill5Code{9}},
                 "fill5 code 9");
-  check_illegal(MaskInstr{MaskOp::tail, A(0), A(1), 0, 32, true},
+  check_illegal(MaskInstr{MaskOp::tail, A(0), A(1), 0, ScalarRegister{32}},
                 "xFill index 32");
-  check_illegal(MaskInstr{MaskOp::tail, A(0), A(1), 32, 0, false},
+  check_illegal(MaskInstr{MaskOp::tail, A(0), A(1), 32, Fill5Code{0}},
                 "bound index 32");
 }
 

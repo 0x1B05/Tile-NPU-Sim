@@ -145,12 +145,13 @@ DecodeResult decode_emask(std::uint32_t word) {
   if (f.dest >= count || f.src1 >= count) {
     return DecodeError::illegal;
   }
+  const auto fill = fill_is_scalar ? FillOperand{ScalarRegister{f.arg}}
+                                   : FillOperand{Fill5Code{f.arg}};
   return DecodedNpuInstr{MaskInstr{static_cast<MaskOp>(f.funct3),
                                    {domain, f.dest},
                                    {domain, f.src1},
                                    f.src2,
-                                   f.arg,
-                                   fill_is_scalar}};
+                                   fill}};
 }
 
 // CVT (R2): sel3 = {dom2, 0}; dom2 selects the destination domain (Acc or
