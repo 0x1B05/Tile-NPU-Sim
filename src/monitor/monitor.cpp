@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <span>
 #include <string>
 #include <string_view>
@@ -14,7 +15,10 @@ namespace {
 // Monitor conventions, not ISA-defined behavior.
 constexpr std::uint64_t MEMORY_BASE = 0x80000000;
 constexpr std::size_t DEFAULT_MEMORY_MIB = 128;
-constexpr std::uint64_t DEFAULT_STEP_LIMIT = 10'000'000;
+// The step budget counts retired instructions, so 0 runs none. The maximum
+// value is "no limit" in practice, and parse_u64 wraps a literal "-1" to it.
+constexpr std::uint64_t DEFAULT_STEP_LIMIT =
+    std::numeric_limits<std::uint64_t>::max();
 
 struct Image {
   std::string path;
@@ -140,7 +144,7 @@ bool run_batch(const Image &image, const Options &options) {
 
 // Plain run for full programs: semihosting prints guest output, and an
 // ecall with a7 = 93 exits with a0 as the process exit code. A stop on any
-// other status is an error. A step limit of 0 means unlimited.
+// other status is an error.
 int run_plain(const Options &options) {
   tile_npu::FlatMemory memory(MEMORY_BASE, options.memory_mib * 1024 * 1024);
   for (const auto &image : options.images) {
@@ -149,8 +153,7 @@ int run_plain(const Options &options) {
   tile_npu::Simulator sim(memory);
   sim.reset(MEMORY_BASE);
 
-  for (std::uint64_t steps = 0;
-       options.step_limit == 0 || steps < options.step_limit; ++steps) {
+  for (std::uint64_t steps = 0; steps < options.step_limit; ++steps) {
     const auto result = sim.step();
     if (result.status == tile_npu::StepStatus::retired) continue;
     if (result.status == tile_npu::StepStatus::environment_call) {
@@ -177,7 +180,9 @@ int main(int argc, char **argv) {
                  "image.bin[@0xADDR] ...\n"
                  "  default (interactive): sdb shell on the first image\n"
                  "  --run: plain run with semihosting (ecall a7=1 putchar, "
-                 "a7=93 exit); -s 0 = unlimited steps\n";
+                 "a7=93 exit)\n"
+                 "  -s STEPS: retired-instruction budget; 0 runs none, "
+                 "default is unlimited\n";
     return 2;
   }
   if (options.batch) {
