@@ -58,12 +58,14 @@ if has_config("rvtests") then
             for _, name in ipairs(target:values("passlist")) do
                 local src = path.join(srcdir, "isa", name .. ".S")
                 local elf, bin = guestimg.output_paths(bindir, name:gsub("/", "-"))
+                -- lastmtime anchors on the outputs: a missing one rebuilds.
                 depend.on_changed(function()
                     guestimg.build_guest_image(gcc, objcopy, linkscript, src, elf, bin,
                                       {"-I", target:values("envdir"), "-I", macrosdir})
                 end, {dependfile = target:dependfile(name:gsub("/", "-")),
                       files = {src, linkscript, envheader,
                                path.join(macrosdir, "test_macros.h")},
+                      lastmtime = math.min(os.mtime(elf), os.mtime(bin)),
                       values = {gcc, "-march=rv64im -mabi=lp64"}})
             end
         end)

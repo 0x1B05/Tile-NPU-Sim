@@ -26,6 +26,7 @@ target("qwen3_app")
         local deps = {linkscript, path.join(app_srcdir, "qwen3.h"),
                       path.join(guest_incdir, "npu.inc")}
         table.join2(deps, sources)
+        -- lastmtime anchors on the outputs: a missing one forces a rebuild.
         depend.on_changed(function()
             local args = {"-march=rv64im", "-mabi=lp64", "-O2",
                           "-ffreestanding", "-nostdlib", "-static",
@@ -36,6 +37,7 @@ target("qwen3_app")
             os.vrunv(objcopy, {"-O", "binary", elf, bin})
         end, {dependfile = target:dependfile("qwen3"),
               files = deps,
+              lastmtime = math.min(os.mtime(elf), os.mtime(bin)),
               values = {gcc, "-march=rv64im -mabi=lp64 -O2"}})
     end)
 target_end()
@@ -91,6 +93,7 @@ if has_config("qwen3test") then
                 os.vrunv(target:data("python"), {convert, "--tiny", blob, ref})
             end, {dependfile = target:dependfile("tiny"),
                   files = {convert},
+                  lastmtime = math.min(os.mtime(blob), os.mtime(ref)),
                   values = {target:data("python")}})
         end)
         add_tests("forward")

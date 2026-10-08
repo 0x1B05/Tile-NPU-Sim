@@ -79,7 +79,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `scripts/fetch_riscv_tests.sh` | 拉取官方 riscv-tests (pinned commit) 到 `external/` (gitignored) |
 | `apps/qwen3/` | Qwen3-0.6B 推理 guest 程序 (rv64im 裸机, NPU kernel 库 + forward 编排, 末位 prompt token 上带数值对齐探针); `xmake build qwen3_app` 交叉编译, 模型 blob 由 `scripts/qwen3/` 生成 |
 | `scripts/qwen3/` | Qwen3 宿主工具: `fetch_model.sh` 下载模型权重/分词器到 `external/qwen3` (sha256 固定), `convert.py` safetensors→q8s32 模型 blob (含 `--tiny` 随机小模型), `ref.py` tiny 模型 numpy 对齐参考, `tokenizer.py` 纯 Python 分词器, `tiny_check.py` guest 输出与 ref.py 的逐探针对齐比较 (由 `--qwen3test=y` 的 xmake 测试驱动) |
-| `xmake/guest.lua`, `xmake/riscv_tests.lua`, `xmake/apps.lua` | 按关注点拆出的构建脚本 (guest 镜像 / 官方套件 / Qwen3 应用与 tiny 回归), 由根 `xmake.lua` includes; 共享汇编逻辑在 `xmake/modules/guestimg.lua` |
+| `xmake/guest.lua`, `xmake/riscv_tests.lua`, `xmake/apps.lua` | 按关注点拆出的构建脚本 (guest 镜像 / 官方套件 / Qwen3 应用与 tiny 回归), 由根 `xmake.lua` includes; 共享汇编逻辑在 `xmake/modules/guestimg.lua`; 增量重建用 `depend.on_changed` 的 `lastmtime` 锚定产物 mtime (产物缺失即重建) |
 | `src/monitor/monitor.cpp` | `sim_run` 主程序: 参数解析, 镜像装载, batch/plain 模式的结果解释与展示 |
 | `src/monitor/parse.h` | 命令行参数与 sdb 命令共享的数值解析 `parse_u64` (base 0, 全串消费) |
 | `src/monitor/runner.h`, `src/monitor/runner.cpp` | monitor 运行层: 统一步进循环 (步数预算, semihost 穿透) 与停止原因分类 (`StopReason`/`RunOutcome`); semihosting 约定 (a7=1 putchar / a7=93 exit) 在此实现, 属模拟器约定 |
