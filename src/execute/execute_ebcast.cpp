@@ -38,9 +38,8 @@ ExecuteResult bcast(
     return fail;
   }
 
-  auto dst = matrix_view(matrix_regs[instr.dest.index], dst_config);
-  auto src = matrix_view(std::as_const(matrix_regs[instr.src1.index]),
-                         src_config);
+  auto dst = matrix_view(matrix_regs[instr.dest.index]);
+  auto src = matrix_view(std::as_const(matrix_regs[instr.src1.index]));
   const auto &vec_reg = vector_regs[instr.vector.index];
   const auto arith = arith_mode_of(dst_config);
   for (std::size_t row = 0; row < dst_config.rows; ++row) {

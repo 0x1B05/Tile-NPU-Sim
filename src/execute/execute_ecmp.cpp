@@ -98,8 +98,8 @@ ExecuteResult run_cmp_acc(const CmpInstr &instr, State &state,
                           RightAt right_at) {
   const auto &dst_config = state.ac[instr.dest.index];
   const auto &lhs_config = state.ac[instr.src1.index];
-  auto dst = matrix_view(state.a[instr.dest.index], dst_config);
-  auto lhs = matrix_view(std::as_const(state.a[instr.src1.index]), lhs_config);
+  auto dst = matrix_view(state.a[instr.dest.index]);
+  auto lhs = matrix_view(std::as_const(state.a[instr.src1.index]));
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
       dst.at(row, col) = mask_word(compare(
@@ -114,7 +114,7 @@ ExecuteResult cmp_acc(const CmpInstr &instr, State &state) {
   if (!operands_valid(instr, state.ac)) {
     return {.status = StepStatus::invalid_configuration};
   }
-  return with_src2_matrix(instr.src2, state, state.a, state.ac,
+  return with_src2_matrix(instr.src2, state, state.a,
                           [&](auto right_at) {
                             return run_cmp_acc(instr, state, right_at);
                           });

@@ -48,9 +48,9 @@ ExecuteResult mma(const MmaInstr &instr, State &state) {
       dst_config.cols != n) {
     return fail;
   }
-  auto dst = matrix_view(state.a[instr.dest.index], dst_config);
-  auto lhs = matrix_view(std::as_const(state.t[instr.src_a.index]), lhs_config);
-  auto rhs = matrix_view(std::as_const(state.t[instr.src_b.index]), rhs_config);
+  auto dst = matrix_view(state.a[instr.dest.index]);
+  auto lhs = matrix_view(std::as_const(state.t[instr.src_a.index]));
+  auto rhs = matrix_view(std::as_const(state.t[instr.src_b.index]));
   for (std::size_t i = 0; i < m; ++i) {
     for (std::size_t j = 0; j < n; ++j) {
       std::int32_t partial = 0;
@@ -84,7 +84,7 @@ ExecuteResult bdot(const MmaInstr &instr, State &state) {
   if (lhs_config.len != k || dst_config.len != n) {
     return fail;
   }
-  auto rhs = matrix_view(std::as_const(state.t[instr.src_b.index]), rhs_config);
+  auto rhs = matrix_view(std::as_const(state.t[instr.src_b.index]));
   const auto &lhs = state.b[instr.src_a.index];
   auto &dst = state.v[instr.dest.index];
   for (std::size_t j = 0; j < n; ++j) {

@@ -74,8 +74,8 @@ mask_matrix(const MaskInstr &instr, State &state,
   const auto n_rows = static_cast<std::uint32_t>(bound);
   const auto n_cols = static_cast<std::uint32_t>(bound >> 32);
   const auto delta = static_cast<std::int64_t>(bound);
-  auto dst = matrix_view(regs[instr.dest.index], dst_config);
-  auto src = matrix_view(std::as_const(regs[instr.src.index]), src_config);
+  auto dst = matrix_view(regs[instr.dest.index]);
+  auto src = matrix_view(std::as_const(regs[instr.src.index]));
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
       const auto signed_diff =

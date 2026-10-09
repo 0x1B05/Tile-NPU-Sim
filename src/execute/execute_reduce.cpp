@@ -88,7 +88,7 @@ ExecuteResult areduce(const ReduceInstr &instr, State &state) {
       dst_config.len != src_config.rows) {
     return fail;
   }
-  auto src = matrix_view(std::as_const(state.a[instr.src.index]), src_config);
+  auto src = matrix_view(std::as_const(state.a[instr.src.index]));
   auto &dst_reg = state.v[dst.index];
   for (std::size_t row = 0; row < src_config.rows; ++row) {
     if (instr.op == ReduceOp::argmax) {

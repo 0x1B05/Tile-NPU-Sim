@@ -18,19 +18,17 @@ Element scalar_operand(const State &state, ScalarRegister reg) {
 }
 
 // Resolves a matrix-domain src2 into an element accessor for the run_* body:
-// a register source reads through its own config's view, a scalar source
-// broadcasts the same value to every element.
-template <typename Element, typename Config, std::size_t RegCount,
-          typename Body>
+// a register source reads the same coordinate of the source register, a
+// scalar source broadcasts the same value to every element.
+template <typename Element, std::size_t RegCount, typename Body>
 ExecuteResult
 with_src2_matrix(const NpuOperand &src2, const State &state,
                  const std::array<std::array<Element, MATRIX_ELEMENTS>,
                                   RegCount> &regs,
-                 const std::array<Config, RegCount> &configs, Body body) {
+                 Body body) {
   return std::visit(
       Overloaded{[&](NpuRegister rhs) {
-                   const auto &rhs_config = configs[rhs.index];
-                   auto right = matrix_view(regs[rhs.index], rhs_config);
+                   auto right = matrix_view(regs[rhs.index]);
                    return body([&](std::size_t row, std::size_t col) {
                      return right.at(row, col);
                    });

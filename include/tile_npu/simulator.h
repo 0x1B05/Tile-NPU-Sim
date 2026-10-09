@@ -11,7 +11,7 @@ namespace tile_npu {
 struct StepResult {
   StepStatus status;
   std::uint64_t pc;
-  std::optional<std::uint32_t> instr;
+  std::optional<std::uint32_t> instr = std::nullopt;
   std::optional<std::uint64_t> fault_address = std::nullopt;
 };
 

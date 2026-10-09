@@ -68,9 +68,9 @@ er4_matrix(const Er4Instr &instr,
   }
   const auto &dst_config = configs[instr.dest.index];
   const auto view = [&](RegisterIndex index) {
-    return matrix_view(std::as_const(regs[index]), configs[index]);
+    return matrix_view(std::as_const(regs[index]));
   };
-  auto dst = matrix_view(regs[instr.dest.index], dst_config);
+  auto dst = matrix_view(regs[instr.dest.index]);
   const auto arg = view(instr.arg.index);
   const auto lhs = view(instr.src1.index);
   const auto rhs = view(instr.src2.index);

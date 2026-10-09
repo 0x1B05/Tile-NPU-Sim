@@ -37,9 +37,8 @@ ExecuteResult cvt_acc(const CvtInstr &instr, State &state) {
     return fail;
   }
   const auto &dst_config = state.ac[instr.dest.index];
-  const auto &src_config = state.ac[instr.src.index];
-  auto dst = matrix_view(state.a[instr.dest.index], dst_config);
-  auto src = matrix_view(std::as_const(state.a[instr.src.index]), src_config);
+  auto dst = matrix_view(state.a[instr.dest.index]);
+  auto src = matrix_view(std::as_const(state.a[instr.src.index]));
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
       dst.at(row, col) = i32_to_f32_bits(src.at(row, col));
@@ -76,8 +75,8 @@ ExecuteResult widen_tile_to_acc(const CvtInstr &instr, State &state) {
       dst_config.cols != src_config.cols) {
     return fail;
   }
-  auto dst = matrix_view(state.a[instr.dest.index], dst_config);
-  auto src = matrix_view(std::as_const(state.t[instr.src.index]), src_config);
+  auto dst = matrix_view(state.a[instr.dest.index]);
+  auto src = matrix_view(std::as_const(state.t[instr.src.index]));
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
       const auto value = std::bit_cast<std::int8_t>(src.at(row, col));

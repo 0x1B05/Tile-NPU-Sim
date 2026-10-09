@@ -43,9 +43,8 @@ run_matrix(const EbinInstr &instr,
            std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
            const std::array<Config, RegCount> &configs, RightAt right_at) {
   const auto &dst_config = configs[instr.dest.index];
-  const auto &lhs_config = configs[instr.src1.index];
-  auto dst = matrix_view(regs[instr.dest.index], dst_config);
-  auto lhs = matrix_view(std::as_const(regs[instr.src1.index]), lhs_config);
+  auto dst = matrix_view(regs[instr.dest.index]);
+  auto lhs = matrix_view(std::as_const(regs[instr.src1.index]));
   const auto arith = arith_mode_of(dst_config);
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
@@ -65,7 +64,7 @@ ExecuteResult elementwise_matrix(
   if (!operands_valid(instr, configs)) {
     return {.status = StepStatus::invalid_configuration};
   }
-  return with_src2_matrix(instr.src2, state, regs, configs,
+  return with_src2_matrix(instr.src2, state, regs,
                           [&](auto right_at) {
                             return run_matrix(instr, regs, configs, right_at);
                           });

@@ -34,14 +34,14 @@ init_matrix(const InitInstr &instr, State &state,
   const auto &dst_config = configs[instr.reg.index];
   if (!valid_domain_config(dst_config)) return config_error();
 
-  auto dst = matrix_view(regs[instr.reg.index], dst_config);
+  auto dst = matrix_view(regs[instr.reg.index]);
   if (instr.op == InitOp::copy) {
     const auto &src_config = configs[instr.src];
     if (!valid_domain_config(src_config) ||
         !configs_match(dst_config, src_config)) {
       return config_error();
     }
-    auto src = matrix_view(std::as_const(regs[instr.src]), src_config);
+    auto src = matrix_view(std::as_const(regs[instr.src]));
     for (std::size_t row = 0; row < dst_config.rows; ++row) {
       for (std::size_t col = 0; col < dst_config.cols; ++col) {
         dst.at(row, col) = src.at(row, col);
@@ -105,10 +105,8 @@ ExecuteResult transpose_tile(const InitInstr &instr, State &state) {
   // writes below would otherwise alias src_config.
   const auto src_rows = src_config.rows;
   const auto src_cols = src_config.cols;
-  const auto src = matrix_view(staged, src_config);
-  // The destination takes the transposed shape, which no config holds yet.
-  MatrixView dst(std::span<std::uint8_t>(state.t[instr.reg.index]), src_cols,
-                 src_rows, dst_config.layout);
+  const auto src = matrix_view(staged);
+  auto dst = matrix_view(state.t[instr.reg.index]);
   for (std::size_t row = 0; row < src_cols; ++row) {
     for (std::size_t col = 0; col < src_rows; ++col) {
       dst.at(row, col) = src.at(col, row);

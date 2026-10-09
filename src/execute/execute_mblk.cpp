@@ -102,7 +102,7 @@ ExecuteResult probed_store(Memory &memory, const Reg &reg,
 template <typename Config>
 auto matrix_at(const Config &config) {
   return [&config](auto &storage, std::size_t n) -> decltype(auto) {
-    const auto view = matrix_view(storage, config);
+    const auto view = matrix_view(storage);
     return view.at(n / config.cols, n % config.cols);
   };
 }
@@ -205,9 +205,8 @@ row_access(const MblkInstr &instr, ExecContext &ctx,
   auto &reg = regs[accessed_reg(instr).index];
   const std::span<const std::uint64_t> range(addrs->data(), cols);
   // The view spans the whole matrix; only row `row` is transferred.
-  const auto at = [&config, row](auto &storage,
-                                 std::size_t n) -> decltype(auto) {
-    const auto view = matrix_view(storage, config);
+  const auto at = [row](auto &storage, std::size_t n) -> decltype(auto) {
+    const auto view = matrix_view(storage);
     return view.at(row, n);
   };
   const auto result = is_store_form(instr.op)
@@ -269,7 +268,7 @@ ExecuteResult gather_tile(const MblkInstr &instr, ExecContext &ctx,
   if (result.status != StepStatus::retired) {
     return result;
   }
-  auto dst = matrix_view(reg, config);
+  auto dst = matrix_view(reg);
   for (std::size_t i = indexed_rows; i < rows; ++i) {
     for (std::size_t j = 0; j < cols; ++j) {
       dst.at(i, j) = 0;

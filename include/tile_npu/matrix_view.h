@@ -8,51 +8,37 @@
 
 namespace tile_npu {
 
-// A non-owning logical view over the fixed-size physical matrix register,
-// implementing the canonical row-major layout. The mapping lives here so
-// future layouts stay local to this abstraction; the recorded shape and
-// layout are what a second layout would dispatch on. Shape and layout
-// legality are config-layer concerns (valid_domain_config).
+// A non-owning view over one fixed-size physical matrix register, mapping
+// the logical coordinate (row, col) to the canonical row-major storage
+// offset. The view carries no shape or layout: shape and layout legality
+// are config-layer concerns (valid_domain_config).
 template <typename Element> class MatrixView {
 public:
-  MatrixView(std::span<Element> storage, std::size_t rows, std::size_t cols,
-             std::uint8_t layout)
-      : storage_(storage), rows_(rows), cols_(cols), layout_(layout) {}
+  explicit MatrixView(std::span<Element, MATRIX_ELEMENTS> storage)
+      : storage_(storage) {}
 
   Element &at(std::size_t row, std::size_t col) const {
-    return storage_[physical_index(row, col)];
+    return storage_[row * MATRIX_EXTENT + col];
   }
 
 private:
-  static std::size_t physical_index(std::size_t row, std::size_t col) {
-    return row * MATRIX_EXTENT + col;
-  }
-
-  std::span<Element> storage_;
-  std::size_t rows_;
-  std::size_t cols_;
-  std::uint8_t layout_;
+  std::span<Element, MATRIX_ELEMENTS> storage_;
 };
 
-template <typename Element, std::size_t N>
-MatrixView(std::span<Element, N>, std::size_t, std::size_t, std::uint8_t)
-    -> MatrixView<Element>;
-
-// Executors always view a register through its bound config; the factory
-// keeps the span/shape plumbing in one place. Constness follows the source
+// Executors always view a register; the fixed-extent span makes a
+// wrong-sized register a compile error. Constness follows the source
 // register.
-template <typename Element, std::size_t N, typename Config>
-MatrixView<Element> matrix_view(std::array<Element, N> &reg,
-                                const Config &config) {
-  return MatrixView<Element>(std::span<Element>(reg), config.rows, config.cols,
-                             config.layout);
+template <typename Element, std::size_t N>
+  requires(N == MATRIX_ELEMENTS)
+MatrixView<Element> matrix_view(std::array<Element, N> &reg) {
+  return MatrixView<Element>(std::span<Element, MATRIX_ELEMENTS>(reg));
 }
 
-template <typename Element, std::size_t N, typename Config>
-MatrixView<const Element> matrix_view(const std::array<Element, N> &reg,
-                                      const Config &config) {
-  return MatrixView<const Element>(std::span<const Element>(reg), config.rows,
-                                   config.cols, config.layout);
+template <typename Element, std::size_t N>
+  requires(N == MATRIX_ELEMENTS)
+MatrixView<const Element> matrix_view(const std::array<Element, N> &reg) {
+  return MatrixView<const Element>(
+      std::span<const Element, MATRIX_ELEMENTS>(reg));
 }
 
 } // namespace tile_npu

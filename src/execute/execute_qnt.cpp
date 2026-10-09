@@ -75,8 +75,8 @@ ExecuteResult tquant(const QntInstr &instr, State &state) {
       scale_config.len != src_config.rows) {
     return fail;
   }
-  auto dst = matrix_view(state.t[instr.dest.index], dst_config);
-  auto src = matrix_view(std::as_const(state.a[instr.src.index]), src_config);
+  auto dst = matrix_view(state.t[instr.dest.index]);
+  auto src = matrix_view(std::as_const(state.a[instr.src.index]));
   auto &scale_reg = state.v[instr.scale];
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     float scale;
@@ -108,8 +108,8 @@ ExecuteResult tdequant(const QntInstr &instr, State &state) {
       scale_config.len != src_config.rows) {
     return fail;
   }
-  auto dst = matrix_view(state.a[instr.dest.index], dst_config);
-  auto src = matrix_view(std::as_const(state.t[instr.src.index]), src_config);
+  auto dst = matrix_view(state.a[instr.dest.index]);
+  auto src = matrix_view(std::as_const(state.t[instr.src.index]));
   const auto &scale_reg = state.v[instr.scale];
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     const float scale = std::bit_cast<float>(scale_reg[row]);

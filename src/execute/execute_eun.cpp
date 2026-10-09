@@ -86,8 +86,8 @@ unary_matrix(const EunInstr &instr, State &,
     return fail;
   }
 
-  auto dst = matrix_view(regs[instr.dest.index], dst_config);
-  auto src = matrix_view(std::as_const(regs[instr.src.index]), src_config);
+  auto dst = matrix_view(regs[instr.dest.index]);
+  auto src = matrix_view(std::as_const(regs[instr.src.index]));
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
       dst.at(row, col) =

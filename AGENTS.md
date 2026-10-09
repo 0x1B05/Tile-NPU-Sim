@@ -40,7 +40,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `include/tile_npu/instruction.h` | typed instruction IR: scalar operands, NPU domains/registers (`domain_register_count`), `IndexOperand` (index5 操作数: `ImmediateIndex` 或 `ScalarRegister` 的 variant; `MblkInstr` 按方向拆 `dest`/`src`, 方向判读共享 `is_store_form`/`accessed_reg`), elementwise (`EbinInstr` + `EBIN_BY_FUNCT4` 操作元数据表, `EunInstr`, `CmpInstr` + `CMP_BY_FUNCT3` 条件元数据表, `BcastInstr`, `Er4Instr`, `MaskInstr`, `CvtInstr`, `ReduceInstr`, `QntInstr` + QNT 域配对谓词, `MmaInstr` + `MMA_BY_FUNCT3` 元数据表, `SysInstr`), config (`CfgInstr`, `ConfigRegType`), 访存 (`MblkInstr`), 初始化 (`InitInstr`) 与行/lane 搬运 (`RowInstr`, `LaneInstr`) 指令类型 |
 | `include/tile_npu/decode.h` | 译码结果类型: typed scalar/NPU instructions, `DecodeError`, `DecodeResult` |
 | `include/tile_npu/config.h`, `src/config.cpp` | 统一配置/描述符字段访问、字段编号映射与写入校验 |
-| `include/tile_npu/matrix_view.h` | 逻辑矩阵坐标到物理寄存器存储的 `MatrixView` 与构造工厂 `matrix_view(reg, cfg)`, 当前实现 canonical layout |
+| `include/tile_npu/matrix_view.h` | 固定尺寸矩阵寄存器的非拥有视图 `MatrixView`: `(row, col)` 到 canonical 行主序存储偏移的映射, 不携带 shape/layout; 构造工厂 `matrix_view(reg)` 只接受 `MATRIX_ELEMENTS` 大小的寄存器 |
 | `include/tile_npu/descriptor_view.h` | TM/AM/BM/VM 地址计算、保留位校验、`incremented_base` 预检与访存后 `base_addr` 自增 |
 | `include/tile_npu/simulator.h` | `Simulator` 单步 API: `reset(entry_pc)`, `step()` → `StepResult` |
 | `src/utils/endian.h` | 内部工具: `load_le`/`store_le` 小端字节转换 (取指/load/store 共享); 不属于模型接口, `include/tile_npu/` 只放架构状态与 API |
