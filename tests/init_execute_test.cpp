@@ -33,6 +33,28 @@ TEST_CASE(init_fill_tile_truncates_imm) {
   check_eq(state.t[0][2], std::uint8_t{0xab}, "tfill keeps invalid lanes");
 }
 
+TEST_CASE(init_fill_acc_f32_bf16_imm) {
+  FlatMemory memory(CODE_BASE, 8);
+  Simulator sim(memory);
+  // An f32 fill reads imm16 as the bf16 pattern (the high half of the f32
+  // bits): 0x3F80 is 1.0f, 0xC000 is -2.0f; the latter must not sign-extend.
+  write_word(memory, CODE_BASE,
+             make_init_fill(NpuDomain::acc, 0, 0x3f80u)); // afill a0, 1.0f
+  write_word(memory, CODE_BASE + 4,
+             make_init_fill(NpuDomain::acc, 1, 0xc000u)); // afill a1, -2.0f
+  sim.reset(CODE_BASE);
+  auto &state = sim.state();
+  for (auto index : {0, 1}) {
+    state.ac[index].dtype = DType::f32;
+    state.ac[index].rows = 1;
+    state.ac[index].cols = 1;
+  }
+  check_eq(sim.step().status, StepStatus::retired, "afill 1.0f retires");
+  check_eq(sim.step().status, StepStatus::retired, "afill -2.0f retires");
+  check_eq(hex(state.a[0][0]), hex(0x3f800000u), "1.0f bits");
+  check_eq(hex(state.a[1][0]), hex(0xc0000000u), "-2.0f bits");
+}
+
 TEST_CASE(init_fillx_acc_keeps_low32) {
   FlatMemory memory(CODE_BASE, 4);
   Simulator sim(memory);

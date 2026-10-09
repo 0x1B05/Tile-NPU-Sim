@@ -69,7 +69,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `src/execute/execute_mma.cpp` | 矩阵乘/点积 (MMA_BDOT) 族执行器: mma.{nn,nt}.{zero,acc} 为 i8 符号扩展后的 i32 乘加 (acc 形式 wrap32 累加到目的旧值), nt 对右 Tile 做逻辑转置; bdot.{nn,nt} 为 Vec8 与 Tile 列/行的点积, 只有 zero 形式 |
 | `src/execute/execute_sys.cpp` | 同步/结束 (SYS) 族执行器: fence.* 在单 hart 按序模型下为 no-op; kernel.end 上报 `StepStatus::kernel_end` 且 PC 停在指令上 (模拟器约定, 手册未定义 kernel 完成后的架构行为) |
 | `src/execute/execute_mblk.cpp` | M_BLK 访存族执行器: 先完成全部地址计算 (溢出报 `invalid_configuration`), 再做传输; load 先 stage 寄存器副本, store 先 `contains` 全探测, fault 不改变架构状态 |
-| `src/execute/execute_init.cpp` | INIT_MOVE 族执行器: fill/fillx 按目的 dtype 截取元素位宽, copy 要求同 dtype 同有效 shape, ttranspose 先 stage 源再写回并更新目的配置行列 |
+| `src/execute/execute_init.cpp` | INIT_MOVE 族执行器: fill/fillx 按目的 dtype 截取元素位宽 (f32 目的的 fill 立即数按 bf16 位模式解释), copy 要求同 dtype 同有效 shape, ttranspose 先 stage 源再写回并更新目的配置行列 |
 | `src/execute/execute_row_lane.cpp` | ROW_MOVE/LANE_MOVE 执行器: 行搬运要求向量长度等于矩阵列数且行号有效, lane extract 按源 dtype 扩展, insert 截取低位, broadcast 写入目的有效 lane |
 | `src/execute/execute_rv64i.cpp`, `src/execute/execute_rv64m.cpp` | RV64I 与 M 扩展语义 |
 | `src/execute/rv64_util.h` | RV64 执行器共享的 *W 结果符号扩展 (`signed_word`) |

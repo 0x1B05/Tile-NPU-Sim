@@ -13,14 +13,21 @@
 namespace tile_npu {
 namespace {
 
-// fill takes the sign-extended imm16, fillx the scalar register; both keep
-// the low element-width bits of the 64-bit value.
+// fill takes the sign-extended imm16, fillx the scalar register; integer
+// destinations keep the low element-width bits of the 64-bit value. An f32
+// fill interprets the raw imm16 as a bf16 pattern: the high half of the f32
+// bit pattern, low 16 bits zero.
 template <typename Element>
-Element fill_value(const InitInstr &instr, const State &state) {
-  const auto value = instr.op == InitOp::fill
-                         ? static_cast<std::uint64_t>(instr.imm)
-                         : state.scalar.read_x(instr.src);
-  return static_cast<Element>(value);
+Element fill_value(const InitInstr &instr, const State &state, DType dtype) {
+  if (instr.op == InitOp::fillx) {
+    return static_cast<Element>(state.scalar.read_x(instr.src));
+  }
+  if (dtype == DType::f32) {
+    return static_cast<Element>(
+        static_cast<std::uint32_t>(static_cast<std::uint16_t>(instr.imm))
+        << 16);
+  }
+  return static_cast<Element>(static_cast<std::uint64_t>(instr.imm));
 }
 
 // Matrix fill/fillx/copy over the destination's effective shape; physical
@@ -50,7 +57,7 @@ init_matrix(const InitInstr &instr, State &state,
     return {.status = StepStatus::retired};
   }
 
-  const auto value = fill_value<Element>(instr, state);
+  const auto value = fill_value<Element>(instr, state, dst_config.dtype);
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
       dst.at(row, col) = value;
@@ -81,7 +88,7 @@ init_vector(const InitInstr &instr, State &state,
     return {.status = StepStatus::retired};
   }
 
-  const auto value = fill_value<Element>(instr, state);
+  const auto value = fill_value<Element>(instr, state, dst_config.dtype);
   for (std::size_t lane = 0; lane < dst_config.len; ++lane) {
     dst_reg[lane] = value;
   }
