@@ -37,6 +37,7 @@ target("qwen3_app")
             os.vrunv(objcopy, {"-O", "binary", elf, bin})
         end, {dependfile = target:dependfile("qwen3"),
               files = deps,
+              changed = target:is_rebuilt(),
               lastmtime = math.min(os.mtime(elf), os.mtime(bin)),
               values = {gcc, "-march=rv64im -mabi=lp64 -O2"}})
     end)
@@ -93,6 +94,7 @@ if has_config("qwen3test") then
                 os.vrunv(target:data("python"), {convert, "--tiny", blob, ref})
             end, {dependfile = target:dependfile("tiny"),
                   files = {convert},
+                  changed = target:is_rebuilt(),
                   lastmtime = math.min(os.mtime(blob), os.mtime(ref)),
                   values = {target:data("python")}})
         end)

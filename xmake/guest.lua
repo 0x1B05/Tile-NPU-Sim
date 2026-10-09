@@ -37,6 +37,7 @@ target("guest_images")
                 guestimg.build_guest_image(gcc, objcopy, linkscript, src, elf, bin, extra)
             end, {dependfile = target:dependfile(path.basename(src)),
                   files = deps,
+                  changed = target:is_rebuilt(),
                   lastmtime = math.min(os.mtime(elf), os.mtime(bin)),
                   values = {gcc, "-march=rv64im -mabi=lp64 -O2"}})
         end

@@ -65,6 +65,7 @@ if has_config("rvtests") then
                 end, {dependfile = target:dependfile(name:gsub("/", "-")),
                       files = {src, linkscript, envheader,
                                path.join(macrosdir, "test_macros.h")},
+                      changed = target:is_rebuilt(),
                       lastmtime = math.min(os.mtime(elf), os.mtime(bin)),
                       values = {gcc, "-march=rv64im -mabi=lp64"}})
             end
