@@ -19,7 +19,10 @@ using DecodedNpuInstr =
                  MblkInstr, InitInstr, RowInstr, LaneInstr, CfgInstr, CvtInstr,
                  ReduceInstr, QntInstr, MmaInstr, SysInstr>;
 
-enum class DecodeError { not_implemented, illegal };
+// Every undecodable word is illegal: encodings the ISA reserves, and (on the
+// scalar side) encodings of extensions this hart does not implement, which
+// are illegal by RISC-V hart semantics.
+enum class DecodeError { illegal };
 using DecodeResult =
     std::variant<DecodedScalarInstr, DecodedNpuInstr, DecodeError>;
 

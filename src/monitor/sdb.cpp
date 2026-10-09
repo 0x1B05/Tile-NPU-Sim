@@ -124,7 +124,6 @@ std::string_view status_name(StepStatus status) {
   // clang-format off
   switch (status) {
   case retired:                        return "retired";
-  case decode_not_implemented:         return "decode_not_implemented";
   case execution_not_implemented:      return "execution_not_implemented";
   case illegal_instruction:            return "illegal_instruction";
   case invalid_configuration:          return "invalid_configuration";

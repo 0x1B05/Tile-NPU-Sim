@@ -115,7 +115,6 @@ struct State {
 // ISA-defined traps.
 enum class StepStatus {
   retired,
-  decode_not_implemented,
   execution_not_implemented,
   illegal_instruction,
   invalid_configuration,

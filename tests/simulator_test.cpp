@@ -72,7 +72,7 @@ TEST_CASE(npu_decode) {
                  "reserved elementwise major"},
       RejectCase{0x10002081u, DecodeError::illegal,
                  "reserved data movement major"},
-      RejectCase{0x90002082u, DecodeError::not_implemented,
+      RejectCase{0x90002082u, DecodeError::illegal,
                  "reserved cross-domain major"},
   };
   for (const auto &test : reject_cases) {

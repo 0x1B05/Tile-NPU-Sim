@@ -89,17 +89,6 @@ void check_illegal(const std::array<std::uint32_t, N> &words) {
   }
 }
 
-template <std::size_t N>
-void check_not_implemented(const std::array<std::uint32_t, N> &words) {
-  for (const auto word : words) {
-    const auto result = tile_npu::decode(word);
-    const auto *error = std::get_if<DecodeError>(&result);
-    check(error != nullptr, "accepts unsupported instruction " + to_hex(word));
-    check_eq(*error, DecodeError::not_implemented,
-             "error kind for unsupported instruction " + to_hex(word));
-  }
-}
-
 } // namespace
 
 TEST_CASE(rv64im_decode) {
@@ -220,12 +209,14 @@ TEST_CASE(rv64im_decode) {
   };
   check_illegal(illegal_cases);
 
-  constexpr std::array unsupported_cases{
+  // Encodings of extensions outside RV64IM (Zifencei, Zicsr, other SYSTEM)
+  // and reserved operand combinations are illegal on this hart.
+  constexpr std::array extension_cases{
       i(0x0f, 1, 0), // FENCE.I belongs to Zifencei.
       i(0x73, 1, 0), // CSR instructions belong to Zicsr.
-      0x00200073u,   // Other SYSTEM instructions are not modeled yet.
+      0x00200073u,   // SYSTEM encodings beyond ECALL/EBREAK.
       0x000000f3u,   // ECALL with nonzero rd is not ECALL.
       0x00108073u,   // EBREAK with nonzero rs1 is not EBREAK.
   };
-  check_not_implemented(unsupported_cases);
+  check_illegal(extension_cases);
 }

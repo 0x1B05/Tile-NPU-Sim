@@ -30,11 +30,9 @@ StepResult Simulator::step() {
   // decode && execute
   ExecContext ctx{state_, memory_};
   const auto execution = std::visit(
-      Overloaded{[](DecodeError error) {
-                   return ExecuteResult{
-                       .status = error == DecodeError::illegal
-                                     ? StepStatus::illegal_instruction
-                                     : StepStatus::decode_not_implemented};
+      Overloaded{[](DecodeError) {
+                   return ExecuteResult{.status =
+                                            StepStatus::illegal_instruction};
                  },
                  [&ctx](const DecodedScalarInstr &decoded) {
                    return execute_scalar(decoded, ctx);

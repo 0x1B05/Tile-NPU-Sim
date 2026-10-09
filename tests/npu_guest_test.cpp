@@ -34,8 +34,6 @@ constexpr std::size_t tile_index(std::size_t row, std::size_t col) {
 std::string_view status_name(tile_npu::StepStatus status) {
   switch (status) {
   case tile_npu::StepStatus::retired: return "retired";
-  case tile_npu::StepStatus::decode_not_implemented:
-    return "decode_not_implemented";
   case tile_npu::StepStatus::execution_not_implemented:
     return "execution_not_implemented";
   case tile_npu::StepStatus::illegal_instruction: return "illegal_instruction";

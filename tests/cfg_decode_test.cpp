@@ -154,9 +154,9 @@ TEST_CASE(cfg_decode_rejects_reserved) {
                 DecodeError::illegal},
       ErrorCase{"get ac12 out of range", cfg_reg(1, 0, 2, 0, 12, 5),
                 DecodeError::illegal},
-      // Reserved major4 encodings report not_implemented.
+      // Reserved major4 encodings report illegal.
       ErrorCase{"reserved major4 1001", (0x9u << 28) | 0x2u,
-                DecodeError::not_implemented},
+                DecodeError::illegal},
   };
   check_errors(cases);
 }
