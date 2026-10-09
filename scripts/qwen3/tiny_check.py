@@ -78,7 +78,7 @@ def run(cmd):
 
 def main():
     sim_run, app_bin, blob, ref_npz = sys.argv[1:5]
-    guest = run([sim_run, "--run", "-m", MEMORY_MIB, app_bin,
+    guest = run([sim_run, "-m", MEMORY_MIB, app_bin,
                  f"{blob}@{BLOB_BASE}"])
     ref = run([sys.executable, REF_PY, ref_npz])
 

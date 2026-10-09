@@ -2,15 +2,15 @@
 
 ## 项目概览
 
-Tile NPU 指令集的功能模拟器 (functional simulator), 独立 git 仓库, 远端为 `git@github.com:0x1B05/Tile-NPU-Sim`。当前为单 hart, 按程序序同步执行的库 (`tile_npu_sim` 静态库) 加 monitor 程序 `sim_run` (交互 sdb shell + batch 模式); 译码与执行已覆盖 32-bit RV64IM 整数指令、逐元素二元 (`E_BIN`)、逐元素一元 (`E_UNARY`)、比较 (`E_CMP`)、向量广播 (`E_BCAST`)、四寄存器 (`E_R4`: select/fmadd)、mask (`E_MASK`: tail/tril/triu)、类型转换 (`CVT`: acvt/vcvt/twiden)、规约 (`AREDUCE` 行规约, `VREDUCE` 向量规约与 argmax)、量化/反量化 (`QNT`)、矩阵乘/点积 (`MMA_BDOT`) 和同步/结束 (`SYS`) 各族、配置指令 (`cfg.seti/setx/copy/get`)、`M_BLK` 访存族 (block/row load/store, gather load)、`INIT_MOVE` (fill/fillx/copy/ttranspose) 和行/lane 搬运族 (`ROW_MOVE` insert/extract.row, `LANE_MOVE` extract/insert/broadcast); 手册 major4 表中的指令族已全部覆盖。
+Tile NPU 指令集的功能模拟器 (functional simulator), 独立 git 仓库, 远端为 `git@github.com:0x1B05/Tile-NPU-Sim`。当前为单 hart, 按程序序同步执行的库 (`tile_npu_sim` 静态库) 加 monitor 程序 `sim_run` (默认运行程序, `-i` 进入交互 sdb shell); 译码与执行已覆盖 32-bit RV64IM 整数指令、逐元素二元 (`E_BIN`)、逐元素一元 (`E_UNARY`)、比较 (`E_CMP`)、向量广播 (`E_BCAST`)、四寄存器 (`E_R4`: select/fmadd)、mask (`E_MASK`: tail/tril/triu)、类型转换 (`CVT`: acvt/vcvt/twiden)、规约 (`AREDUCE` 行规约, `VREDUCE` 向量规约与 argmax)、量化/反量化 (`QNT`)、矩阵乘/点积 (`MMA_BDOT`) 和同步/结束 (`SYS`) 各族、配置指令 (`cfg.seti/setx/copy/get`)、`M_BLK` 访存族 (block/row load/store, gather load)、`INIT_MOVE` (fill/fillx/copy/ttranspose) 和行/lane 搬运族 (`ROW_MOVE` insert/extract.row, `LANE_MOVE` extract/insert/broadcast); 手册 major4 表中的指令族已全部覆盖。
 
 配套的 ISA 手册仓库在 `../Tile-NPU-ISA/` (另一个独立 git 仓库)。
 
-**注意**: 本仓库无包管理清单以外的第三方依赖, 无 CI; 验证方式就是 `xmake test` 通过。
+**注意**: `sim_run` 使用 CLI11 解析命令行, 由 xmake 管理依赖; 本仓库无 CI, 验证方式就是 `xmake test` 通过。
 
 ## 技术栈
 
-- 语言: C++20 (`namespace tile_npu`), 无第三方库依赖
+- 语言: C++20 (`namespace tile_npu`), `sim_run` 依赖 CLI11
 - 构建: xmake (编译器缓存在本目录 `.cache/ccache`, 已 gitignore)
 - 文档语言: `README.md` 与代码注释为英文; 本文件为中文
 
@@ -19,8 +19,8 @@ Tile NPU 指令集的功能模拟器 (functional simulator), 独立 git 仓库, 
 ```bash
 xmake                                  # 构建 tile_npu_sim 静态库与 sim_run
 xmake test                             # 构建并运行全部测试 (sim_tests + guest 镜像)
-xmake run sim_run program.bin          # sdb 交互模式 (si/c/info r/x/q)
-xmake run sim_run -b a.bin b.bin       # batch 模式, 逐镜像报 PASS/FAIL
+xmake run sim_run program.bin          # 默认运行, ecall/ebreak/kernel.end 退出
+xmake run sim_run -i program.bin       # sdb 交互模式 (si/c/info r/x/q)
 xmake f --monitor=n && xmake           # 关闭 monitor, 只构建库
 scripts/fetch_riscv_tests.sh           # 拉取官方 riscv-tests 到 external/ (一次性)
 xmake f --rvtests=y && xmake test      # 额外跑官方 rv64ui/rv64um 套件
@@ -74,6 +74,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `src/execute/execute_rv64i.cpp`, `src/execute/execute_rv64m.cpp` | RV64I 与 M 扩展语义 |
 | `src/execute/rv64_util.h` | RV64 执行器共享的 *W 结果符号扩展 (`signed_word`) |
 | `src/simulator.cpp`, `src/memory.cpp` | 取指 (小端 4 字节拼字) 与步进循环, 内存实现 |
+| `src/main.cpp` | `sim_run` 入口: CLI11 参数解析; 编进 sim_run 而非静态库 (xmake.lua 用 `\|main.cpp` 排除) |
 | `tests/*.cpp` | 全部编入 `sim_tests` 一个测试程序; 手卷迷你框架, 见"测试约定" |
 | `tests/guest/` | guest 测试: C 程序 (共享 `crt0.S`) 与裸 `.S`, 经 `link.ld` 链接成扁平 bin 到 `build/guest/`; `include/npu.inc` 为共享的 NPU 编码宏与配置常量 (供 tests/guest 与 apps/qwen3 共同使用) |
 | `tests/riscv-tests-env/riscv_test.h` | 官方 riscv-tests 的自定义最小 env: 无特权态/tohost, PASS/FAIL 走 `ebreak`/`a0` 约定 |
@@ -81,7 +82,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `apps/qwen3/` | Qwen3-0.6B 推理 guest 程序 (rv64im 裸机, NPU kernel 库 + forward 编排, 末位 prompt token 上带数值对齐探针); `xmake build qwen3_app` 交叉编译, 模型 blob 由 `scripts/qwen3/` 生成 |
 | `scripts/qwen3/` | Qwen3 宿主工具: `fetch_model.sh` 下载模型权重/分词器到 `external/qwen3` (sha256 固定), `convert.py` safetensors→q8s32 模型 blob (含 `--tiny` 随机小模型), `ref.py` tiny 模型 numpy 对齐参考, `tokenizer.py` 纯 Python 分词器, `tiny_check.py` guest 输出与 ref.py 的逐探针对齐比较 (由 `--qwen3test=y` 的 xmake 测试驱动) |
 | `xmake/guest.lua`, `xmake/riscv_tests.lua`, `xmake/apps.lua` | 按关注点拆出的构建脚本 (guest 镜像 / 官方套件 / Qwen3 应用与 tiny 回归), 由根 `xmake.lua` includes; 共享汇编逻辑在 `xmake/modules/guestimg.lua`; 增量重建用 `depend.on_changed` 的 `lastmtime` 锚定产物 mtime (产物缺失即重建) |
-| `src/monitor/monitor.cpp` | `sim_run` 主程序: 参数解析, 镜像装载, batch/plain 模式的结果解释与展示 |
+| `src/monitor/monitor.h`, `src/monitor/monitor.cpp` | monitor 平台胶水: 镜像装载 (`image@0xADDR`), 运行/交互分派与结果解释; 入口 main 在 `src/main.cpp` |
 | `src/monitor/parse.h` | 命令行参数与 sdb 命令共享的数值解析 `parse_u64` (base 0, 全串消费) |
 | `src/monitor/runner.h`, `src/monitor/runner.cpp` | monitor 运行层: 统一步进循环 (步数预算) 与停止原因分类 (`StopReason`/`RunOutcome`); ecall a7=93 退出约定在此实现, 属模拟器约定 |
 | `src/monitor/sdb.cpp` | sdb 交互 shell: `si`/`c`/`info r`/`x`/`q`, 空行重复上一条命令 |
@@ -119,10 +120,10 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 
 - 无第三方测试框架: `tests/framework.h` 提供手卷迷你框架 — `TEST_CASE(name)` 静态自动注册, `tests/main.cpp` 按名字排序后逐用例跑并汇总 (重名直接报错; `sim_tests --list` 列出全部用例, `sim_tests --filter SUBSTR` 只跑名字匹配的用例); `check_eq(actual, expected, what)` 失败时带 actual/expected 值与 file:line, 指令字/地址等数值用 `hex()` 包装后按十六进制打印。host 侧执行测试的共享 fixture (`CODE_BASE`/`load_one`/`tile_cfg`/`acc_cfg`/`vec_cfg`/`f32_bits`/`i8_bits`/`write_word`) 集中在 `tests/support/execute_helpers.h`, 纯译码测试只需 `framework.h`。
 - 指令级测试直接内联机器码常数, 行尾注释对应的汇编形式 (如 `0x002081b3u, // add x3, x1, x2`)。
-- guest 镜像: `tests/guest/**.c` 由 RISC-V 工具链交叉编译 (共享 `crt0.S` 起栈并调 `main`, 裸 `.S` 自带 `_start`), 链接成扁平 bin (构建产物, 不入库); `rv64im/` 下为自校验程序 (`main` 返回 0 即 PASS, 经 `ebreak`/`a0` 约定上报), 逐个注册为 `sim_run -b` 的 xmake 测试。需要 riscv64 工具链, 前缀可用 `xmake f --riscv_cross=` 改。镜像依赖挂在 `sim_tests` 上 (`sim_run` 二进制本身不需要交叉工具链); 过滤单跑 guest 测试前先 `xmake build guest_images` 或跑一遍完整 `xmake test`。
+- guest 镜像: `tests/guest/**.c` 由 RISC-V 工具链交叉编译 (共享 `crt0.S` 起栈并调 `main`, 裸 `.S` 自带 `_start`), 链接成扁平 bin (构建产物, 不入库); `rv64im/` 下为自校验程序 (`main` 返回 0 即 PASS, 经 `ebreak`/`a0` 约定上报), 逐个注册为 `sim_run` 的 xmake 测试。需要 riscv64 工具链, 前缀可用 `xmake f --riscv_cross=` 改。镜像依赖挂在 `sim_tests` 上 (`sim_run` 二进制本身不需要交叉工具链); 过滤单跑 guest 测试前先 `xmake build guest_images` 或跑一遍完整 `xmake test`。
 - NPU 指令正例写 guest 镜像: `tests/guest/npu/*.S` 用 `npu.inc` 的编码宏 (字段布局与 `src/decode/encoding.h` 一一对应), host 侧 driver (`tests/npu_guest_test.cpp`) 装载镜像、设配置、逐条步进断言; "跑到停止并检查 a0" 的自校验镜像统一走 `check_guest_image()` helper (停止状态默认 `breakpoint`, `kernel.end` 见 sys 用例), 步进循环本身由 `run_until_stop()` 提供 — 超过步数预算会报告 timeout, 步数, PC 与 PC 处指令字; 非法编码负例留在 host 侧表驱动。
-- 官方套件 (可选): `xmake f --rvtests=y` 后 `riscv-tests` 的 rv64ui/rv64um 逐个注册为 `sim_run -b` 测试; `fence_i` (Zifencei) 与 `ma_data` (依赖 trap 投递) 在 xmake.lua 里显式排除。
-- tiny Qwen3 对齐回归 (可选): `xmake f --qwen3test=y` 后注册 `qwen3_tiny/forward` 测试 — `convert.py --tiny` 生成固定 seed 随机模型, `sim_run --run` 跑 guest forward, `scripts/qwen3/tiny_check.py` 与 `ref.py` 的 numpy 参考逐探针比较 (整数探针位精确, f32 探针走容差, 生成 token 精确); python3 或 numpy 不可用时打印警告并跳过注册, 不影响其余测试。
+- 官方套件 (可选): `xmake f --rvtests=y` 后 `riscv-tests` 的 rv64ui/rv64um 逐个注册为 `sim_run` 测试; `fence_i` (Zifencei) 与 `ma_data` (依赖 trap 投递) 在 xmake.lua 里显式排除。
+- tiny Qwen3 对齐回归 (可选): `xmake f --qwen3test=y` 后注册 `qwen3_tiny/forward` 测试 — `convert.py --tiny` 生成固定 seed 随机模型, `sim_run` 跑 guest forward, `scripts/qwen3/tiny_check.py` 与 `ref.py` 的 numpy 参考逐探针对齐 (整数探针位精确, f32 探针走容差, 生成 token 精确); python3 或 numpy 不可用时打印警告并跳过注册, 不影响其余测试。
 - 外部 `.bin` 测试镜像不入库, 路径由命令行提供, 不作为构建依赖。
 
 ## 代码风格

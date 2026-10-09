@@ -8,7 +8,7 @@
 namespace tile_npu::monitor {
 
 // A step budget of UNLIMITED_STEPS runs until the program stops on its own;
-// parse_u64 wraps a literal "-1" to this same value.
+// a command-line "-1" wraps to this same value (int64 -> uint64).
 inline constexpr std::uint64_t UNLIMITED_STEPS =
     std::numeric_limits<std::uint64_t>::max();
 
@@ -29,10 +29,8 @@ struct RunOutcome {
   std::uint64_t exit_code = 0;
 };
 
-// One step loop shared by batch mode, plain runs, and the sdb shell: all
-// three retire instructions and classify the stop, while Simulator::step()
-// itself stays a single-step API. Runs until the simulator stops or the
-// step budget is spent.
+// Step loop shared by the default runner and sdb shell. Simulator::step()
+// remains a single-step API; this runs until a stop or the step budget.
 RunOutcome run(Simulator &sim, std::uint64_t step_limit);
 
 } // namespace tile_npu::monitor

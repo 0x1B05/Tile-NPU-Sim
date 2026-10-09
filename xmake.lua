@@ -11,7 +11,7 @@ add_moduledirs("xmake/modules")
 option("monitor")
     set_default(true)
     set_showmenu(true)
-    set_description("Build sim_run, the interactive monitor and batch runner")
+    set_description("Build sim_run, the guest runner and interactive monitor")
 option_end()
 
 option("riscv_cross")
@@ -34,10 +34,8 @@ option_end()
 
 target("tile_npu_sim")
     set_kind("static")
-    add_files("src/*.cpp", "src/decode/*.cpp", "src/execute/*.cpp")
+    add_files("src/*.cpp|main.cpp", "src/decode/*.cpp", "src/execute/*.cpp")
     add_includedirs("include", {public = true})
-    -- Internal helpers (src/utils) are private to the implementation tree;
-    -- tests and the monitor opt into the same root below.
     add_includedirs("src")
 target_end()
 
@@ -51,11 +49,13 @@ target("sim_tests")
 target_end()
 
 if has_config("monitor") then
+    add_requires("cli11 2.7.2")
     target("sim_run")
         set_kind("binary")
         add_deps("tile_npu_sim")
-        add_files("src/monitor/*.cpp")
+        add_files("src/main.cpp", "src/monitor/*.cpp")
         add_includedirs("src")
+        add_packages("cli11")
     target_end()
 end
 

@@ -1,7 +1,7 @@
 -- Official riscv-tests suite, opt-in (--rvtests=y, fetched by
 -- scripts/fetch_riscv_tests.sh). Each rv64ui/rv64um test is assembled
 -- against our minimal env (tests/riscv-tests-env) and reported as its own
--- sim_run batch test. Excluded: fence_i (Zifencei, not modeled) and ma_data
+-- sim_run test. Excluded: fence_i (Zifencei, not modeled) and ma_data
 -- (requires trap delivery, which the simulator does not implement).
 
 if has_config("rvtests") then
@@ -82,7 +82,7 @@ if has_config("rvtests") then
         for _, name in ipairs(rvtests) do
             local bin = path.join(rvtests_bindir, name:gsub("/", "-") .. ".bin")
             add_tests("riscv-tests/" .. name:gsub("/", "-"),
-                      {runargs = {"-b", bin}})
+                      {runargs = {bin}})
         end
     target_end()
 end

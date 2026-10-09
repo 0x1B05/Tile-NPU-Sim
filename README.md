@@ -18,10 +18,19 @@ xmake
 xmake test
 ```
 
-`sim_run` has two modes. Interactive, an sdb shell over a flat `.bin` image:
+`sim_run` executes a flat `.bin` image by default. An `ecall` with `a7=93`
+returns `a0` as the process exit code; `ebreak` and `kernel.end` also stop a
+self-checking guest, with `a0=0` indicating success. Additional
+`path@0xADDR` images are loaded into the same memory before execution:
 
 ```sh
-xmake run sim_run path/to/program.bin
+xmake run sim_run path/to/program.bin [data.bin@0xADDR ...]
+```
+
+Use `-i` or `--interactive` to open the sdb shell:
+
+```sh
+xmake run sim_run -i path/to/program.bin
 ```
 
 ```
@@ -31,18 +40,12 @@ xmake run sim_run path/to/program.bin
 (sdb) c           # continue until the program stops
 ```
 
-Batch mode reports PASS/FAIL per image:
-
-```sh
-xmake run sim_run -b path/to/program.bin [more.bin ...]
-```
-
 The runner is an xmake option; `xmake f --monitor=n` builds the library only.
 
 Guest test programs under `tests/guest/` are C sources cross-compiled with a
 RISC-V toolchain (`riscv64-linux-gnu-gcc`/`objcopy` by default; override the
 prefix with `xmake f --riscv_cross=<prefix>`), linked against a minimal
-`crt0.S`. Self-checking RV64IM programs run through `sim_run -b` as
+`crt0.S`. Self-checking RV64IM programs run through `sim_run` as
 individual `xmake test` cases. Images attach to the `sim_tests` target, so
 the `sim_run` binary itself never needs the cross toolchain; before a
 filtered rerun like `xmake test 'sim_run/guest/factorial'`, build the images
@@ -83,7 +86,7 @@ blob, which must land at the address the guest is linked against
 (`BLOB_BASE` in `apps/qwen3/qwen3.h`):
 
 ```sh
-./build/linux/x86_64/release/sim_run --run -m 1024 \
+./build/linux/x86_64/release/sim_run -m 1024 \
     build/apps/qwen3.bin model.q3b@0x81000000
 ```
 

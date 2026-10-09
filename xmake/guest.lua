@@ -59,11 +59,11 @@ target_end()
 
 if has_config("monitor") then
     target("sim_run")
-        -- Self-checking guest images: sim_run -b reports PASS/FAIL per image.
+        -- Each self-checking guest image runs as a separate xmake test.
         for _, ext in ipairs({"*.c", "*.S"}) do
             for _, src in ipairs(os.files(path.join(guest_srcdir, "rv64im", ext))) do
                 add_tests("guest/" .. path.basename(src),
-                          {runargs = {"-b", path.join(guest_bindir, path.basename(src) .. ".bin")}})
+                          {runargs = {path.join(guest_bindir, path.basename(src) .. ".bin")}})
             end
         end
     target_end()
