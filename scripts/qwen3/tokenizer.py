@@ -78,11 +78,10 @@ class Tokenizer:
 
         chunks = []
         i, n = 0, len(text)
-        lower = text.lower()
         while i < n:
             c = text[i]
             for con in ("'s", "'t", "'re", "'ve", "'m", "'ll", "'d"):
-                if lower.startswith(con, i):
+                if text[i:i + len(con)].lower() == con:
                     chunks.append(text[i:i + len(con)])
                     i += len(con)
                     break
