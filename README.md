@@ -18,9 +18,9 @@ xmake
 xmake test
 ```
 
-`sim_run` executes a flat `.bin` image by default. An `ecall` with `a7=93`
-returns `a0` as the process exit code; `ebreak` and `kernel.end` also stop a
-self-checking guest, with `a0=0` indicating success. Additional
+`sim_run` executes a flat `.bin` image by default. A guest stops at `ebreak`
+(or `kernel.end` on the NPU side) with `a0` as the process exit code;
+`a0 = 0` indicates success. Additional
 `path@0xADDR` images are loaded into the same memory before execution:
 
 ```sh

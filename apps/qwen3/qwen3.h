@@ -39,16 +39,15 @@ struct q3b_section {
 };
 
 // Console I/O (platform conventions, not ISA behavior): storing a byte at
-// the serial THR prints it on the host (see include/tile_npu/serial.h); an
-// ecall with a7 = 93 exits with a0 as the process exit code.
+// the serial THR prints it on the host (see include/tile_npu/serial.h);
+// ebreak stops the simulator with a0 as the process exit code.
 #define SERIAL_THR ((volatile unsigned char *)0x10000000ull)
 
 static inline void serial_putc(int c) { *SERIAL_THR = (unsigned char)c; }
 
-static inline void semihost_exit(long code) {
+static inline void halt(long code) {
   register long a0 asm("a0") = code;
-  register long a7 asm("a7") = 93;
-  asm volatile("ecall" : "+r"(a0) : "r"(a7) : "memory");
+  asm volatile("ebreak" : : "r"(a0) : "memory");
   __builtin_unreachable();
 }
 

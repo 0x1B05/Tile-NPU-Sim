@@ -44,21 +44,20 @@ bool load_image(const Image &image, FlatMemory &memory) {
   return true;
 }
 
-// Ecall a7=93 uses a0 as an exit code. Self-checking guest images also stop
-// at ebreak or kernel.end, with a0=0 indicating success.
+// A guest stops at ebreak or kernel.end with a0 as the process exit code;
+// a0 = 0 means success. A stop on any other status is an error.
 int run_program(Simulator &sim, std::uint64_t step_limit) {
   const auto outcome = tile_npu::monitor::run(sim, step_limit);
   using enum tile_npu::monitor::StopReason;
   switch (outcome.reason) {
-  case semihost_exit:
-    return static_cast<int>(outcome.exit_code);
   case breakpoint:
-  case kernel_end:
-    if (const auto exit_code = sim.state().scalar.read_x(10); exit_code != 0) {
+  case kernel_end: {
+    const auto exit_code = sim.state().scalar.read_x(10);
+    if (exit_code != 0) {
       std::cerr << "guest exited with a0=" << exit_code << '\n';
-      return 1;
     }
-    return 0;
+    return static_cast<int>(exit_code);
+  }
   case step_limit:
     std::cerr << "step limit reached\n";
     return 1;

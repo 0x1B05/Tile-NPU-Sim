@@ -22,7 +22,7 @@ const void *blob_section(const char name[8]) {
   for (int i = 0; i < 8 && name[i]; ++i)
     serial_putc(name[i]);
   serial_putc('\n');
-  semihost_exit(1);
+  halt(1);
 }
 
 const struct q3b_header *blob_header(void) { return blob; }

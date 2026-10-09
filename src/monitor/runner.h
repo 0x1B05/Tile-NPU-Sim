@@ -13,11 +13,10 @@ inline constexpr std::uint64_t UNLIMITED_STEPS =
     std::numeric_limits<std::uint64_t>::max();
 
 enum class StopReason {
-  step_limit,    // the retired-instruction budget is spent
-  semihost_exit, // semihosting exit (ecall a7 = 93); exit_code carries a0
-  breakpoint,    // ebreak
-  kernel_end,    // kernel.end
-  stopped,       // any other non-retired StepStatus; result describes it
+  step_limit, // the retired-instruction budget is spent
+  breakpoint, // ebreak; a0 carries the exit code
+  kernel_end, // kernel.end
+  stopped,    // any other non-retired StepStatus; result describes it
 };
 
 struct RunOutcome {
@@ -26,7 +25,6 @@ struct RunOutcome {
   StepResult result{};
   // Retired instructions so far.
   std::uint64_t steps = 0;
-  std::uint64_t exit_code = 0;
 };
 
 // Step loop shared by the default runner and sdb shell. Simulator::step()

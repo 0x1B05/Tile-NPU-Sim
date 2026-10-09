@@ -1,6 +1,6 @@
 # Bare-metal startup for the Qwen3 app. Zeroes .bss, sets the stack to the
-# app's reserved top of RAM, calls main, and reports its return value through
-# the semihosting exit convention (a7 = 93).
+# app's reserved top of RAM, calls main, and stops on ebreak with main's
+# return value in a0.
 
     .section .text.crt0, "ax", @progbits
     .globl _start
@@ -15,5 +15,4 @@ _start:
     j       1b
 2:  li      sp, STACK_TOP
     call    main
-    li      a7, 93
-    ecall
+    ebreak

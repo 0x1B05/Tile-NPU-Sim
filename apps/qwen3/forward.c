@@ -223,18 +223,18 @@ void forward_init(void) {
       INTER % 32 != 0 || Q_DIM % 32 != 0 || KV_DIM % 32 != 0 ||
       VOCAB % 32 != 0 || N_Q % N_KV != 0 || (HIDDEN & (HIDDEN - 1)) != 0) {
     print_str("unsupported arch dims\n");
-    semihost_exit(1);
+    halt(1);
   }
   switch (HD) {
   case 128: SCALE_LOG2E_BITS = 0x3E0293EEu; break;
   case 64: SCALE_LOG2E_BITS = 0x3E38AA3Bu; break;
   case 32: SCALE_LOG2E_BITS = 0x3E8293EEu; break;
-  default: print_str("unsupported head_dim\n"); semihost_exit(1);
+  default: print_str("unsupported head_dim\n"); halt(1);
   }
   kv_stride = MAX_POS * KV_DIM * 4;
   if ((uint64_t)2 * N_LAYERS * kv_stride > KV_REGION_SIZE) {
     print_str("kv cache exceeds region\n");
-    semihost_exit(1);
+    halt(1);
   }
   embed = blob_section("embed\0\0");
   embed_s = blob_section("embed_s\0");
