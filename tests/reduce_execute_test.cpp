@@ -131,6 +131,23 @@ TEST_CASE(vreduce_folds) {
   check_eq(hex(state.scalar.read_x(8)), hex(f32_bits(22.25f)), "sumsq bits");
 }
 
+TEST_CASE(vreduce_sumsq_rounds_each_product) {
+  FlatMemory memory(CODE_BASE, 4);
+  Simulator sim(memory);
+  // The manual rounds each product to f32 before the f32 add; a host build
+  // that contracts the fold into an FMA would produce 0x3f701583 instead
+  // (reproduced with -O2 -mfma).
+  load_one(sim, memory, make_vreduce(3, 5, 1));
+  auto &state = sim.state();
+  vec_cfg(state, 1, DType::f32, 2);
+  state.v[1][0] = 0x3f4f5282u;
+  state.v[1][1] = 0x3f07eff9u;
+
+  check_eq(sim.step().status, StepStatus::retired, "vreduce.sumsq retires");
+  check_eq(hex(state.scalar.read_x(5)), hex(0x3f701582ull),
+           "products round to f32 before the add");
+}
+
 TEST_CASE(vreduce_argmax) {
   FlatMemory memory(CODE_BASE, 4);
   Simulator sim(memory);

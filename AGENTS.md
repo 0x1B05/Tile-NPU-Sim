@@ -93,6 +93,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 - Tile 按行主序存储, 对应 canonical layout。
 - 标量执行: 64-bit 回绕算术, 小端访存, load/store 要求自然对齐; 非对齐访问只报告状态, 不改变架构状态。
 - 单 hart 模型下 RV64 `FENCE` 与 NPU `fence.*` 均为 no-op; `ECALL`/`EBREAK`/`kernel.end` 使 `step()` 停在当前 PC, 交给调用方处理。
+- 主机浮点策略: 构建经 `-ffp-contract=off` (xmake.lua) 禁止编译器隐式乘加融合, 手册逐次舍入的运算 (如 sumsq 先乘积舍入再累加) 依赖此约定; `fmadd` 的单次舍入经显式 `std::fma` 表达。`FpEnvGuard` (src/execute/fp_env.h) 管运行时浮点环境 (舍入模式/异常标志), 约束不了编译期融合, 两者各管一层。
 - NPU 指令统一在默认浮点环境 (RNE 舍入, 默认 subnormal 处理) 下执行: `execute_npu` 入口的 `FpEnvGuard` (`src/execute/fp_env.h`) 保存并恢复宿主的浮点环境, 执行结果只取决于架构输入。
 - 状态与诊断的区分是刻意的: `decode_not_implemented` (编码可能合法但未译码) / `illegal` (保留编码) / `execution_not_implemented` / `invalid_configuration` 都是**模拟器诊断, 不是 ISA 定义的 trap**。理论上不可达的路径 (不变式被破坏, 即模拟器自身 bug) 用 `unreachable()` 当场中止, 不走 `StepStatus`。
 - 结构合法性只校验一次: `decode()` 产生的 IR 保证结构合法 (op code、domain、操作数 variant、寄存器号都在某个真实编码允许的范围内); `execute_npu` 入口用 `valid_structure` (`src/execute/validate.h`) 统一复查, 手工构造的非法 IR (embedder bug) 报 `illegal_instruction`。各执行器不再重复结构检查, 只负责配置与数据的动态约束 (dtype/shape/len/描述符), 失败报 `invalid_configuration`。

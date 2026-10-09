@@ -11,7 +11,8 @@
 
 namespace tile_npu {
 
-// decode_scalar(xS, TYPE) keeps the low element-width bits of xS.
+// decode_scalar(xS) keeps the low element-width bits of xS, interpreted per
+// the destination's bound config dtype.
 template <typename Element>
 Element scalar_operand(const State &state, ScalarRegister reg) {
   return static_cast<Element>(state.scalar.read_x(reg.index));
