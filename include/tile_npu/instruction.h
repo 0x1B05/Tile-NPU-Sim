@@ -321,6 +321,11 @@ struct Fill5Code {
   std::uint8_t code = 0;
 };
 
+// The fill5 immediate table: codes 0-4 are the integer values 0/+1/-1/+2/-2,
+// codes 5-8 add the f32-only ±0.5/±inf; codes 9-31 are reserved.
+inline constexpr std::uint8_t FILL5_INT_MAX = 4;
+inline constexpr std::uint8_t FILL5_MAX = 8;
+
 using FillOperand = std::variant<Fill5Code, ScalarRegister>;
 
 // Operand reading: dest = D, src = S, bound = xB (Scalar register), fill per

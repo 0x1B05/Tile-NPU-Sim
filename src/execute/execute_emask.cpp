@@ -16,7 +16,7 @@ namespace {
 
 // fill5 codes 0-8, converted to f32 bit patterns.
 // clang-format off
-constexpr std::array<std::uint32_t, 9> F32_BY_FILL5 = {
+constexpr std::array<std::uint32_t, FILL5_MAX + 1> F32_BY_FILL5 = {
     0x00000000u, // +0
     0x3f800000u, // +1
     0xbf800000u, // -1
@@ -30,7 +30,7 @@ constexpr std::array<std::uint32_t, 9> F32_BY_FILL5 = {
 // clang-format on
 
 // fill5 codes 0-4 as integer constants.
-constexpr std::array<std::int8_t, 5> INT_BY_FILL5 = {0, 1, -1, 2, -2};
+constexpr std::array<std::int8_t, FILL5_INT_MAX + 1> INT_BY_FILL5 = {0, 1, -1, 2, -2};
 
 // Resolves the fill operand to raw element bits: the register form keeps the
 // low element-width bits of xFill; the fill5 form decodes the immediate table
@@ -45,7 +45,7 @@ std::optional<Element> fill_value(const MaskInstr &instr, const State &state, DT
   if (dtype == DType::f32) {
     return static_cast<Element>(F32_BY_FILL5[code]);
   }
-  if (code > 4) return std::nullopt;
+  if (code > FILL5_INT_MAX) return std::nullopt;
   return static_cast<Element>(static_cast<std::int64_t>(INT_BY_FILL5[code]));
 }
 

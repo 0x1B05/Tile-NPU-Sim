@@ -16,7 +16,7 @@ namespace tile_npu {
 struct ExecuteResult {
   StepStatus status;
   // Set only by a taken jump/branch; any other retired instruction advances
-  // to pc + 4, which the step loop owns.
+  // by one instruction word, which the step loop owns.
   std::optional<std::uint64_t> redirect = std::nullopt;
   std::optional<std::uint64_t> fault_address = std::nullopt;
 };

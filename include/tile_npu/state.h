@@ -14,6 +14,10 @@ inline constexpr std::size_t ACC_REGISTERS = 12;
 inline constexpr std::size_t VECTOR_REGISTERS = 32;
 inline constexpr std::size_t SCALAR_REGISTERS = 32;
 
+// Fixed-width 32-bit instructions (no RVC): the byte size of one
+// instruction word.
+inline constexpr std::uint64_t INSTR_BYTES = 4;
+
 using Tile = std::array<std::uint8_t, MATRIX_ELEMENTS>;
 using Acc = std::array<std::uint32_t, MATRIX_ELEMENTS>;
 using Vec8 = std::array<std::uint8_t, VECTOR_LANES>;
@@ -64,14 +68,24 @@ struct VectorDescriptor {
 
 // Descriptor flags bit layout, shared by the write validation in config.cpp
 // and the reserved-bit checks in DescriptorView: a matrix descriptor holds
-// the post-access increment mode in the low two bits (the mode value 3 is
-// reserved), a vector descriptor a single increment-enable bit; all higher
-// bits are reserved.
+// the post-access increment mode in the low two bits, a vector descriptor a
+// single increment-enable bit; all higher bits are reserved.
 inline constexpr std::uint8_t MATRIX_INC_MODE_MASK = 0x3u;
-inline constexpr std::uint8_t MATRIX_INC_MODE_RESERVED = 0x3u;
 inline constexpr std::uint8_t MATRIX_DESC_FLAGS_MAX = 0x2u;
 inline constexpr std::uint8_t VECTOR_INC_ENABLE_MASK = 0x1u;
 inline constexpr std::uint8_t VECTOR_DESC_FLAGS_MAX = 0x1u;
+
+// The matrix inc_mode values (TM/AM flags[1:0] in the manual): the base
+// address does not advance, advances along rows, or advances along columns
+// after each access.
+enum class MatrixIncMode : std::uint8_t { off = 0, row = 1, col = 2, reserved = 3 };
+
+// The TM/AM transform values: 0 = normal, 1 = transpose.
+inline constexpr std::uint8_t DESC_TRANSFORM_MAX = 0x1u;
+
+// The ABI number of a0, the register the runner conventions read the guest
+// exit code from.
+inline constexpr std::size_t REG_A0 = 10;
 
 class ScalarState {
 public:

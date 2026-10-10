@@ -161,7 +161,7 @@ ConfigAccessError write_vector_config(Config &config, ConfigRegType reg_type, Co
 
 ConfigAccessError write_matrix_descriptor(MatrixDescriptor &descriptor, ConfigField field, const ConfigFieldValue &value) {
   if (field == ConfigField::flags)            return write_scalar(descriptor.flags, value, MATRIX_DESC_FLAGS_MAX);
-  if (field == ConfigField::transform)        return write_scalar(descriptor.transform, value, std::uint8_t{1});
+  if (field == ConfigField::transform)        return write_scalar(descriptor.transform, value, DESC_TRANSFORM_MAX);
   if (field == ConfigField::base_addr)        return write_scalar(descriptor.base_addr, value);
   if (field == ConfigField::row_stride_bytes) return write_scalar(descriptor.row_stride_bytes, value);
   if (field == ConfigField::col_stride_bytes) return write_scalar(descriptor.col_stride_bytes, value);

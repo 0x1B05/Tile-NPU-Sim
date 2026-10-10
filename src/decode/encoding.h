@@ -20,6 +20,10 @@ constexpr std::int32_t sign_extend(std::uint32_t value, unsigned width) {
   return static_cast<std::int32_t>(extended);
 }
 
+// word[1:0] selects the instruction quadrant: 0b11 is the RV64IM scalar
+// quadrant, the other three hold the NPU major spaces.
+inline constexpr std::uint32_t QUADRANT_RV64IM = 0b11;
+
 struct RiscvR {
   std::uint8_t opcode;
   std::uint8_t dest;

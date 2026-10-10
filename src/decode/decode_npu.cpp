@@ -152,7 +152,8 @@ DecodeResult decode_emask(std::uint32_t word) {
   const auto domain = sel3_domain(f.sel3);
   const bool fill_is_scalar = (f.sel3 & 1) != 0;
   const bool vector_domain = domain == NpuDomain::vec8 || domain == NpuDomain::vec32;
-  if (f.funct3 > 0b010 || (vector_domain && f.funct3 != 0b000) || (!fill_is_scalar && f.arg > 8)) {
+  if (f.funct3 > 0b010 || (vector_domain && f.funct3 != 0b000) ||
+      (!fill_is_scalar && f.arg > FILL5_MAX)) {
     return DecodeError::illegal;
   }
   const auto count = domain_register_count(domain);
@@ -399,9 +400,13 @@ constexpr ConfigRegType cfg_reg_type(std::uint8_t sel2, bool vector_side) {
   }
 }
 
+// The cfg.seti majors: 0101 is the matrix side (TC/AC/TM/AM), 0110 the
+// vector side (BC/VC/BM/VM).
+constexpr std::uint8_t MAJOR4_CFG_VEC_SETI = 0b0110;
+
 DecodeResult decode_cfg_seti(std::uint32_t word) {
   const auto f = encoding::NpuI::from(word);
-  const auto reg_type = cfg_reg_type(f.sel2, f.major4 == 0b0110);
+  const auto reg_type = cfg_reg_type(f.sel2, f.major4 == MAJOR4_CFG_VEC_SETI);
   // Out-of-range config register numbers are reserved encodings.
   if (f.dest >= config_register_count(reg_type)) {
     return DecodeError::illegal;
@@ -421,8 +426,8 @@ template <CfgOp Op> DecodeResult decode_cfg_reg(std::uint32_t word) {
   if (Op != CfgOp::setx && f.src1 >= count) {
     return DecodeError::illegal;
   }
-  return DecodedNpuInstr{
-      CfgInstr{Op, reg_type, f.dest, f.src1, static_cast<std::uint8_t>(f.arg & 0x7), 0}};
+  return DecodedNpuInstr{CfgInstr{Op, reg_type, f.dest, f.src1,
+                                  static_cast<std::uint8_t>(encoding::field<2, 0>(f.arg)), 0}};
 }
 
 // clang-format off

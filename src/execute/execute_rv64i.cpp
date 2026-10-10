@@ -87,7 +87,7 @@ ExecuteResult execute_store(const DecodedScalarInstr &instr, ExecContext &ctx) {
 ExecuteResult execute_rv64i(const DecodedScalarInstr &instr, ExecContext &ctx) {
   ScalarState &scalar = ctx.state.scalar;
   const auto pc = scalar.pc;
-  const auto link = pc + 4;
+  const auto link = pc + INSTR_BYTES;
   const auto &r = instr.regs;
   const auto lhs = scalar.read_x(r.src1);
   const auto rhs = scalar.read_x(r.src2);
@@ -109,7 +109,7 @@ ExecuteResult execute_rv64i(const DecodedScalarInstr &instr, ExecContext &ctx) {
   // redirect/jump/branch share the target alignment rule; a misaligned jump
   // faults without writing the link register.
   auto redirect = [](std::uint64_t target) -> ExecuteResult {
-    if (target % 4 != 0) {
+    if (target % INSTR_BYTES != 0) {
       return access_fault(StepStatus::instruction_address_misaligned, target);
     }
     return {.status = StepStatus::retired, .redirect = target};

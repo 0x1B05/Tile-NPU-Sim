@@ -16,6 +16,10 @@
 namespace tile_npu {
 namespace {
 
+// Symmetric q8 maps [-absmax, absmax] onto [-127, 127]: the saturation bound
+// and the dynamic-scale denominator are one magnitude.
+constexpr std::int8_t Q8_MAX_MAGNITUDE = 127;
+
 // q8s32 element rule: round-to-nearest-even of value / scale, saturated to
 // [-127, 127]; a NaN quotient (0/0, inf/inf, NaN input) yields 0. An
 // infinite quotient saturates like any large value.
@@ -25,11 +29,11 @@ std::int8_t quantize_lane(float value, float scale) {
     return 0;
   }
   const float rounded = std::nearbyint(quotient); // RNE
-  if (rounded > 127.0f) {
-    return 127;
+  if (rounded > Q8_MAX_MAGNITUDE) {
+    return Q8_MAX_MAGNITUDE;
   }
-  if (rounded < -127.0f) {
-    return -127;
+  if (rounded < -Q8_MAX_MAGNITUDE) {
+    return -Q8_MAX_MAGNITUDE;
   }
   return static_cast<std::int8_t>(rounded);
 }
@@ -81,7 +85,7 @@ ExecuteResult tquant(const QntInstr &instr, State &state) {
     if (instr.op == QntOp::quant_ext_scale) {
       scale = std::bit_cast<float>(scale_reg[row]);
     } else {
-      scale = row_amax(src, row, src_config.cols) / 127.0f;
+      scale = row_amax(src, row, src_config.cols) / Q8_MAX_MAGNITUDE;
       scale_reg[row] = f32_bits(scale);
     }
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
@@ -138,7 +142,7 @@ ExecuteResult vquant(const QntInstr &instr, State &state) {
   const auto &src_reg = state.v[instr.src.index];
   auto &dst_reg = state.b[instr.dest.index];
   const float amax = f32_absmax(std::span(src_reg).first(src_config.len));
-  const float scale = amax / 127.0f;
+  const float scale = amax / Q8_MAX_MAGNITUDE;
   for (std::size_t j = 0; j < src_config.len; ++j) {
     dst_reg[j] = static_cast<std::uint8_t>(quantize_lane(std::bit_cast<float>(src_reg[j]), scale));
   }

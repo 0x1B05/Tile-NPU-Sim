@@ -36,7 +36,7 @@ StepResult Simulator::step() {
           [&ctx](const DecodedNpuInstr &decoded) { return exec_npu_instr(decoded, ctx); }},
       decode(instr));
   if (execution.status == StepStatus::retired) {
-    state_.scalar.pc = execution.redirect.value_or(pc + 4);
+    state_.scalar.pc = execution.redirect.value_or(pc + INSTR_BYTES);
   }
 
   return {.status = execution.status,
