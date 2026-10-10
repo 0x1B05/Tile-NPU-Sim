@@ -23,9 +23,8 @@ using tile_npu::StepStatus;
 TEST_CASE(ebin_tile_sub_wrap) {
   FlatMemory memory(CODE_BASE, 4);
   Simulator sim(memory);
-  load_one(sim, memory,
-           make_ebin(EbinOp::sub, NpuDomain::tile, false, 0, 1,
-                     2)); // tsub t0, t1, t2
+  load_one(sim, memory, make_ebin(EbinOp::sub, NpuDomain::tile, false, 0, 1,
+                                  2)); // tsub t0, t1, t2
   auto &state = sim.state();
   for (auto index : {0, 1, 2})
     tile_cfg(state, index, DType::i8, 1, 2);
@@ -42,9 +41,8 @@ TEST_CASE(ebin_tile_sub_wrap) {
 TEST_CASE(ebin_tile_sub_sat) {
   FlatMemory memory(CODE_BASE, 4);
   Simulator sim(memory);
-  load_one(sim, memory,
-           make_ebin(EbinOp::sub, NpuDomain::tile, false, 0, 1,
-                     2)); // tsub t0, t1, t2
+  load_one(sim, memory, make_ebin(EbinOp::sub, NpuDomain::tile, false, 0, 1,
+                                  2)); // tsub t0, t1, t2
   auto &state = sim.state();
   for (auto index : {0, 1, 2}) {
     tile_cfg(state, index, DType::u8, 1, 2, ArithMode::sat);
@@ -88,22 +86,14 @@ TEST_CASE(ebin_tile_bitwise_and_shift_forms) {
   FlatMemory memory(CODE_BASE, 32);
   Simulator sim(memory);
   // and/or/xor/shr in both the register (BX=0) and scalar (BX=1) forms.
-  write_word(memory, CODE_BASE + 0,
-             make_ebin(EbinOp::bit_and, NpuDomain::tile, false, 0, 1, 2));
-  write_word(memory, CODE_BASE + 4,
-             make_ebin(EbinOp::bit_or, NpuDomain::tile, false, 3, 1, 2));
-  write_word(memory, CODE_BASE + 8,
-             make_ebin(EbinOp::bit_xor, NpuDomain::tile, false, 4, 1, 2));
-  write_word(memory, CODE_BASE + 12,
-             make_ebin(EbinOp::shr, NpuDomain::tile, false, 5, 1, 2));
-  write_word(memory, CODE_BASE + 16,
-             make_ebin(EbinOp::bit_and, NpuDomain::tile, true, 6, 1, 3));
-  write_word(memory, CODE_BASE + 20,
-             make_ebin(EbinOp::bit_or, NpuDomain::tile, true, 7, 1, 3));
-  write_word(memory, CODE_BASE + 24,
-             make_ebin(EbinOp::bit_xor, NpuDomain::tile, true, 8, 1, 3));
-  write_word(memory, CODE_BASE + 28,
-             make_ebin(EbinOp::shr, NpuDomain::tile, true, 9, 1, 4));
+  write_word(memory, CODE_BASE + 0, make_ebin(EbinOp::bit_and, NpuDomain::tile, false, 0, 1, 2));
+  write_word(memory, CODE_BASE + 4, make_ebin(EbinOp::bit_or, NpuDomain::tile, false, 3, 1, 2));
+  write_word(memory, CODE_BASE + 8, make_ebin(EbinOp::bit_xor, NpuDomain::tile, false, 4, 1, 2));
+  write_word(memory, CODE_BASE + 12, make_ebin(EbinOp::shr, NpuDomain::tile, false, 5, 1, 2));
+  write_word(memory, CODE_BASE + 16, make_ebin(EbinOp::bit_and, NpuDomain::tile, true, 6, 1, 3));
+  write_word(memory, CODE_BASE + 20, make_ebin(EbinOp::bit_or, NpuDomain::tile, true, 7, 1, 3));
+  write_word(memory, CODE_BASE + 24, make_ebin(EbinOp::bit_xor, NpuDomain::tile, true, 8, 1, 3));
+  write_word(memory, CODE_BASE + 28, make_ebin(EbinOp::shr, NpuDomain::tile, true, 9, 1, 4));
   sim.reset(CODE_BASE);
   auto &state = sim.state();
   for (auto index : {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}) {
@@ -154,9 +144,8 @@ TEST_CASE(ebin_tile_sra_and_shl) {
 TEST_CASE(ebin_tile_scalar_source) {
   FlatMemory memory(CODE_BASE, 4);
   Simulator sim(memory);
-  load_one(sim, memory,
-           make_ebin(EbinOp::add, NpuDomain::tile, true, 0, 1,
-                     2)); // taddx t0, t1, x2
+  load_one(sim, memory, make_ebin(EbinOp::add, NpuDomain::tile, true, 0, 1,
+                                  2)); // taddx t0, t1, x2
   auto &state = sim.state();
   tile_cfg(state, 0, DType::i8, 1, 1);
   tile_cfg(state, 1, DType::i8, 1, 1);
@@ -170,9 +159,8 @@ TEST_CASE(ebin_tile_scalar_source) {
 TEST_CASE(ebin_acc_mul_wrap32) {
   FlatMemory memory(CODE_BASE, 4);
   Simulator sim(memory);
-  load_one(sim, memory,
-           make_ebin(EbinOp::mul, NpuDomain::acc, false, 0, 1,
-                     2)); // amul a0, a1, a2
+  load_one(sim, memory, make_ebin(EbinOp::mul, NpuDomain::acc, false, 0, 1,
+                                  2)); // amul a0, a1, a2
   auto &state = sim.state();
   for (auto index : {0, 1, 2})
     acc_cfg(state, index, DType::i32, 1, 2);
@@ -183,21 +171,16 @@ TEST_CASE(ebin_acc_mul_wrap32) {
   check_eq(sim.step().status, StepStatus::retired, "amul retires");
   // 0x10000 * 0x10000 = 2^32 wraps to 0; -2 * 3 = -6.
   check_eq(hex(state.a[0][0]), hex(0), "amul wraps at 32 bits");
-  check_eq(hex(state.a[0][1]), hex(static_cast<std::uint32_t>(-6)),
-           "amul signed lane");
+  check_eq(hex(state.a[0][1]), hex(static_cast<std::uint32_t>(-6)), "amul signed lane");
 }
 
 TEST_CASE(ebin_acc_min_max_i32_u32) {
   FlatMemory memory(CODE_BASE, 16);
   Simulator sim(memory);
-  write_word(memory, CODE_BASE + 0,
-             make_ebin(EbinOp::min, NpuDomain::acc, false, 0, 1, 2));
-  write_word(memory, CODE_BASE + 4,
-             make_ebin(EbinOp::max, NpuDomain::acc, false, 3, 4, 5));
-  write_word(memory, CODE_BASE + 8,
-             make_ebin(EbinOp::min, NpuDomain::acc, false, 6, 7, 8));
-  write_word(memory, CODE_BASE + 12,
-             make_ebin(EbinOp::max, NpuDomain::acc, false, 9, 10, 11));
+  write_word(memory, CODE_BASE + 0, make_ebin(EbinOp::min, NpuDomain::acc, false, 0, 1, 2));
+  write_word(memory, CODE_BASE + 4, make_ebin(EbinOp::max, NpuDomain::acc, false, 3, 4, 5));
+  write_word(memory, CODE_BASE + 8, make_ebin(EbinOp::min, NpuDomain::acc, false, 6, 7, 8));
+  write_word(memory, CODE_BASE + 12, make_ebin(EbinOp::max, NpuDomain::acc, false, 9, 10, 11));
   sim.reset(CODE_BASE);
   auto &state = sim.state();
   for (auto index : {0, 1, 2, 3, 4, 5})
@@ -221,9 +204,8 @@ TEST_CASE(ebin_acc_min_max_i32_u32) {
 TEST_CASE(ebin_acc_sra_i32) {
   FlatMemory memory(CODE_BASE, 4);
   Simulator sim(memory);
-  load_one(sim, memory,
-           make_ebin(EbinOp::sra, NpuDomain::acc, false, 0, 1,
-                     2)); // asra a0, a1, a2
+  load_one(sim, memory, make_ebin(EbinOp::sra, NpuDomain::acc, false, 0, 1,
+                                  2)); // asra a0, a1, a2
   auto &state = sim.state();
   for (auto index : {0, 1, 2})
     acc_cfg(state, index, DType::i32, 1, 1);
@@ -254,9 +236,8 @@ TEST_CASE(ebin_vec_sra_top_bit_fill) {
 TEST_CASE(ebin_acc_scalar_source) {
   FlatMemory memory(CODE_BASE, 4);
   Simulator sim(memory);
-  load_one(sim, memory,
-           make_ebin(EbinOp::sub, NpuDomain::acc, true, 0, 1,
-                     3)); // asubx a0, a1, x3
+  load_one(sim, memory, make_ebin(EbinOp::sub, NpuDomain::acc, true, 0, 1,
+                                  3)); // asubx a0, a1, x3
   auto &state = sim.state();
   acc_cfg(state, 0, DType::i32, 1, 2);
   acc_cfg(state, 1, DType::i32, 1, 2);
@@ -266,8 +247,7 @@ TEST_CASE(ebin_acc_scalar_source) {
   check_eq(sim.step().status, StepStatus::retired, "asubx retires");
   // 7 - 5 = 2; -3 - 5 = -8.
   check_eq(hex(state.a[0][0]), hex(2), "asubx lane 0");
-  check_eq(hex(state.a[0][1]), hex(static_cast<std::uint32_t>(-8)),
-           "asubx lane 1");
+  check_eq(hex(state.a[0][1]), hex(static_cast<std::uint32_t>(-8)), "asubx lane 1");
 }
 
 TEST_CASE(ebin_vec32_len_and_scalar_source) {
@@ -358,15 +338,13 @@ TEST_CASE(ebin_f32_rejects_integer_only_ops) {
 TEST_CASE(ebin_i32_rejects_div) {
   FlatMemory memory(CODE_BASE, 4);
   Simulator sim(memory);
-  load_one(sim, memory,
-           make_ebin(EbinOp::div, NpuDomain::acc, false, 0, 1,
-                     2)); // adiv a0, a1, a2
+  load_one(sim, memory, make_ebin(EbinOp::div, NpuDomain::acc, false, 0, 1,
+                                  2)); // adiv a0, a1, a2
   auto &state = sim.state();
   for (auto index : {0, 1, 2})
     acc_cfg(state, index, DType::i32, 1, 1);
   state.a[1][0] = 6;
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "integer div is a config error");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "integer div is a config error");
   check_eq(hex(state.a[0][0]), hex(0), "rejected op leaves a0 untouched");
 }
 
@@ -378,18 +356,16 @@ TEST_CASE(ebin_rejects_mismatched_configs) {
     const char *name;
     void (*perturb)(tile_npu::State &);
   };
+
   constexpr std::array cases{
-      Case{"dtype mismatch",
-           [](tile_npu::State &state) { state.tc[1].dtype = DType::u8; }},
+      Case{"dtype mismatch", [](tile_npu::State &state) { state.tc[1].dtype = DType::u8; }},
       Case{"shape mismatch",
            [](tile_npu::State &state) {
              state.tc[1].cols = 2;
              state.tc[2].cols = 2;
            }},
       Case{"reserved arith_mode",
-           [](tile_npu::State &state) {
-             state.tc[0].arith_mode = static_cast<ArithMode>(2);
-           }},
+           [](tile_npu::State &state) { state.tc[0].arith_mode = static_cast<ArithMode>(2); }},
   };
   for (const auto &test : cases) {
     FlatMemory memory(CODE_BASE, 4);
@@ -415,15 +391,13 @@ TEST_CASE(ebin_rejects_empty_shape) {
   // rejects it; the loops would otherwise run zero iterations and retire.
   FlatMemory memory(CODE_BASE, 4);
   Simulator sim(memory);
-  load_one(sim, memory,
-           make_ebin(EbinOp::add, NpuDomain::tile, false, 0, 1,
-                     2)); // tadd t0, t1, t2
+  load_one(sim, memory, make_ebin(EbinOp::add, NpuDomain::tile, false, 0, 1,
+                                  2)); // tadd t0, t1, t2
   auto &state = sim.state();
   for (auto index : {0, 1, 2}) {
     tile_cfg(state, index, DType::i8, 0, 0);
   }
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "zero effective shape rejects");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "zero effective shape rejects");
 
   FlatMemory vec_memory(CODE_BASE, 4);
   Simulator vec_sim(vec_memory);
@@ -434,8 +408,7 @@ TEST_CASE(ebin_rejects_empty_shape) {
   for (auto index : {0, 1, 2}) {
     vec_cfg(vec_state, index, DType::i32, 0);
   }
-  check_eq(vec_sim.step().status, StepStatus::invalid_configuration,
-           "zero lane count rejects");
+  check_eq(vec_sim.step().status, StepStatus::invalid_configuration, "zero lane count rejects");
 }
 
 TEST_CASE(ebin_legality_matrix) {
@@ -448,6 +421,7 @@ TEST_CASE(ebin_legality_matrix) {
     NpuDomain domain;
     DType dtype;
   };
+
   constexpr std::array combos{
       Combo{NpuDomain::tile, DType::i8},   Combo{NpuDomain::tile, DType::u8},
       Combo{NpuDomain::acc, DType::i32},   Combo{NpuDomain::acc, DType::u32},
@@ -461,9 +435,8 @@ TEST_CASE(ebin_legality_matrix) {
       if (domain == NpuDomain::tile && !entry->tile_allowed) {
         continue; // reserved at decode time
       }
-      const bool f32_legal = op == EbinOp::add || op == EbinOp::sub ||
-                             op == EbinOp::mul || op == EbinOp::div ||
-                             op == EbinOp::min || op == EbinOp::max;
+      const bool f32_legal = op == EbinOp::add || op == EbinOp::sub || op == EbinOp::mul ||
+                             op == EbinOp::div || op == EbinOp::min || op == EbinOp::max;
       const bool legal = dtype == DType::f32 ? f32_legal : op != EbinOp::div;
       for (const bool scalar_src2 : {false, true}) {
         FlatMemory memory(CODE_BASE, 4);
@@ -491,14 +464,11 @@ TEST_CASE(ebin_legality_matrix) {
           state.v[2][0] = value;
         }
         state.scalar.write_x(2, value);
-        const std::string what =
-            "legality dom=" + std::to_string(static_cast<unsigned>(domain)) +
-            " dtype=" + std::to_string(static_cast<unsigned>(dtype)) +
-            " op=" + std::to_string(static_cast<unsigned>(op)) +
-            (scalar_src2 ? " bx=1" : " bx=0");
-        check_eq(sim.step().status,
-                 legal ? StepStatus::retired
-                       : StepStatus::invalid_configuration,
+        const std::string what = "legality dom=" + std::to_string(static_cast<unsigned>(domain)) +
+                                 " dtype=" + std::to_string(static_cast<unsigned>(dtype)) +
+                                 " op=" + std::to_string(static_cast<unsigned>(op)) +
+                                 (scalar_src2 ? " bx=1" : " bx=0");
+        check_eq(sim.step().status, legal ? StepStatus::retired : StepStatus::invalid_configuration,
                  what);
       }
     }

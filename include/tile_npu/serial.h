@@ -23,10 +23,8 @@ public:
   SerialMemory(Memory &inner, std::ostream &out) : inner_(inner), out_(out) {}
 
   bool contains(std::uint64_t address, std::size_t size) const override;
-  bool read(std::uint64_t address,
-            std::span<std::byte> bytes) const override;
-  bool write(std::uint64_t address,
-             std::span<const std::byte> bytes) override;
+  bool read(std::uint64_t address, std::span<std::byte> bytes) const override;
+  bool write(std::uint64_t address, std::span<const std::byte> bytes) override;
 
 private:
   Memory &inner_;

@@ -31,15 +31,13 @@ std::string hex64(std::uint64_t value) {
   return out.str();
 }
 
-std::pair<std::string_view, std::string_view>
-split_command(std::string_view line) {
+std::pair<std::string_view, std::string_view> split_command(std::string_view line) {
   const auto space = line.find(' ');
   if (space == std::string_view::npos) return {line, {}};
   const auto rest = line.substr(space + 1);
   const auto first = rest.find_first_not_of(' ');
-  return {line.substr(0, space), first == std::string_view::npos
-                                     ? std::string_view{}
-                                     : rest.substr(first)};
+  return {line.substr(0, space),
+          first == std::string_view::npos ? std::string_view{} : rest.substr(first)};
 }
 
 void cmd_help() {
@@ -93,8 +91,7 @@ void cmd_examine(Memory &memory, std::string_view arg) {
   const auto [count_text, address_text] = split_command(arg);
   std::uint64_t count = 0;
   std::uint64_t address = 0;
-  if (!parse_u64(count_text, count) || !parse_u64(address_text, address) ||
-      count == 0) {
+  if (!parse_u64(count_text, count) || !parse_u64(address_text, address) || count == 0) {
     std::cout << "usage: x N ADDR\n";
     return;
   }
@@ -143,12 +140,10 @@ std::string_view status_name(StepStatus status) {
 
 std::string stop_message(const StepResult &result) {
   std::ostringstream out;
-  out << "stopped: " << status_name(result.status)
-      << " at pc=" << hex64(result.pc);
+  out << "stopped: " << status_name(result.status) << " at pc=" << hex64(result.pc);
   if (result.instr) {
     std::ostringstream word;
-    word << "0x" << std::hex << std::setw(8) << std::setfill('0')
-         << *result.instr;
+    word << "0x" << std::hex << std::setw(8) << std::setfill('0') << *result.instr;
     out << " instruction=" << word.str();
   }
   if (result.fault_address) {

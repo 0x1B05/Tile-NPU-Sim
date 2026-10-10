@@ -9,26 +9,24 @@ namespace tile_npu {
 // and the canonical layout (matrix configs only). Elementwise adds its own
 // arith_mode check on top; the other paths ignore arith_mode.
 inline bool valid_domain_config(const TileConfig &config) {
-  return (config.dtype == DType::i8 || config.dtype == DType::u8) &&
-         config.rows >= 1 && config.rows <= MATRIX_EXTENT && config.cols >= 1 &&
-         config.cols <= MATRIX_EXTENT && config.layout == 0;
+  return (config.dtype == DType::i8 || config.dtype == DType::u8) && config.rows >= 1 &&
+         config.rows <= MATRIX_EXTENT && config.cols >= 1 && config.cols <= MATRIX_EXTENT &&
+         config.layout == 0;
 }
 
 inline bool valid_domain_config(const AccConfig &config) {
-  return (config.dtype == DType::i32 || config.dtype == DType::u32 ||
-          config.dtype == DType::f32) &&
+  return (config.dtype == DType::i32 || config.dtype == DType::u32 || config.dtype == DType::f32) &&
          config.rows >= 1 && config.rows <= MATRIX_EXTENT && config.cols >= 1 &&
          config.cols <= MATRIX_EXTENT && config.layout == 0;
 }
 
 inline bool valid_domain_config(const Vec8Config &config) {
-  return (config.dtype == DType::i8 || config.dtype == DType::u8) &&
-         config.len >= 1 && config.len <= VECTOR_LANES;
+  return (config.dtype == DType::i8 || config.dtype == DType::u8) && config.len >= 1 &&
+         config.len <= VECTOR_LANES;
 }
 
 inline bool valid_domain_config(const Vec32Config &config) {
-  return (config.dtype == DType::i32 || config.dtype == DType::u32 ||
-          config.dtype == DType::f32) &&
+  return (config.dtype == DType::i32 || config.dtype == DType::u32 || config.dtype == DType::f32) &&
          config.len >= 1 && config.len <= VECTOR_LANES;
 }
 
@@ -78,12 +76,8 @@ inline bool shapes_match(const AccConfig &a, const AccConfig &b) {
   return a.rows == b.rows && a.cols == b.cols;
 }
 
-inline bool shapes_match(const Vec8Config &a, const Vec8Config &b) {
-  return a.len == b.len;
-}
+inline bool shapes_match(const Vec8Config &a, const Vec8Config &b) { return a.len == b.len; }
 
-inline bool shapes_match(const Vec32Config &a, const Vec32Config &b) {
-  return a.len == b.len;
-}
+inline bool shapes_match(const Vec32Config &a, const Vec32Config &b) { return a.len == b.len; }
 
 } // namespace tile_npu

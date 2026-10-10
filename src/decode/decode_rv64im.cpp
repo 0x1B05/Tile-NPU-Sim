@@ -20,9 +20,7 @@ template <unsigned ShamtBits> using Shift = encoding::RiscvShift<ShamtBits>;
 // Base implementations ignore FENCE's reserved rd, rs1, and fm settings.
 DecodeResult decode_fence(std::uint32_t word) {
   return DecodedScalarInstr{
-      ScalarOp::fence,
-      {0, 0, 0},
-      static_cast<std::int32_t>(encoding::field<31, 20>(word))};
+      ScalarOp::fence, {0, 0, 0}, static_cast<std::int32_t>(encoding::field<31, 20>(word))};
 }
 
 // clang-format off
@@ -125,8 +123,6 @@ constexpr DecodeEntry RV64IM_TABLE[] = {
 
 } // namespace
 
-DecodeResult decode_rv64im(std::uint32_t word) {
-  return match(RV64IM_TABLE, word);
-}
+DecodeResult decode_rv64im(std::uint32_t word) { return match(RV64IM_TABLE, word); }
 
 } // namespace tile_npu

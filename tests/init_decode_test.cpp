@@ -31,8 +31,7 @@ template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
     const auto *npu = std::get_if<DecodedNpuInstr>(&result);
-    const std::string what =
-        std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
+    const std::string what = std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
     check(npu != nullptr, what);
     const auto *decoded = std::get_if<InitInstr>(npu);
     check(decoded != nullptr, what);
@@ -50,13 +49,11 @@ struct ErrorCase {
   DecodeError error;
 };
 
-template <std::size_t N>
-void check_errors(const std::array<ErrorCase, N> &cases) {
+template <std::size_t N> void check_errors(const std::array<ErrorCase, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
     const auto *error = std::get_if<DecodeError>(&result);
-    const std::string what =
-        std::string(test.name) + " (" + to_hex(test.word) + ")";
+    const std::string what = std::string(test.name) + " (" + to_hex(test.word) + ")";
     check(error != nullptr, what + " decodes");
     check_eq(*error, test.error, what + ": error kind");
   }
@@ -147,30 +144,21 @@ TEST_CASE(init_decode_r2_forms) {
 TEST_CASE(init_decode_rejects_reserved) {
   constexpr std::array cases{
       // R2 forms require sel3 bit 0 = 0 and reserved10 = 0.
-      ErrorCase{"fillx sel3 bit0",
-                make_init_r2(NpuDomain::tile, 1, 0, 0) | (1u << 25),
+      ErrorCase{"fillx sel3 bit0", make_init_r2(NpuDomain::tile, 1, 0, 0) | (1u << 25),
                 DecodeError::illegal},
-      ErrorCase{"copy reserved10",
-                make_init_r2(NpuDomain::tile, 2, 0, 0) | (1u << 12),
+      ErrorCase{"copy reserved10", make_init_r2(NpuDomain::tile, 2, 0, 0) | (1u << 12),
                 DecodeError::illegal},
       // funct3 = 1xx is reserved.
-      ErrorCase{"funct3 100", make_init_r2(NpuDomain::tile, 4, 0, 0),
-                DecodeError::illegal},
-      ErrorCase{"funct3 111", make_init_r2(NpuDomain::tile, 7, 0, 0),
-                DecodeError::illegal},
+      ErrorCase{"funct3 100", make_init_r2(NpuDomain::tile, 4, 0, 0), DecodeError::illegal},
+      ErrorCase{"funct3 111", make_init_r2(NpuDomain::tile, 7, 0, 0), DecodeError::illegal},
       // ttranspose is Tile-only.
-      ErrorCase{"atranspose", make_init_r2(NpuDomain::acc, 3, 0, 0),
-                DecodeError::illegal},
-      ErrorCase{"vtranspose", make_init_r2(NpuDomain::vec32, 3, 0, 0),
-                DecodeError::illegal},
+      ErrorCase{"atranspose", make_init_r2(NpuDomain::acc, 3, 0, 0), DecodeError::illegal},
+      ErrorCase{"vtranspose", make_init_r2(NpuDomain::vec32, 3, 0, 0), DecodeError::illegal},
       // Register numbers are bounded per domain; fillx never bounds xS, but
       // copy/ttranspose bound the source.
-      ErrorCase{"tfill t16", make_init_fill(NpuDomain::tile, 16, 0),
-                DecodeError::illegal},
-      ErrorCase{"afillx a12", make_init_r2(NpuDomain::acc, 1, 12, 0),
-                DecodeError::illegal},
-      ErrorCase{"tcopy t0, t16", make_init_r2(NpuDomain::tile, 2, 0, 16),
-                DecodeError::illegal},
+      ErrorCase{"tfill t16", make_init_fill(NpuDomain::tile, 16, 0), DecodeError::illegal},
+      ErrorCase{"afillx a12", make_init_r2(NpuDomain::acc, 1, 12, 0), DecodeError::illegal},
+      ErrorCase{"tcopy t0, t16", make_init_r2(NpuDomain::tile, 2, 0, 16), DecodeError::illegal},
       ErrorCase{"ttranspose t0, t16", make_init_r2(NpuDomain::tile, 3, 0, 16),
                 DecodeError::illegal},
       // I-form funct3 != 000 is reserved.

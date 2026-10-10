@@ -34,9 +34,7 @@ struct Pattern {
     }
   }
 
-  constexpr bool matches(std::uint32_t word) const {
-    return (word & mask) == key;
-  }
+  constexpr bool matches(std::uint32_t word) const { return (word & mask) == key; }
 };
 
 using DecodeHandler = DecodeResult (*)(std::uint32_t word);
@@ -48,8 +46,7 @@ struct DecodeEntry {
   DecodeHandler handler;
 };
 
-template <std::size_t N>
-DecodeResult match(const DecodeEntry (&table)[N], std::uint32_t word) {
+template <std::size_t N> DecodeResult match(const DecodeEntry (&table)[N], std::uint32_t word) {
   for (const auto &entry : table) {
     if (entry.pattern.matches(word)) {
       return entry.handler(word);
@@ -63,24 +60,29 @@ DecodeResult match(const DecodeEntry (&table)[N], std::uint32_t word) {
 inline DecodedScalarInstr make_instr(ScalarOp op, const encoding::RiscvR &f) {
   return {op, {f.dest, f.src1, f.src2}};
 }
+
 inline DecodedScalarInstr make_instr(ScalarOp op, const encoding::RiscvI &f) {
   return {op, {f.dest, f.src1, 0}, f.imm};
 }
+
 inline DecodedScalarInstr make_instr(ScalarOp op, const encoding::RiscvS &f) {
   return {op, {0, f.src1, f.src2}, f.imm};
 }
+
 inline DecodedScalarInstr make_instr(ScalarOp op, const encoding::RiscvB &f) {
   return {op, {0, f.src1, f.src2}, f.imm};
 }
+
 inline DecodedScalarInstr make_instr(ScalarOp op, const encoding::RiscvU &f) {
   return {op, {f.dest, 0, 0}, f.imm};
 }
+
 inline DecodedScalarInstr make_instr(ScalarOp op, const encoding::RiscvJ &f) {
   return {op, {f.dest, 0, 0}, f.imm};
 }
+
 template <unsigned ShamtBits>
-DecodedScalarInstr make_instr(ScalarOp op,
-                              const encoding::RiscvShift<ShamtBits> &f) {
+DecodedScalarInstr make_instr(ScalarOp op, const encoding::RiscvShift<ShamtBits> &f) {
   return {op, {f.dest, f.src1, 0}, f.shamt};
 }
 

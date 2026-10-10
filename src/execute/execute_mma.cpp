@@ -22,9 +22,7 @@ constexpr bool is_nt(MmaOp op) {
   return op == MmaOp::nt_zero || op == MmaOp::nt_acc || op == MmaOp::bdot_nt;
 }
 
-constexpr bool accumulates(MmaOp op) {
-  return op == MmaOp::nn_acc || op == MmaOp::nt_acc;
-}
+constexpr bool accumulates(MmaOp op) { return op == MmaOp::nn_acc || op == MmaOp::nt_acc; }
 
 // mma.{nn,nt}.{zero,acc}.i8.i32: D = A x B with the right Tile logically
 // transposed for nt; the acc form wraps the i32 partial into the
@@ -58,9 +56,8 @@ ExecuteResult mma(const MmaInstr &instr, State &state) {
         partial += i8_product(lhs.at(i, e), nt ? rhs.at(j, e) : rhs.at(e, j));
       }
       auto &cell = dst.at(i, j);
-      cell = accumulates(instr.op)
-                 ? cell + std::bit_cast<std::uint32_t>(partial)
-                 : std::bit_cast<std::uint32_t>(partial);
+      cell = accumulates(instr.op) ? cell + std::bit_cast<std::uint32_t>(partial)
+                                   : std::bit_cast<std::uint32_t>(partial);
     }
   }
   return {.status = StepStatus::retired};

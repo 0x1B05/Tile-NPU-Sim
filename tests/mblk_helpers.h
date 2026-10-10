@@ -13,17 +13,15 @@
 //       [6:2] reg5  [1:0] q = 01
 // funct3 = {form2, LS}: 000/001 = block load/store, 010 = gather load
 // (S5 = index vS), 100/101 = row load/store (MR).
-constexpr std::uint32_t make_mblk(tile_npu::NpuDomain domain,
-                                  std::uint32_t funct3, std::uint32_t dest,
-                                  std::uint32_t src2 = 0) {
-  return (static_cast<std::uint32_t>(domain) << 26) | (funct3 << 22) |
-         (src2 << 7) | (dest << 2) | 1;
+constexpr std::uint32_t make_mblk(tile_npu::NpuDomain domain, std::uint32_t funct3,
+                                  std::uint32_t dest, std::uint32_t src2 = 0) {
+  return (static_cast<std::uint32_t>(domain) << 26) | (funct3 << 22) | (src2 << 7) | (dest << 2) |
+         1;
 }
 
-constexpr std::uint32_t make_mrow(bool acc_side, bool scalar_index,
-                                  std::uint32_t funct3, std::uint32_t index,
-                                  std::uint32_t reg) {
+constexpr std::uint32_t make_mrow(bool acc_side, bool scalar_index, std::uint32_t funct3,
+                                  std::uint32_t index, std::uint32_t reg) {
   return (static_cast<std::uint32_t>(acc_side) << 27) |
-         (static_cast<std::uint32_t>(scalar_index) << 25) | (funct3 << 22) |
-         (index << 12) | (reg << 2) | 1;
+         (static_cast<std::uint32_t>(scalar_index) << 25) | (funct3 << 22) | (index << 12) |
+         (reg << 2) | 1;
 }

@@ -25,31 +25,27 @@ struct Case {
   std::int32_t imm;
 };
 
-constexpr std::uint32_t r(std::uint32_t opcode, std::uint32_t funct3,
-                          std::uint32_t funct7, std::uint32_t dest = 3,
-                          std::uint32_t src1 = 5, std::uint32_t src2 = 7) {
-  return (funct7 << 25) | (src2 << 20) | (src1 << 15) | (funct3 << 12) |
-         (dest << 7) | opcode;
+constexpr std::uint32_t r(std::uint32_t opcode, std::uint32_t funct3, std::uint32_t funct7,
+                          std::uint32_t dest = 3, std::uint32_t src1 = 5, std::uint32_t src2 = 7) {
+  return (funct7 << 25) | (src2 << 20) | (src1 << 15) | (funct3 << 12) | (dest << 7) | opcode;
 }
 
-constexpr std::uint32_t i(std::uint32_t opcode, std::uint32_t funct3,
-                          std::int32_t imm, std::uint32_t dest = 3,
-                          std::uint32_t src1 = 5) {
-  return ((static_cast<std::uint32_t>(imm) & 0xfffu) << 20) | (src1 << 15) |
-         (funct3 << 12) | (dest << 7) | opcode;
+constexpr std::uint32_t i(std::uint32_t opcode, std::uint32_t funct3, std::int32_t imm,
+                          std::uint32_t dest = 3, std::uint32_t src1 = 5) {
+  return ((static_cast<std::uint32_t>(imm) & 0xfffu) << 20) | (src1 << 15) | (funct3 << 12) |
+         (dest << 7) | opcode;
 }
 
 constexpr std::uint32_t s(std::uint32_t funct3, std::int32_t imm) {
   const auto bits = static_cast<std::uint32_t>(imm) & 0xfffu;
-  return ((bits >> 5) << 25) | (7u << 20) | (5u << 15) | (funct3 << 12) |
-         ((bits & 0x1fu) << 7) | 0x23u;
+  return ((bits >> 5) << 25) | (7u << 20) | (5u << 15) | (funct3 << 12) | ((bits & 0x1fu) << 7) |
+         0x23u;
 }
 
 constexpr std::uint32_t b(std::uint32_t funct3, std::int32_t imm) {
   const auto bits = static_cast<std::uint32_t>(imm) & 0x1fffu;
-  return (((bits >> 12) & 1u) << 31) | (((bits >> 5) & 0x3fu) << 25) |
-         (7u << 20) | (5u << 15) | (funct3 << 12) |
-         (((bits >> 1) & 0xfu) << 8) | (((bits >> 11) & 1u) << 7) | 0x63u;
+  return (((bits >> 12) & 1u) << 31) | (((bits >> 5) & 0x3fu) << 25) | (7u << 20) | (5u << 15) |
+         (funct3 << 12) | (((bits >> 1) & 0xfu) << 8) | (((bits >> 11) & 1u) << 7) | 0x63u;
 }
 
 constexpr std::uint32_t u(std::uint32_t opcode, std::uint32_t imm) {
@@ -59,16 +55,14 @@ constexpr std::uint32_t u(std::uint32_t opcode, std::uint32_t imm) {
 constexpr std::uint32_t j(std::int32_t imm) {
   const auto bits = static_cast<std::uint32_t>(imm) & 0x1fffffu;
   return (((bits >> 20) & 1u) << 31) | (((bits >> 1) & 0x3ffu) << 21) |
-         (((bits >> 11) & 1u) << 20) | (((bits >> 12) & 0xffu) << 12) |
-         (3u << 7) | 0x6fu;
+         (((bits >> 11) & 1u) << 20) | (((bits >> 12) & 0xffu) << 12) | (3u << 7) | 0x6fu;
 }
 
 template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
     const auto *decoded = std::get_if<DecodedScalarInstr>(&result);
-    const std::string what =
-        std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
+    const std::string what = std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
     check(decoded != nullptr, what);
     check_eq(decoded->op, test.op, what + ": op");
     check_eq(decoded->regs.dest, test.dest, what + ": rd");
@@ -78,8 +72,7 @@ template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
   }
 }
 
-template <std::size_t N>
-void check_illegal(const std::array<std::uint32_t, N> &words) {
+template <std::size_t N> void check_illegal(const std::array<std::uint32_t, N> &words) {
   for (const auto word : words) {
     const auto result = tile_npu::decode(word);
     const auto *error = std::get_if<DecodeError>(&result);
@@ -169,14 +162,12 @@ TEST_CASE(rv64im_decode) {
       Case{"bgeu", b(7, 2048), ScalarOp::bgeu, 0, 5, 7, 2048},
       Case{"lui sign", u(0x37, 0x80000000u), ScalarOp::lui, 3, 0, 0,
            std::numeric_limits<std::int32_t>::min()},
-      Case{"lui positive", u(0x37, 0x7ffff000u), ScalarOp::lui, 3, 0, 0,
-           0x7ffff000},
+      Case{"lui positive", u(0x37, 0x7ffff000u), ScalarOp::lui, 3, 0, 0, 0x7ffff000},
       Case{"auipc", u(0x17, 0xfffff000u), ScalarOp::auipc, 3, 0, 0, -4096},
       Case{"jal min", j(-1048576), ScalarOp::jal, 3, 0, 0, -1048576},
       Case{"jal max", j(1048574), ScalarOp::jal, 3, 0, 0, 1048574},
       Case{"fence", i(0x0f, 0, 0x0ff, 3, 5), ScalarOp::fence, 0, 0, 0, 0x0ff},
-      Case{"fence reserved mode", i(0x0f, 0, 0x8ff), ScalarOp::fence, 0, 0, 0,
-           0x8ff},
+      Case{"fence reserved mode", i(0x0f, 0, 0x8ff), ScalarOp::fence, 0, 0, 0, 0x8ff},
       Case{"ecall", 0x00000073u, ScalarOp::ecall, 0, 0, 0, 0},
       Case{"ebreak", 0x00100073u, ScalarOp::ebreak, 0, 0, 0, 0},
   };

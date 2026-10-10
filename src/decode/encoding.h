@@ -4,12 +4,10 @@
 
 namespace tile_npu::encoding {
 
-template <unsigned Hi, unsigned Lo>
-constexpr std::uint32_t field(std::uint32_t word) {
+template <unsigned Hi, unsigned Lo> constexpr std::uint32_t field(std::uint32_t word) {
   static_assert(Lo <= Hi && Hi < 32);
   constexpr auto width = Hi - Lo + 1;
-  return (word >> Lo) &
-         static_cast<std::uint32_t>((std::uint64_t{1} << width) - 1);
+  return (word >> Lo) & static_cast<std::uint32_t>((std::uint64_t{1} << width) - 1);
 }
 
 constexpr std::int32_t sign_extend(std::uint32_t value, unsigned width) {
@@ -49,8 +47,7 @@ struct RiscvI {
   static constexpr RiscvI from(std::uint32_t word) {
     return {static_cast<std::uint8_t>(field<11, 7>(word)),
             static_cast<std::uint8_t>(field<14, 12>(word)),
-            static_cast<std::uint8_t>(field<19, 15>(word)),
-            sign_extend(field<31, 20>(word), 12)};
+            static_cast<std::uint8_t>(field<19, 15>(word)), sign_extend(field<31, 20>(word), 12)};
   }
 };
 
@@ -64,8 +61,7 @@ struct RiscvS {
     const auto imm = (field<31, 25>(word) << 5) | field<11, 7>(word);
     return {static_cast<std::uint8_t>(field<14, 12>(word)),
             static_cast<std::uint8_t>(field<19, 15>(word)),
-            static_cast<std::uint8_t>(field<24, 20>(word)),
-            sign_extend(imm, 12)};
+            static_cast<std::uint8_t>(field<24, 20>(word)), sign_extend(imm, 12)};
   }
 };
 
@@ -84,8 +80,7 @@ struct RiscvB {
     // clang-format on
     return {static_cast<std::uint8_t>(field<14, 12>(word)),
             static_cast<std::uint8_t>(field<19, 15>(word)),
-            static_cast<std::uint8_t>(field<24, 20>(word)),
-            sign_extend(imm, 13)};
+            static_cast<std::uint8_t>(field<24, 20>(word)), sign_extend(imm, 13)};
   }
 };
 
@@ -110,8 +105,7 @@ struct RiscvJ {
                      (field<20, 20>(word) << 11) |
                      (field<30, 21>(word) <<  1);
     // clang-format on
-    return {static_cast<std::uint8_t>(field<11, 7>(word)),
-            sign_extend(imm, 21)};
+    return {static_cast<std::uint8_t>(field<11, 7>(word)), sign_extend(imm, 21)};
   }
 };
 
@@ -159,8 +153,7 @@ struct NpuI {
   static constexpr NpuI from(std::uint32_t word) {
     return {static_cast<std::uint8_t>(field<31, 28>(word)),
             static_cast<std::uint8_t>(field<27, 26>(word)),
-            static_cast<std::uint8_t>(field<25, 23>(word)),
-            sign_extend(field<22, 7>(word), 16),
+            static_cast<std::uint8_t>(field<25, 23>(word)), sign_extend(field<22, 7>(word), 16),
             static_cast<std::uint8_t>(field<6, 2>(word))};
   }
 };

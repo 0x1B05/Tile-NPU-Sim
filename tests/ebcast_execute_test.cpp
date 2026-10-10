@@ -157,8 +157,7 @@ TEST_CASE(ebcast_rejects_invalid) {
   state.bc[2].dtype = DType::i8;
   state.bc[2].len = 3; // rows = 2
   state.t[0][0] = 0xee;
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "byrow rejects len != rows");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "byrow rejects len != rows");
   check_eq(state.t[0][0], std::uint8_t{0xee}, "non-mutating");
 
   load_one(sim, memory, make_ebcast(false, true, 0, 0, 1, 2));
@@ -166,8 +165,7 @@ TEST_CASE(ebcast_rejects_invalid) {
     tile_cfg(state, index, DType::i8, 2, 2);
   state.bc[2].dtype = DType::i8;
   state.bc[2].len = 1; // cols = 2
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "bycol rejects len != cols");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "bycol rejects len != cols");
 
   // The vector dtype must match the matrix dtype.
   load_one(sim, memory, make_ebcast(true, false, 0, 0, 1, 2));
@@ -193,6 +191,5 @@ TEST_CASE(ebcast_rejects_invalid) {
     acc_cfg(state, index, DType::i32, 1, 2);
   state.vc[2].dtype = DType::i32;
   state.vc[2].len = 1;
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "adivv rejects i32");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "adivv rejects i32");
 }

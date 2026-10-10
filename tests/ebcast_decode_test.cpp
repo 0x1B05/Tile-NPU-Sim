@@ -33,8 +33,7 @@ template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
     const auto *npu = std::get_if<DecodedNpuInstr>(&result);
-    const std::string what =
-        std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
+    const std::string what = std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
     check(npu != nullptr, what);
     const auto *decoded = std::get_if<BcastInstr>(npu);
     check(decoded != nullptr, what);
@@ -55,13 +54,11 @@ struct ErrorCase {
   DecodeError error;
 };
 
-template <std::size_t N>
-void check_errors(const std::array<ErrorCase, N> &cases) {
+template <std::size_t N> void check_errors(const std::array<ErrorCase, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
     const auto *error = std::get_if<DecodeError>(&result);
-    const std::string what =
-        std::string(test.name) + " (" + to_hex(test.word) + ")";
+    const std::string what = std::string(test.name) + " (" + to_hex(test.word) + ")";
     check(error != nullptr, what + " decodes");
     check_eq(*error, test.error, what + ": error kind");
   }
@@ -138,21 +135,15 @@ TEST_CASE(ebcast_decode_rejects_reserved) {
       ErrorCase{"reserved4", make_ebcast(false, false, 0, 0, 0, 0) | (1u << 17),
                 DecodeError::illegal},
       // Unassigned funct4 codes are reserved (shared E_BIN table).
-      ErrorCase{"funct4 0110", make_ebcast(false, false, 6, 0, 0, 0),
-                DecodeError::illegal},
-      ErrorCase{"funct4 1111", make_ebcast(true, false, 15, 0, 0, 0),
-                DecodeError::illegal},
+      ErrorCase{"funct4 0110", make_ebcast(false, false, 6, 0, 0, 0), DecodeError::illegal},
+      ErrorCase{"funct4 1111", make_ebcast(true, false, 15, 0, 0, 0), DecodeError::illegal},
       // Tile has no mul/div encodings.
-      ErrorCase{"tmulb", make_ebcast(false, false, 2, 0, 0, 0),
-                DecodeError::illegal},
-      ErrorCase{"tdivb", make_ebcast(false, false, 3, 0, 0, 0),
-                DecodeError::illegal},
+      ErrorCase{"tmulb", make_ebcast(false, false, 2, 0, 0, 0), DecodeError::illegal},
+      ErrorCase{"tdivb", make_ebcast(false, false, 3, 0, 0, 0), DecodeError::illegal},
       // Matrix register numbers are bounded per domain; the vector side
       // takes all 32.
-      ErrorCase{"taddb t16", make_ebcast(false, false, 0, 16, 0, 0),
-                DecodeError::illegal},
-      ErrorCase{"amulv a12", make_ebcast(true, false, 2, 0, 12, 0),
-                DecodeError::illegal},
+      ErrorCase{"taddb t16", make_ebcast(false, false, 0, 16, 0, 0), DecodeError::illegal},
+      ErrorCase{"amulv a12", make_ebcast(true, false, 2, 0, 12, 0), DecodeError::illegal},
   };
   check_errors(cases);
 }

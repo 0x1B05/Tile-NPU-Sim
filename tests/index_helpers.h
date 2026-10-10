@@ -11,9 +11,8 @@
 
 // Shared decode-side assertion for the IndexOperand variant: an immediate
 // index decodes to ImmediateIndex, an xS form to ScalarRegister.
-inline void check_index(const tile_npu::IndexOperand &operand,
-                        std::uint8_t expected, bool is_scalar,
-                        std::string_view what) {
+inline void check_index(const tile_npu::IndexOperand &operand, std::uint8_t expected,
+                        bool is_scalar, std::string_view what) {
   const std::string context(what);
   if (is_scalar) {
     const auto *reg = std::get_if<tile_npu::ScalarRegister>(&operand);

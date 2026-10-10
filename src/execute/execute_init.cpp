@@ -23,9 +23,8 @@ Element fill_value(const InitInstr &instr, const State &state, DType dtype) {
     return static_cast<Element>(state.scalar.read_x(instr.src));
   }
   if (dtype == DType::f32) {
-    return static_cast<Element>(
-        static_cast<std::uint32_t>(static_cast<std::uint16_t>(instr.imm))
-        << 16);
+    return static_cast<Element>(static_cast<std::uint32_t>(static_cast<std::uint16_t>(instr.imm))
+                                << 16);
   }
   return static_cast<Element>(static_cast<std::uint64_t>(instr.imm));
 }
@@ -34,18 +33,16 @@ Element fill_value(const InitInstr &instr, const State &state, DType dtype) {
 // positions outside it keep their values. A self copy is safe: each element
 // is read before it is written.
 template <typename Element, typename Config, std::size_t RegCount>
-ExecuteResult
-init_matrix(const InitInstr &instr, State &state,
-            std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
-            const std::array<Config, RegCount> &configs) {
+ExecuteResult init_matrix(const InitInstr &instr, State &state,
+                          std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
+                          const std::array<Config, RegCount> &configs) {
   const auto &dst_config = configs[instr.reg.index];
   if (!valid_domain_config(dst_config)) return config_error();
 
   auto dst = matrix_view(regs[instr.reg.index]);
   if (instr.op == InitOp::copy) {
     const auto &src_config = configs[instr.src];
-    if (!valid_domain_config(src_config) ||
-        !configs_match(dst_config, src_config)) {
+    if (!valid_domain_config(src_config) || !configs_match(dst_config, src_config)) {
       return config_error();
     }
     auto src = matrix_view(std::as_const(regs[instr.src]));
@@ -67,18 +64,16 @@ init_matrix(const InitInstr &instr, State &state,
 }
 
 template <typename Element, typename Config, std::size_t RegCount>
-ExecuteResult
-init_vector(const InitInstr &instr, State &state,
-            std::array<std::array<Element, VECTOR_LANES>, RegCount> &regs,
-            const std::array<Config, RegCount> &configs) {
+ExecuteResult init_vector(const InitInstr &instr, State &state,
+                          std::array<std::array<Element, VECTOR_LANES>, RegCount> &regs,
+                          const std::array<Config, RegCount> &configs) {
   const auto &dst_config = configs[instr.reg.index];
   if (!valid_domain_config(dst_config)) return config_error();
   auto &dst_reg = regs[instr.reg.index];
 
   if (instr.op == InitOp::copy) {
     const auto &src_config = configs[instr.src];
-    if (!valid_domain_config(src_config) ||
-        !configs_match(dst_config, src_config)) {
+    if (!valid_domain_config(src_config) || !configs_match(dst_config, src_config)) {
       return config_error();
     }
     const auto &src_reg = regs[instr.src];

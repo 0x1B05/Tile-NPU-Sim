@@ -43,8 +43,7 @@ std::size_t store_width(ScalarOp op) {
 ExecuteResult execute_load(const DecodedScalarInstr &instr, ExecContext &ctx) {
   ScalarState &scalar = ctx.state.scalar;
   const auto width = load_width(instr.op);
-  const auto address =
-      scalar.read_x(instr.regs.src1) + static_cast<std::uint64_t>(instr.imm);
+  const auto address = scalar.read_x(instr.regs.src1) + static_cast<std::uint64_t>(instr.imm);
   if (address % width != 0) {
     return access_fault(StepStatus::load_address_misaligned, address);
   }
@@ -53,8 +52,7 @@ ExecuteResult execute_load(const DecodedScalarInstr &instr, ExecContext &ctx) {
   if (!ctx.memory.read(address, std::span<std::byte>(bytes.data(), width))) {
     return access_fault(StepStatus::load_fault, address);
   }
-  std::uint64_t value =
-      load_le<std::uint64_t>(std::span<const std::byte>(bytes.data(), width));
+  std::uint64_t value = load_le<std::uint64_t>(std::span<const std::byte>(bytes.data(), width));
   // clang-format off
   switch (instr.op) {
   case ScalarOp::lb: value = sign_extend(value, 8);  break;
@@ -70,8 +68,7 @@ ExecuteResult execute_load(const DecodedScalarInstr &instr, ExecContext &ctx) {
 ExecuteResult execute_store(const DecodedScalarInstr &instr, ExecContext &ctx) {
   ScalarState &scalar = ctx.state.scalar;
   const auto width = store_width(instr.op);
-  const auto address =
-      scalar.read_x(instr.regs.src1) + static_cast<std::uint64_t>(instr.imm);
+  const auto address = scalar.read_x(instr.regs.src1) + static_cast<std::uint64_t>(instr.imm);
   if (address % width != 0) {
     return access_fault(StepStatus::store_address_misaligned, address);
   }
@@ -79,8 +76,7 @@ ExecuteResult execute_store(const DecodedScalarInstr &instr, ExecContext &ctx) {
   const auto value = scalar.read_x(instr.regs.src2);
   std::array<std::byte, 8> bytes{};
   store_le(value, std::span<std::byte>(bytes.data(), width));
-  if (!ctx.memory.write(address,
-                        std::span<const std::byte>(bytes.data(), width))) {
+  if (!ctx.memory.write(address, std::span<const std::byte>(bytes.data(), width))) {
     return access_fault(StepStatus::store_fault, address);
   }
   return {.status = StepStatus::retired};

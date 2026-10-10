@@ -128,7 +128,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 
 ## 代码风格
 
-- 格式化以仓库根目录 `.clang-format` (LLVM 派生) 为准; 改动过的文件提交前跑一遍 `clang-format -i`, 保证各机器输出一致。
+- 格式化以仓库根目录 `.clang-format` (LLVM 派生) 为准; 改动过的文件提交前跑一遍 `clang-format -i`, 保证各机器输出一致。配置含 clang-format 14 引入的键, 旧版本会因不认识的键拒绝整个配置, 故要求 clang-format >= 14。两个文件内容是 GNU as 汇编而非 C (`tests/guest/include/npu.inc`, `tests/riscv-tests-env/riscv_test.h`), 已用文件首行的 `/* clang-format off */` 永久豁免, 不要对它们运行 clang-format (`.S` 汇编同理)。
 - 遵循现有代码: `#pragma once`, `snake_case` 函数/变量, `enum class` 强类型枚举, 尽可能 `constexpr`。
 - 常量名用 `ALL_CAPS` (如 `MATRIX_EXTENT`), 不用 `k` 前缀。
 - 查表性质的 switch、位段拼装和编码枚举/元数据表用对齐排版 (编码枚举可按编码空间分组、一行多个枚举项), 并以 `// clang-format off`/`on` 保护 (格式化器不会动保护区)。

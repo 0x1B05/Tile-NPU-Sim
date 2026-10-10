@@ -12,9 +12,7 @@ namespace tile_npu {
 namespace {
 
 // sel3 = {dom2, ...}: the two high bits name the data domain directly.
-constexpr NpuDomain sel3_domain(std::uint8_t sel3) {
-  return static_cast<NpuDomain>(sel3 >> 1);
-}
+constexpr NpuDomain sel3_domain(std::uint8_t sel3) { return static_cast<NpuDomain>(sel3 >> 1); }
 
 // sel3 bit 2 pairs a matrix domain with a vector domain: Tile with Vec8 (0),
 // Acc with Vec32 (1).
@@ -24,15 +22,13 @@ struct PairedDomains {
 };
 
 constexpr PairedDomains paired_domains(std::uint8_t sel3) {
-  return (sel3 & 0b100) != 0
-             ? PairedDomains{NpuDomain::acc, NpuDomain::vec32}
-             : PairedDomains{NpuDomain::tile, NpuDomain::vec8};
+  return (sel3 & 0b100) != 0 ? PairedDomains{NpuDomain::acc, NpuDomain::vec32}
+                             : PairedDomains{NpuDomain::tile, NpuDomain::vec8};
 }
 
 // The BX bit selects the second source: BX = 0 a same-domain register, BX = 1
 // the Scalar register xS. The register form fails on an out-of-range number.
-std::optional<NpuOperand> decode_bx_src2(std::uint8_t sel3, std::uint8_t src2,
-                                         NpuDomain domain) {
+std::optional<NpuOperand> decode_bx_src2(std::uint8_t sel3, std::uint8_t src2, NpuDomain domain) {
   if ((sel3 & 1) != 0) {
     return NpuOperand{ScalarRegister{src2}};
   }
@@ -62,8 +58,7 @@ DecodeResult decode_ebin(std::uint32_t word) {
   if (!src2) {
     return DecodeError::illegal;
   }
-  return DecodedNpuInstr{
-      EbinInstr{info->op, {domain, f.dest}, {domain, f.src1}, *src2}};
+  return DecodedNpuInstr{EbinInstr{info->op, {domain, f.dest}, {domain, f.src1}, *src2}};
 }
 
 // E_UNARY (R2): sel3 = {dom2, 0}. dom2 = 10 (Vec8) is reserved, funct3 = 111
@@ -79,8 +74,8 @@ DecodeResult decode_eun(std::uint32_t word) {
   if (f.dest >= count || f.src2 >= count) {
     return DecodeError::illegal;
   }
-  return DecodedNpuInstr{EunInstr{
-      static_cast<EunOp>(f.funct3), {domain, f.dest}, {domain, f.src2}}};
+  return DecodedNpuInstr{
+      EunInstr{static_cast<EunOp>(f.funct3), {domain, f.dest}, {domain, f.src2}}};
 }
 
 // E_CMP (R4): sel3 = {dom2, BX}; the patterns pin dom2 to Acc/Vec32 (the only
@@ -102,8 +97,7 @@ DecodeResult decode_ecmp(std::uint32_t word) {
   if (!src2) {
     return DecodeError::illegal;
   }
-  return DecodedNpuInstr{
-      CmpInstr{info->op, {domain, f.dest}, {domain, f.src1}, *src2}};
+  return DecodedNpuInstr{CmpInstr{info->op, {domain, f.dest}, {domain, f.src1}, *src2}};
 }
 
 // E_BCAST (R3): sel3 = {TA, 0, DIR}; TA pairs Tile with Vec8 (0) or Acc with
@@ -157,23 +151,18 @@ DecodeResult decode_emask(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domain = sel3_domain(f.sel3);
   const bool fill_is_scalar = (f.sel3 & 1) != 0;
-  const bool vector_domain =
-      domain == NpuDomain::vec8 || domain == NpuDomain::vec32;
-  if (f.funct3 > 0b010 || (vector_domain && f.funct3 != 0b000) ||
-      (!fill_is_scalar && f.arg > 8)) {
+  const bool vector_domain = domain == NpuDomain::vec8 || domain == NpuDomain::vec32;
+  if (f.funct3 > 0b010 || (vector_domain && f.funct3 != 0b000) || (!fill_is_scalar && f.arg > 8)) {
     return DecodeError::illegal;
   }
   const auto count = domain_register_count(domain);
   if (f.dest >= count || f.src1 >= count) {
     return DecodeError::illegal;
   }
-  const auto fill = fill_is_scalar ? FillOperand{ScalarRegister{f.arg}}
-                                   : FillOperand{Fill5Code{f.arg}};
-  return DecodedNpuInstr{MaskInstr{static_cast<MaskOp>(f.funct3),
-                                   {domain, f.dest},
-                                   {domain, f.src1},
-                                   f.src2,
-                                   fill}};
+  const auto fill =
+      fill_is_scalar ? FillOperand{ScalarRegister{f.arg}} : FillOperand{Fill5Code{f.arg}};
+  return DecodedNpuInstr{
+      MaskInstr{static_cast<MaskOp>(f.funct3), {domain, f.dest}, {domain, f.src1}, f.src2, fill}};
 }
 
 // CVT (R2): sel3 = {dom2, 0}; dom2 selects the destination domain (Acc or
@@ -193,14 +182,12 @@ DecodeResult decode_cvt(std::uint32_t word) {
     if (f.src2 >= TILE_REGISTERS) {
       return DecodeError::illegal;
     }
-    return DecodedNpuInstr{
-        CvtInstr{CvtOp::widen, {domain, f.dest}, {NpuDomain::tile, f.src2}}};
+    return DecodedNpuInstr{CvtInstr{CvtOp::widen, {domain, f.dest}, {NpuDomain::tile, f.src2}}};
   }
   if (f.src2 >= count) {
     return DecodeError::illegal;
   }
-  return DecodedNpuInstr{
-      CvtInstr{CvtOp::cvt, {domain, f.dest}, {domain, f.src2}}};
+  return DecodedNpuInstr{CvtInstr{CvtOp::cvt, {domain, f.dest}, {domain, f.src2}}};
 }
 
 // AREDUCE (R2): reserved3/reserved10 are pinned by the pattern; S5 is the
@@ -212,11 +199,10 @@ DecodeResult decode_areduce(std::uint32_t word) {
   if (f.funct3 > 0b101 || f.src2 >= ACC_REGISTERS) {
     return DecodeError::illegal;
   }
-  return DecodedNpuInstr{
-      ReduceInstr{static_cast<ReduceOp>(f.funct3),
-                  NpuOperand{NpuRegister{NpuDomain::vec32, f.dest}},
-                  {},
-                  {NpuDomain::acc, f.src2}}};
+  return DecodedNpuInstr{ReduceInstr{static_cast<ReduceOp>(f.funct3),
+                                     NpuOperand{NpuRegister{NpuDomain::vec32, f.dest}},
+                                     {},
+                                     {NpuDomain::acc, f.src2}}};
 }
 
 // VREDUCE sum/max/min/sumsq (R2): D5 is the Scalar destination, S5 the Vec32
@@ -249,19 +235,17 @@ DecodeResult decode_vreduce_argmax(std::uint32_t word) {
 // matrix forms. All dtype/shape constraints fail at execution.
 // index5 with the IS bit: an immediate index, or the named Scalar register.
 IndexOperand decode_index(RegisterIndex raw, bool is_scalar) {
-  return is_scalar ? IndexOperand{ScalarRegister{raw}}
-                   : IndexOperand{ImmediateIndex{raw}};
+  return is_scalar ? IndexOperand{ScalarRegister{raw}} : IndexOperand{ImmediateIndex{raw}};
 }
 
 DecodeResult decode_qnt(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domain = sel3_domain(f.sel3);
   const bool index_is_scalar = (f.sel3 & 1) != 0;
-  const bool vector_form =
-      domain == NpuDomain::vec8 || domain == NpuDomain::vec32;
+  const bool vector_form = domain == NpuDomain::vec8 || domain == NpuDomain::vec32;
   // funct3 = 000 quantizes into Tile/Vec8 destinations and dequantizes into
   // Acc/Vec32 destinations; the source is the paired domain.
-  const auto op = f.funct3 == 0b001 ? QntOp::quant_ext_scale
+  const auto op = f.funct3 == 0b001                 ? QntOp::quant_ext_scale
                   : qnt_domain_is_quantized(domain) ? QntOp::quant
                                                     : QntOp::dequant;
   if (f.funct3 > 0b001 || !qnt_dest_legal(op, domain) ||
@@ -269,15 +253,11 @@ DecodeResult decode_qnt(std::uint32_t word) {
     return DecodeError::illegal;
   }
   const auto src_domain = qnt_paired_domain(domain);
-  if (f.dest >= domain_register_count(domain) ||
-      f.src1 >= domain_register_count(src_domain)) {
+  if (f.dest >= domain_register_count(domain) || f.src1 >= domain_register_count(src_domain)) {
     return DecodeError::illegal;
   }
-  return DecodedNpuInstr{QntInstr{op,
-                                  {domain, f.dest},
-                                  {src_domain, f.src1},
-                                  f.arg,
-                                  decode_index(f.src2, index_is_scalar)}};
+  return DecodedNpuInstr{QntInstr{
+      op, {domain, f.dest}, {src_domain, f.src1}, f.arg, decode_index(f.src2, index_is_scalar)}};
 }
 
 // MMA_BDOT (R4): funct3 bit2 picks mma (Acc destination) or bdot (Vec32
@@ -292,8 +272,7 @@ DecodeResult decode_mma(std::uint32_t word) {
     return DecodeError::illegal;
   }
   if (f.dest >= domain_register_count(info->dest_domain) ||
-      f.src1 >= domain_register_count(info->lhs_domain) ||
-      f.src2 >= TILE_REGISTERS) {
+      f.src1 >= domain_register_count(info->lhs_domain) || f.src2 >= TILE_REGISTERS) {
     return DecodeError::illegal;
   }
   return DecodedNpuInstr{MmaInstr{info->op,
@@ -326,15 +305,11 @@ DecodeResult decode_mblk(std::uint32_t word) {
   if (f.dest >= domain_register_count(domain)) {
     return DecodeError::illegal;
   }
-  const auto op = gather                ? MblkOp::gather
-                  : (f.funct3 & 1) != 0 ? MblkOp::store
-                                        : MblkOp::load;
+  const auto op = gather ? MblkOp::gather : (f.funct3 & 1) != 0 ? MblkOp::store : MblkOp::load;
   const auto gather_src = gather ? f.src2 : RegisterIndex{0};
   const NpuRegister reg{domain, f.dest};
-  return DecodedNpuInstr{
-      is_store_form(op)
-          ? MblkInstr{op, {}, reg, ImmediateIndex{}, gather_src}
-          : MblkInstr{op, reg, {}, ImmediateIndex{}, gather_src}};
+  return DecodedNpuInstr{is_store_form(op) ? MblkInstr{op, {}, reg, ImmediateIndex{}, gather_src}
+                                           : MblkInstr{op, reg, {}, ImmediateIndex{}, gather_src}};
 }
 
 // M_BLK row forms (MR): sel3 = {TA, 0, IS}; IS=0 takes the row number from
@@ -410,8 +385,7 @@ DecodeResult decode_lane_move(std::uint32_t word) {
                                    : NpuOperand{NpuRegister{domain, f.dest}};
   auto src = op == LaneOp::insert ? NpuOperand{ScalarRegister{f.src1}}
                                   : NpuOperand{NpuRegister{domain, f.src1}};
-  return DecodedNpuInstr{
-      LaneInstr{op, dst, src, decode_index(f.src2, (f.sel3 & 1) != 0)}};
+  return DecodedNpuInstr{LaneInstr{op, dst, src, decode_index(f.src2, (f.sel3 & 1) != 0)}};
 }
 
 // sel2 selects the register family pair, the vector-side bit picks within it:
@@ -432,8 +406,7 @@ DecodeResult decode_cfg_seti(std::uint32_t word) {
   if (f.dest >= config_register_count(reg_type)) {
     return DecodeError::illegal;
   }
-  return DecodedNpuInstr{
-      CfgInstr{CfgOp::seti, reg_type, f.dest, 0, f.field3, f.imm}};
+  return DecodedNpuInstr{CfgInstr{CfgOp::seti, reg_type, f.dest, 0, f.field3, f.imm}};
 }
 
 template <CfgOp Op> DecodeResult decode_cfg_reg(std::uint32_t word) {
@@ -448,8 +421,8 @@ template <CfgOp Op> DecodeResult decode_cfg_reg(std::uint32_t word) {
   if (Op != CfgOp::setx && f.src1 >= count) {
     return DecodeError::illegal;
   }
-  return DecodedNpuInstr{CfgInstr{Op, reg_type, f.dest, f.src1,
-                                  static_cast<std::uint8_t>(f.arg & 0x7), 0}};
+  return DecodedNpuInstr{
+      CfgInstr{Op, reg_type, f.dest, f.src1, static_cast<std::uint8_t>(f.arg & 0x7), 0}};
 }
 
 // clang-format off

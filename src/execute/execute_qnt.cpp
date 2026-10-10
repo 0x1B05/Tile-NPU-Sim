@@ -37,8 +37,7 @@ std::int8_t quantize_lane(float value, float scale) {
 // The absmax scan of one source row. An all-zero or all-NaN row yields
 // +0.0, whose derived scale quantizes every element of the row to 0 through
 // the NaN quotient rule.
-float row_amax(MatrixView<const std::uint32_t> src, std::size_t row,
-               std::size_t cols) {
+float row_amax(MatrixView<const std::uint32_t> src, std::size_t row, std::size_t cols) {
   float amax = 0.0f;
   for (std::size_t col = 0; col < cols; ++col) {
     amax = f32_absmax_step(amax, std::bit_cast<float>(src.at(row, col)));
@@ -49,8 +48,8 @@ float row_amax(MatrixView<const std::uint32_t> src, std::size_t row,
 // Resolves the vector-form scale lane: an immediate index or the value of
 // the named Scalar register; the lane must fall inside vScale's effective
 // length.
-std::optional<std::uint32_t>
-scale_lane(const QntInstr &instr, const State &state, std::uint8_t vscale_len) {
+std::optional<std::uint32_t> scale_lane(const QntInstr &instr, const State &state,
+                                        std::uint8_t vscale_len) {
   const auto lane = resolve_index(instr.index, state);
   if (lane >= vscale_len) {
     return std::nullopt;
@@ -70,8 +69,7 @@ ExecuteResult tquant(const QntInstr &instr, State &state) {
   if (!valid_domain_config(dst_config) || dst_config.dtype != DType::i8 ||
       !valid_domain_config(src_config) || src_config.dtype != DType::f32 ||
       !valid_domain_config(scale_config) || scale_config.dtype != DType::f32 ||
-      dst_config.rows != src_config.rows ||
-      dst_config.cols != src_config.cols ||
+      dst_config.rows != src_config.rows || dst_config.cols != src_config.cols ||
       scale_config.len != src_config.rows) {
     return fail;
   }
@@ -87,8 +85,8 @@ ExecuteResult tquant(const QntInstr &instr, State &state) {
       scale_reg[row] = f32_bits(scale);
     }
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
-      dst.at(row, col) = static_cast<std::uint8_t>(
-          quantize_lane(std::bit_cast<float>(src.at(row, col)), scale));
+      dst.at(row, col) =
+          static_cast<std::uint8_t>(quantize_lane(std::bit_cast<float>(src.at(row, col)), scale));
     }
   }
   return {.status = StepStatus::retired};
@@ -103,8 +101,7 @@ ExecuteResult tdequant(const QntInstr &instr, State &state) {
   if (!valid_domain_config(dst_config) || dst_config.dtype != DType::f32 ||
       !valid_domain_config(src_config) || src_config.dtype != DType::i8 ||
       !valid_domain_config(scale_config) || scale_config.dtype != DType::f32 ||
-      dst_config.rows != src_config.rows ||
-      dst_config.cols != src_config.cols ||
+      dst_config.rows != src_config.rows || dst_config.cols != src_config.cols ||
       scale_config.len != src_config.rows) {
     return fail;
   }
@@ -114,8 +111,7 @@ ExecuteResult tdequant(const QntInstr &instr, State &state) {
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     const float scale = std::bit_cast<float>(scale_reg[row]);
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
-      const float element =
-          static_cast<float>(std::bit_cast<std::int8_t>(src.at(row, col)));
+      const float element = static_cast<float>(std::bit_cast<std::int8_t>(src.at(row, col)));
       dst.at(row, col) = f32_bits(element * scale);
     }
   }
@@ -144,8 +140,7 @@ ExecuteResult vquant(const QntInstr &instr, State &state) {
   const float amax = f32_absmax(std::span(src_reg).first(src_config.len));
   const float scale = amax / 127.0f;
   for (std::size_t j = 0; j < src_config.len; ++j) {
-    dst_reg[j] = static_cast<std::uint8_t>(
-        quantize_lane(std::bit_cast<float>(src_reg[j]), scale));
+    dst_reg[j] = static_cast<std::uint8_t>(quantize_lane(std::bit_cast<float>(src_reg[j]), scale));
   }
   state.v[instr.scale][*lane] = f32_bits(scale);
   return {.status = StepStatus::retired};
@@ -171,8 +166,7 @@ ExecuteResult bdequant(const QntInstr &instr, State &state) {
   const auto &src_reg = state.b[instr.src.index];
   auto &dst_reg = state.v[instr.dest.index];
   for (std::size_t j = 0; j < dst_config.len; ++j) {
-    const float element =
-        static_cast<float>(std::bit_cast<std::int8_t>(src_reg[j]));
+    const float element = static_cast<float>(std::bit_cast<std::int8_t>(src_reg[j]));
     dst_reg[j] = f32_bits(element * scale);
   }
   return {.status = StepStatus::retired};
@@ -185,12 +179,10 @@ ExecuteResult bdequant(const QntInstr &instr, State &state) {
 ExecuteResult execute_qnt(const QntInstr &instr, State &state) {
   switch (instr.op) {
   case QntOp::quant:
-    return instr.dest.domain == NpuDomain::tile ? tquant(instr, state)
-                                                : vquant(instr, state);
+    return instr.dest.domain == NpuDomain::tile ? tquant(instr, state) : vquant(instr, state);
   case QntOp::quant_ext_scale: return tquant(instr, state);
   case QntOp::dequant:
-    return instr.dest.domain == NpuDomain::acc ? tdequant(instr, state)
-                                               : bdequant(instr, state);
+    return instr.dest.domain == NpuDomain::acc ? tdequant(instr, state) : bdequant(instr, state);
   }
   unreachable("execute_qnt with an unknown op");
 }

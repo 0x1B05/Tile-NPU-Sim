@@ -34,8 +34,7 @@ template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
     const auto *npu = std::get_if<DecodedNpuInstr>(&result);
-    const std::string what =
-        std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
+    const std::string what = std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
     check(npu != nullptr, what);
     const auto *decoded = std::get_if<CmpInstr>(npu);
     check(decoded != nullptr, what);
@@ -63,13 +62,11 @@ struct ErrorCase {
   DecodeError error;
 };
 
-template <std::size_t N>
-void check_errors(const std::array<ErrorCase, N> &cases) {
+template <std::size_t N> void check_errors(const std::array<ErrorCase, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
     const auto *error = std::get_if<DecodeError>(&result);
-    const std::string what =
-        std::string(test.name) + " (" + to_hex(test.word) + ")";
+    const std::string what = std::string(test.name) + " (" + to_hex(test.word) + ")";
     check(error != nullptr, what + " decodes");
     check_eq(*error, test.error, what + ": error kind");
   }
@@ -160,18 +157,13 @@ TEST_CASE(ecmp_decode) {
 TEST_CASE(ecmp_decode_rejects_reserved) {
   constexpr std::array cases{
       // Comparisons only exist on Acc/Vec32: dom2 = 00/10 is reserved.
-      ErrorCase{"tile domain", make_ecmp(NpuDomain::tile, false, 0, 0, 0, 0),
-                DecodeError::illegal},
-      ErrorCase{"vec8 domain", make_ecmp(NpuDomain::vec8, false, 0, 0, 0, 0),
-                DecodeError::illegal},
+      ErrorCase{"tile domain", make_ecmp(NpuDomain::tile, false, 0, 0, 0, 0), DecodeError::illegal},
+      ErrorCase{"vec8 domain", make_ecmp(NpuDomain::vec8, false, 0, 0, 0, 0), DecodeError::illegal},
       // funct3 = 110/111 is reserved.
-      ErrorCase{"funct3 110", make_ecmp(NpuDomain::acc, false, 6, 0, 0, 0),
-                DecodeError::illegal},
-      ErrorCase{"funct3 111", make_ecmp(NpuDomain::vec32, false, 7, 0, 0, 0),
-                DecodeError::illegal},
+      ErrorCase{"funct3 110", make_ecmp(NpuDomain::acc, false, 6, 0, 0, 0), DecodeError::illegal},
+      ErrorCase{"funct3 111", make_ecmp(NpuDomain::vec32, false, 7, 0, 0, 0), DecodeError::illegal},
       // reserved5 must be 0.
-      ErrorCase{"reserved5",
-                make_ecmp(NpuDomain::acc, false, 0, 0, 0, 0) | (1u << 17),
+      ErrorCase{"reserved5", make_ecmp(NpuDomain::acc, false, 0, 0, 0, 0) | (1u << 17),
                 DecodeError::illegal},
       // Acc register numbers are bounded at 12; Vec32 takes all 32.
       ErrorCase{"acmp a12 mask", make_ecmp(NpuDomain::acc, false, 0, 12, 0, 0),

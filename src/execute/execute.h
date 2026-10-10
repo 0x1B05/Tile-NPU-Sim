@@ -30,22 +30,16 @@ struct ExecContext {
 
 // Resolves an IndexOperand: the immediate value, or the named Scalar
 // register's value.
-inline std::uint64_t resolve_index(const IndexOperand &index,
-                                   const State &state) {
-  return std::visit(Overloaded{[](ImmediateIndex imm) {
-                                 return static_cast<std::uint64_t>(imm.value);
-                               },
-                               [&state](ScalarRegister reg) {
-                                 return state.scalar.read_x(reg.index);
-                               }},
-                    index);
+inline std::uint64_t resolve_index(const IndexOperand &index, const State &state) {
+  return std::visit(
+      Overloaded{[](ImmediateIndex imm) { return static_cast<std::uint64_t>(imm.value); },
+                 [&state](ScalarRegister reg) { return state.scalar.read_x(reg.index); }},
+      index);
 }
 
 // The shared failure constructors: a dynamic constraint violation reports
 // invalid_configuration, and a faulting access carries its address.
-inline ExecuteResult config_error() {
-  return {.status = StepStatus::invalid_configuration};
-}
+inline ExecuteResult config_error() { return {.status = StepStatus::invalid_configuration}; }
 
 inline ExecuteResult access_fault(StepStatus status, std::uint64_t address) {
   return {.status = status, .fault_address = address};
@@ -55,8 +49,7 @@ inline ExecuteResult access_fault(StepStatus status, std::uint64_t address) {
 
 // Scalar execution
 ExecuteResult execute_rv64i(const DecodedScalarInstr &instr, ExecContext &ctx);
-ExecuteResult execute_rv64m(const DecodedScalarInstr &instr,
-                            ScalarState &scalar);
+ExecuteResult execute_rv64m(const DecodedScalarInstr &instr, ScalarState &scalar);
 
 // Elementwise execution
 ExecuteResult execute_ebin(const EbinInstr &instr, State &state);
@@ -83,9 +76,9 @@ ExecuteResult execute_cfg(const CfgInstr &instr, ExecContext &ctx);
 ExecuteResult execute_sys(const SysInstr &instr, State &state);
 
 // Dispatch entry points
-ExecuteResult execute_scalar(const DecodedScalarInstr &instr, ExecContext &ctx);
+ExecuteResult exec_scalar_instr(const DecodedScalarInstr &instr, ExecContext &ctx);
 // Validates the instruction's structure first (validate.h): IR that no
 // encoding can produce fails with illegal_instruction before dispatch.
-ExecuteResult execute_npu(const DecodedNpuInstr &instr, ExecContext &ctx);
+ExecuteResult exec_npu_instr(const DecodedNpuInstr &instr, ExecContext &ctx);
 
 } // namespace tile_npu

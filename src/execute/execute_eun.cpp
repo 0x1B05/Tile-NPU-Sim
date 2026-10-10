@@ -29,8 +29,7 @@ bool op_supports_dtype(EunOp op, DType dtype) {
 // overflows for x < -88, flushing normal-range results like silu(-89) to -0
 // and breaking the ISA's 2^-10 relative-error bound.
 float silu_f32(float x) {
-  return static_cast<float>(static_cast<double>(x) /
-                            (1.0 + std::exp(-static_cast<double>(x))));
+  return static_cast<float>(static_cast<double>(x) / (1.0 + std::exp(-static_cast<double>(x))));
 }
 
 // One element of the operation on raw storage bits. abs/neg only reach here
@@ -63,26 +62,22 @@ template <typename E> E apply_unary(EunOp op, DType dtype, E value) {
     return static_cast<E>(0u - static_cast<std::uint32_t>(signed_value));
   }
   // abs
-  return static_cast<E>(signed_value < 0
-                            ? 0u - static_cast<std::uint32_t>(signed_value)
-                            : static_cast<std::uint32_t>(signed_value));
+  return static_cast<E>(signed_value < 0 ? 0u - static_cast<std::uint32_t>(signed_value)
+                                         : static_cast<std::uint32_t>(signed_value));
 }
 
 // Shared single-source loop: matrix domains run over the effective shape,
 // the vector domain over the effective length. An unsuccessful execution
 // leaves architectural state unchanged.
 template <typename Element, typename Config, std::size_t RegCount>
-ExecuteResult
-unary_matrix(const EunInstr &instr, State &,
-             std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
-             const std::array<Config, RegCount> &configs) {
+ExecuteResult unary_matrix(const EunInstr &instr, State &,
+                           std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
+                           const std::array<Config, RegCount> &configs) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   const auto &dst_config = configs[instr.dest.index];
   const auto &src_config = configs[instr.src.index];
-  if (!valid_elementwise_config(dst_config) ||
-      !valid_elementwise_config(src_config) ||
-      !configs_match(dst_config, src_config) ||
-      !op_supports_dtype(instr.op, dst_config.dtype)) {
+  if (!valid_elementwise_config(dst_config) || !valid_elementwise_config(src_config) ||
+      !configs_match(dst_config, src_config) || !op_supports_dtype(instr.op, dst_config.dtype)) {
     return fail;
   }
 
@@ -90,25 +85,21 @@ unary_matrix(const EunInstr &instr, State &,
   auto src = matrix_view(std::as_const(regs[instr.src.index]));
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
-      dst.at(row, col) =
-          apply_unary(instr.op, dst_config.dtype, src.at(row, col));
+      dst.at(row, col) = apply_unary(instr.op, dst_config.dtype, src.at(row, col));
     }
   }
   return {.status = StepStatus::retired};
 }
 
 template <typename Element, typename Config, std::size_t RegCount>
-ExecuteResult
-unary_vector(const EunInstr &instr, State &,
-             std::array<std::array<Element, VECTOR_LANES>, RegCount> &regs,
-             const std::array<Config, RegCount> &configs) {
+ExecuteResult unary_vector(const EunInstr &instr, State &,
+                           std::array<std::array<Element, VECTOR_LANES>, RegCount> &regs,
+                           const std::array<Config, RegCount> &configs) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   const auto &dst_config = configs[instr.dest.index];
   const auto &src_config = configs[instr.src.index];
-  if (!valid_elementwise_config(dst_config) ||
-      !valid_elementwise_config(src_config) ||
-      !configs_match(dst_config, src_config) ||
-      !op_supports_dtype(instr.op, dst_config.dtype)) {
+  if (!valid_elementwise_config(dst_config) || !valid_elementwise_config(src_config) ||
+      !configs_match(dst_config, src_config) || !op_supports_dtype(instr.op, dst_config.dtype)) {
     return fail;
   }
 

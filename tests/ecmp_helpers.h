@@ -11,9 +11,9 @@
 // funct3: 000 eq, 001 ne (int), 010 lt, 011 ge (int), 100 le (f32),
 //         101 unord (f32); 110/111 reserved.
 constexpr std::uint32_t make_ecmp(tile_npu::NpuDomain domain, bool scalar_src2,
-                                  std::uint32_t funct3, std::uint32_t mask,
-                                  std::uint32_t src1, std::uint32_t src2) {
+                                  std::uint32_t funct3, std::uint32_t mask, std::uint32_t src1,
+                                  std::uint32_t src2) {
   return (2u << 28) | (static_cast<std::uint32_t>(domain) << 26) |
-         (static_cast<std::uint32_t>(scalar_src2 ? 1 : 0) << 25) |
-         (funct3 << 22) | (src2 << 12) | (src1 << 7) | (mask << 2);
+         (static_cast<std::uint32_t>(scalar_src2 ? 1 : 0) << 25) | (funct3 << 22) | (src2 << 12) |
+         (src1 << 7) | (mask << 2);
 }

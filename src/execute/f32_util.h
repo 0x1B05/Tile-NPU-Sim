@@ -7,9 +7,7 @@
 
 namespace tile_npu {
 
-constexpr std::uint32_t f32_bits(float value) {
-  return std::bit_cast<std::uint32_t>(value);
-}
+constexpr std::uint32_t f32_bits(float value) { return std::bit_cast<std::uint32_t>(value); }
 
 // One step of the ISA absmax scan: a NaN candidate never wins, so an
 // all-zero or all-NaN scan ends at +0.0.

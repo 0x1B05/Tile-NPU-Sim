@@ -101,8 +101,7 @@ TEST_CASE(eun_exp2_special_values) {
   check_eq(sim.step().status, StepStatus::retired, "vexp2 retires");
   check_eq(hex(state.v[0][0]), hex(f32_bits(8.0f)), "exp2(3) = 8");
   check_eq(hex(state.v[0][1]), hex(0x0u), "exp2(-inf) = +0");
-  check_eq(hex(state.v[0][2]),
-           hex(f32_bits(std::numeric_limits<float>::infinity())),
+  check_eq(hex(state.v[0][2]), hex(f32_bits(std::numeric_limits<float>::infinity())),
            "exp2 overflow = +inf");
   check(std::isnan(std::bit_cast<float>(state.v[0][3])), "exp2(NaN) = NaN");
 }
@@ -121,8 +120,7 @@ TEST_CASE(eun_rcp_rsqrt_special_values) {
   state.v[1][3] = f32_bits(-0.0f);
   check_eq(sim.step().status, StepStatus::retired, "vrcp retires");
   check_eq(hex(state.v[0][0]), hex(f32_bits(0.25f)), "rcp(4) = 0.25");
-  check_eq(hex(state.v[0][1]),
-           hex(f32_bits(std::numeric_limits<float>::infinity())),
+  check_eq(hex(state.v[0][1]), hex(f32_bits(std::numeric_limits<float>::infinity())),
            "rcp(+0) = +inf");
   check_eq(hex(state.v[0][2]), hex(0x80000000u), "rcp(-inf) = -0");
   check_eq(hex(state.v[0][3]), hex(0xff800000u), "rcp(-0) = -inf");
@@ -156,16 +154,13 @@ TEST_CASE(eun_silu) {
   check_eq(sim.step().status, StepStatus::retired, "vsilu retires");
   check_eq(hex(state.v[0][0]), hex(0x0u), "silu(+0) = +0");
   // silu is evaluated in double precision, then rounded once to f32.
-  check_eq(hex(state.v[0][1]),
-           hex(f32_bits(static_cast<float>(1.0 / (1.0 + std::exp(-1.0))))),
+  check_eq(hex(state.v[0][1]), hex(f32_bits(static_cast<float>(1.0 / (1.0 + std::exp(-1.0))))),
            "silu(1)");
-  check_eq(hex(state.v[0][2]),
-           hex(f32_bits(std::numeric_limits<float>::infinity())),
+  check_eq(hex(state.v[0][2]), hex(f32_bits(std::numeric_limits<float>::infinity())),
            "silu(+inf) = +inf");
   // silu(-89) ~= -1.98e-37 is a normal f32; a single-precision exp(89)
   // overflows and would flush it to -0.
-  check_eq(hex(state.v[0][3]),
-           hex(f32_bits(static_cast<float>(-89.0 / (1.0 + std::exp(89.0))))),
+  check_eq(hex(state.v[0][3]), hex(f32_bits(static_cast<float>(-89.0 / (1.0 + std::exp(89.0))))),
            "silu(-89) stays normal");
   check_eq(hex(state.v[0][4]), hex(0x80000000u), "silu(-0) = -0");
 }
@@ -182,19 +177,16 @@ TEST_CASE(eun_rejects_invalid) {
     state.ac[index].cols = 1;
   }
   state.a[0][0] = 0xee;
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "aabs rejects u32");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "aabs rejects u32");
   check_eq(state.a[0][0], std::uint32_t{0xee}, "non-mutating");
 
   load_one(sim, memory, make_eun(NpuDomain::vec32, 3, 0, 1)); // vexp2 v0, v1
   for (auto index : {0, 1})
     vec_cfg(state, index, DType::i32, 2); // approx functions are f32-only
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "vexp2 rejects i32");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "vexp2 rejects i32");
 
   load_one(sim, memory, make_eun(NpuDomain::vec32, 0, 0, 1)); // vnot v0, v1
   vec_cfg(state, 0, DType::f32, 2);
   vec_cfg(state, 1, DType::f32, 3); // shape mismatch
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "vnot rejects shape mismatch");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "vnot rejects shape mismatch");
 }

@@ -108,8 +108,7 @@ TEST_CASE(emask_vec_tail) {
   check_eq(state.v[0][1], std::uint32_t{20}, "lane < xLen keeps source");
   check_eq(state.v[0][2], std::uint32_t{30}, "lane < xLen keeps source");
   check_eq(state.v[0][3], std::uint32_t{1}, "lane >= xLen fills +1");
-  check_eq(state.v[0][4], std::uint32_t{0x5a5a5a5au},
-           "mask keeps lanes past the effective length");
+  check_eq(state.v[0][4], std::uint32_t{0x5a5a5a5au}, "mask keeps lanes past the effective length");
 }
 
 TEST_CASE(emask_vec8_maskx) {

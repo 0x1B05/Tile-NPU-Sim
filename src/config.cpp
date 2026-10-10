@@ -26,8 +26,7 @@ constexpr bool valid_dtype(ConfigRegType reg_type, DType dtype) {
   return false;
 }
 
-constexpr bool valid_register_index(ConfigRegType reg_type,
-                                    std::uint8_t index) {
+constexpr bool valid_register_index(ConfigRegType reg_type, std::uint8_t index) {
   return index < config_register_count(reg_type);
 }
 
@@ -35,16 +34,14 @@ template <typename T> const T *get_typed(const ConfigFieldValue &value) {
   return std::get_if<T>(&value);
 }
 
-template <typename T>
-bool coerce_scalar(const ConfigFieldValue &value, T &result) {
+template <typename T> bool coerce_scalar(const ConfigFieldValue &value, T &result) {
   if (const auto *typed = get_typed<T>(value)) {
     result = *typed;
     return true;
   }
   if (const auto *raw = get_typed<std::uint64_t>(value)) {
     if constexpr (std::is_enum_v<T>) {
-      if (*raw > static_cast<std::uint64_t>(
-                     std::numeric_limits<std::uint8_t>::max())) {
+      if (*raw > static_cast<std::uint64_t>(std::numeric_limits<std::uint8_t>::max())) {
         return false;
       }
       result = static_cast<T>(*raw);
@@ -54,11 +51,9 @@ bool coerce_scalar(const ConfigFieldValue &value, T &result) {
       result = static_cast<T>(*raw);
       return true;
     } else if constexpr (std::is_same_v<T, std::int32_t>) {
-      constexpr auto low =
-          static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max());
-      constexpr auto high =
-          std::numeric_limits<std::uint64_t>::max() -
-          static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max());
+      constexpr auto low = static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max());
+      constexpr auto high = std::numeric_limits<std::uint64_t>::max() -
+                            static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max());
       if (*raw > low && *raw < high) return false;
       result = static_cast<T>(static_cast<std::uint32_t>(*raw));
       return true;
@@ -73,8 +68,7 @@ bool coerce_scalar(const ConfigFieldValue &value, T &result) {
   return false;
 }
 
-template <typename T>
-ConfigAccessError write_scalar(T &target, const ConfigFieldValue &value) {
+template <typename T> ConfigAccessError write_scalar(T &target, const ConfigFieldValue &value) {
   T raw;
   if (!coerce_scalar(value, raw)) {
     return ConfigAccessError::invalid_value;
@@ -262,10 +256,9 @@ constexpr auto FIELD_BY_TYPE_AND_CODE = [] {
 
 } // namespace
 
-ConfigReadResult read_config_field(const State &state, ConfigRegType reg_type,
-                                   std::uint8_t index, ConfigField field) {
-  if (!valid_register_index(reg_type, index))
-    return ConfigAccessError::invalid_register;
+ConfigReadResult read_config_field(const State &state, ConfigRegType reg_type, std::uint8_t index,
+                                   ConfigField field) {
+  if (!valid_register_index(reg_type, index)) return ConfigAccessError::invalid_register;
 
   switch (reg_type) {
   case ConfigRegType::tc: return read_tile_config(state.tc[index], field);
@@ -281,11 +274,9 @@ ConfigReadResult read_config_field(const State &state, ConfigRegType reg_type,
   return ConfigAccessError::unsupported_field;
 }
 
-ConfigAccessError write_config_field(State &state, ConfigRegType reg_type,
-                                     std::uint8_t index, ConfigField field,
-                                     const ConfigFieldValue &value) {
-  if (!valid_register_index(reg_type, index))
-    return ConfigAccessError::invalid_register;
+ConfigAccessError write_config_field(State &state, ConfigRegType reg_type, std::uint8_t index,
+                                     ConfigField field, const ConfigFieldValue &value) {
+  if (!valid_register_index(reg_type, index)) return ConfigAccessError::invalid_register;
 
   // clang-format off
   switch (reg_type) {
@@ -302,8 +293,8 @@ ConfigAccessError write_config_field(State &state, ConfigRegType reg_type,
   return ConfigAccessError::unsupported_field;
 }
 
-std::variant<ConfigField, ConfigAccessError>
-config_field_from_code(ConfigRegType reg_type, std::uint8_t field_code) {
+std::variant<ConfigField, ConfigAccessError> config_field_from_code(ConfigRegType reg_type,
+                                                                    std::uint8_t field_code) {
   const auto type = static_cast<std::uint8_t>(reg_type);
   if (type >= FIELD_BY_TYPE_AND_CODE.size()) {
     return ConfigAccessError::unsupported_field;
@@ -318,9 +309,7 @@ config_field_from_code(ConfigRegType reg_type, std::uint8_t field_code) {
 // Every alternative converts losslessly: enums to their numeric code,
 // int32_t sign-extended so negative strides survive cfg.get.
 std::uint64_t config_field_as_scalar(const ConfigFieldValue &value) {
-  return std::visit(
-      [](const auto &typed) { return static_cast<std::uint64_t>(typed); },
-      value);
+  return std::visit([](const auto &typed) { return static_cast<std::uint64_t>(typed); }, value);
 }
 
 } // namespace tile_npu

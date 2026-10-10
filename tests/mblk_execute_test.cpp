@@ -37,8 +37,7 @@ struct MblkRun {
 };
 
 template <std::size_t N>
-void poke(FlatMemory &memory, std::uint64_t address,
-          const std::uint8_t (&bytes)[N]) {
+void poke(FlatMemory &memory, std::uint64_t address, const std::uint8_t (&bytes)[N]) {
   std::array<std::byte, N> raw{};
   for (std::size_t i = 0; i < N; ++i) {
     raw[i] = static_cast<std::byte>(bytes[i]);
@@ -47,8 +46,7 @@ void poke(FlatMemory &memory, std::uint64_t address,
 }
 
 template <std::size_t N>
-std::array<std::uint8_t, N> peek(const FlatMemory &memory,
-                                 std::uint64_t address) {
+std::array<std::uint8_t, N> peek(const FlatMemory &memory, std::uint64_t address) {
   std::array<std::byte, N> raw{};
   check(memory.read(address, raw), "peek memory");
   std::array<std::uint8_t, N> out{};
@@ -64,15 +62,15 @@ void config_tile_2x2(tile_npu::State &state, std::uint8_t index) {
   state.tc[index].cols = 2;
 }
 
-void stride_desc(tile_npu::MatrixDescriptor &desc, std::uint64_t base,
-                 std::int32_t row_stride, std::int32_t col_stride) {
+void stride_desc(tile_npu::MatrixDescriptor &desc, std::uint64_t base, std::int32_t row_stride,
+                 std::int32_t col_stride) {
   desc.base_addr = base;
   desc.row_stride_bytes = row_stride;
   desc.col_stride_bytes = col_stride;
 }
 
-constexpr std::uint32_t block(NpuDomain domain, std::uint32_t funct3,
-                              std::uint32_t dest, std::uint32_t src2 = 0) {
+constexpr std::uint32_t block(NpuDomain domain, std::uint32_t funct3, std::uint32_t dest,
+                              std::uint32_t src2 = 0) {
   return make_mblk(domain, funct3, dest, src2);
 }
 
@@ -94,8 +92,7 @@ TEST_CASE(mblk_tload_block_walks_strides) {
   check_eq(state.t[0][tile_index(1, 1)], std::uint8_t{4}, "t0(1,1)");
   check_eq(state.t[0][tile_index(0, 2)], std::uint8_t{0x5a},
            "element outside the valid shape is untouched");
-  check_eq(hex(state.tm[0].base_addr), hex(DATA),
-           "descriptor without increment keeps base_addr");
+  check_eq(hex(state.tm[0].base_addr), hex(DATA), "descriptor without increment keeps base_addr");
 }
 
 TEST_CASE(mblk_tload_transpose) {
@@ -143,10 +140,8 @@ TEST_CASE(mblk_row_load_forms) {
   check_eq(run.sim.step().status, StepStatus::retired, "tload.row imm retires");
   check_eq(state.t[0][tile_index(1, 0)], std::uint8_t{5}, "t0(1,0)");
   check_eq(state.t[0][tile_index(1, 1)], std::uint8_t{6}, "t0(1,1)");
-  check_eq(state.t[0][tile_index(0, 0)], std::uint8_t{0xaa},
-           "row 0 is untouched");
-  check_eq(state.t[0][tile_index(0, 1)], std::uint8_t{0xbb},
-           "row 0 is untouched");
+  check_eq(state.t[0][tile_index(0, 0)], std::uint8_t{0xaa}, "row 0 is untouched");
+  check_eq(state.t[0][tile_index(0, 1)], std::uint8_t{0xbb}, "row 0 is untouched");
 
   MblkRun scalar_run(make_mrow(false, true, 4, 5, 0)); // tload.row t0[x5]
   auto &scalar_state = scalar_run.sim.state();
@@ -155,8 +150,7 @@ TEST_CASE(mblk_row_load_forms) {
   scalar_state.scalar.write_x(5, 1);
   poke(scalar_run.memory, DATA, {7, 8});
 
-  check_eq(scalar_run.sim.step().status, StepStatus::retired,
-           "tload.row scalar index retires");
+  check_eq(scalar_run.sim.step().status, StepStatus::retired, "tload.row scalar index retires");
   check_eq(scalar_state.t[0][tile_index(1, 0)], std::uint8_t{7}, "t0(1,0)");
   check_eq(scalar_state.t[0][tile_index(1, 1)], std::uint8_t{8}, "t0(1,1)");
 }
@@ -201,8 +195,7 @@ TEST_CASE(mblk_vector_load_store) {
 
   check_eq(store_run.sim.step().status, StepStatus::retired, "vstore retires");
   const auto bytes = peek<8>(store_run.memory, DATA);
-  const std::array<std::uint8_t, 8> expected{0x44, 0x33, 0x22, 0x11,
-                                             0x88, 0x77, 0x66, 0x55};
+  const std::array<std::uint8_t, 8> expected{0x44, 0x33, 0x22, 0x11, 0x88, 0x77, 0x66, 0x55};
   check(bytes == expected, "32-bit elements store little-endian");
 }
 
@@ -222,8 +215,7 @@ TEST_CASE(mblk_gather_tile) {
   check_eq(state.t[0][tile_index(0, 1)], std::uint8_t{15}, "t0(0,1)");
   check_eq(state.t[0][tile_index(1, 0)], std::uint8_t{10}, "t0(1,0)");
   check_eq(state.t[0][tile_index(1, 1)], std::uint8_t{11}, "t0(1,1)");
-  check_eq(hex(state.tm[0].base_addr), hex(DATA),
-           "gather never increments the descriptor");
+  check_eq(hex(state.tm[0].base_addr), hex(DATA), "gather never increments the descriptor");
 
   MblkRun short_run(block(NpuDomain::tile, 2, 0, 2));
   auto &short_state = short_run.sim.state();
@@ -273,8 +265,7 @@ TEST_CASE(mblk_post_increment) {
   poke(run.memory, DATA, {1, 2, 3, 4, 5, 6, 7, 8});
 
   check_eq(run.sim.step().status, StepStatus::retired, "tload retires");
-  check_eq(hex(state.tm[0].base_addr), hex(DATA + 2 * 4),
-           "base_addr += rows * row_stride_bytes");
+  check_eq(hex(state.tm[0].base_addr), hex(DATA + 2 * 4), "base_addr += rows * row_stride_bytes");
 
   MblkRun row_run(make_mrow(false, false, 4, 0, 1)); // tload.row t1[0]
   auto &row_state = row_run.sim.state();
@@ -284,8 +275,7 @@ TEST_CASE(mblk_post_increment) {
   poke(row_run.memory, DATA, {1, 2});
 
   check_eq(row_run.sim.step().status, StepStatus::retired, "tload.row retires");
-  check_eq(hex(row_state.tm[1].base_addr), hex(DATA + 4),
-           "row load increments by one row stride");
+  check_eq(hex(row_state.tm[1].base_addr), hex(DATA + 4), "row load increments by one row stride");
 
   MblkRun vec_run(block(NpuDomain::vec32, 1, 1)); // vstore v1
   auto &vec_state = vec_run.sim.state();
@@ -296,8 +286,7 @@ TEST_CASE(mblk_post_increment) {
   vec_state.vm[1].flags = 1;
 
   check_eq(vec_run.sim.step().status, StepStatus::retired, "vstore retires");
-  check_eq(hex(vec_state.vm[1].base_addr), hex(DATA + 2 * 4),
-           "base_addr += len * stride_bytes");
+  check_eq(hex(vec_state.vm[1].base_addr), hex(DATA + 2 * 4), "base_addr += len * stride_bytes");
 }
 
 TEST_CASE(mblk_rejects_invalid_configs) {
@@ -305,6 +294,7 @@ TEST_CASE(mblk_rejects_invalid_configs) {
     const char *name;
     std::uint32_t word;
   };
+
   // Each scenario starts from a valid 2x2 i8 tile setup and breaks one rule.
   constexpr std::array scenarios{
       Scenario{"transform on tstore", block(NpuDomain::tile, 1, 0)},
@@ -346,8 +336,7 @@ TEST_CASE(mblk_rejects_invalid_configs) {
     config_tile_2x2(state, 0);
     state.tc[0].dtype = DType::i32; // not a tile dtype
     stride_desc(state.tm[0], DATA, 2, 1);
-    check_eq(run.sim.step().status, StepStatus::invalid_configuration,
-             "bad domain dtype rejects");
+    check_eq(run.sim.step().status, StepStatus::invalid_configuration, "bad domain dtype rejects");
   }
   {
     MblkRun run(block(NpuDomain::tile, 0, 0));
@@ -382,8 +371,7 @@ TEST_CASE(mblk_rejects_invalid_configs) {
     config_tile_2x2(state, 0);
     stride_desc(state.tm[0], DATA, 2, 1);
     state.tm[0].flags = 0x03; // reserved inc_mode
-    check_eq(run.sim.step().status, StepStatus::invalid_configuration,
-             "reserved inc_mode rejects");
+    check_eq(run.sim.step().status, StepStatus::invalid_configuration, "reserved inc_mode rejects");
   }
   {
     MblkRun run(block(NpuDomain::tile, 0, 0));
@@ -460,8 +448,7 @@ TEST_CASE(mblk_faults_leave_state_unchanged) {
     check(result.fault_address.has_value(), "fault carries an address");
     check_eq(hex(*result.fault_address), hex(MEM_END), "fault address");
     const auto byte = peek<1>(run.memory, MEM_END - 1);
-    check_eq(byte[0], std::uint8_t{0xee},
-             "range probe prevents partial memory writes");
+    check_eq(byte[0], std::uint8_t{0xee}, "range probe prevents partial memory writes");
   }
 }
 
@@ -483,8 +470,7 @@ TEST_CASE(mblk_row_faults_leave_state_unchanged) {
              "staged row elements are discarded on fault");
     check_eq(state.t[0][tile_index(0, 1)], std::uint8_t{0xa5},
              "staged row elements are discarded on fault");
-    check_eq(hex(state.tm[0].base_addr), hex(MEM_END - 1),
-             "fault leaves base_addr unincremented");
+    check_eq(hex(state.tm[0].base_addr), hex(MEM_END - 1), "fault leaves base_addr unincremented");
   }
   {
     MblkRun run(make_mrow(false, false, 5, 0, 0)); // tstore.row t0[0]
@@ -500,10 +486,8 @@ TEST_CASE(mblk_row_faults_leave_state_unchanged) {
     check_eq(result.status, StepStatus::store_fault, "mid-row store faults");
     check_eq(hex(*result.fault_address), hex(MEM_END), "fault address");
     const auto byte = peek<1>(run.memory, MEM_END - 1);
-    check_eq(byte[0], std::uint8_t{0xee},
-             "range probe prevents partial memory writes");
-    check_eq(hex(state.tm[0].base_addr), hex(MEM_END - 1),
-             "fault leaves base_addr unincremented");
+    check_eq(byte[0], std::uint8_t{0xee}, "range probe prevents partial memory writes");
+    check_eq(hex(state.tm[0].base_addr), hex(MEM_END - 1), "fault leaves base_addr unincremented");
   }
 }
 
@@ -523,12 +507,9 @@ TEST_CASE(mblk_vector_faults_leave_state_unchanged) {
     const auto result = run.sim.step();
     check_eq(result.status, StepStatus::load_fault, "mid-vector load faults");
     check_eq(hex(*result.fault_address), hex(MEM_END), "fault address");
-    check_eq(hex(state.v[0][0]), hex(0xdeadbeefu),
-             "staged lanes are discarded on fault");
-    check_eq(hex(state.v[0][1]), hex(0xcafebabeu),
-             "staged lanes are discarded on fault");
-    check_eq(hex(state.vm[0].base_addr), hex(MEM_END - 4),
-             "fault leaves base_addr unincremented");
+    check_eq(hex(state.v[0][0]), hex(0xdeadbeefu), "staged lanes are discarded on fault");
+    check_eq(hex(state.v[0][1]), hex(0xcafebabeu), "staged lanes are discarded on fault");
+    check_eq(hex(state.vm[0].base_addr), hex(MEM_END - 4), "fault leaves base_addr unincremented");
   }
   {
     MblkRun run(block(NpuDomain::vec32, 1, 0)); // vstore v0
@@ -548,8 +529,7 @@ TEST_CASE(mblk_vector_faults_leave_state_unchanged) {
     const auto bytes = peek<4>(run.memory, MEM_END - 4);
     const std::array<std::uint8_t, 4> old{0xee, 0xee, 0xee, 0xee};
     check(bytes == old, "range probe prevents partial memory writes");
-    check_eq(hex(state.vm[0].base_addr), hex(MEM_END - 4),
-             "fault leaves base_addr unincremented");
+    check_eq(hex(state.vm[0].base_addr), hex(MEM_END - 4), "fault leaves base_addr unincremented");
   }
 }
 
@@ -575,10 +555,8 @@ TEST_CASE(mblk_gather_faults_leave_state_unchanged) {
              "staged elements are discarded on fault");
     check_eq(state.t[0][tile_index(0, 1)], std::uint8_t{0x22},
              "staged elements are discarded on fault");
-    check_eq(state.t[0][tile_index(1, 0)], std::uint8_t{0x33},
-             "fault runs no zero-fill");
-    check_eq(state.t[0][tile_index(1, 1)], std::uint8_t{0x44},
-             "fault runs no zero-fill");
+    check_eq(state.t[0][tile_index(1, 0)], std::uint8_t{0x33}, "fault runs no zero-fill");
+    check_eq(state.t[0][tile_index(1, 1)], std::uint8_t{0x44}, "fault runs no zero-fill");
   }
   {
     MblkRun run(block(NpuDomain::vec32, 2, 3, 2)); // vload.gather v3, v2
@@ -593,11 +571,9 @@ TEST_CASE(mblk_gather_faults_leave_state_unchanged) {
     state.v[3][1] = 0xcafebabeu;
 
     const auto result = run.sim.step();
-    check_eq(result.status, StepStatus::load_fault,
-             "mid-vector-gather load faults");
+    check_eq(result.status, StepStatus::load_fault, "mid-vector-gather load faults");
     check_eq(hex(*result.fault_address), hex(MEM_END), "fault address");
-    check_eq(hex(state.v[3][0]), hex(0xdeadbeefu),
-             "staged lanes are discarded on fault");
+    check_eq(hex(state.v[3][0]), hex(0xdeadbeefu), "staged lanes are discarded on fault");
     check_eq(hex(state.v[3][1]), hex(0xcafebabeu), "fault runs no zero-fill");
   }
 }
@@ -616,8 +592,7 @@ TEST_CASE(mblk_gather_aliased_index_vector) {
   // u32 table {100, 200, 300}, little-endian.
   poke(run.memory, DATA, {100, 0, 0, 0, 200, 0, 0, 0, 0x2c, 0x01, 0, 0});
 
-  check_eq(run.sim.step().status, StepStatus::retired,
-           "aliased vload.gather retires");
+  check_eq(run.sim.step().status, StepStatus::retired, "aliased vload.gather retires");
   check_eq(hex(state.v[2][0]), hex(0x0c8u), "lane 0 = table[old v2[0]]");
   check_eq(hex(state.v[2][1]), hex(0x12cu), "lane 1 = table[old v2[1]]");
 }

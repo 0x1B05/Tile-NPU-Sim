@@ -12,22 +12,20 @@ namespace {
 // A failed config access is the ISA's CFG_ERROR. The manual leaves the
 // architectural consequence of CFG_ERROR open, so surfacing it as
 // invalid_configuration is a simulator convention.
-ExecuteResult cfg_write(const CfgInstr &instr, State &state,
-                        std::uint64_t value) {
+ExecuteResult cfg_write(const CfgInstr &instr, State &state, std::uint64_t value) {
   const auto field = config_field_from_code(instr.reg_type, instr.field);
   const auto *resolved = std::get_if<ConfigField>(&field);
   if (resolved == nullptr) {
     return config_error();
   }
-  return write_config_field(state, instr.reg_type, instr.dest, *resolved,
-                            value) == ConfigAccessError::none
+  return write_config_field(state, instr.reg_type, instr.dest, *resolved, value) ==
+                 ConfigAccessError::none
              ? ExecuteResult{.status = StepStatus::retired}
              : config_error();
 }
 
 std::variant<std::uint64_t, ConfigAccessError>
-read_as_scalar(const State &state, ConfigRegType reg_type, std::uint8_t index,
-               ConfigField field) {
+read_as_scalar(const State &state, ConfigRegType reg_type, std::uint8_t index, ConfigField field) {
   return std::visit(
       [](const auto &typed) -> std::variant<std::uint64_t, ConfigAccessError> {
         using T = std::decay_t<decltype(typed)>;
@@ -48,11 +46,9 @@ ExecuteResult execute_cfg(const CfgInstr &instr, ExecContext &ctx) {
   case CfgOp::seti:
     // extend(imm) to the field width: sign extension keeps negative strides
     // representable; per-field range checks reject what does not fit.
-    return cfg_write(
-        instr, state,
-        static_cast<std::uint64_t>(static_cast<std::int64_t>(instr.imm)));
-  case CfgOp::setx:
-    return cfg_write(instr, state, state.scalar.read_x(instr.src));
+    return cfg_write(instr, state,
+                     static_cast<std::uint64_t>(static_cast<std::int64_t>(instr.imm)));
+  case CfgOp::setx: return cfg_write(instr, state, state.scalar.read_x(instr.src));
   case CfgOp::copy: {
     // Same-type whole-register copy; the shared sel3 keeps both operands in
     // one register type.
@@ -76,8 +72,7 @@ ExecuteResult execute_cfg(const CfgInstr &instr, ExecContext &ctx) {
     if (resolved == nullptr) {
       return config_error();
     }
-    const auto value =
-        read_as_scalar(state, instr.reg_type, instr.src, *resolved);
+    const auto value = read_as_scalar(state, instr.reg_type, instr.src, *resolved);
     if (const auto *bits = std::get_if<std::uint64_t>(&value)) {
       state.scalar.write_x(instr.dest, *bits);
       return {.status = StepStatus::retired};

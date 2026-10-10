@@ -14,8 +14,7 @@ namespace tile_npu {
 // are config-layer concerns (valid_domain_config).
 template <typename Element> class MatrixView {
 public:
-  explicit MatrixView(std::span<Element, MATRIX_ELEMENTS> storage)
-      : storage_(storage) {}
+  explicit MatrixView(std::span<Element, MATRIX_ELEMENTS> storage) : storage_(storage) {}
 
   Element &at(std::size_t row, std::size_t col) const {
     return storage_[row * MATRIX_EXTENT + col];
@@ -37,8 +36,7 @@ MatrixView<Element> matrix_view(std::array<Element, N> &reg) {
 template <typename Element, std::size_t N>
   requires(N == MATRIX_ELEMENTS)
 MatrixView<const Element> matrix_view(const std::array<Element, N> &reg) {
-  return MatrixView<const Element>(
-      std::span<const Element, MATRIX_ELEMENTS>(reg));
+  return MatrixView<const Element>(std::span<const Element, MATRIX_ELEMENTS>(reg));
 }
 
 } // namespace tile_npu

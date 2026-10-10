@@ -32,8 +32,7 @@ template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
     const auto *npu = std::get_if<DecodedNpuInstr>(&result);
-    const std::string what =
-        std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
+    const std::string what = std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
     check(npu != nullptr, what);
     const auto *decoded = std::get_if<MmaInstr>(npu);
     check(decoded != nullptr, what);
@@ -53,13 +52,11 @@ struct ErrorCase {
   DecodeError error;
 };
 
-template <std::size_t N>
-void check_errors(const std::array<ErrorCase, N> &cases) {
+template <std::size_t N> void check_errors(const std::array<ErrorCase, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
     const auto *error = std::get_if<DecodeError>(&result);
-    const std::string what =
-        std::string(test.name) + " (" + to_hex(test.word) + ")";
+    const std::string what = std::string(test.name) + " (" + to_hex(test.word) + ")";
     check(error != nullptr, what + " decodes");
     check_eq(*error, test.error, what + ": error kind");
   }

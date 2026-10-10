@@ -32,8 +32,7 @@ template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
     const auto *npu = std::get_if<DecodedNpuInstr>(&result);
-    const std::string what =
-        std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
+    const std::string what = std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
     check(npu != nullptr, what);
     const auto *decoded = std::get_if<Er4Instr>(npu);
     check(decoded != nullptr, what);
@@ -55,13 +54,11 @@ struct ErrorCase {
   DecodeError error;
 };
 
-template <std::size_t N>
-void check_errors(const std::array<ErrorCase, N> &cases) {
+template <std::size_t N> void check_errors(const std::array<ErrorCase, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
     const auto *error = std::get_if<DecodeError>(&result);
-    const std::string what =
-        std::string(test.name) + " (" + to_hex(test.word) + ")";
+    const std::string what = std::string(test.name) + " (" + to_hex(test.word) + ")";
     check(error != nullptr, what + " decodes");
     check_eq(*error, test.error, what + ": error kind");
   }
@@ -121,25 +118,17 @@ TEST_CASE(er4_decode) {
 TEST_CASE(er4_decode_rejects_reserved) {
   constexpr std::array cases{
       // Vec8 has no E_R4; tile has no fmadd; funct3 >= 010 is reserved.
-      ErrorCase{"bselect", make_er4(NpuDomain::vec8, 0, 0, 0, 0, 0),
-                DecodeError::illegal},
-      ErrorCase{"tfmadd", make_er4(NpuDomain::tile, 1, 0, 0, 0, 0),
-                DecodeError::illegal},
-      ErrorCase{"funct3 010", make_er4(NpuDomain::acc, 2, 0, 0, 0, 0),
-                DecodeError::illegal},
-      ErrorCase{"funct3 111", make_er4(NpuDomain::vec32, 7, 0, 0, 0, 0),
-                DecodeError::illegal},
+      ErrorCase{"bselect", make_er4(NpuDomain::vec8, 0, 0, 0, 0, 0), DecodeError::illegal},
+      ErrorCase{"tfmadd", make_er4(NpuDomain::tile, 1, 0, 0, 0, 0), DecodeError::illegal},
+      ErrorCase{"funct3 010", make_er4(NpuDomain::acc, 2, 0, 0, 0, 0), DecodeError::illegal},
+      ErrorCase{"funct3 111", make_er4(NpuDomain::vec32, 7, 0, 0, 0, 0), DecodeError::illegal},
       // sel3 bit 0 must be 0.
-      ErrorCase{"sel3 bit0",
-                make_er4(NpuDomain::acc, 0, 0, 0, 0, 0) | (1u << 25),
+      ErrorCase{"sel3 bit0", make_er4(NpuDomain::acc, 0, 0, 0, 0, 0) | (1u << 25),
                 DecodeError::illegal},
       // Register numbers are bounded per domain.
-      ErrorCase{"tselect t16", make_er4(NpuDomain::tile, 0, 16, 0, 0, 0),
-                DecodeError::illegal},
-      ErrorCase{"aselect a12 arg", make_er4(NpuDomain::acc, 0, 0, 12, 0, 0),
-                DecodeError::illegal},
-      ErrorCase{"afmadd a12 src2", make_er4(NpuDomain::acc, 1, 0, 0, 0, 12),
-                DecodeError::illegal},
+      ErrorCase{"tselect t16", make_er4(NpuDomain::tile, 0, 16, 0, 0, 0), DecodeError::illegal},
+      ErrorCase{"aselect a12 arg", make_er4(NpuDomain::acc, 0, 0, 12, 0, 0), DecodeError::illegal},
+      ErrorCase{"afmadd a12 src2", make_er4(NpuDomain::acc, 1, 0, 0, 0, 12), DecodeError::illegal},
   };
   check_errors(cases);
 }

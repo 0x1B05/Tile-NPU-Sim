@@ -14,10 +14,10 @@ namespace tile_npu {
 
 // The overflow mode only exists on the tile domain (8-bit add/sub); the
 // 32-bit domains always wrap.
-inline ArithMode arith_mode_of(const TileConfig &config) {
-  return config.arith_mode;
-}
+inline ArithMode arith_mode_of(const TileConfig &config) { return config.arith_mode; }
+
 inline ArithMode arith_mode_of(const AccConfig &) { return ArithMode::wrap; }
+
 inline ArithMode arith_mode_of(const Vec32Config &) { return ArithMode::wrap; }
 
 // div is f32-only; bitwise and shift operations are integer-only. Legality
@@ -35,8 +35,7 @@ inline bool ebin_op_supports_dtype(EbinOp op, DType dtype) {
 // can clamp; everything else wraps to the element width. Shift amounts take
 // the low log2(width) bits of the right operand. f32 min/max follow IEEE 754
 // minNum/maxNum: NaN does not propagate.
-template <typename E>
-E apply_ebin_op(EbinOp op, DType dtype, ArithMode arith, E lhs, E rhs) {
+template <typename E> E apply_ebin_op(EbinOp op, DType dtype, ArithMode arith, E lhs, E rhs) {
   if constexpr (sizeof(E) == sizeof(float)) {
     if (dtype == DType::f32) {
       const auto left = std::bit_cast<float>(lhs);
@@ -61,14 +60,11 @@ E apply_ebin_op(EbinOp op, DType dtype, ArithMode arith, E lhs, E rhs) {
   case EbinOp::add:
   case EbinOp::sub: {
     if constexpr (sizeof(E) == 1) {
-      const int left =
-          is_signed ? static_cast<int>(static_cast<S>(lhs)) : int{lhs};
-      const int right =
-          is_signed ? static_cast<int>(static_cast<S>(rhs)) : int{rhs};
+      const int left = is_signed ? static_cast<int>(static_cast<S>(lhs)) : int{lhs};
+      const int right = is_signed ? static_cast<int>(static_cast<S>(rhs)) : int{rhs};
       int result = op == EbinOp::add ? left + right : left - right;
       if (arith == ArithMode::sat) {
-        result = is_signed ? std::clamp(result, -128, 127)
-                           : std::clamp(result, 0, 255);
+        result = is_signed ? std::clamp(result, -128, 127) : std::clamp(result, 0, 255);
       }
       return static_cast<E>(result);
     }
@@ -80,8 +76,7 @@ E apply_ebin_op(EbinOp op, DType dtype, ArithMode arith, E lhs, E rhs) {
     if (is_signed) {
       const auto left = static_cast<S>(lhs);
       const auto right = static_cast<S>(rhs);
-      return static_cast<E>(op == EbinOp::min ? std::min(left, right)
-                                              : std::max(left, right));
+      return static_cast<E>(op == EbinOp::min ? std::min(left, right) : std::max(left, right));
     }
     return op == EbinOp::min ? std::min(lhs, rhs) : std::max(lhs, rhs);
   case EbinOp::bit_and: return static_cast<E>(lhs & rhs);
@@ -89,8 +84,7 @@ E apply_ebin_op(EbinOp op, DType dtype, ArithMode arith, E lhs, E rhs) {
   case EbinOp::bit_xor: return static_cast<E>(lhs ^ rhs);
   case EbinOp::shl: return static_cast<E>(lhs << (rhs & shamt_mask));
   case EbinOp::shr: return static_cast<E>(lhs >> (rhs & shamt_mask));
-  case EbinOp::sra:
-    return static_cast<E>(static_cast<S>(lhs) >> (rhs & shamt_mask));
+  case EbinOp::sra: return static_cast<E>(static_cast<S>(lhs) >> (rhs & shamt_mask));
   default: unreachable("integer element with the f32-only E_BIN div");
   }
 }

@@ -14,8 +14,7 @@ using tile_npu::FlatMemory;
 using tile_npu::Simulator;
 using tile_npu::StepStatus;
 
-void acc_f32(tile_npu::State &state, std::size_t index, std::uint8_t rows,
-             std::uint8_t cols) {
+void acc_f32(tile_npu::State &state, std::size_t index, std::uint8_t rows, std::uint8_t cols) {
   state.ac[index].dtype = DType::f32;
   state.ac[index].rows = rows;
   state.ac[index].cols = cols;
@@ -67,12 +66,10 @@ TEST_CASE(areduce_sumsq_absmax) {
   state.a[1][32] = f32_bits(-5.0f);
   state.a[1][33] = f32_bits(2.0f);
 
-  check_eq(sim.step().status, StepStatus::retired,
-           "areduce.rows.sumsq retires");
+  check_eq(sim.step().status, StepStatus::retired, "areduce.rows.sumsq retires");
   check_eq(hex(state.v[0][0]), hex(f32_bits(25.0f)), "row0 sumsq");
   check_eq(hex(state.v[0][1]), hex(f32_bits(29.0f)), "row1 sumsq");
-  check_eq(sim.step().status, StepStatus::retired,
-           "areduce.rows.absmax retires");
+  check_eq(sim.step().status, StepStatus::retired, "areduce.rows.absmax retires");
   check_eq(hex(state.v[0][0]), hex(f32_bits(4.0f)), "row0 absmax");
   check_eq(hex(state.v[0][1]), hex(f32_bits(5.0f)), "row1 absmax");
 }
@@ -88,18 +85,15 @@ TEST_CASE(areduce_argmax) {
   vec_cfg(state, 0, DType::i32, 3);
   const auto nan = f32_bits(std::nanf(""));
   const float row0[4] = {1.0f, 5.0f, 5.0f, 2.0f};
-  const std::uint32_t row1[4] = {f32_bits(1.0f), nan, f32_bits(3.0f),
-                                 f32_bits(2.0f)};
-  const std::uint32_t row2[4] = {nan, f32_bits(1.0f), f32_bits(2.0f),
-                                 f32_bits(3.0f)};
+  const std::uint32_t row1[4] = {f32_bits(1.0f), nan, f32_bits(3.0f), f32_bits(2.0f)};
+  const std::uint32_t row2[4] = {nan, f32_bits(1.0f), f32_bits(2.0f), f32_bits(3.0f)};
   for (std::uint8_t col = 0; col < 4; ++col) {
     state.a[1][col] = f32_bits(row0[col]);
     state.a[1][32 + col] = row1[col];
     state.a[1][64 + col] = row2[col];
   }
 
-  check_eq(sim.step().status, StepStatus::retired,
-           "areduce.rows.argmax retires");
+  check_eq(sim.step().status, StepStatus::retired, "areduce.rows.argmax retires");
   check_eq(state.v[0][0], std::uint32_t{1}, "tie takes the smaller index");
   check_eq(state.v[0][1], std::uint32_t{1}, "NaN candidate wins");
   check_eq(state.v[0][2], std::uint32_t{0}, "established NaN best stays");
@@ -144,8 +138,7 @@ TEST_CASE(vreduce_sumsq_rounds_each_product) {
   state.v[1][1] = 0x3f07eff9u;
 
   check_eq(sim.step().status, StepStatus::retired, "vreduce.sumsq retires");
-  check_eq(hex(state.scalar.read_x(5)), hex(0x3f701582ull),
-           "products round to f32 before the add");
+  check_eq(hex(state.scalar.read_x(5)), hex(0x3f701582ull), "products round to f32 before the add");
 }
 
 TEST_CASE(vreduce_argmax) {
@@ -178,8 +171,7 @@ TEST_CASE(reduce_rejects_invalid) {
   state.ac[1].cols = 2;
   vec_cfg(state, 0, DType::f32, 2);
   state.v[0][0] = 0xeeeeeeeeu;
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "areduce rejects an i32 source");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "areduce rejects an i32 source");
   check_eq(hex(state.v[0][0]), hex(0xeeeeeeeeu), "non-mutating");
 
   // The destination length must equal the source row count.
@@ -205,6 +197,5 @@ TEST_CASE(reduce_rejects_invalid) {
   // vreduce requires an f32 source.
   load_one(sim, memory, make_vreduce(0, 5, 1));
   vec_cfg(state, 1, DType::u32, 3);
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "vreduce rejects a u32 source");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "vreduce rejects a u32 source");
 }

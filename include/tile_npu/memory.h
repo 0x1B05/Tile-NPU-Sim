@@ -16,10 +16,8 @@ public:
   // fully inside a range that contains() accepted must succeed: executors
   // rely on the probe to keep multi-element transfers atomic.
   virtual bool contains(std::uint64_t address, std::size_t size) const = 0;
-  virtual bool read(std::uint64_t address,
-                    std::span<std::byte> bytes) const = 0;
-  virtual bool write(std::uint64_t address,
-                     std::span<const std::byte> bytes) = 0;
+  virtual bool read(std::uint64_t address, std::span<std::byte> bytes) const = 0;
+  virtual bool write(std::uint64_t address, std::span<const std::byte> bytes) = 0;
 };
 
 class FlatMemory final : public Memory {
@@ -31,6 +29,7 @@ public:
   bool write(std::uint64_t address, std::span<const std::byte> bytes) override;
 
   std::uint64_t base() const { return base_; }
+
   std::size_t size() const { return bytes_.size(); }
 
 private:

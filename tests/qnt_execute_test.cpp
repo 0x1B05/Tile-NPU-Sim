@@ -16,15 +16,13 @@ using tile_npu::NpuDomain;
 using tile_npu::Simulator;
 using tile_npu::StepStatus;
 
-void tile_i8(tile_npu::State &state, std::size_t index, std::uint8_t rows,
-             std::uint8_t cols) {
+void tile_i8(tile_npu::State &state, std::size_t index, std::uint8_t rows, std::uint8_t cols) {
   state.tc[index].dtype = DType::i8;
   state.tc[index].rows = rows;
   state.tc[index].cols = cols;
 }
 
-void acc_f32(tile_npu::State &state, std::size_t index, std::uint8_t rows,
-             std::uint8_t cols) {
+void acc_f32(tile_npu::State &state, std::size_t index, std::uint8_t rows, std::uint8_t cols) {
   state.ac[index].dtype = DType::f32;
   state.ac[index].rows = rows;
   state.ac[index].cols = cols;
@@ -83,8 +81,7 @@ TEST_CASE(qnt_tquant_external_scale) {
   state.a[1][2] = f32_bits(10.0f);
   state.v[0][0] = f32_bits(0.5f);
 
-  check_eq(sim.step().status, StepStatus::retired,
-           "tquant.rows.scale.q8s32 retires");
+  check_eq(sim.step().status, StepStatus::retired, "tquant.rows.scale.q8s32 retires");
   check_eq(hex(state.t[0][0]), hex(0x7fu), "col0 saturates at 127");
   check_eq(hex(state.t[0][1]), hex(0xbeu), "col1 is -66");
   check_eq(hex(state.t[0][2]), hex(0x14u), "col2 is 20");
@@ -115,8 +112,7 @@ TEST_CASE(qnt_vquant) {
   // v1 = {127.0, 0.0, -63.5}: amax 127.0, scale 1.0 lands only in the lane
   // named by index5/xS; the remaining vScale lanes keep their values.
   write_word(memory, CODE_BASE, make_qnt(NpuDomain::vec8, 0, 0, 1, 2, 2));
-  write_word(memory, CODE_BASE + 4,
-             make_qnt(NpuDomain::vec8, 0, 0, 1, 2, 3, true));
+  write_word(memory, CODE_BASE + 4, make_qnt(NpuDomain::vec8, 0, 0, 1, 2, 3, true));
   sim.reset(CODE_BASE);
   auto &state = sim.state();
   vec8_i8(state, 0, 3);
@@ -129,8 +125,7 @@ TEST_CASE(qnt_vquant) {
     state.v[2][lane] = 0xdeadbeefu;
   state.scalar.write_x(3, 1);
 
-  check_eq(sim.step().status, StepStatus::retired,
-           "vquant.q8s32 with immediate lane retires");
+  check_eq(sim.step().status, StepStatus::retired, "vquant.q8s32 with immediate lane retires");
   check_eq(hex(state.b[0][0]), hex(0x7fu), "lane0 saturates at 127");
   check_eq(hex(state.b[0][1]), hex(0x00u), "lane1 is 0");
   check_eq(hex(state.b[0][2]), hex(0xc0u), "lane2 rounds to -64");
@@ -138,8 +133,7 @@ TEST_CASE(qnt_vquant) {
   check_eq(hex(state.v[2][1]), hex(0xdeadbeefu), "lane1 untouched");
 
   state.b[0][0] = 0x55u; // clobber to prove the second form rewrites it
-  check_eq(sim.step().status, StepStatus::retired,
-           "vquant.q8s32 with scalar lane retires");
+  check_eq(sim.step().status, StepStatus::retired, "vquant.q8s32 with scalar lane retires");
   check_eq(hex(state.b[0][0]), hex(0x7fu), "lane0 rewritten");
   check_eq(hex(state.v[2][1]), hex(f32_bits(1.0f)), "scale lane x3 written");
   check_eq(hex(state.v[2][2]), hex(f32_bits(1.0f)), "lane2 keeps old scale");
@@ -176,8 +170,7 @@ TEST_CASE(qnt_rejects_invalid) {
   acc_f32(state, 1, 2, 2);
   vec32_f32(state, 0, 2);
   state.t[0][0] = 0xaau;
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "tquant rejects a u8 destination");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "tquant rejects a u8 destination");
   check_eq(hex(state.t[0][0]), hex(0xaau), "non-mutating");
 
   // vScale's length must equal the source row count.
@@ -211,8 +204,7 @@ TEST_CASE(qnt_rejects_invalid) {
   state.bc[1].dtype = DType::u8;
   state.bc[1].len = 2;
   vec32_f32(state, 2, 2);
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "bdequant rejects a u8 source");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "bdequant rejects a u8 source");
 }
 
 TEST_CASE(qnt_rounding_ignores_host_fp_mode) {
@@ -241,8 +233,6 @@ TEST_CASE(qnt_rounding_ignores_host_fp_mode) {
   check_eq(hex(upward[0]), hex(0x00u), "+0.5 rounds to even under FE_UPWARD");
   check_eq(hex(upward[1]), hex(0x00u), "-0.5 rounds to even under FE_UPWARD");
   const auto downward = quantize_ties(FE_DOWNWARD);
-  check_eq(hex(downward[0]), hex(0x00u),
-           "+0.5 rounds to even under FE_DOWNWARD");
-  check_eq(hex(downward[1]), hex(0x00u),
-           "-0.5 rounds to even under FE_DOWNWARD");
+  check_eq(hex(downward[0]), hex(0x00u), "+0.5 rounds to even under FE_DOWNWARD");
+  check_eq(hex(downward[1]), hex(0x00u), "-0.5 rounds to even under FE_DOWNWARD");
 }

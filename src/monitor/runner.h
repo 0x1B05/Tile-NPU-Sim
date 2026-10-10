@@ -9,8 +9,7 @@ namespace tile_npu::monitor {
 
 // A step budget of UNLIMITED_STEPS runs until the program stops on its own;
 // a command-line "-1" wraps to this same value (int64 -> uint64).
-inline constexpr std::uint64_t UNLIMITED_STEPS =
-    std::numeric_limits<std::uint64_t>::max();
+inline constexpr std::uint64_t UNLIMITED_STEPS = std::numeric_limits<std::uint64_t>::max();
 
 enum class StopReason {
   step_limit, // the retired-instruction budget is spent

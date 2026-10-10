@@ -128,15 +128,13 @@ TEST_CASE(er4_rejects_invalid) {
   for (auto index : {0, 1, 2, 3})
     tile_cfg(state, index, DType::i8, 2, 2); // mask must be u8
   state.t[0][0] = 0xee;
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "tselect rejects a non-u8 mask");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "tselect rejects a non-u8 mask");
   check_eq(state.t[0][0], std::uint8_t{0xee}, "non-mutating");
 
   load_one(sim, memory, make_er4(NpuDomain::acc, 0, 0, 1, 2, 3));
   for (auto index : {0, 1, 2, 3})
     acc_cfg(state, index, DType::i32, 1, 2); // mask must be u32
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "aselect rejects a non-u32 mask");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "aselect rejects a non-u32 mask");
 
   // The mask shape must match the data shape.
   load_one(sim, memory, make_er4(NpuDomain::acc, 0, 0, 1, 2, 3));
@@ -150,8 +148,7 @@ TEST_CASE(er4_rejects_invalid) {
   load_one(sim, memory, make_er4(NpuDomain::vec32, 1, 0, 3, 1, 2));
   for (auto index : {0, 1, 2, 3})
     vec_cfg(state, index, DType::i32, 2);
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "vfmadd rejects i32");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "vfmadd rejects i32");
 
   // fmadd's addend C must match the destination shape.
   load_one(sim, memory, make_er4(NpuDomain::vec32, 1, 0, 3, 1, 2));

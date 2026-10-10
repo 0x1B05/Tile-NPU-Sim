@@ -24,9 +24,8 @@ int main(int argc, char **argv) {
   // A stable name order keeps --list output and failure reruns independent of
   // link order; duplicate names would make both ambiguous.
   auto &tests = tile_npu::test::registry();
-  std::sort(tests.begin(), tests.end(), [](const auto &lhs, const auto &rhs) {
-    return lhs.name < rhs.name;
-  });
+  std::sort(tests.begin(), tests.end(),
+            [](const auto &lhs, const auto &rhs) { return lhs.name < rhs.name; });
   for (std::size_t i = 1; i < tests.size(); ++i) {
     if (tests[i - 1].name == tests[i].name) {
       std::cerr << "duplicate test name: " << tests[i - 1].name << '\n';

@@ -12,18 +12,16 @@ using tile_npu::Simulator;
 using tile_npu::StepStatus;
 
 // Same format builders as cfg_decode_test.cpp, duplicated per test file.
-constexpr std::uint32_t cfg_i(std::uint32_t major4, std::uint32_t sel2,
-                              std::uint32_t field3, std::int32_t imm,
-                              std::uint32_t c5) {
+constexpr std::uint32_t cfg_i(std::uint32_t major4, std::uint32_t sel2, std::uint32_t field3,
+                              std::int32_t imm, std::uint32_t c5) {
   return (major4 << 28) | (sel2 << 26) | (field3 << 23) |
          ((static_cast<std::uint32_t>(imm) & 0xffffu) << 7) | (c5 << 2) | 0x2u;
 }
 
-constexpr std::uint32_t cfg_reg(std::uint32_t sel2, std::uint32_t mv,
-                                std::uint32_t funct3, std::uint32_t field5,
-                                std::uint32_t s5, std::uint32_t d5) {
-  return (0x7u << 28) | (sel2 << 26) | (mv << 25) | (funct3 << 22) |
-         (field5 << 17) | (s5 << 7) | (d5 << 2) | 0x2u;
+constexpr std::uint32_t cfg_reg(std::uint32_t sel2, std::uint32_t mv, std::uint32_t funct3,
+                                std::uint32_t field5, std::uint32_t s5, std::uint32_t d5) {
+  return (0x7u << 28) | (sel2 << 26) | (mv << 25) | (funct3 << 22) | (field5 << 17) | (s5 << 7) |
+         (d5 << 2) | 0x2u;
 }
 
 // field3 codes per config register type (matrix config / vector config /
@@ -54,18 +52,15 @@ TEST_CASE(cfg_seti_sign_extends_negative_imm) {
   Simulator sim(memory);
   // tm0.row_stride_bytes = -4: the signed field keeps the extended value.
   load_one(sim, memory, cfg_i(0x5, 2, FIELD_ROW_STRIDE, -4, 0));
-  check_eq(sim.step().status, StepStatus::retired,
-           "cfg.seti negative stride retires");
-  check_eq(sim.state().tm[0].row_stride_bytes, std::int32_t{-4},
-           "tm0.row_stride_bytes is -4");
+  check_eq(sim.step().status, StepStatus::retired, "cfg.seti negative stride retires");
+  check_eq(sim.state().tm[0].row_stride_bytes, std::int32_t{-4}, "tm0.row_stride_bytes is -4");
 }
 
 TEST_CASE(cfg_seti_base_addr) {
   FlatMemory memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, cfg_i(0x5, 2, FIELD_BASE_ADDR, 0x4000, 0));
-  check_eq(sim.step().status, StepStatus::retired,
-           "cfg.seti base_addr retires");
+  check_eq(sim.step().status, StepStatus::retired, "cfg.seti base_addr retires");
   check_eq(hex(sim.state().tm[0].base_addr), hex(0x4000u), "tm0.base_addr");
 }
 
@@ -74,10 +69,8 @@ TEST_CASE(cfg_seti_rejects_out_of_range_value) {
   Simulator sim(memory);
   // rows = 33 exceeds MATRIX_EXTENT = 32 -> CFG_ERROR, state untouched.
   load_one(sim, memory, cfg_i(0x5, 0, FIELD_ROWS, 33, 0));
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "rows = 33 fails");
-  check_eq(sim.state().tc[0].rows, std::uint8_t{0},
-           "failed write preserves field");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "rows = 33 fails");
+  check_eq(sim.state().tc[0].rows, std::uint8_t{0}, "failed write preserves field");
   check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE), "failed step keeps pc");
 }
 
@@ -86,8 +79,7 @@ TEST_CASE(cfg_seti_rejects_unsupported_dtype) {
   Simulator sim(memory);
   // AC supports i32/u32/f32; dtype code 0 (i8) is invalid there.
   load_one(sim, memory, cfg_i(0x5, 1, FIELD_DTYPE, 0, 0));
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "ac dtype i8 fails");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "ac dtype i8 fails");
   check_eq(sim.state().ac[0].dtype, DType::i32, "ac0.dtype preserved");
 }
 
@@ -96,8 +88,7 @@ TEST_CASE(cfg_seti_rejects_unsupported_field) {
   Simulator sim(memory);
   // BC has dtype/len only; field code 2 (cols in matrix configs) is absent.
   load_one(sim, memory, cfg_i(0x6, 0, FIELD_COLS, 8, 0));
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "bc cols fails");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "bc cols fails");
 }
 
 TEST_CASE(cfg_setx_writes_full_scalar_value) {
@@ -124,10 +115,8 @@ TEST_CASE(cfg_setx_rejects_out_of_range_value) {
   Simulator sim(memory);
   load_one(sim, memory, cfg_reg(1, 1, 0, FIELD_LEN, 4, 0));
   sim.state().scalar.write_x(4, 33); // len = 33 exceeds VECTOR_LANES = 32
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "vc0 len = 33 fails");
-  check_eq(sim.state().vc[0].len, std::uint8_t{0},
-           "failed write preserves len");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "vc0 len = 33 fails");
+  check_eq(sim.state().vc[0].len, std::uint8_t{0}, "failed write preserves len");
 }
 
 TEST_CASE(cfg_copy_duplicates_whole_register) {
@@ -190,6 +179,5 @@ TEST_CASE(cfg_get_rejects_unsupported_field) {
   FlatMemory memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, cfg_reg(0, 1, 2, 4, 0, 5));
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "bc field 4 fails");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "bc field 4 fails");
 }

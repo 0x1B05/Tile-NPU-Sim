@@ -32,8 +32,8 @@ struct Case {
 
 // The fill operand decodes to Fill5Code for FS = 0 and to ScalarRegister for
 // FS = 1.
-void check_fill(const tile_npu::FillOperand &fill, std::uint8_t expected,
-                bool is_scalar, std::string_view what) {
+void check_fill(const tile_npu::FillOperand &fill, std::uint8_t expected, bool is_scalar,
+                std::string_view what) {
   const std::string context(what);
   if (is_scalar) {
     const auto *reg = std::get_if<tile_npu::ScalarRegister>(&fill);
@@ -54,8 +54,7 @@ template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
     const auto *npu = std::get_if<DecodedNpuInstr>(&result);
-    const std::string what =
-        std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
+    const std::string what = std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
     check(npu != nullptr, what);
     const auto *decoded = std::get_if<MaskInstr>(npu);
     check(decoded != nullptr, what);
@@ -75,13 +74,11 @@ struct ErrorCase {
   DecodeError error;
 };
 
-template <std::size_t N>
-void check_errors(const std::array<ErrorCase, N> &cases) {
+template <std::size_t N> void check_errors(const std::array<ErrorCase, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
     const auto *error = std::get_if<DecodeError>(&result);
-    const std::string what =
-        std::string(test.name) + " (" + to_hex(test.word) + ")";
+    const std::string what = std::string(test.name) + " (" + to_hex(test.word) + ")";
     check(error != nullptr, what + " decodes");
     check_eq(*error, test.error, what + ": error kind");
   }
@@ -145,26 +142,19 @@ TEST_CASE(emask_decode) {
 TEST_CASE(emask_decode_rejects_reserved) {
   constexpr std::array cases{
       // funct3 >= 011 is reserved.
-      ErrorCase{"funct3 011", make_emask(NpuDomain::acc, 3, 0, 0, 0, 0),
-                DecodeError::illegal},
-      ErrorCase{"funct3 111", make_emask(NpuDomain::tile, 7, 0, 0, 0, 0),
-                DecodeError::illegal},
+      ErrorCase{"funct3 011", make_emask(NpuDomain::acc, 3, 0, 0, 0, 0), DecodeError::illegal},
+      ErrorCase{"funct3 111", make_emask(NpuDomain::tile, 7, 0, 0, 0, 0), DecodeError::illegal},
       // tril/triu are matrix-only.
-      ErrorCase{"vmask.tril", make_emask(NpuDomain::vec32, 1, 0, 0, 0, 0),
-                DecodeError::illegal},
-      ErrorCase{"bmask.triu", make_emask(NpuDomain::vec8, 2, 0, 0, 0, 0),
-                DecodeError::illegal},
+      ErrorCase{"vmask.tril", make_emask(NpuDomain::vec32, 1, 0, 0, 0, 0), DecodeError::illegal},
+      ErrorCase{"bmask.triu", make_emask(NpuDomain::vec8, 2, 0, 0, 0, 0), DecodeError::illegal},
       // fill5 codes 9-31 are reserved (FS = 0 only; with FS = 1 arg5 names
       // xFill and any 5-bit number is a valid Scalar register).
-      ErrorCase{"fill5 9", make_emask(NpuDomain::tile, 0, 0, 0, 0, 9),
-                DecodeError::illegal},
-      ErrorCase{"fill5 31", make_emask(NpuDomain::acc, 0, 0, 0, 0, 31),
-                DecodeError::illegal},
+      ErrorCase{"fill5 9", make_emask(NpuDomain::tile, 0, 0, 0, 0, 9), DecodeError::illegal},
+      ErrorCase{"fill5 31", make_emask(NpuDomain::acc, 0, 0, 0, 0, 31), DecodeError::illegal},
       // Register numbers are bounded per domain.
       ErrorCase{"tmask.tail t16", make_emask(NpuDomain::tile, 0, 16, 0, 0, 0),
                 DecodeError::illegal},
-      ErrorCase{"amask.tail a12 src",
-                make_emask(NpuDomain::acc, 0, 0, 12, 0, 0),
+      ErrorCase{"amask.tail a12 src", make_emask(NpuDomain::acc, 0, 0, 12, 0, 0),
                 DecodeError::illegal},
   };
   check_errors(cases);

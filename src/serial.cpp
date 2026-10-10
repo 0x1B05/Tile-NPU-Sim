@@ -18,20 +18,17 @@ bool SerialMemory::contains(std::uint64_t address, std::size_t size) const {
   return in_serial(address, size) || inner_.contains(address, size);
 }
 
-bool SerialMemory::read(std::uint64_t address,
-                        std::span<std::byte> bytes) const {
+bool SerialMemory::read(std::uint64_t address, std::span<std::byte> bytes) const {
   if (!in_serial(address, bytes.size())) {
     return inner_.read(address, bytes);
   }
   for (std::size_t i = 0; i < bytes.size(); ++i) {
-    bytes[i] = address - SERIAL_BASE + i == LSR_OFFSET ? LSR_READY
-                                                       : std::byte{0};
+    bytes[i] = address - SERIAL_BASE + i == LSR_OFFSET ? LSR_READY : std::byte{0};
   }
   return true;
 }
 
-bool SerialMemory::write(std::uint64_t address,
-                         std::span<const std::byte> bytes) {
+bool SerialMemory::write(std::uint64_t address, std::span<const std::byte> bytes) {
   if (!in_serial(address, bytes.size())) {
     return inner_.write(address, bytes);
   }

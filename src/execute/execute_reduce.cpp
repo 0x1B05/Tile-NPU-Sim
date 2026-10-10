@@ -94,8 +94,7 @@ ExecuteResult areduce(const ReduceInstr &instr, State &state) {
     if (instr.op == ReduceOp::argmax) {
       ArgmaxScan scan;
       for (std::size_t col = 0; col < src_config.cols; ++col) {
-        scan.feed(static_cast<std::uint32_t>(col),
-                  std::bit_cast<float>(src.at(row, col)));
+        scan.feed(static_cast<std::uint32_t>(col), std::bit_cast<float>(src.at(row, col)));
       }
       dst_reg[row] = scan.best_index;
     } else {
@@ -125,14 +124,11 @@ ExecuteResult vreduce(const ReduceInstr &instr, State &state) {
     const auto &x_value = std::get<ScalarRegister>(instr.dest2);
     ArgmaxScan scan;
     for (std::size_t lane = 0; lane < src_config.len; ++lane) {
-      scan.feed(static_cast<std::uint32_t>(lane),
-                std::bit_cast<float>(src_reg[lane]));
+      scan.feed(static_cast<std::uint32_t>(lane), std::bit_cast<float>(src_reg[lane]));
     }
-    state.scalar.write_x(x_index.index,
-                         static_cast<std::uint64_t>(static_cast<std::int64_t>(
-                             static_cast<std::int32_t>(scan.best_index))));
-    state.scalar.write_x(x_value.index,
-                         static_cast<std::uint64_t>(f32_bits(scan.best_value)));
+    state.scalar.write_x(x_index.index, static_cast<std::uint64_t>(static_cast<std::int64_t>(
+                                            static_cast<std::int32_t>(scan.best_index))));
+    state.scalar.write_x(x_value.index, static_cast<std::uint64_t>(f32_bits(scan.best_value)));
     return {.status = StepStatus::retired};
   }
 

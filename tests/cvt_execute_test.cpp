@@ -86,8 +86,7 @@ TEST_CASE(cvt_widen_tile_to_acc) {
   state.tc[1].dtype = DType::i8;
   state.tc[1].rows = 2;
   state.tc[1].cols = 3;
-  const std::uint8_t src[6] = {0xff, 0,    1,
-                               127,  0x80, 42}; // -1, 0, 1, 127, -128, 42
+  const std::uint8_t src[6] = {0xff, 0, 1, 127, 0x80, 42}; // -1, 0, 1, 127, -128, 42
   for (std::uint8_t k = 0; k < 6; ++k)
     state.t[1][(k / 3) * 32 + (k % 3)] = src[k];
 
@@ -111,8 +110,7 @@ TEST_CASE(cvt_rejects_invalid) {
   acc_cfg(state, 0, DType::i32, 1, 2);
   acc_cfg(state, 1, DType::u32, 1, 2);
   state.a[0][0] = 0xeeeeeeeeu;
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "acvt rejects a u32 source");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "acvt rejects a u32 source");
   check_eq(hex(state.a[0][0]), hex(0xeeeeeeeeu), "non-mutating");
   check_eq(state.ac[0].dtype, DType::i32, "failed acvt keeps the dtype");
 
@@ -122,8 +120,7 @@ TEST_CASE(cvt_rejects_invalid) {
   state.vc[0].len = 2;
   state.vc[1].dtype = DType::i32;
   state.vc[1].len = 3;
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "vcvt rejects a shape mismatch");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "vcvt rejects a shape mismatch");
 
   // twiden requires an i8 source.
   load_one(sim, memory, make_cvt(NpuDomain::acc, 1, 0, 1));
@@ -131,8 +128,7 @@ TEST_CASE(cvt_rejects_invalid) {
   state.tc[1].dtype = DType::u8;
   state.tc[1].rows = 1;
   state.tc[1].cols = 2;
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "twiden rejects a u8 source");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "twiden rejects a u8 source");
 
   // twiden requires an i32 destination with the source's shape.
   load_one(sim, memory, make_cvt(NpuDomain::acc, 1, 0, 1));
@@ -140,6 +136,5 @@ TEST_CASE(cvt_rejects_invalid) {
   state.tc[1].dtype = DType::i8;
   state.tc[1].rows = 1;
   state.tc[1].cols = 2;
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "twiden rejects a shape mismatch");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "twiden rejects a shape mismatch");
 }

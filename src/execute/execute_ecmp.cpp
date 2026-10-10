@@ -65,20 +65,16 @@ bool compare(CmpOp op, DType dtype, std::uint32_t lhs, std::uint32_t rhs) {
   }
 }
 
-constexpr std::uint32_t mask_word(bool holds) {
-  return holds ? 0xffffffffu : 0u;
-}
+constexpr std::uint32_t mask_word(bool holds) { return holds ? 0xffffffffu : 0u; }
 
 // The full E_CMP operand constraint: a u32 destination mask shaped like the
 // first source, an op-legal source dtype, and a register second source
 // matching the first (a scalar src2 has no config to check).
 template <typename Config, std::size_t RegCount>
-bool operands_valid(const CmpInstr &instr,
-                    const std::array<Config, RegCount> &configs) {
+bool operands_valid(const CmpInstr &instr, const std::array<Config, RegCount> &configs) {
   const auto &dst = configs[instr.dest.index];
   const auto &lhs = configs[instr.src1.index];
-  if (!valid_domain_config(dst) || !mask_matches(dst, lhs) ||
-      !valid_domain_config(lhs) ||
+  if (!valid_domain_config(dst) || !mask_matches(dst, lhs) || !valid_domain_config(lhs) ||
       !op_supports_dtype(instr.op, lhs.dtype)) {
     return false;
   }
@@ -94,16 +90,15 @@ bool operands_valid(const CmpInstr &instr,
 // Acc: runs the comparison over the destination's effective shape;
 // right_at(row, col) yields the second source.
 template <typename RightAt>
-ExecuteResult run_cmp_acc(const CmpInstr &instr, State &state,
-                          RightAt right_at) {
+ExecuteResult run_cmp_acc(const CmpInstr &instr, State &state, RightAt right_at) {
   const auto &dst_config = state.ac[instr.dest.index];
   const auto &lhs_config = state.ac[instr.src1.index];
   auto dst = matrix_view(state.a[instr.dest.index]);
   auto lhs = matrix_view(std::as_const(state.a[instr.src1.index]));
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
-      dst.at(row, col) = mask_word(compare(
-          instr.op, lhs_config.dtype, lhs.at(row, col), right_at(row, col)));
+      dst.at(row, col) =
+          mask_word(compare(instr.op, lhs_config.dtype, lhs.at(row, col), right_at(row, col)));
     }
   }
   return {.status = StepStatus::retired};
@@ -115,22 +110,18 @@ ExecuteResult cmp_acc(const CmpInstr &instr, State &state) {
     return {.status = StepStatus::invalid_configuration};
   }
   return with_src2_matrix(instr.src2, state, state.a,
-                          [&](auto right_at) {
-                            return run_cmp_acc(instr, state, right_at);
-                          });
+                          [&](auto right_at) { return run_cmp_acc(instr, state, right_at); });
 }
 
 // Vec32: the flat lane-loop form over the effective length.
 template <typename RightAt>
-ExecuteResult run_cmp_vec32(const CmpInstr &instr, State &state,
-                            RightAt right_at) {
+ExecuteResult run_cmp_vec32(const CmpInstr &instr, State &state, RightAt right_at) {
   const auto &dst_config = state.vc[instr.dest.index];
   const auto &lhs_config = state.vc[instr.src1.index];
   auto &dst_reg = state.v[instr.dest.index];
   const auto &lhs_reg = state.v[instr.src1.index];
   for (std::size_t lane = 0; lane < dst_config.len; ++lane) {
-    dst_reg[lane] = mask_word(
-        compare(instr.op, lhs_config.dtype, lhs_reg[lane], right_at(lane)));
+    dst_reg[lane] = mask_word(compare(instr.op, lhs_config.dtype, lhs_reg[lane], right_at(lane)));
   }
   return {.status = StepStatus::retired};
 }
@@ -139,9 +130,8 @@ ExecuteResult cmp_vec32(const CmpInstr &instr, State &state) {
   if (!operands_valid(instr, state.vc)) {
     return {.status = StepStatus::invalid_configuration};
   }
-  return with_src2_vector(instr.src2, state, state.v, [&](auto right_at) {
-    return run_cmp_vec32(instr, state, right_at);
-  });
+  return with_src2_vector(instr.src2, state, state.v,
+                          [&](auto right_at) { return run_cmp_vec32(instr, state, right_at); });
 }
 
 } // namespace

@@ -30,8 +30,7 @@ template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
     const auto *npu = std::get_if<DecodedNpuInstr>(&result);
-    const std::string what =
-        std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
+    const std::string what = std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
     check(npu != nullptr, what);
     const auto *decoded = std::get_if<EunInstr>(npu);
     check(decoded != nullptr, what);
@@ -49,13 +48,11 @@ struct ErrorCase {
   DecodeError error;
 };
 
-template <std::size_t N>
-void check_errors(const std::array<ErrorCase, N> &cases) {
+template <std::size_t N> void check_errors(const std::array<ErrorCase, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
     const auto *error = std::get_if<DecodeError>(&result);
-    const std::string what =
-        std::string(test.name) + " (" + to_hex(test.word) + ")";
+    const std::string what = std::string(test.name) + " (" + to_hex(test.word) + ")";
     check(error != nullptr, what + " decodes");
     check_eq(*error, test.error, what + ": error kind");
   }
@@ -122,24 +119,18 @@ TEST_CASE(eun_decode_rejects_reserved) {
   constexpr std::array cases{
       // Vec8 has no E_UNARY; on Tile only `not` exists; funct3 = 111 is
       // reserved.
-      ErrorCase{"bnot", make_eun(NpuDomain::vec8, 0, 0, 0),
-                DecodeError::illegal},
-      ErrorCase{"tabs", make_eun(NpuDomain::tile, 1, 0, 0),
-                DecodeError::illegal},
-      ErrorCase{"texp2", make_eun(NpuDomain::tile, 3, 0, 0),
-                DecodeError::illegal},
-      ErrorCase{"funct3 111", make_eun(NpuDomain::acc, 7, 0, 0),
-                DecodeError::illegal},
+      ErrorCase{"bnot", make_eun(NpuDomain::vec8, 0, 0, 0), DecodeError::illegal},
+      ErrorCase{"tabs", make_eun(NpuDomain::tile, 1, 0, 0), DecodeError::illegal},
+      ErrorCase{"texp2", make_eun(NpuDomain::tile, 3, 0, 0), DecodeError::illegal},
+      ErrorCase{"funct3 111", make_eun(NpuDomain::acc, 7, 0, 0), DecodeError::illegal},
       // sel3 bit 0 and reserved10 must be 0.
       ErrorCase{"sel3 bit0", make_eun(NpuDomain::vec32, 0, 0, 0) | (1u << 25),
                 DecodeError::illegal},
       ErrorCase{"reserved10", make_eun(NpuDomain::vec32, 0, 0, 0) | (1u << 12),
                 DecodeError::illegal},
       // Register numbers are bounded per domain.
-      ErrorCase{"tnot t16", make_eun(NpuDomain::tile, 0, 16, 0),
-                DecodeError::illegal},
-      ErrorCase{"aneg a12", make_eun(NpuDomain::acc, 2, 0, 12),
-                DecodeError::illegal},
+      ErrorCase{"tnot t16", make_eun(NpuDomain::tile, 0, 16, 0), DecodeError::illegal},
+      ErrorCase{"aneg a12", make_eun(NpuDomain::acc, 2, 0, 12), DecodeError::illegal},
   };
   check_errors(cases);
 }

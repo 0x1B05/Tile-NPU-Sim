@@ -12,15 +12,13 @@ using tile_npu::FlatMemory;
 using tile_npu::Simulator;
 using tile_npu::StepStatus;
 
-void tile_i8(tile_npu::State &state, std::size_t index, std::uint8_t rows,
-             std::uint8_t cols) {
+void tile_i8(tile_npu::State &state, std::size_t index, std::uint8_t rows, std::uint8_t cols) {
   state.tc[index].dtype = DType::i8;
   state.tc[index].rows = rows;
   state.tc[index].cols = cols;
 }
 
-void acc_i32(tile_npu::State &state, std::size_t index, std::uint8_t rows,
-             std::uint8_t cols) {
+void acc_i32(tile_npu::State &state, std::size_t index, std::uint8_t rows, std::uint8_t cols) {
   state.ac[index].dtype = DType::i32;
   state.ac[index].rows = rows;
   state.ac[index].cols = cols;
@@ -155,8 +153,7 @@ TEST_CASE(mma_rejects_invalid) {
   state.tc[1].cols = 3;
   tile_i8(state, 2, 3, 2);
   state.a[0][0] = 0xeeeeeeeeu;
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "mma rejects a u8 left operand");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "mma rejects a u8 left operand");
   check_eq(hex(state.a[0][0]), hex(0xeeeeeeeeu), "non-mutating");
 
   // The Acc destination must be i32.
@@ -165,16 +162,14 @@ TEST_CASE(mma_rejects_invalid) {
   state.ac[0].dtype = DType::f32;
   tile_i8(state, 1, 2, 3);
   tile_i8(state, 2, 3, 2);
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "mma rejects an f32 destination");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "mma rejects an f32 destination");
 
   // nn requires cols(tA) == rows(tB).
   load_one(sim, memory, make_mma(0, 0, 1, 2));
   acc_i32(state, 0, 2, 2);
   tile_i8(state, 1, 2, 3);
   tile_i8(state, 2, 2, 2);
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "mma.nn rejects a K mismatch");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "mma.nn rejects a K mismatch");
 
   // The destination shape must be M x N.
   load_one(sim, memory, make_mma(0, 0, 1, 2));

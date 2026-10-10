@@ -16,8 +16,7 @@ namespace {
 constexpr std::uint64_t IMAGE_BASE = 0x80000000;
 
 void load_image(tile_npu::FlatMemory &memory, std::string_view name) {
-  const std::string path =
-      std::string(GUEST_IMAGE_DIR) + "/" + std::string(name) + ".bin";
+  const std::string path = std::string(GUEST_IMAGE_DIR) + "/" + std::string(name) + ".bin";
   std::ifstream in(path, std::ios::binary);
   check(in.good(), "open guest image " + path);
   const std::vector<char> bytes{std::istreambuf_iterator<char>(in),
@@ -34,18 +33,14 @@ constexpr std::size_t tile_index(std::size_t row, std::size_t col) {
 std::string_view status_name(tile_npu::StepStatus status) {
   switch (status) {
   case tile_npu::StepStatus::retired: return "retired";
-  case tile_npu::StepStatus::execution_not_implemented:
-    return "execution_not_implemented";
+  case tile_npu::StepStatus::execution_not_implemented: return "execution_not_implemented";
   case tile_npu::StepStatus::illegal_instruction: return "illegal_instruction";
-  case tile_npu::StepStatus::invalid_configuration:
-    return "invalid_configuration";
+  case tile_npu::StepStatus::invalid_configuration: return "invalid_configuration";
   case tile_npu::StepStatus::fetch_fault: return "fetch_fault";
   case tile_npu::StepStatus::instruction_address_misaligned:
     return "instruction_address_misaligned";
-  case tile_npu::StepStatus::load_address_misaligned:
-    return "load_address_misaligned";
-  case tile_npu::StepStatus::store_address_misaligned:
-    return "store_address_misaligned";
+  case tile_npu::StepStatus::load_address_misaligned: return "load_address_misaligned";
+  case tile_npu::StepStatus::store_address_misaligned: return "store_address_misaligned";
   case tile_npu::StepStatus::load_fault: return "load_fault";
   case tile_npu::StepStatus::store_fault: return "store_fault";
   case tile_npu::StepStatus::environment_call: return "environment_call";
@@ -58,8 +53,7 @@ std::string_view status_name(tile_npu::StepStatus status) {
 // Steps until the guest stops on its own (any non-retired status), so a
 // guest fault surfaces immediately. A hung guest fails with the budget,
 // the current PC and the instruction word at PC.
-tile_npu::StepResult run_until_stop(tile_npu::Simulator &sim,
-                                    tile_npu::FlatMemory &memory,
+tile_npu::StepResult run_until_stop(tile_npu::Simulator &sim, tile_npu::FlatMemory &memory,
                                     int max_steps = 512) {
   tile_npu::StepResult result{};
   for (int steps = 0; steps < max_steps; ++steps) {
@@ -74,38 +68,34 @@ tile_npu::StepResult run_until_stop(tile_npu::Simulator &sim,
   if (memory.read(pc, bytes)) {
     word = tile_npu::load_le<std::uint32_t>(bytes);
   }
-  tile_npu::test::fail(
-      "guest image did not stop within " + std::to_string(max_steps) +
-          " steps (pc=" + to_hex(pc) + ", instr=" + to_hex(word) + ")",
-      std::source_location::current());
+  tile_npu::test::fail("guest image did not stop within " + std::to_string(max_steps) +
+                           " steps (pc=" + to_hex(pc) + ", instr=" + to_hex(word) + ")",
+                       std::source_location::current());
 }
 
 // Runs a self-checking guest image until it stops, then asserts the runner
 // conventions: the expected stop status (ebreak; kernel.end for sys.S) and
 // a0 == 0.
-void check_guest_image(
-    std::string_view name, std::uint64_t memory_size,
-    tile_npu::StepStatus stop = tile_npu::StepStatus::breakpoint) {
+void check_guest_image(std::string_view name, std::uint64_t memory_size,
+                       tile_npu::StepStatus stop = tile_npu::StepStatus::breakpoint) {
   tile_npu::FlatMemory memory{IMAGE_BASE, memory_size};
   tile_npu::Simulator sim(memory);
   load_image(memory, name);
   sim.reset(IMAGE_BASE);
   const auto result = run_until_stop(sim, memory);
   check(result.status == stop, std::string(name) + " image stops (status=" +
-                                   std::string(status_name(result.status)) +
-                                   ")");
+                                   std::string(status_name(result.status)) + ")");
   check_eq(hex(sim.state().scalar.read_x(10)), hex(0x0u),
            std::string(name) + " image reports success via a0");
 }
 
 template <std::size_t R, std::size_t C>
-void check_region(const tile_npu::Tile &tile,
-                  const std::uint8_t (&expected)[R][C], std::string_view name) {
+void check_region(const tile_npu::Tile &tile, const std::uint8_t (&expected)[R][C],
+                  std::string_view name) {
   for (std::size_t row = 0; row < R; ++row) {
     for (std::size_t col = 0; col < C; ++col) {
       check_eq(hex(tile[tile_index(row, col)]), hex(expected[row][col]),
-               std::string(name) + " (" + std::to_string(row) + ", " +
-                   std::to_string(col) + ")");
+               std::string(name) + " (" + std::to_string(row) + ", " + std::to_string(col) + ")");
     }
   }
 }
@@ -150,8 +140,7 @@ TEST_CASE(npu_guest_tadd_i8_sat) {
   load_i8_operands(state);
   state.t[0][tile_index(0, 2)] = 0x5a; // sentinel outside the valid 2x2 region
 
-  check_eq(run.sim.step().status, tile_npu::StepStatus::retired,
-           "tadd retires");
+  check_eq(run.sim.step().status, tile_npu::StepStatus::retired, "tadd retires");
 
   // 127 + 1 = 128, saturates to 127; -128 + -1 = -129, saturates to -128.
   const std::uint8_t expected[2][2] = {
@@ -175,17 +164,14 @@ TEST_CASE(npu_guest_tadd_i8_wrap_alias) {
       {i8_bits(-128), i8_bits(127)},
       {i8_bits(0), i8_bits(-2)},
   };
-  check_eq(run.sim.step().status, tile_npu::StepStatus::retired,
-           "first tadd retires");
+  check_eq(run.sim.step().status, tile_npu::StepStatus::retired, "first tadd retires");
   check_region(state.t[0], wrapped, "t0");
 
   // The second tadd aliases its destination onto src1: t1 = t1 + t2.
-  check_eq(run.sim.step().status, tile_npu::StepStatus::retired,
-           "aliased tadd retires");
+  check_eq(run.sim.step().status, tile_npu::StepStatus::retired, "aliased tadd retires");
   check_region(state.t[1], wrapped, "t1");
   check_eq(hex(state.scalar.pc), hex(IMAGE_BASE + 8), "tadd advances pc");
-  check_eq(run.sim.step().status, tile_npu::StepStatus::breakpoint,
-           "ebreak stops the run");
+  check_eq(run.sim.step().status, tile_npu::StepStatus::breakpoint, "ebreak stops the run");
 }
 
 TEST_CASE(npu_guest_tadd_u8_sat) {
@@ -199,8 +185,7 @@ TEST_CASE(npu_guest_tadd_u8_sat) {
   state.t[1][tile_index(0, 0)] = 250; // 250 + 10 = 260, saturates to 255 (u8)
   state.t[2][tile_index(0, 0)] = 10;
 
-  check_eq(run.sim.step().status, tile_npu::StepStatus::retired,
-           "tadd retires");
+  check_eq(run.sim.step().status, tile_npu::StepStatus::retired, "tadd retires");
 
   const std::uint8_t expected[1][1] = {{255}};
   check_region(state.t[0], expected, "t0");
@@ -228,8 +213,7 @@ TEST_CASE(npu_guest_ebin) {
   check(result.status == tile_npu::StepStatus::breakpoint,
         std::string("ebin image reaches ebreak (status=") +
             std::string(status_name(result.status)) + ")");
-  check_eq(hex(state.scalar.read_x(10)), hex(0x0u),
-           "ebin image reports success via a0");
+  check_eq(hex(state.scalar.read_x(10)), hex(0x0u), "ebin image reports success via a0");
 
   // tsub (wrap): 0 - 1 = -1; -128 - 1 = -129 wraps to 127; 5 - 10 = -5;
   // -1 - 127 = -128.

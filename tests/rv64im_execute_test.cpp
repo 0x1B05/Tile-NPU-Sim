@@ -19,56 +19,48 @@ constexpr std::uint64_t DATA_BASE = 0x1040;
 constexpr std::uint64_t I32_MIN_SIGN_EXT = 0xffffffff80000000ull;
 constexpr std::uint64_t I64_MIN_BITS = 0x8000000000000000ull;
 
-constexpr std::uint32_t r(std::uint32_t opcode, std::uint32_t funct3,
-                          std::uint32_t funct7, std::uint32_t rd = 3,
-                          std::uint32_t rs1 = 1, std::uint32_t rs2 = 2) {
-  return (funct7 << 25) | (rs2 << 20) | (rs1 << 15) | (funct3 << 12) |
+constexpr std::uint32_t r(std::uint32_t opcode, std::uint32_t funct3, std::uint32_t funct7,
+                          std::uint32_t rd = 3, std::uint32_t rs1 = 1, std::uint32_t rs2 = 2) {
+  return (funct7 << 25) | (rs2 << 20) | (rs1 << 15) | (funct3 << 12) | (rd << 7) | opcode;
+}
+
+constexpr std::uint32_t i(std::uint32_t opcode, std::uint32_t funct3, std::int32_t imm,
+                          std::uint32_t rd = 3, std::uint32_t rs1 = 1) {
+  return ((static_cast<std::uint32_t>(imm) & 0xfffu) << 20) | (rs1 << 15) | (funct3 << 12) |
          (rd << 7) | opcode;
 }
 
-constexpr std::uint32_t i(std::uint32_t opcode, std::uint32_t funct3,
-                          std::int32_t imm, std::uint32_t rd = 3,
-                          std::uint32_t rs1 = 1) {
-  return ((static_cast<std::uint32_t>(imm) & 0xfffu) << 20) | (rs1 << 15) |
-         (funct3 << 12) | (rd << 7) | opcode;
-}
-
-constexpr std::uint32_t s(std::uint32_t funct3, std::int32_t imm,
-                          std::uint32_t rs1 = 1, std::uint32_t rs2 = 2) {
+constexpr std::uint32_t s(std::uint32_t funct3, std::int32_t imm, std::uint32_t rs1 = 1,
+                          std::uint32_t rs2 = 2) {
   const auto bits = static_cast<std::uint32_t>(imm) & 0xfffu;
-  return ((bits >> 5) << 25) | (rs2 << 20) | (rs1 << 15) | (funct3 << 12) |
-         ((bits & 0x1fu) << 7) | 0x23u;
+  return ((bits >> 5) << 25) | (rs2 << 20) | (rs1 << 15) | (funct3 << 12) | ((bits & 0x1fu) << 7) |
+         0x23u;
 }
 
-constexpr std::uint32_t b(std::uint32_t funct3, std::int32_t imm,
-                          std::uint32_t rs1 = 1, std::uint32_t rs2 = 2) {
+constexpr std::uint32_t b(std::uint32_t funct3, std::int32_t imm, std::uint32_t rs1 = 1,
+                          std::uint32_t rs2 = 2) {
   const auto bits = static_cast<std::uint32_t>(imm) & 0x1fffu;
-  return (((bits >> 12) & 1u) << 31) | (((bits >> 5) & 0x3fu) << 25) |
-         (rs2 << 20) | (rs1 << 15) | (funct3 << 12) |
-         (((bits >> 1) & 0xfu) << 8) | (((bits >> 11) & 1u) << 7) | 0x63u;
+  return (((bits >> 12) & 1u) << 31) | (((bits >> 5) & 0x3fu) << 25) | (rs2 << 20) | (rs1 << 15) |
+         (funct3 << 12) | (((bits >> 1) & 0xfu) << 8) | (((bits >> 11) & 1u) << 7) | 0x63u;
 }
 
-constexpr std::uint32_t u(std::uint32_t opcode, std::uint32_t imm,
-                          std::uint32_t rd = 3) {
+constexpr std::uint32_t u(std::uint32_t opcode, std::uint32_t imm, std::uint32_t rd = 3) {
   return (imm & 0xfffff000u) | (rd << 7) | opcode;
 }
 
 constexpr std::uint32_t j(std::int32_t imm, std::uint32_t rd = 3) {
   const auto bits = static_cast<std::uint32_t>(imm) & 0x1fffffu;
   return (((bits >> 20) & 1u) << 31) | (((bits >> 1) & 0x3ffu) << 21) |
-         (((bits >> 11) & 1u) << 20) | (((bits >> 12) & 0xffu) << 12) |
-         (rd << 7) | 0x6fu;
+         (((bits >> 11) & 1u) << 20) | (((bits >> 12) & 0xffu) << 12) | (rd << 7) | 0x6fu;
 }
 
-void expect_step(const StepResult &result, StepStatus status,
-                 std::uint32_t word,
+void expect_step(const StepResult &result, StepStatus status, std::uint32_t word,
                  std::optional<std::uint64_t> fault_address = std::nullopt) {
   const std::string what = "step " + to_hex(word);
   check_eq(result.status, status, what + ": status");
   check_eq(hex(result.pc), hex(CODE_BASE), what + ": pc");
   check_eq(hex(result.instr), hex(std::make_optional(word)), what + ": instr");
-  check_eq(hex(result.fault_address), hex(fault_address),
-           what + ": fault address");
+  check_eq(hex(result.fault_address), hex(fault_address), what + ": fault address");
 }
 
 struct RegisterCase {
@@ -88,10 +80,8 @@ void check_register_case(const RegisterCase &test) {
   sim.state().scalar.write_x(2, test.rhs);
   sim.state().scalar.write_x(3, 0xdeadbeef);
   expect_step(sim.step(), StepStatus::retired, test.word);
-  const std::string what =
-      std::string("execute ") + test.name + " (" + to_hex(test.word) + ")";
-  check_eq(hex(sim.state().scalar.read_x(3)), hex(test.expected),
-           what + ": rd");
+  const std::string what = std::string("execute ") + test.name + " (" + to_hex(test.word) + ")";
+  check_eq(hex(sim.state().scalar.read_x(3)), hex(test.expected), what + ": rd");
   check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE + 4), what + ": next pc");
 }
 
@@ -137,10 +127,8 @@ void test_integer_arithmetic() {
   sim.state().scalar.write_x(1, 4);
   sim.state().scalar.write_x(2, 5);
   expect_step(sim.step(), StepStatus::retired, 0x00208033u);
-  check_eq(sim.state().scalar.read_x(0), std::uint64_t{0},
-           "write to x0 is discarded");
-  check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE + 4),
-           "add to x0 advances pc");
+  check_eq(sim.state().scalar.read_x(0), std::uint64_t{0}, "write to x0 is discarded");
+  check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE + 4), "add to x0 advances pc");
 }
 
 void test_control_flow() {
@@ -148,8 +136,7 @@ void test_control_flow() {
   Simulator sim(memory);
 
   const auto run = [&](std::uint32_t word, std::uint64_t lhs, std::uint64_t rhs,
-                       std::uint64_t expected_pc,
-                       std::uint64_t expected_rd = 0xface) {
+                       std::uint64_t expected_pc, std::uint64_t expected_rd = 0xface) {
     write_word(memory, CODE_BASE, word);
     sim.reset(CODE_BASE);
     sim.state().scalar.write_x(1, lhs);
@@ -158,8 +145,7 @@ void test_control_flow() {
     expect_step(sim.step(), StepStatus::retired, word);
     const std::string what = "control-flow " + to_hex(word);
     check_eq(hex(sim.state().scalar.pc), hex(expected_pc), what + ": pc");
-    check_eq(hex(sim.state().scalar.read_x(3)), hex(expected_rd),
-             what + ": rd");
+    check_eq(hex(sim.state().scalar.read_x(3)), hex(expected_rd), what + ": rd");
   };
 
   run(u(0x37, 0x80000000u), 0, 0, CODE_BASE + 4, I32_MIN_SIGN_EXT);
@@ -178,19 +164,16 @@ void test_control_flow() {
   sim.reset(CODE_BASE);
   sim.state().scalar.write_x(1, 0x1015);
   expect_step(sim.step(), StepStatus::retired, jalr_same_reg);
-  check_eq(hex(sim.state().scalar.pc), hex(0x1014),
-           "jalr reads old rs1 and clears bit zero");
-  check_eq(hex(sim.state().scalar.read_x(1)), hex(CODE_BASE + 4),
-           "jalr writes the link register");
+  check_eq(hex(sim.state().scalar.pc), hex(0x1014), "jalr reads old rs1 and clears bit zero");
+  check_eq(hex(sim.state().scalar.read_x(1)), hex(CODE_BASE + 4), "jalr writes the link register");
 
   const auto jal_misaligned = j(2);
   write_word(memory, CODE_BASE, jal_misaligned);
   sim.reset(CODE_BASE);
   sim.state().scalar.write_x(3, 0xface);
-  expect_step(sim.step(), StepStatus::instruction_address_misaligned,
-              jal_misaligned, CODE_BASE + 2);
-  check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE),
-           "misaligned jal leaves pc at the jump");
+  expect_step(sim.step(), StepStatus::instruction_address_misaligned, jal_misaligned,
+              CODE_BASE + 2);
+  check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE), "misaligned jal leaves pc at the jump");
   check_eq(hex(sim.state().scalar.read_x(3)), hex(0xface),
            "misaligned jal does not write the link register");
 
@@ -199,8 +182,8 @@ void test_control_flow() {
   sim.reset(CODE_BASE);
   sim.state().scalar.write_x(1, 7);
   sim.state().scalar.write_x(2, 7);
-  expect_step(sim.step(), StepStatus::instruction_address_misaligned,
-              branch_misaligned, CODE_BASE + 2);
+  expect_step(sim.step(), StepStatus::instruction_address_misaligned, branch_misaligned,
+              CODE_BASE + 2);
   check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE),
            "taken branch reports misaligned target at branch");
 
@@ -208,32 +191,25 @@ void test_control_flow() {
   write_word(memory, CODE_BASE, jalr_misaligned);
   sim.reset(CODE_BASE);
   sim.state().scalar.write_x(1, 0x1013);
-  expect_step(sim.step(), StepStatus::instruction_address_misaligned,
-              jalr_misaligned, 0x1012);
-  check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE),
-           "misaligned jalr leaves pc unchanged");
+  expect_step(sim.step(), StepStatus::instruction_address_misaligned, jalr_misaligned, 0x1012);
+  check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE), "misaligned jalr leaves pc unchanged");
   check_eq(hex(sim.state().scalar.read_x(1)), hex(0x1013),
            "misaligned jalr preserves aliased link/source register");
 }
 
 void test_loads() {
-  constexpr std::array<std::byte, 8> data{
-      std::byte{0x80}, std::byte{0xff}, std::byte{0xff}, std::byte{0xff},
-      std::byte{0x44}, std::byte{0x33}, std::byte{0x22}, std::byte{0x11}};
+  constexpr std::array<std::byte, 8> data{std::byte{0x80}, std::byte{0xff}, std::byte{0xff},
+                                          std::byte{0xff}, std::byte{0x44}, std::byte{0x33},
+                                          std::byte{0x22}, std::byte{0x11}};
   constexpr std::array cases{
-      RegisterCase{"lb sign", i(0x03, 0, 0), DATA_BASE, 0,
-                   0xffffffffffffff80ull},
-      RegisterCase{"lh sign", i(0x03, 1, 0), DATA_BASE, 0,
-                   0xffffffffffffff80ull},
-      RegisterCase{"lw sign", i(0x03, 2, 0), DATA_BASE, 0,
-                   0xffffffffffffff80ull},
-      RegisterCase{"ld little endian", i(0x03, 3, 0), DATA_BASE, 0,
-                   0x11223344ffffff80ull},
+      RegisterCase{"lb sign", i(0x03, 0, 0), DATA_BASE, 0, 0xffffffffffffff80ull},
+      RegisterCase{"lh sign", i(0x03, 1, 0), DATA_BASE, 0, 0xffffffffffffff80ull},
+      RegisterCase{"lw sign", i(0x03, 2, 0), DATA_BASE, 0, 0xffffffffffffff80ull},
+      RegisterCase{"ld little endian", i(0x03, 3, 0), DATA_BASE, 0, 0x11223344ffffff80ull},
       RegisterCase{"lbu zero", i(0x03, 4, 0), DATA_BASE, 0, 0x80},
       RegisterCase{"lhu zero", i(0x03, 5, 0), DATA_BASE, 0, 0xff80},
       RegisterCase{"lwu zero", i(0x03, 6, 0), DATA_BASE, 0, 0xffffff80},
-      RegisterCase{"negative offset", i(0x03, 3, -1), DATA_BASE + 1, 0,
-                   0x11223344ffffff80ull},
+      RegisterCase{"negative offset", i(0x03, 3, -1), DATA_BASE + 1, 0, 0x11223344ffffff80ull},
   };
   for (const auto &test : cases) {
     FlatMemory memory(CODE_BASE, 0x50);
@@ -244,10 +220,8 @@ void test_loads() {
     sim.state().scalar.write_x(1, test.lhs);
     expect_step(sim.step(), StepStatus::retired, test.word);
     const std::string what = std::string("execute ") + test.name;
-    check_eq(hex(sim.state().scalar.read_x(3)), hex(test.expected),
-             what + ": rd");
-    check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE + 4),
-             what + ": next pc");
+    check_eq(hex(sim.state().scalar.read_x(3)), hex(test.expected), what + ": rd");
+    check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE + 4), what + ": next pc");
   }
 
   FlatMemory memory(CODE_BASE, 0x50);
@@ -267,12 +241,9 @@ void test_loads() {
   sim.reset(CODE_BASE);
   sim.state().scalar.write_x(1, DATA_BASE);
   sim.state().scalar.write_x(3, 0xface);
-  expect_step(sim.step(), StepStatus::load_address_misaligned, misaligned,
-              DATA_BASE + 1);
-  check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE),
-           "misaligned load preserves pc");
-  check_eq(hex(sim.state().scalar.read_x(3)), hex(0xface),
-           "misaligned load preserves destination");
+  expect_step(sim.step(), StepStatus::load_address_misaligned, misaligned, DATA_BASE + 1);
+  check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE), "misaligned load preserves pc");
+  check_eq(hex(sim.state().scalar.read_x(3)), hex(0xface), "misaligned load preserves destination");
 
   const auto fault = i(0x03, 3, 0);
   write_word(memory, CODE_BASE, fault);
@@ -280,10 +251,8 @@ void test_loads() {
   sim.state().scalar.write_x(1, CODE_BASE + 0x50);
   sim.state().scalar.write_x(3, 0xface);
   expect_step(sim.step(), StepStatus::load_fault, fault, CODE_BASE + 0x50);
-  check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE),
-           "failed load preserves pc");
-  check_eq(hex(sim.state().scalar.read_x(3)), hex(0xface),
-           "failed load preserves destination");
+  check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE), "failed load preserves pc");
+  check_eq(hex(sim.state().scalar.read_x(3)), hex(0xface), "failed load preserves destination");
 }
 
 void test_stores() {
@@ -292,8 +261,7 @@ void test_stores() {
       RegisterCase{"sh", s(1, 0), DATA_BASE, 0x8877665544332211ull, 2},
       RegisterCase{"sw", s(2, 0), DATA_BASE, 0x8877665544332211ull, 4},
       RegisterCase{"sd", s(3, 0), DATA_BASE, 0x8877665544332211ull, 8},
-      RegisterCase{"negative offset", s(3, -8), DATA_BASE + 8,
-                   0x8877665544332211ull, 8},
+      RegisterCase{"negative offset", s(3, -8), DATA_BASE + 8, 0x8877665544332211ull, 8},
   };
   for (const auto &test : cases) {
     FlatMemory memory(CODE_BASE, 0x50);
@@ -306,16 +274,13 @@ void test_stores() {
     std::array<std::byte, 8> bytes{};
     check(memory.read(DATA_BASE, bytes), "read stored bytes");
     for (std::size_t index = 0; index < bytes.size(); ++index) {
-      const auto expected =
-          index < test.expected
-              ? static_cast<std::byte>((test.rhs >> (8 * index)) & 0xffu)
-              : std::byte{0};
+      const auto expected = index < test.expected
+                                ? static_cast<std::byte>((test.rhs >> (8 * index)) & 0xffu)
+                                : std::byte{0};
       check_eq(bytes[index], expected,
-               std::string("execute ") + test.name + ": byte " +
-                   std::to_string(index));
+               std::string("execute ") + test.name + ": byte " + std::to_string(index));
     }
-    check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE + 4),
-             "store advances pc");
+    check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE + 4), "store advances pc");
   }
 
   FlatMemory memory(CODE_BASE, 0x44);
@@ -325,15 +290,13 @@ void test_stores() {
   sim.reset(CODE_BASE);
   sim.state().scalar.write_x(1, DATA_BASE);
   sim.state().scalar.write_x(2, 0x12345678);
-  expect_step(sim.step(), StepStatus::store_address_misaligned, misaligned,
-              DATA_BASE + 1);
-  check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE),
-           "misaligned store preserves pc");
+  expect_step(sim.step(), StepStatus::store_address_misaligned, misaligned, DATA_BASE + 1);
+  check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE), "misaligned store preserves pc");
 
   const auto crossing = s(3, 0);
   write_word(memory, CODE_BASE, crossing);
-  constexpr std::array<std::byte, 4> marker{std::byte{0xaa}, std::byte{0xbb},
-                                            std::byte{0xcc}, std::byte{0xdd}};
+  constexpr std::array<std::byte, 4> marker{std::byte{0xaa}, std::byte{0xbb}, std::byte{0xcc},
+                                            std::byte{0xdd}};
   check(memory.write(DATA_BASE, marker), "initialize final memory bytes");
   sim.reset(CODE_BASE);
   sim.state().scalar.write_x(1, DATA_BASE);
@@ -342,8 +305,7 @@ void test_stores() {
   std::array<std::byte, 4> after{};
   check(memory.read(DATA_BASE, after), "read memory after store fault");
   check(after == marker, "crossing store fails atomically");
-  check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE),
-           "crossing store preserves pc");
+  check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE), "crossing store preserves pc");
   check_eq(hex(sim.state().scalar.read_x(2)), hex(0x8877665544332211ull),
            "crossing store preserves source register");
 }
@@ -354,48 +316,40 @@ void test_m_extension() {
       RegisterCase{"mul low wrap", r(0x33, 0, 1), I64_MIN_BITS, 2, 0},
       RegisterCase{"mulh signed", r(0x33, 1, 1), UINT64_MAX, UINT64_MAX, 0},
       RegisterCase{"mulhsu", r(0x33, 2, 1), UINT64_MAX, UINT64_MAX, UINT64_MAX},
-      RegisterCase{"mulhu", r(0x33, 3, 1), UINT64_MAX, UINT64_MAX,
-                   UINT64_MAX - 1},
-      RegisterCase{"mulh mixed sign and limb carries", r(0x33, 1, 1),
-                   0x12345678abcdef01ull, 0xfedcba9876543210ull,
-                   0xffeb49923cad2a2cull},
-      RegisterCase{"mulhsu mixed sign and limb carries", r(0x33, 2, 1),
-                   0xfedcba9876543210ull, 0x12345678abcdef01ull,
-                   0xffeb49923cad2a2cull},
+      RegisterCase{"mulhu", r(0x33, 3, 1), UINT64_MAX, UINT64_MAX, UINT64_MAX - 1},
+      RegisterCase{"mulh mixed sign and limb carries", r(0x33, 1, 1), 0x12345678abcdef01ull,
+                   0xfedcba9876543210ull, 0xffeb49923cad2a2cull},
+      RegisterCase{"mulhsu mixed sign and limb carries", r(0x33, 2, 1), 0xfedcba9876543210ull,
+                   0x12345678abcdef01ull, 0xffeb49923cad2a2cull},
       RegisterCase{"mulhu limb carries", r(0x33, 3, 1), 0x12345678abcdef01ull,
                    0xfedcba9876543210ull, 0x121fa00ae87b192dull},
       RegisterCase{"mulh both negative", r(0x33, 1, 1), 0x87654321fedcba98ull,
                    0xfedcba9876543210ull, 0x8938972c60de2cull},
-      RegisterCase{"div signed", r(0x33, 4, 1), UINT64_MAX - 20, 4,
-                   UINT64_MAX - 4},
+      RegisterCase{"div signed", r(0x33, 4, 1), UINT64_MAX - 20, 4, UINT64_MAX - 4},
       RegisterCase{"divu", r(0x33, 5, 1), 21, 4, 5},
       RegisterCase{"rem signed", r(0x33, 6, 1), UINT64_MAX - 20, 4, UINT64_MAX},
       RegisterCase{"remu", r(0x33, 7, 1), 21, 4, 1},
       RegisterCase{"mulw sign", r(0x3b, 0, 1), 0x40000000, 2, I32_MIN_SIGN_EXT},
       RegisterCase{"divw", r(0x3b, 4, 1), UINT64_MAX - 20, 4, UINT64_MAX - 4},
       RegisterCase{"divuw", r(0x3b, 5, 1), 0x80000000, 2, 0x40000000},
-      RegisterCase{"divuw ignores upper bits", r(0x3b, 5, 1),
-                   0x12345678ffffffffull, 0xffff000000000001ull, UINT64_MAX},
+      RegisterCase{"divuw ignores upper bits", r(0x3b, 5, 1), 0x12345678ffffffffull,
+                   0xffff000000000001ull, UINT64_MAX},
       RegisterCase{"remw", r(0x3b, 6, 1), UINT64_MAX - 20, 4, UINT64_MAX},
       RegisterCase{"remuw", r(0x3b, 7, 1), 0xffffffff, 2, 1},
-      RegisterCase{"remuw sign extends word result", r(0x3b, 7, 1),
-                   0x1234567880000000ull, 0xffff0000ffffffffull,
-                   I32_MIN_SIGN_EXT},
-      RegisterCase{"div overflow", r(0x33, 4, 1), I64_MIN_BITS, UINT64_MAX,
-                   I64_MIN_BITS},
+      RegisterCase{"remuw sign extends word result", r(0x3b, 7, 1), 0x1234567880000000ull,
+                   0xffff0000ffffffffull, I32_MIN_SIGN_EXT},
+      RegisterCase{"div overflow", r(0x33, 4, 1), I64_MIN_BITS, UINT64_MAX, I64_MIN_BITS},
       RegisterCase{"rem overflow", r(0x33, 6, 1), I64_MIN_BITS, UINT64_MAX, 0},
       RegisterCase{"div zero", r(0x33, 4, 1), 42, 0, UINT64_MAX},
       RegisterCase{"divu zero", r(0x33, 5, 1), 42, 0, UINT64_MAX},
       RegisterCase{"rem zero", r(0x33, 6, 1), 42, 0, 42},
       RegisterCase{"remu zero", r(0x33, 7, 1), 42, 0, 42},
-      RegisterCase{"divw overflow", r(0x3b, 4, 1), 0x80000000, UINT64_MAX,
-                   I32_MIN_SIGN_EXT},
+      RegisterCase{"divw overflow", r(0x3b, 4, 1), 0x80000000, UINT64_MAX, I32_MIN_SIGN_EXT},
       RegisterCase{"remw overflow", r(0x3b, 6, 1), 0x80000000, UINT64_MAX, 0},
       RegisterCase{"divw zero", r(0x3b, 4, 1), 42, 0, UINT64_MAX},
       RegisterCase{"divuw zero", r(0x3b, 5, 1), 42, 0, UINT64_MAX},
       RegisterCase{"remw zero", r(0x3b, 6, 1), 0x80000000, 0, I32_MIN_SIGN_EXT},
-      RegisterCase{"remuw zero", r(0x3b, 7, 1), 0x80000000, 0,
-                   I32_MIN_SIGN_EXT},
+      RegisterCase{"remuw zero", r(0x3b, 7, 1), 0x80000000, 0, I32_MIN_SIGN_EXT},
   };
   for (const auto &test : cases) {
     check_register_case(test);
@@ -414,8 +368,7 @@ void test_environment_boundary() {
     sim.reset(CODE_BASE);
     sim.state().scalar.write_x(10, 0xfeed);
     expect_step(sim.step(), status, word);
-    check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE),
-             "environment boundary preserves pc");
+    check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE), "environment boundary preserves pc");
     check_eq(hex(sim.state().scalar.read_x(10)), hex(0xfeed),
              "environment boundary preserves architectural state");
   }
@@ -424,15 +377,19 @@ void test_environment_boundary() {
   write_word(memory, CODE_BASE, fence);
   sim.reset(CODE_BASE);
   expect_step(sim.step(), StepStatus::retired, fence);
-  check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE + 4),
-           "fence retires with synchronous memory");
+  check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE + 4), "fence retires with synchronous memory");
 }
 
 } // namespace
 
 TEST_CASE(rv64im_execute_integer_arithmetic) { test_integer_arithmetic(); }
+
 TEST_CASE(rv64im_execute_control_flow) { test_control_flow(); }
+
 TEST_CASE(rv64im_execute_loads) { test_loads(); }
+
 TEST_CASE(rv64im_execute_stores) { test_stores(); }
+
 TEST_CASE(rv64im_execute_m_extension) { test_m_extension(); }
+
 TEST_CASE(rv64im_execute_environment_boundary) { test_environment_boundary(); }

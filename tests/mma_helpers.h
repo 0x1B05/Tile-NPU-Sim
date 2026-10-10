@@ -9,7 +9,7 @@
 //   [1:0] q = 10
 // funct3: 000 mma.nn.zero, 001 mma.nn.acc, 010 mma.nt.zero, 011 mma.nt.acc,
 // 100 bdot.nn, 110 bdot.nt; 101/111 reserved.
-constexpr std::uint32_t make_mma(std::uint32_t funct3, std::uint32_t dest,
-                                 std::uint32_t src_a, std::uint32_t src_b) {
+constexpr std::uint32_t make_mma(std::uint32_t funct3, std::uint32_t dest, std::uint32_t src_a,
+                                 std::uint32_t src_b) {
   return (funct3 << 22) | (src_b << 12) | (src_a << 7) | (dest << 2) | 2u;
 }

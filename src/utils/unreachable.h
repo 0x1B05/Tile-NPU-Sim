@@ -15,8 +15,7 @@ namespace tile_npu {
 unreachable(std::string_view message,
             const std::source_location &loc = std::source_location::current()) {
   std::fprintf(stderr, "%s:%u: unreachable: %.*s\n", loc.file_name(),
-               static_cast<unsigned>(loc.line()),
-               static_cast<int>(message.size()), message.data());
+               static_cast<unsigned>(loc.line()), static_cast<int>(message.size()), message.data());
   std::abort();
 }
 

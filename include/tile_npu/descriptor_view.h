@@ -13,8 +13,7 @@ namespace detail {
 
 // Base-address overflow is rejected: the ISA manual leaves address
 // wraparound undefined, so rejection is a simulator convention.
-inline std::optional<std::uint64_t> add_signed_offset(std::uint64_t base,
-                                                      std::int64_t offset) {
+inline std::optional<std::uint64_t> add_signed_offset(std::uint64_t base, std::int64_t offset) {
   if (offset >= 0) {
     const auto positive = static_cast<std::uint64_t>(offset);
     if (base > std::numeric_limits<std::uint64_t>::max() - positive) {
@@ -41,8 +40,7 @@ inline std::optional<std::uint64_t> add_signed_offset(std::uint64_t base,
 template <typename Descriptor> class DescriptorView {
   using Value = std::remove_const_t<Descriptor>;
 
-  static_assert(std::is_same_v<Value, MatrixDescriptor> ||
-                std::is_same_v<Value, VectorDescriptor>);
+  static_assert(std::is_same_v<Value, MatrixDescriptor> || std::is_same_v<Value, VectorDescriptor>);
 
 public:
   explicit DescriptorView(Descriptor &descriptor) : descriptor_(&descriptor) {}
@@ -50,10 +48,8 @@ public:
   bool valid() const {
     if constexpr (std::is_same_v<Value, MatrixDescriptor>) {
       const auto flags = descriptor_->flags;
-      const auto inc_mode =
-          static_cast<std::uint8_t>(flags & MATRIX_INC_MODE_MASK);
-      return (flags & ~MATRIX_INC_MODE_MASK) == 0 &&
-             inc_mode != MATRIX_INC_MODE_RESERVED &&
+      const auto inc_mode = static_cast<std::uint8_t>(flags & MATRIX_INC_MODE_MASK);
+      return (flags & ~MATRIX_INC_MODE_MASK) == 0 && inc_mode != MATRIX_INC_MODE_RESERVED &&
              descriptor_->transform <= 1;
     } else {
       return (descriptor_->flags & ~VECTOR_INC_ENABLE_MASK) == 0;
@@ -72,12 +68,10 @@ public:
     return detail::add_signed_offset(descriptor_->base_addr, offset);
   }
 
-  template <typename D = Descriptor>
-  std::optional<std::uint64_t> address(std::size_t index) const {
+  template <typename D = Descriptor> std::optional<std::uint64_t> address(std::size_t index) const {
     static_assert(std::is_same_v<std::remove_const_t<D>, VectorDescriptor>);
     if (!valid()) return std::nullopt;
-    const auto offset = std::int64_t{descriptor_->stride_bytes} *
-                        static_cast<std::int64_t>(index);
+    const auto offset = std::int64_t{descriptor_->stride_bytes} * static_cast<std::int64_t>(index);
     return detail::add_signed_offset(descriptor_->base_addr, offset);
   }
 
@@ -90,17 +84,15 @@ public:
     static_assert(std::is_same_v<std::remove_const_t<D>, MatrixDescriptor>);
     if (!valid()) return std::nullopt;
     return detail::add_signed_offset(descriptor_->base_addr,
-                                     std::int64_t{index} *
-                                         descriptor_->col_stride_bytes);
+                                     std::int64_t{index} * descriptor_->col_stride_bytes);
   }
 
   template <typename D = Descriptor>
-  std::optional<std::uint64_t> gather_address(std::uint64_t row_base,
-                                              std::size_t col) const {
+  std::optional<std::uint64_t> gather_address(std::uint64_t row_base, std::size_t col) const {
     static_assert(std::is_same_v<std::remove_const_t<D>, MatrixDescriptor>);
     if (!valid()) return std::nullopt;
-    const auto offset = std::int64_t{descriptor_->row_stride_bytes} *
-                        static_cast<std::int64_t>(col);
+    const auto offset =
+        std::int64_t{descriptor_->row_stride_bytes} * static_cast<std::int64_t>(col);
     return detail::add_signed_offset(row_base, offset);
   }
 
@@ -109,8 +101,7 @@ public:
     static_assert(std::is_same_v<std::remove_const_t<D>, VectorDescriptor>);
     if (!valid()) return std::nullopt;
     return detail::add_signed_offset(descriptor_->base_addr,
-                                     std::int64_t{index} *
-                                         descriptor_->stride_bytes);
+                                     std::int64_t{index} * descriptor_->stride_bytes);
   }
 
   // The base address after the post-access increment, or nullopt when the
@@ -118,34 +109,28 @@ public:
   // disabled this is the current base, so callers can pre-validate the update
   // before touching architectural state.
   template <typename D = Descriptor>
-  std::optional<std::uint64_t> incremented_base(std::size_t rows,
-                                                std::size_t cols) const {
+  std::optional<std::uint64_t> incremented_base(std::size_t rows, std::size_t cols) const {
     static_assert(std::is_same_v<std::remove_const_t<D>, MatrixDescriptor>);
     if (!valid()) return std::nullopt;
-    const auto mode =
-        static_cast<std::uint8_t>(descriptor_->flags & MATRIX_INC_MODE_MASK);
+    const auto mode = static_cast<std::uint8_t>(descriptor_->flags & MATRIX_INC_MODE_MASK);
     if (mode == 0) return descriptor_->base_addr;
     const auto index = mode == 1 ? rows : cols;
-    const auto stride = mode == 1 ? descriptor_->row_stride_bytes
-                                  : descriptor_->col_stride_bytes;
+    const auto stride = mode == 1 ? descriptor_->row_stride_bytes : descriptor_->col_stride_bytes;
     return detail::add_signed_offset(descriptor_->base_addr,
-                                     std::int64_t{stride} *
-                                         static_cast<std::int64_t>(index));
+                                     std::int64_t{stride} * static_cast<std::int64_t>(index));
   }
 
   template <typename D = Descriptor>
   std::optional<std::uint64_t> incremented_base(std::size_t len) const {
     static_assert(std::is_same_v<std::remove_const_t<D>, VectorDescriptor>);
     if (!valid()) return std::nullopt;
-    if ((descriptor_->flags & VECTOR_INC_ENABLE_MASK) == 0)
-      return descriptor_->base_addr;
+    if ((descriptor_->flags & VECTOR_INC_ENABLE_MASK) == 0) return descriptor_->base_addr;
     return detail::add_signed_offset(descriptor_->base_addr,
                                      std::int64_t{descriptor_->stride_bytes} *
                                          static_cast<std::int64_t>(len));
   }
 
-  template <typename D = Descriptor>
-  bool post_increment(std::size_t rows, std::size_t cols) {
+  template <typename D = Descriptor> bool post_increment(std::size_t rows, std::size_t cols) {
     static_assert(std::is_same_v<std::remove_const_t<D>, MatrixDescriptor>);
     static_assert(!std::is_const_v<D>);
     const auto next = incremented_base(rows, cols);

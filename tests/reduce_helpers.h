@@ -12,19 +12,15 @@
 //     [21:17] reserved5  [16:12] xVal5  [11:7] S5 (vS)  [6:2] D5 (xIndex)
 // funct3: 000 sum, 001 max, 010 min, 011 sumsq, 100 argmax, 101 absmax
 // (AREDUCE only); 110-111 reserved.
-constexpr std::uint32_t make_areduce(std::uint32_t funct3, std::uint32_t vd,
-                                     std::uint32_t as) {
+constexpr std::uint32_t make_areduce(std::uint32_t funct3, std::uint32_t vd, std::uint32_t as) {
   return (1u << 28) | (funct3 << 22) | (as << 7) | (vd << 2) | 2u;
 }
 
-constexpr std::uint32_t make_vreduce(std::uint32_t funct3, std::uint32_t xd,
-                                     std::uint32_t vs) {
+constexpr std::uint32_t make_vreduce(std::uint32_t funct3, std::uint32_t xd, std::uint32_t vs) {
   return (2u << 28) | (funct3 << 22) | (vs << 7) | (xd << 2) | 2u;
 }
 
-constexpr std::uint32_t make_vreduce_argmax(std::uint32_t x_index,
-                                            std::uint32_t x_value,
+constexpr std::uint32_t make_vreduce_argmax(std::uint32_t x_index, std::uint32_t x_value,
                                             std::uint32_t vs) {
-  return (2u << 28) | (4u << 22) | (x_value << 12) | (vs << 7) |
-         (x_index << 2) | 2u;
+  return (2u << 28) | (4u << 22) | (x_value << 12) | (vs << 7) | (x_index << 2) | 2u;
 }

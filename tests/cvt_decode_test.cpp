@@ -31,8 +31,7 @@ template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
     const auto *npu = std::get_if<DecodedNpuInstr>(&result);
-    const std::string what =
-        std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
+    const std::string what = std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
     check(npu != nullptr, what);
     const auto *decoded = std::get_if<CvtInstr>(npu);
     check(decoded != nullptr, what);
@@ -50,13 +49,11 @@ struct ErrorCase {
   DecodeError error;
 };
 
-template <std::size_t N>
-void check_errors(const std::array<ErrorCase, N> &cases) {
+template <std::size_t N> void check_errors(const std::array<ErrorCase, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
     const auto *error = std::get_if<DecodeError>(&result);
-    const std::string what =
-        std::string(test.name) + " (" + to_hex(test.word) + ")";
+    const std::string what = std::string(test.name) + " (" + to_hex(test.word) + ")";
     check(error != nullptr, what + " decodes");
     check_eq(*error, test.error, what + ": error kind");
   }
@@ -95,27 +92,18 @@ TEST_CASE(cvt_decode) {
 TEST_CASE(cvt_decode_rejects_reserved) {
   constexpr std::array cases{
       // The destination domain is Acc or Vec32 only.
-      ErrorCase{"tile destination", make_cvt(NpuDomain::tile, 0, 0, 0),
-                DecodeError::illegal},
-      ErrorCase{"vec8 destination", make_cvt(NpuDomain::vec8, 0, 0, 0),
-                DecodeError::illegal},
+      ErrorCase{"tile destination", make_cvt(NpuDomain::tile, 0, 0, 0), DecodeError::illegal},
+      ErrorCase{"vec8 destination", make_cvt(NpuDomain::vec8, 0, 0, 0), DecodeError::illegal},
       // funct3 >= 010 is reserved; widen has no Vec32 encoding.
-      ErrorCase{"funct3 010", make_cvt(NpuDomain::acc, 2, 0, 0),
-                DecodeError::illegal},
-      ErrorCase{"funct3 111", make_cvt(NpuDomain::vec32, 7, 0, 0),
-                DecodeError::illegal},
-      ErrorCase{"vwiden", make_cvt(NpuDomain::vec32, 1, 0, 0),
-                DecodeError::illegal},
+      ErrorCase{"funct3 010", make_cvt(NpuDomain::acc, 2, 0, 0), DecodeError::illegal},
+      ErrorCase{"funct3 111", make_cvt(NpuDomain::vec32, 7, 0, 0), DecodeError::illegal},
+      ErrorCase{"vwiden", make_cvt(NpuDomain::vec32, 1, 0, 0), DecodeError::illegal},
       // reserved10 and bit 25 must be 0.
-      ErrorCase{"reserved10", make_cvt(NpuDomain::acc, 0, 0, 0) | (1u << 12),
-                DecodeError::illegal},
-      ErrorCase{"sel3 bit0", make_cvt(NpuDomain::acc, 0, 0, 0) | (1u << 25),
-                DecodeError::illegal},
+      ErrorCase{"reserved10", make_cvt(NpuDomain::acc, 0, 0, 0) | (1u << 12), DecodeError::illegal},
+      ErrorCase{"sel3 bit0", make_cvt(NpuDomain::acc, 0, 0, 0) | (1u << 25), DecodeError::illegal},
       // Register numbers are bounded per domain.
-      ErrorCase{"acvt a12", make_cvt(NpuDomain::acc, 0, 12, 0),
-                DecodeError::illegal},
-      ErrorCase{"twiden t16", make_cvt(NpuDomain::acc, 1, 0, 16),
-                DecodeError::illegal},
+      ErrorCase{"acvt a12", make_cvt(NpuDomain::acc, 0, 12, 0), DecodeError::illegal},
+      ErrorCase{"twiden t16", make_cvt(NpuDomain::acc, 1, 0, 16), DecodeError::illegal},
   };
   check_errors(cases);
 }

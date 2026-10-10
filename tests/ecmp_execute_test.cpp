@@ -23,8 +23,7 @@ constexpr std::uint32_t MASK_FALSE = 0u;
 TEST_CASE(ecmp_acc_i32_lt) {
   FlatMemory memory(CODE_BASE, 4);
   Simulator sim(memory);
-  load_one(sim, memory,
-           make_ecmp(NpuDomain::acc, false, 2, 0, 1, 2)); // acmp.lt a0, a1, a2
+  load_one(sim, memory, make_ecmp(NpuDomain::acc, false, 2, 0, 1, 2)); // acmp.lt a0, a1, a2
   auto &state = sim.state();
   acc_cfg(state, 0, DType::u32, 1, 4); // the mask is always u32
   acc_cfg(state, 1, DType::i32, 1, 4);
@@ -50,8 +49,7 @@ TEST_CASE(ecmp_acc_i32_lt) {
 TEST_CASE(ecmp_acc_u32_lt_is_unsigned) {
   FlatMemory memory(CODE_BASE, 4);
   Simulator sim(memory);
-  load_one(sim, memory,
-           make_ecmp(NpuDomain::acc, false, 2, 0, 1, 2)); // acmp.lt a0, a1, a2
+  load_one(sim, memory, make_ecmp(NpuDomain::acc, false, 2, 0, 1, 2)); // acmp.lt a0, a1, a2
   auto &state = sim.state();
   acc_cfg(state, 0, DType::u32, 1, 2);
   acc_cfg(state, 1, DType::u32, 1, 2);
@@ -72,8 +70,7 @@ TEST_CASE(ecmp_acc_eq_ne_ge_i32) {
   Simulator sim(memory);
   auto &state = sim.state();
 
-  load_one(sim, memory,
-           make_ecmp(NpuDomain::acc, false, 0, 0, 1, 2)); // acmp.eq a0, a1, a2
+  load_one(sim, memory, make_ecmp(NpuDomain::acc, false, 0, 0, 1, 2)); // acmp.eq a0, a1, a2
   for (auto index : {0, 1, 2})
     acc_cfg(state, index, index == 0 ? DType::u32 : DType::i32, 1, 2);
   state.a[1][0] = 5;           // 5 == 5
@@ -84,8 +81,7 @@ TEST_CASE(ecmp_acc_eq_ne_ge_i32) {
   check_eq(hex(state.a[0][0]), hex(MASK_TRUE), "eq lane 0");
   check_eq(hex(state.a[0][1]), hex(MASK_FALSE), "eq lane 1");
 
-  load_one(sim, memory,
-           make_ecmp(NpuDomain::acc, false, 1, 0, 1, 2)); // acmp.ne a0, a1, a2
+  load_one(sim, memory, make_ecmp(NpuDomain::acc, false, 1, 0, 1, 2)); // acmp.ne a0, a1, a2
   for (auto index : {0, 1, 2})
     acc_cfg(state, index, index == 0 ? DType::u32 : DType::i32, 1, 2);
   state.a[1][0] = 5;
@@ -96,8 +92,7 @@ TEST_CASE(ecmp_acc_eq_ne_ge_i32) {
   check_eq(hex(state.a[0][0]), hex(MASK_FALSE), "ne lane 0");
   check_eq(hex(state.a[0][1]), hex(MASK_TRUE), "ne lane 1");
 
-  load_one(sim, memory,
-           make_ecmp(NpuDomain::acc, false, 3, 0, 1, 2)); // acmp.ge a0, a1, a2
+  load_one(sim, memory, make_ecmp(NpuDomain::acc, false, 3, 0, 1, 2)); // acmp.ge a0, a1, a2
   for (auto index : {0, 1, 2})
     acc_cfg(state, index, index == 0 ? DType::u32 : DType::i32, 1, 2);
   state.a[1][0] = 5;           // 5 >= 5
@@ -164,8 +159,7 @@ TEST_CASE(ecmp_vec_f32) {
 TEST_CASE(ecmp_scalar_form) {
   FlatMemory memory(CODE_BASE, 4);
   Simulator sim(memory);
-  load_one(sim, memory,
-           make_ecmp(NpuDomain::acc, true, 0, 0, 1, 5)); // acmpx.eq a0, a1, x5
+  load_one(sim, memory, make_ecmp(NpuDomain::acc, true, 0, 0, 1, 5)); // acmpx.eq a0, a1, x5
   auto &state = sim.state();
   acc_cfg(state, 0, DType::u32, 1, 2);
   acc_cfg(state, 1, DType::i32, 1, 2);
@@ -182,8 +176,7 @@ TEST_CASE(ecmp_scalar_form) {
 TEST_CASE(ecmp_mask_aliases_source) {
   FlatMemory memory(CODE_BASE, 4);
   Simulator sim(memory);
-  load_one(sim, memory,
-           make_ecmp(NpuDomain::acc, false, 0, 1, 1, 2)); // acmp.eq a1, a1, a2
+  load_one(sim, memory, make_ecmp(NpuDomain::acc, false, 0, 1, 1, 2)); // acmp.eq a1, a1, a2
   auto &state = sim.state();
   // Mask and source can be the same register when its dtype is u32.
   acc_cfg(state, 1, DType::u32, 1, 2);
@@ -209,35 +202,30 @@ TEST_CASE(ecmp_rejects_invalid) {
   acc_cfg(state, 1, DType::i32, 1, 2);
   acc_cfg(state, 2, DType::i32, 1, 2);
   state.a[0][0] = 0xee;
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "acmp rejects a non-u32 mask");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "acmp rejects a non-u32 mask");
   check_eq(state.a[0][0], std::uint32_t{0xee}, "non-mutating");
 
   // ne/ge are integer-only.
   load_one(sim, memory, make_ecmp(NpuDomain::acc, false, 1, 0, 1, 2));
   for (auto index : {0, 1, 2})
     acc_cfg(state, index, index == 0 ? DType::u32 : DType::f32, 1, 2);
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "acmp.ne rejects f32");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "acmp.ne rejects f32");
 
   load_one(sim, memory, make_ecmp(NpuDomain::acc, false, 3, 0, 1, 2));
   for (auto index : {0, 1, 2})
     acc_cfg(state, index, index == 0 ? DType::u32 : DType::f32, 1, 2);
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "acmp.ge rejects f32");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "acmp.ge rejects f32");
 
   // le/unord are f32-only.
   load_one(sim, memory, make_ecmp(NpuDomain::vec32, false, 4, 0, 1, 2));
   for (auto index : {0, 1, 2})
     vec_cfg(state, index, index == 0 ? DType::u32 : DType::i32, 2);
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "vcmp.le rejects i32");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "vcmp.le rejects i32");
 
   load_one(sim, memory, make_ecmp(NpuDomain::vec32, false, 5, 0, 1, 2));
   for (auto index : {0, 1, 2})
     vec_cfg(state, index, DType::u32, 2);
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "vcmp.unord rejects u32");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "vcmp.unord rejects u32");
 
   // Register source and mask must share the source shape.
   load_one(sim, memory, make_ecmp(NpuDomain::acc, false, 0, 0, 1, 2));
@@ -258,6 +246,5 @@ TEST_CASE(ecmp_rejects_invalid) {
   load_one(sim, memory, make_ecmp(NpuDomain::vec32, false, 0, 0, 1, 2));
   for (auto index : {0, 1, 2})
     vec_cfg(state, index, DType::u32, 0);
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "vcmp rejects an empty shape");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "vcmp rejects an empty shape");
 }

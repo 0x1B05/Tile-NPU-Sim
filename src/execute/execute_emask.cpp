@@ -37,8 +37,7 @@ constexpr std::array<std::int8_t, 5> INT_BY_FILL5 = {0, 1, -1, 2, -2};
 // and converts to the destination dtype (codes 5-8, ±0.5 and ±inf, are
 // f32-only).
 template <typename Element>
-std::optional<Element> fill_value(const MaskInstr &instr, const State &state,
-                                  DType dtype) {
+std::optional<Element> fill_value(const MaskInstr &instr, const State &state, DType dtype) {
   if (const auto *reg = std::get_if<ScalarRegister>(&instr.fill)) {
     return static_cast<Element>(state.scalar.read_x(reg->index));
   }
@@ -47,23 +46,20 @@ std::optional<Element> fill_value(const MaskInstr &instr, const State &state,
     return static_cast<Element>(F32_BY_FILL5[code]);
   }
   if (code > 4) return std::nullopt;
-  return static_cast<Element>(
-      static_cast<std::int64_t>(INT_BY_FILL5[code]));
+  return static_cast<Element>(static_cast<std::int64_t>(INT_BY_FILL5[code]));
 }
 
 // Matrix mask over the destination's effective shape: tail reads the packed
 // nRows/nCols bound, tril/triu the signed xDelta. An unsuccessful execution
 // leaves architectural state unchanged.
 template <typename Element, typename Config, std::size_t RegCount>
-ExecuteResult
-mask_matrix(const MaskInstr &instr, State &state,
-            std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
-            const std::array<Config, RegCount> &configs) {
+ExecuteResult mask_matrix(const MaskInstr &instr, State &state,
+                          std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
+                          const std::array<Config, RegCount> &configs) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   const auto &dst_config = configs[instr.dest.index];
   const auto &src_config = configs[instr.src.index];
-  if (!valid_elementwise_config(dst_config) ||
-      !valid_elementwise_config(src_config) ||
+  if (!valid_elementwise_config(dst_config) || !valid_elementwise_config(src_config) ||
       !configs_match(dst_config, src_config)) {
     return fail;
   }
@@ -78,8 +74,7 @@ mask_matrix(const MaskInstr &instr, State &state,
   auto src = matrix_view(std::as_const(regs[instr.src.index]));
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
-      const auto signed_diff =
-          static_cast<std::int64_t>(col) - static_cast<std::int64_t>(row);
+      const auto signed_diff = static_cast<std::int64_t>(col) - static_cast<std::int64_t>(row);
       bool keep = false;
       switch (instr.op) {
       case MaskOp::tail: keep = row < n_rows && col < n_cols; break;
@@ -94,15 +89,13 @@ mask_matrix(const MaskInstr &instr, State &state,
 
 // Vector mask over the effective length: only tail exists (xLen bound).
 template <typename Element, typename Config, std::size_t RegCount>
-ExecuteResult
-mask_vector(const MaskInstr &instr, State &state,
-            std::array<std::array<Element, VECTOR_LANES>, RegCount> &regs,
-            const std::array<Config, RegCount> &configs) {
+ExecuteResult mask_vector(const MaskInstr &instr, State &state,
+                          std::array<std::array<Element, VECTOR_LANES>, RegCount> &regs,
+                          const std::array<Config, RegCount> &configs) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   const auto &dst_config = configs[instr.dest.index];
   const auto &src_config = configs[instr.src.index];
-  if (!valid_elementwise_config(dst_config) ||
-      !valid_elementwise_config(src_config) ||
+  if (!valid_elementwise_config(dst_config) || !valid_elementwise_config(src_config) ||
       !configs_match(dst_config, src_config)) {
     return fail;
   }

@@ -38,9 +38,7 @@ TEST_CASE(sys_kernel_end_stops) {
   const auto result = sim.step();
   check_eq(result.status, StepStatus::kernel_end, "kernel.end stops the step");
   check_eq(hex(result.pc), hex(CODE_BASE), "kernel.end reports its own pc");
-  check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE),
-           "kernel.end does not advance the pc");
+  check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE), "kernel.end does not advance the pc");
   const auto again = sim.step();
-  check_eq(again.status, StepStatus::kernel_end,
-           "stepping again stops at the same kernel.end");
+  check_eq(again.status, StepStatus::kernel_end, "stepping again stops at the same kernel.end");
 }

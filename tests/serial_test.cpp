@@ -7,9 +7,9 @@
 #include <string>
 
 using tile_npu::FlatMemory;
-using tile_npu::SerialMemory;
 using tile_npu::SERIAL_BASE;
 using tile_npu::SERIAL_SIZE;
+using tile_npu::SerialMemory;
 
 namespace {
 

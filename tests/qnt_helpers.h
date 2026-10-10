@@ -11,12 +11,10 @@
 // funct3: 000 = quant/dequant (dom2 picks the direction), 001 = tquant with
 // external scale (Tile dst only); 010-111 reserved. index5/IS carry the
 // vector-form scale lane and are reserved (0) for the matrix forms.
-constexpr std::uint32_t make_qnt(tile_npu::NpuDomain domain,
-                                 std::uint32_t funct3, std::uint32_t dest,
-                                 std::uint32_t src, std::uint32_t scale,
-                                 std::uint32_t index = 0,
-                                 bool index_is_scalar = false) {
+constexpr std::uint32_t make_qnt(tile_npu::NpuDomain domain, std::uint32_t funct3,
+                                 std::uint32_t dest, std::uint32_t src, std::uint32_t scale,
+                                 std::uint32_t index = 0, bool index_is_scalar = false) {
   return (4u << 28) | (static_cast<std::uint32_t>(domain) << 26) |
-         (static_cast<std::uint32_t>(index_is_scalar) << 25) | (funct3 << 22) |
-         (scale << 17) | (index << 12) | (src << 7) | (dest << 2) | 2u;
+         (static_cast<std::uint32_t>(index_is_scalar) << 25) | (funct3 << 22) | (scale << 17) |
+         (index << 12) | (src << 7) | (dest << 2) | 2u;
 }

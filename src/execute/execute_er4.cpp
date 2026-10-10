@@ -25,8 +25,7 @@ template <typename E> constexpr DType mask_dtype_of() {
 // the addend C and matches D fully). An unsuccessful execution leaves
 // architectural state unchanged.
 template <typename Element, typename Config, std::size_t RegCount>
-bool operands_valid(const Er4Instr &instr,
-                    const std::array<Config, RegCount> &configs) {
+bool operands_valid(const Er4Instr &instr, const std::array<Config, RegCount> &configs) {
   const auto &dst = configs[instr.dest.index];
   const auto &arg = configs[instr.arg.index];
   const auto &lhs = configs[instr.src1.index];
@@ -44,50 +43,44 @@ bool operands_valid(const Er4Instr &instr,
 
 // One E_R4 element on raw storage bits. fmadd is f32-only by validation:
 // one fused multiply-add, one rounding.
-template <typename E>
-E apply_er4_op(Er4Op op, E arg, E lhs, E rhs) {
+template <typename E> E apply_er4_op(Er4Op op, E arg, E lhs, E rhs) {
   if (op == Er4Op::select) {
     return arg != 0 ? lhs : rhs;
   }
   if constexpr (sizeof(E) == sizeof(float)) {
-    return std::bit_cast<E>(std::fma(std::bit_cast<float>(lhs),
-                                     std::bit_cast<float>(rhs),
-                                     std::bit_cast<float>(arg)));
+    return std::bit_cast<E>(
+        std::fma(std::bit_cast<float>(lhs), std::bit_cast<float>(rhs), std::bit_cast<float>(arg)));
   }
   unreachable("fmadd on an 8-bit domain");
 }
 
 template <typename Element, typename Config, std::size_t RegCount>
-ExecuteResult
-er4_matrix(const Er4Instr &instr,
-           std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
-           const std::array<Config, RegCount> &configs) {
+ExecuteResult er4_matrix(const Er4Instr &instr,
+                         std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
+                         const std::array<Config, RegCount> &configs) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   if (!operands_valid<Element>(instr, configs)) {
     return fail;
   }
   const auto &dst_config = configs[instr.dest.index];
-  const auto view = [&](RegisterIndex index) {
-    return matrix_view(std::as_const(regs[index]));
-  };
+  const auto view = [&](RegisterIndex index) { return matrix_view(std::as_const(regs[index])); };
   auto dst = matrix_view(regs[instr.dest.index]);
   const auto arg = view(instr.arg.index);
   const auto lhs = view(instr.src1.index);
   const auto rhs = view(instr.src2.index);
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
-      dst.at(row, col) = apply_er4_op(instr.op, arg.at(row, col),
-                                      lhs.at(row, col), rhs.at(row, col));
+      dst.at(row, col) =
+          apply_er4_op(instr.op, arg.at(row, col), lhs.at(row, col), rhs.at(row, col));
     }
   }
   return {.status = StepStatus::retired};
 }
 
 template <typename Element, typename Config, std::size_t RegCount>
-ExecuteResult
-er4_vector(const Er4Instr &instr,
-           std::array<std::array<Element, VECTOR_LANES>, RegCount> &regs,
-           const std::array<Config, RegCount> &configs) {
+ExecuteResult er4_vector(const Er4Instr &instr,
+                         std::array<std::array<Element, VECTOR_LANES>, RegCount> &regs,
+                         const std::array<Config, RegCount> &configs) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   if (!operands_valid<Element>(instr, configs)) {
     return fail;
@@ -98,8 +91,7 @@ er4_vector(const Er4Instr &instr,
   const auto &lhs_reg = regs[instr.src1.index];
   const auto &rhs_reg = regs[instr.src2.index];
   for (std::size_t lane = 0; lane < dst_config.len; ++lane) {
-    dst_reg[lane] = apply_er4_op(instr.op, arg_reg[lane], lhs_reg[lane],
-                                 rhs_reg[lane]);
+    dst_reg[lane] = apply_er4_op(instr.op, arg_reg[lane], lhs_reg[lane], rhs_reg[lane]);
   }
   return {.status = StepStatus::retired};
 }

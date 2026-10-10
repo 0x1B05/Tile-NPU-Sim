@@ -56,8 +56,7 @@ std::uint32_t remainder_signed_word(std::uint32_t lhs, std::uint32_t rhs) {
 
 } // namespace
 
-ExecuteResult execute_rv64m(const DecodedScalarInstr &instr,
-                            ScalarState &scalar) {
+ExecuteResult execute_rv64m(const DecodedScalarInstr &instr, ScalarState &scalar) {
   const auto &r = instr.regs;
   const auto lhs = scalar.read_x(r.src1);
   const auto rhs = scalar.read_x(r.src2);

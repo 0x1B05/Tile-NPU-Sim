@@ -30,16 +30,10 @@ StepResult Simulator::step() {
   // decode && execute
   ExecContext ctx{state_, memory_};
   const auto execution = std::visit(
-      Overloaded{[](DecodeError) {
-                   return ExecuteResult{.status =
-                                            StepStatus::illegal_instruction};
-                 },
-                 [&ctx](const DecodedScalarInstr &decoded) {
-                   return execute_scalar(decoded, ctx);
-                 },
-                 [&ctx](const DecodedNpuInstr &decoded) {
-                   return execute_npu(decoded, ctx);
-                 }},
+      Overloaded{
+          [](DecodeError) { return ExecuteResult{.status = StepStatus::illegal_instruction}; },
+          [&ctx](const DecodedScalarInstr &decoded) { return exec_scalar_instr(decoded, ctx); },
+          [&ctx](const DecodedNpuInstr &decoded) { return exec_npu_instr(decoded, ctx); }},
       decode(instr));
   if (execution.status == StepStatus::retired) {
     state_.scalar.pc = execution.redirect.value_or(pc + 4);

@@ -31,8 +31,7 @@ template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
     const auto *npu = std::get_if<DecodedNpuInstr>(&result);
-    const std::string what =
-        std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
+    const std::string what = std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
     check(npu != nullptr, what);
     const auto *decoded = std::get_if<ReduceInstr>(npu);
     check(decoded != nullptr, what);
@@ -48,13 +47,11 @@ struct ErrorCase {
   DecodeError error;
 };
 
-template <std::size_t N>
-void check_errors(const std::array<ErrorCase, N> &cases) {
+template <std::size_t N> void check_errors(const std::array<ErrorCase, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
     const auto *error = std::get_if<DecodeError>(&result);
-    const std::string what =
-        std::string(test.name) + " (" + to_hex(test.word) + ")";
+    const std::string what = std::string(test.name) + " (" + to_hex(test.word) + ")";
     check(error != nullptr, what + " decodes");
     check_eq(*error, test.error, what + ": error kind");
   }
@@ -103,8 +100,7 @@ TEST_CASE(reduce_decode_operands) {
   // Operand roles: areduce dest is the Vec32 vD; vreduce dest is the Scalar
   // xD; vreduce.argmax adds xValue in dest2.
   const auto ar = tile_npu::decode(make_areduce(0, 2, 3));
-  const auto *ar_instr =
-      std::get_if<ReduceInstr>(std::get_if<DecodedNpuInstr>(&ar));
+  const auto *ar_instr = std::get_if<ReduceInstr>(std::get_if<DecodedNpuInstr>(&ar));
   check(ar_instr != nullptr, "areduce decodes");
   const auto *ar_dst = std::get_if<NpuRegister>(&ar_instr->dest);
   check(ar_dst != nullptr, "areduce dest is a vector register");
@@ -112,21 +108,18 @@ TEST_CASE(reduce_decode_operands) {
   check_eq(ar_dst->index, std::uint8_t{2}, "areduce dest index");
 
   const auto vr = tile_npu::decode(make_vreduce(1, 6, 7));
-  const auto *vr_instr =
-      std::get_if<ReduceInstr>(std::get_if<DecodedNpuInstr>(&vr));
+  const auto *vr_instr = std::get_if<ReduceInstr>(std::get_if<DecodedNpuInstr>(&vr));
   check(vr_instr != nullptr, "vreduce decodes");
   const auto *vr_dst = std::get_if<ScalarRegister>(&vr_instr->dest);
   check(vr_dst != nullptr, "vreduce dest is a scalar register");
   check_eq(vr_dst->index, std::uint8_t{6}, "vreduce dest index");
 
   const auto ax = tile_npu::decode(make_vreduce_argmax(10, 11, 12));
-  const auto *ax_instr =
-      std::get_if<ReduceInstr>(std::get_if<DecodedNpuInstr>(&ax));
+  const auto *ax_instr = std::get_if<ReduceInstr>(std::get_if<DecodedNpuInstr>(&ax));
   check(ax_instr != nullptr, "vreduce.argmax decodes");
   const auto *ax_index = std::get_if<ScalarRegister>(&ax_instr->dest);
   const auto *ax_value = std::get_if<ScalarRegister>(&ax_instr->dest2);
-  check(ax_index != nullptr && ax_value != nullptr,
-        "vreduce.argmax has two scalar destinations");
+  check(ax_index != nullptr && ax_value != nullptr, "vreduce.argmax has two scalar destinations");
   check_eq(ax_index->index, std::uint8_t{10}, "vreduce.argmax xIndex");
   check_eq(ax_value->index, std::uint8_t{11}, "vreduce.argmax xValue");
 }
@@ -134,21 +127,14 @@ TEST_CASE(reduce_decode_operands) {
 TEST_CASE(reduce_decode_rejects_reserved) {
   constexpr std::array cases{
       // funct3 110/111 are reserved; absmax has no VREDUCE encoding.
-      ErrorCase{"areduce funct3 110", make_areduce(6, 0, 0),
-                DecodeError::illegal},
-      ErrorCase{"areduce funct3 111", make_areduce(7, 0, 0),
-                DecodeError::illegal},
-      ErrorCase{"vreduce funct3 101", make_vreduce(5, 0, 0),
-                DecodeError::illegal},
-      ErrorCase{"vreduce funct3 111", make_vreduce(7, 0, 0),
-                DecodeError::illegal},
+      ErrorCase{"areduce funct3 110", make_areduce(6, 0, 0), DecodeError::illegal},
+      ErrorCase{"areduce funct3 111", make_areduce(7, 0, 0), DecodeError::illegal},
+      ErrorCase{"vreduce funct3 101", make_vreduce(5, 0, 0), DecodeError::illegal},
+      ErrorCase{"vreduce funct3 111", make_vreduce(7, 0, 0), DecodeError::illegal},
       // reserved3/reserved10 must be 0.
-      ErrorCase{"areduce reserved3", make_areduce(0, 0, 0) | (1u << 25),
-                DecodeError::illegal},
-      ErrorCase{"areduce reserved10", make_areduce(0, 0, 0) | (1u << 12),
-                DecodeError::illegal},
-      ErrorCase{"vreduce reserved10", make_vreduce(0, 0, 0) | (1u << 12),
-                DecodeError::illegal},
+      ErrorCase{"areduce reserved3", make_areduce(0, 0, 0) | (1u << 25), DecodeError::illegal},
+      ErrorCase{"areduce reserved10", make_areduce(0, 0, 0) | (1u << 12), DecodeError::illegal},
+      ErrorCase{"vreduce reserved10", make_vreduce(0, 0, 0) | (1u << 12), DecodeError::illegal},
       ErrorCase{"argmax reserved5", make_vreduce_argmax(0, 0, 0) | (1u << 17),
                 DecodeError::illegal},
       // Register numbers are bounded per domain.

@@ -13,6 +13,7 @@ public:
     std::fegetenv(&saved_);
     std::fesetenv(FE_DFL_ENV);
   }
+
   ~FpEnvGuard() { std::fesetenv(&saved_); }
 
   FpEnvGuard(const FpEnvGuard &) = delete;

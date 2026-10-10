@@ -20,6 +20,7 @@ public:
   explicit Simulator(Memory &memory) : memory_(memory) {}
 
   State &state() { return state_; }
+
   const State &state() const { return state_; }
 
   // Simulator initialization convention, not an ISA-defined reset sequence.

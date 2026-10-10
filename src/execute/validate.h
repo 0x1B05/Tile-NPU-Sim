@@ -19,20 +19,14 @@
 
 namespace tile_npu {
 
-inline bool in_range(NpuRegister reg) {
-  return reg.index < domain_register_count(reg.domain);
-}
+inline bool in_range(NpuRegister reg) { return reg.index < domain_register_count(reg.domain); }
 
-inline bool in_range(ScalarRegister reg) {
-  return reg.index < SCALAR_REGISTERS;
-}
+inline bool in_range(ScalarRegister reg) { return reg.index < SCALAR_REGISTERS; }
 
 // E_BIN/E_CMP src2: a same-domain register or a Scalar register.
 inline bool src2_in_range(const NpuOperand &src2, NpuDomain domain) {
   return std::visit(
-      Overloaded{[domain](NpuRegister reg) {
-                   return reg.domain == domain && in_range(reg);
-                 },
+      Overloaded{[domain](NpuRegister reg) { return reg.domain == domain && in_range(reg); },
                  [](ScalarRegister reg) { return in_range(reg); }},
       src2);
 }
@@ -40,27 +34,24 @@ inline bool src2_in_range(const NpuOperand &src2, NpuDomain domain) {
 // The register-numbered index form names a Scalar register; the immediate
 // form carries no structure to check (row/lane bounds are dynamic).
 inline bool index_in_range(const IndexOperand &index) {
-  return std::visit(
-      Overloaded{[](ImmediateIndex) { return true; },
-                 [](ScalarRegister reg) { return in_range(reg); }},
-      index);
+  return std::visit(Overloaded{[](ImmediateIndex) { return true; },
+                               [](ScalarRegister reg) { return in_range(reg); }},
+                    index);
 }
 
 // The matrix forms reserve IS/index5: the encoding carries immediate 0.
 inline bool index_is_immediate_zero(const IndexOperand &index) {
-  return std::visit(
-      Overloaded{[](ImmediateIndex imm) { return imm.value == 0; },
-                 [](ScalarRegister) { return false; }},
-      index);
+  return std::visit(Overloaded{[](ImmediateIndex imm) { return imm.value == 0; },
+                               [](ScalarRegister) { return false; }},
+                    index);
 }
 
 // The register form names a Scalar register; the fill5 form is legal for
 // codes 0-8 (codes 5-8 are f32-only, a dynamic dtype check).
 inline bool fill_in_range(const FillOperand &fill) {
-  return std::visit(
-      Overloaded{[](Fill5Code code) { return code.code <= 8; },
-                 [](ScalarRegister reg) { return in_range(reg); }},
-      fill);
+  return std::visit(Overloaded{[](Fill5Code code) { return code.code <= 8; },
+                               [](ScalarRegister reg) { return in_range(reg); }},
+                    fill);
 }
 
 template <typename Op, typename Info, std::size_t Size>
@@ -76,8 +67,8 @@ inline bool valid_structure(const EbinInstr &instr) {
   if (instr.dest.domain == NpuDomain::tile && !info.tile_allowed) {
     return false;
   }
-  return instr.src1.domain == instr.dest.domain && in_range(instr.dest) &&
-         in_range(instr.src1) && src2_in_range(instr.src2, instr.dest.domain);
+  return instr.src1.domain == instr.dest.domain && in_range(instr.dest) && in_range(instr.src1) &&
+         src2_in_range(instr.src2, instr.dest.domain);
 }
 
 inline bool valid_structure(const EunInstr &instr) {
@@ -87,33 +78,30 @@ inline bool valid_structure(const EunInstr &instr) {
   if (instr.dest.domain == NpuDomain::tile && instr.op != EunOp::bit_not) {
     return false;
   }
-  return instr.src.domain == instr.dest.domain && in_range(instr.dest) &&
-         in_range(instr.src);
+  return instr.src.domain == instr.dest.domain && in_range(instr.dest) && in_range(instr.src);
 }
 
 inline bool valid_structure(const CmpInstr &instr) {
   if (!assigned_op(instr.op, CMP_BY_FUNCT3)) return false;
-  if (instr.dest.domain != NpuDomain::acc &&
-      instr.dest.domain != NpuDomain::vec32) {
+  if (instr.dest.domain != NpuDomain::acc && instr.dest.domain != NpuDomain::vec32) {
     return false;
   }
-  return instr.src1.domain == instr.dest.domain && in_range(instr.dest) &&
-         in_range(instr.src1) && src2_in_range(instr.src2, instr.dest.domain);
+  return instr.src1.domain == instr.dest.domain && in_range(instr.dest) && in_range(instr.src1) &&
+         src2_in_range(instr.src2, instr.dest.domain);
 }
 
 inline bool valid_structure(const BcastInstr &instr) {
   if (!assigned_op(instr.op, EBIN_BY_FUNCT4)) return false;
-  const bool paired = (instr.dest.domain == NpuDomain::tile &&
-                       instr.vector.domain == NpuDomain::vec8) ||
-                      (instr.dest.domain == NpuDomain::acc &&
-                       instr.vector.domain == NpuDomain::vec32);
+  const bool paired =
+      (instr.dest.domain == NpuDomain::tile && instr.vector.domain == NpuDomain::vec8) ||
+      (instr.dest.domain == NpuDomain::acc && instr.vector.domain == NpuDomain::vec32);
   if (!paired) return false;
   if (instr.dest.domain == NpuDomain::tile &&
       !EBIN_BY_FUNCT4[static_cast<std::uint8_t>(instr.op)]->tile_allowed) {
     return false;
   }
-  return instr.src1.domain == instr.dest.domain && in_range(instr.dest) &&
-         in_range(instr.src1) && in_range(instr.vector);
+  return instr.src1.domain == instr.dest.domain && in_range(instr.dest) && in_range(instr.src1) &&
+         in_range(instr.vector);
 }
 
 inline bool valid_structure(const Er4Instr &instr) {
@@ -123,29 +111,24 @@ inline bool valid_structure(const Er4Instr &instr) {
   if (instr.op == Er4Op::fmadd && instr.dest.domain == NpuDomain::tile) {
     return false;
   }
-  return instr.arg.domain == instr.dest.domain &&
-         instr.src1.domain == instr.dest.domain &&
-         instr.src2.domain == instr.dest.domain && in_range(instr.dest) &&
-         in_range(instr.arg) && in_range(instr.src1) && in_range(instr.src2);
+  return instr.arg.domain == instr.dest.domain && instr.src1.domain == instr.dest.domain &&
+         instr.src2.domain == instr.dest.domain && in_range(instr.dest) && in_range(instr.arg) &&
+         in_range(instr.src1) && in_range(instr.src2);
 }
 
 inline bool valid_structure(const MaskInstr &instr) {
   if (instr.op > MaskOp::triu) return false;
-  const bool vector = instr.dest.domain == NpuDomain::vec8 ||
-                      instr.dest.domain == NpuDomain::vec32;
+  const bool vector = instr.dest.domain == NpuDomain::vec8 || instr.dest.domain == NpuDomain::vec32;
   if (vector && instr.op != MaskOp::tail) return false;
   return fill_in_range(instr.fill) && in_range(ScalarRegister{instr.bound}) &&
-         instr.src.domain == instr.dest.domain && in_range(instr.dest) &&
-         in_range(instr.src);
+         instr.src.domain == instr.dest.domain && in_range(instr.dest) && in_range(instr.src);
 }
 
 inline bool valid_structure(const MblkInstr &instr) {
   if (instr.op > MblkOp::row_store) return false;
   const auto &reg = accessed_reg(instr);
-  const bool row_form =
-      instr.op == MblkOp::row_load || instr.op == MblkOp::row_store;
-  if (row_form && reg.domain != NpuDomain::tile &&
-      reg.domain != NpuDomain::acc) {
+  const bool row_form = instr.op == MblkOp::row_load || instr.op == MblkOp::row_store;
+  if (row_form && reg.domain != NpuDomain::tile && reg.domain != NpuDomain::acc) {
     return false;
   }
   if (instr.op == MblkOp::gather) {
@@ -162,29 +145,24 @@ inline bool valid_structure(const InitInstr &instr) {
   case InitOp::fill: return true;
   case InitOp::fillx: return in_range(ScalarRegister{instr.src});
   case InitOp::copy: return instr.src < domain_register_count(instr.reg.domain);
-  case InitOp::transpose:
-    return instr.reg.domain == NpuDomain::tile && instr.src < TILE_REGISTERS;
+  case InitOp::transpose: return instr.reg.domain == NpuDomain::tile && instr.src < TILE_REGISTERS;
   }
   return false;
 }
 
 inline bool valid_structure(const RowInstr &instr) {
   if (instr.op > RowOp::extract) return false;
-  const bool paired = (instr.matrix.domain == NpuDomain::tile &&
-                       instr.vector.domain == NpuDomain::vec8) ||
-                      (instr.matrix.domain == NpuDomain::acc &&
-                       instr.vector.domain == NpuDomain::vec32);
-  return paired && in_range(instr.matrix) && in_range(instr.vector) &&
-         index_in_range(instr.index);
+  const bool paired =
+      (instr.matrix.domain == NpuDomain::tile && instr.vector.domain == NpuDomain::vec8) ||
+      (instr.matrix.domain == NpuDomain::acc && instr.vector.domain == NpuDomain::vec32);
+  return paired && in_range(instr.matrix) && in_range(instr.vector) && index_in_range(instr.index);
 }
 
 inline bool valid_structure(const LaneInstr &instr) {
   if (instr.op > LaneOp::broadcast) return false;
   const auto vector_operand = [](const NpuOperand &operand) {
     const auto *reg = std::get_if<NpuRegister>(&operand);
-    return reg != nullptr &&
-           (reg->domain == NpuDomain::vec8 ||
-            reg->domain == NpuDomain::vec32) &&
+    return reg != nullptr && (reg->domain == NpuDomain::vec8 || reg->domain == NpuDomain::vec32) &&
            in_range(*reg);
   };
   switch (instr.op) {
@@ -199,26 +177,22 @@ inline bool valid_structure(const LaneInstr &instr) {
   case LaneOp::broadcast: {
     const auto *dst = std::get_if<NpuRegister>(&instr.dst);
     const auto *src = std::get_if<NpuRegister>(&instr.src);
-    return vector_operand(instr.dst) && vector_operand(instr.src) &&
-           dst->domain == src->domain;
+    return vector_operand(instr.dst) && vector_operand(instr.src) && dst->domain == src->domain;
   }
   }
   return false;
 }
 
 inline bool valid_structure(const CfgInstr &instr) {
-  if (instr.op > CfgOp::get || instr.reg_type > ConfigRegType::vm ||
-      instr.field > 6) {
+  if (instr.op > CfgOp::get || instr.reg_type > ConfigRegType::vm || instr.field > 6) {
     return false;
   }
   const auto count = config_register_count(instr.reg_type);
   switch (instr.op) {
   case CfgOp::seti: return instr.dest < count;
-  case CfgOp::setx:
-    return instr.dest < count && in_range(ScalarRegister{instr.src});
+  case CfgOp::setx: return instr.dest < count && in_range(ScalarRegister{instr.src});
   case CfgOp::copy: return instr.dest < count && instr.src < count;
-  case CfgOp::get:
-    return in_range(ScalarRegister{instr.dest}) && instr.src < count;
+  case CfgOp::get: return in_range(ScalarRegister{instr.dest}) && instr.src < count;
   }
   return false;
 }
@@ -229,40 +203,37 @@ inline bool valid_structure(const CvtInstr &instr) {
     return instr.dest.domain == NpuDomain::acc && in_range(instr.dest) &&
            instr.src.domain == NpuDomain::tile && in_range(instr.src);
   }
-  const bool cvt_domain = instr.dest.domain == NpuDomain::acc ||
-                          instr.dest.domain == NpuDomain::vec32;
-  return cvt_domain && instr.src.domain == instr.dest.domain &&
-         in_range(instr.dest) && in_range(instr.src);
+  const bool cvt_domain =
+      instr.dest.domain == NpuDomain::acc || instr.dest.domain == NpuDomain::vec32;
+  return cvt_domain && instr.src.domain == instr.dest.domain && in_range(instr.dest) &&
+         in_range(instr.src);
 }
 
 inline bool valid_structure(const ReduceInstr &instr) {
   if (instr.op > ReduceOp::absmax) return false;
-  return std::visit(
-      Overloaded{
-          // areduce.rows.*: Vec32 destination, Acc source.
-          [&](NpuRegister dst) {
-            return dst.domain == NpuDomain::vec32 && in_range(dst) &&
-                   instr.src.domain == NpuDomain::acc && in_range(instr.src);
-          },
-          // vreduce.*: Scalar destination, Vec32 source; absmax is
-          // AREDUCE-only.
-          [&](ScalarRegister x_dst) {
-            if (instr.op == ReduceOp::absmax || !in_range(x_dst) ||
-                instr.src.domain != NpuDomain::vec32 || !in_range(instr.src)) {
-              return false;
-            }
-            if (instr.op == ReduceOp::argmax) {
-              const auto *x_value = std::get_if<ScalarRegister>(&instr.dest2);
-              return x_value != nullptr && in_range(*x_value);
-            }
-            return true;
-          }},
-      instr.dest);
+  return std::visit(Overloaded{// areduce.rows.*: Vec32 destination, Acc source.
+                               [&](NpuRegister dst) {
+                                 return dst.domain == NpuDomain::vec32 && in_range(dst) &&
+                                        instr.src.domain == NpuDomain::acc && in_range(instr.src);
+                               },
+                               // vreduce.*: Scalar destination, Vec32 source; absmax is
+                               // AREDUCE-only.
+                               [&](ScalarRegister x_dst) {
+                                 if (instr.op == ReduceOp::absmax || !in_range(x_dst) ||
+                                     instr.src.domain != NpuDomain::vec32 || !in_range(instr.src)) {
+                                   return false;
+                                 }
+                                 if (instr.op == ReduceOp::argmax) {
+                                   const auto *x_value = std::get_if<ScalarRegister>(&instr.dest2);
+                                   return x_value != nullptr && in_range(*x_value);
+                                 }
+                                 return true;
+                               }},
+                    instr.dest);
 }
 
 inline bool valid_structure(const QntInstr &instr) {
-  if (instr.op > QntOp::quant_ext_scale ||
-      instr.scale >= VECTOR_REGISTERS) {
+  if (instr.op > QntOp::quant_ext_scale || instr.scale >= VECTOR_REGISTERS) {
     return false;
   }
   if (!qnt_dest_legal(instr.op, instr.dest.domain) ||
@@ -270,8 +241,8 @@ inline bool valid_structure(const QntInstr &instr) {
     return false;
   }
   // The matrix forms reserve IS/index5: the encoding carries immediate 0.
-  const bool vector_form = instr.dest.domain == NpuDomain::vec8 ||
-                           instr.dest.domain == NpuDomain::vec32;
+  const bool vector_form =
+      instr.dest.domain == NpuDomain::vec8 || instr.dest.domain == NpuDomain::vec32;
   const auto &index = instr.index;
   return in_range(instr.dest) && in_range(instr.src) &&
          (vector_form ? index_in_range(index) : index_is_immediate_zero(index));
@@ -285,8 +256,6 @@ inline bool valid_structure(const MmaInstr &instr) {
          instr.src_b.domain == NpuDomain::tile && in_range(instr.src_b);
 }
 
-inline bool valid_structure(const SysInstr &instr) {
-  return instr.op <= SysOp::kernel_end;
-}
+inline bool valid_structure(const SysInstr &instr) { return instr.op <= SysOp::kernel_end; }
 
 } // namespace tile_npu

@@ -3,8 +3,7 @@
 // Q3B1 blob directory access. Sections are looked up by name at startup;
 // the pointers stay valid for the whole run.
 
-static const struct q3b_header *const blob =
-    (const struct q3b_header *)BLOB_BASE;
+static const struct q3b_header *const blob = (const struct q3b_header *)BLOB_BASE;
 
 static const struct q3b_section *sections =
     (const struct q3b_section *)(BLOB_BASE + sizeof(struct q3b_header));
