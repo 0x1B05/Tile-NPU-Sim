@@ -84,7 +84,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `xmake/guest.lua`, `xmake/riscv_tests.lua`, `xmake/apps.lua` | 按关注点拆出的构建脚本 (guest 镜像 / 官方套件 / Qwen3 应用与 tiny 回归), 由根 `xmake.lua` includes; 共享汇编逻辑在 `xmake/modules/guestimg.lua`; 增量重建用 `depend.on_changed` 的 `lastmtime` 锚定产物 mtime (产物缺失即重建) |
 | `src/monitor/monitor.h`, `src/monitor/monitor.cpp` | monitor 平台胶水与运行层: 镜像装载 (`image@0xADDR`), 统一步进循环 `npu_exec` (步数预算, 返回停机的 `StepResult`, 预算耗尽返回 `std::nullopt`), 运行/交互分派与停机解释; ebreak/kernel.end 停机时 a0 作退出码, 属模拟器约定; 入口 main 在 `src/main.cpp` |
 | `src/monitor/parse.h` | 命令行参数与 sdb 命令共享的数值解析 `parse_u64` (base 0, 全串消费) |
-| `src/monitor/sdb.cpp` | sdb 交互 shell: `si`/`c`/`info r`/`x`/`q`, 空行重复上一条命令 |
+| `src/monitor/sdb.cpp` | sdb 交互 shell: 命令表驱动 (`SDB_COMMANDS`, NEMU `cmd_table` 风格, help 与分派同表防漂移), handler 返回 false 退出循环; 空行重复上一条命令 |
 
 ## 建模约定 (修改前必读)
 

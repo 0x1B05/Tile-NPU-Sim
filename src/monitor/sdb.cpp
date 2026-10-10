@@ -4,11 +4,13 @@
 #include "parse.h"
 #include "utils/endian.h"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <iomanip>
 #include <iostream>
+#include <iterator>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -40,68 +42,67 @@ std::pair<std::string_view, std::string_view> split_command(std::string_view lin
           first == std::string_view::npos ? std::string_view{} : rest.substr(first)};
 }
 
-void cmd_help() {
-  // clang-format off
-  std::cout <<
-      "  c           continue until the program stops\n"
-      "  si [N]      step N instructions (default 1)\n"
-      "  info r      print pc and scalar registers\n"
-      "  x N ADDR    examine N words (4 bytes each) at ADDR\n"
-      "  q           quit\n"
-      "  help        show this message\n"
-      "An empty line repeats the previous command.\n";
-  // clang-format on
-}
+// One row per sdb command, in the spirit of NEMU's cmd_table: the dispatch
+// loop and the help listing read the same table, so they cannot drift apart.
+struct SdbCommand {
+  std::string_view name;
+  std::string_view summary;
+  // Returning false exits the sdb loop.
+  bool (*run)(Simulator &sim, Memory &memory, std::string_view args);
+};
 
-void cmd_continue(Simulator &sim) {
+bool cmd_continue(Simulator &sim, Memory &, std::string_view) {
   const auto stop = npu_exec(sim, UNLIMITED_STEPS);
-  if (!stop) return; // the unlimited budget cannot run out in practice
+  if (!stop) return true; // the unlimited budget cannot run out in practice
   std::cout << stop_message(*stop) << '\n';
   if (stop->status == StepStatus::breakpoint) {
     std::cout << "a0 = " << sim.state().scalar.read_x(10) << '\n';
   }
+  return true;
 }
 
-void cmd_si(Simulator &sim, std::string_view arg) {
+bool cmd_si(Simulator &sim, Memory &, std::string_view arg) {
   std::uint64_t count = 1;
   if (!arg.empty()) {
     if (!parse_u64(arg, count) || count == 0) {
       std::cout << "usage: si [N]\n";
-      return;
+      return true;
     }
   }
   const auto stop = npu_exec(sim, count);
   if (stop) {
     std::cout << stop_message(*stop) << '\n';
   }
+  return true;
 }
 
-void cmd_info(Simulator &sim, std::string_view arg) {
+bool cmd_info(Simulator &sim, Memory &, std::string_view arg) {
   if (arg != "r") {
     std::cout << "usage: info r\n";
-    return;
+    return true;
   }
   const auto &scalar = sim.state().scalar;
   std::cout << "pc: " << hex64(scalar.pc) << '\n';
   for (std::uint8_t i = 0; i < 32; ++i) {
     std::cout << GPR_NAMES[i] << ": " << hex64(scalar.read_x(i)) << '\n';
   }
+  return true;
 }
 
-void cmd_examine(Memory &memory, std::string_view arg) {
+bool cmd_examine(Simulator &, Memory &memory, std::string_view arg) {
   const auto [count_text, address_text] = split_command(arg);
   std::uint64_t count = 0;
   std::uint64_t address = 0;
   if (!parse_u64(count_text, count) || !parse_u64(address_text, address) || count == 0) {
     std::cout << "usage: x N ADDR\n";
-    return;
+    return true;
   }
   for (std::uint64_t i = 0; i < count; ++i) {
     const auto current = address + i * 4;
     std::array<std::byte, 4> bytes{};
     if (!memory.read(current, bytes)) {
       std::cout << "cannot read memory at " << hex64(current) << '\n';
-      return;
+      return true;
     }
     const auto word = load_le<std::uint32_t>(bytes);
     if (i % 4 == 0) {
@@ -113,6 +114,30 @@ void cmd_examine(Memory &memory, std::string_view arg) {
     std::cout << formatted.str();
   }
   std::cout << '\n';
+  return true;
+}
+
+bool cmd_quit(Simulator &, Memory &, std::string_view) { return false; }
+
+bool cmd_help(Simulator &, Memory &, std::string_view);
+
+// clang-format off
+constexpr SdbCommand SDB_COMMANDS[] = {
+    {"c",    "continue until the program stops",                 cmd_continue},
+    {"si",   "step N instructions (default 1): si [N]",          cmd_si},
+    {"info", "print pc and scalar registers: info r",            cmd_info},
+    {"x",    "examine N words (4 bytes each) at ADDR: x N ADDR", cmd_examine},
+    {"q",    "quit",                                             cmd_quit},
+    {"help", "show this message",                                cmd_help},
+};
+// clang-format on
+
+bool cmd_help(Simulator &, Memory &, std::string_view) {
+  for (const auto &cmd : SDB_COMMANDS) {
+    std::cout << "  " << std::left << std::setw(6) << cmd.name << cmd.summary << '\n';
+  }
+  std::cout << "An empty line repeats the previous command.\n";
+  return true;
 }
 
 } // namespace
@@ -169,21 +194,12 @@ void sdb_loop(Simulator &sim, Memory &memory) {
       last = line;
     }
     const auto [command, args] = split_command(line);
-    if (command == "q") {
-      return;
-    } else if (command == "help") {
-      cmd_help();
-    } else if (command == "c") {
-      cmd_continue(sim);
-    } else if (command == "si") {
-      cmd_si(sim, args);
-    } else if (command == "info") {
-      cmd_info(sim, args);
-    } else if (command == "x") {
-      cmd_examine(memory, args);
-    } else {
+    const auto found = std::ranges::find(SDB_COMMANDS, command, &SdbCommand::name);
+    if (found == std::end(SDB_COMMANDS)) {
       std::cout << "unknown command '" << command << "', type 'help'\n";
+      continue;
     }
+    if (!found->run(sim, memory, args)) return;
   }
 }
 
