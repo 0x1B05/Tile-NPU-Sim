@@ -17,10 +17,10 @@ int main(int argc, char **argv) {
   app.add_option("-m,--memory"   , options.memory_mib , "RAM size in MiB")->check(CLI::PositiveNumber);
   app.add_option("-s,--steps"    , steps              , "Retired-instruction limit (-1: unlimited)");
   app.add_option("images"        , image_args         , "Program and data images (path[@0xADDR])") ->required();
-  // clang-format o
+  // clang-format on
   CLI11_PARSE(app, argc, argv);
 
-  options.step_limit = static_cast<std::uint64_t>(steps); // -1: unlimited
+  options.step_limit = static_cast<std::uint64_t>(steps);
   for (const auto &arg : image_args) {
     tile_npu::monitor::Image image{};
     if (!tile_npu::monitor::parse_image(arg, image)) {

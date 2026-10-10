@@ -10,9 +10,9 @@
 
 namespace {
 using tile_npu::DType;
-using tile_npu::FlatMemory;
 using tile_npu::MblkOp;
 using tile_npu::NpuDomain;
+using tile_npu::Ram;
 using tile_npu::Simulator;
 using tile_npu::StepStatus;
 
@@ -32,12 +32,12 @@ struct MblkRun {
     sim.reset(CODE_BASE);
   }
 
-  FlatMemory memory{CODE_BASE, MEM_SIZE};
+  Ram memory{CODE_BASE, MEM_SIZE};
   Simulator sim;
 };
 
 template <std::size_t N>
-void poke(FlatMemory &memory, std::uint64_t address, const std::uint8_t (&bytes)[N]) {
+void poke(Ram &memory, std::uint64_t address, const std::uint8_t (&bytes)[N]) {
   std::array<std::byte, N> raw{};
   for (std::size_t i = 0; i < N; ++i) {
     raw[i] = static_cast<std::byte>(bytes[i]);
@@ -46,7 +46,7 @@ void poke(FlatMemory &memory, std::uint64_t address, const std::uint8_t (&bytes)
 }
 
 template <std::size_t N>
-std::array<std::uint8_t, N> peek(const FlatMemory &memory, std::uint64_t address) {
+std::array<std::uint8_t, N> peek(const Ram &memory, std::uint64_t address) {
   std::array<std::byte, N> raw{};
   check(memory.read(address, raw), "peek memory");
   std::array<std::uint8_t, N> out{};

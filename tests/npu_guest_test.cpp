@@ -15,7 +15,7 @@
 namespace {
 constexpr std::uint64_t IMAGE_BASE = 0x80000000;
 
-void load_image(tile_npu::FlatMemory &memory, std::string_view name) {
+void load_image(tile_npu::Ram &memory, std::string_view name) {
   const std::string path = std::string(GUEST_IMAGE_DIR) + "/" + std::string(name) + ".bin";
   std::ifstream in(path, std::ios::binary);
   check(in.good(), "open guest image " + path);
@@ -53,7 +53,7 @@ std::string_view status_name(tile_npu::StepStatus status) {
 // Steps until the guest stops on its own (any non-retired status), so a
 // guest fault surfaces immediately. A hung guest fails with the budget,
 // the current PC and the instruction word at PC.
-tile_npu::StepResult run_until_stop(tile_npu::Simulator &sim, tile_npu::FlatMemory &memory,
+tile_npu::StepResult run_until_stop(tile_npu::Simulator &sim, tile_npu::Ram &memory,
                                     int max_steps = 512) {
   tile_npu::StepResult result{};
   for (int steps = 0; steps < max_steps; ++steps) {
@@ -78,7 +78,7 @@ tile_npu::StepResult run_until_stop(tile_npu::Simulator &sim, tile_npu::FlatMemo
 // a0 == 0.
 void check_guest_image(std::string_view name, std::uint64_t memory_size,
                        tile_npu::StepStatus stop = tile_npu::StepStatus::breakpoint) {
-  tile_npu::FlatMemory memory{IMAGE_BASE, memory_size};
+  tile_npu::Ram memory{IMAGE_BASE, memory_size};
   tile_npu::Simulator sim(memory);
   load_image(memory, name);
   sim.reset(IMAGE_BASE);
@@ -107,7 +107,7 @@ struct TaddRun {
     sim.reset(IMAGE_BASE);
   }
 
-  tile_npu::FlatMemory memory{IMAGE_BASE, 16};
+  tile_npu::Ram memory{IMAGE_BASE, 16};
   tile_npu::Simulator sim;
 };
 
@@ -195,7 +195,7 @@ TEST_CASE(npu_guest_ebin) {
   // tests/guest/npu/ebin.S self-configures tc0..tc4 (2x2 i8) via cfg.seti and
   // runs tsub t0, t1, t2 / tmax t3, t1, t2 / taddx t4, t1, x2 (x2 = 5) over
   // the host-poked data below.
-  tile_npu::FlatMemory memory{IMAGE_BASE, 128};
+  tile_npu::Ram memory{IMAGE_BASE, 128};
   tile_npu::Simulator sim(memory);
   load_image(memory, "ebin");
   sim.reset(IMAGE_BASE);

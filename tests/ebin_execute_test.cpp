@@ -13,15 +13,15 @@ namespace {
 using tile_npu::ArithMode;
 using tile_npu::DType;
 using tile_npu::EbinOp;
-using tile_npu::FlatMemory;
 using tile_npu::NpuDomain;
+using tile_npu::Ram;
 using tile_npu::Simulator;
 using tile_npu::StepStatus;
 
 } // namespace
 
 TEST_CASE(ebin_tile_sub_wrap) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, make_ebin(EbinOp::sub, NpuDomain::tile, false, 0, 1,
                                   2)); // tsub t0, t1, t2
@@ -39,7 +39,7 @@ TEST_CASE(ebin_tile_sub_wrap) {
 }
 
 TEST_CASE(ebin_tile_sub_sat) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, make_ebin(EbinOp::sub, NpuDomain::tile, false, 0, 1,
                                   2)); // tsub t0, t1, t2
@@ -58,7 +58,7 @@ TEST_CASE(ebin_tile_sub_sat) {
 }
 
 TEST_CASE(ebin_tile_min_max_signedness) {
-  FlatMemory memory(CODE_BASE, 8);
+  Ram memory(CODE_BASE, 8);
   Simulator sim(memory);
   write_word(memory, CODE_BASE,
              make_ebin(EbinOp::min, NpuDomain::tile, false, 0, 1,
@@ -83,7 +83,7 @@ TEST_CASE(ebin_tile_min_max_signedness) {
 }
 
 TEST_CASE(ebin_tile_bitwise_and_shift_forms) {
-  FlatMemory memory(CODE_BASE, 32);
+  Ram memory(CODE_BASE, 32);
   Simulator sim(memory);
   // and/or/xor/shr in both the register (BX=0) and scalar (BX=1) forms.
   write_word(memory, CODE_BASE + 0, make_ebin(EbinOp::bit_and, NpuDomain::tile, false, 0, 1, 2));
@@ -117,7 +117,7 @@ TEST_CASE(ebin_tile_bitwise_and_shift_forms) {
 }
 
 TEST_CASE(ebin_tile_sra_and_shl) {
-  FlatMemory memory(CODE_BASE, 8);
+  Ram memory(CODE_BASE, 8);
   Simulator sim(memory);
   write_word(memory, CODE_BASE,
              make_ebin(EbinOp::sra, NpuDomain::tile, false, 0, 1,
@@ -142,7 +142,7 @@ TEST_CASE(ebin_tile_sra_and_shl) {
 }
 
 TEST_CASE(ebin_tile_scalar_source) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, make_ebin(EbinOp::add, NpuDomain::tile, true, 0, 1,
                                   2)); // taddx t0, t1, x2
@@ -157,7 +157,7 @@ TEST_CASE(ebin_tile_scalar_source) {
 }
 
 TEST_CASE(ebin_acc_mul_wrap32) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, make_ebin(EbinOp::mul, NpuDomain::acc, false, 0, 1,
                                   2)); // amul a0, a1, a2
@@ -175,7 +175,7 @@ TEST_CASE(ebin_acc_mul_wrap32) {
 }
 
 TEST_CASE(ebin_acc_min_max_i32_u32) {
-  FlatMemory memory(CODE_BASE, 16);
+  Ram memory(CODE_BASE, 16);
   Simulator sim(memory);
   write_word(memory, CODE_BASE + 0, make_ebin(EbinOp::min, NpuDomain::acc, false, 0, 1, 2));
   write_word(memory, CODE_BASE + 4, make_ebin(EbinOp::max, NpuDomain::acc, false, 3, 4, 5));
@@ -202,7 +202,7 @@ TEST_CASE(ebin_acc_min_max_i32_u32) {
 }
 
 TEST_CASE(ebin_acc_sra_i32) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, make_ebin(EbinOp::sra, NpuDomain::acc, false, 0, 1,
                                   2)); // asra a0, a1, a2
@@ -217,7 +217,7 @@ TEST_CASE(ebin_acc_sra_i32) {
 }
 
 TEST_CASE(ebin_vec_sra_top_bit_fill) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory,
            make_ebin(EbinOp::sra, NpuDomain::vec32, false, 0, 1,
@@ -234,7 +234,7 @@ TEST_CASE(ebin_vec_sra_top_bit_fill) {
 }
 
 TEST_CASE(ebin_acc_scalar_source) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, make_ebin(EbinOp::sub, NpuDomain::acc, true, 0, 1,
                                   3)); // asubx a0, a1, x3
@@ -251,7 +251,7 @@ TEST_CASE(ebin_acc_scalar_source) {
 }
 
 TEST_CASE(ebin_vec32_len_and_scalar_source) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory,
            make_ebin(EbinOp::add, NpuDomain::vec32, true, 0, 1,
@@ -269,7 +269,7 @@ TEST_CASE(ebin_vec32_len_and_scalar_source) {
 }
 
 TEST_CASE(ebin_f32_arithmetic) {
-  FlatMemory memory(CODE_BASE, 12);
+  Ram memory(CODE_BASE, 12);
   Simulator sim(memory);
   write_word(memory, CODE_BASE,
              make_ebin(EbinOp::add, NpuDomain::vec32, false, 0, 1,
@@ -301,7 +301,7 @@ TEST_CASE(ebin_f32_arithmetic) {
 }
 
 TEST_CASE(ebin_f32_scalar_source) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // The scalar form reinterprets the low 32 bits of xS as f32 bits; the
   // register file stores raw bits, so this is the case that pins the
@@ -321,7 +321,7 @@ TEST_CASE(ebin_f32_scalar_source) {
 }
 
 TEST_CASE(ebin_f32_rejects_integer_only_ops) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory,
            make_ebin(EbinOp::bit_and, NpuDomain::vec32, false, 0, 1,
@@ -336,7 +336,7 @@ TEST_CASE(ebin_f32_rejects_integer_only_ops) {
 }
 
 TEST_CASE(ebin_i32_rejects_div) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, make_ebin(EbinOp::div, NpuDomain::acc, false, 0, 1,
                                   2)); // adiv a0, a1, a2
@@ -368,7 +368,7 @@ TEST_CASE(ebin_rejects_mismatched_configs) {
            [](tile_npu::State &state) { state.tc[0].arith_mode = static_cast<ArithMode>(2); }},
   };
   for (const auto &test : cases) {
-    FlatMemory memory(CODE_BASE, 4);
+    Ram memory(CODE_BASE, 4);
     Simulator sim(memory);
     load_one(sim, memory,
              make_ebin(EbinOp::add, NpuDomain::tile, false, 0, 1,
@@ -389,7 +389,7 @@ TEST_CASE(ebin_rejects_mismatched_configs) {
 TEST_CASE(ebin_rejects_empty_shape) {
   // A zero dimension matches across operands, so only the 1..extent bound
   // rejects it; the loops would otherwise run zero iterations and retire.
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, make_ebin(EbinOp::add, NpuDomain::tile, false, 0, 1,
                                   2)); // tadd t0, t1, t2
@@ -399,7 +399,7 @@ TEST_CASE(ebin_rejects_empty_shape) {
   }
   check_eq(sim.step().status, StepStatus::invalid_configuration, "zero effective shape rejects");
 
-  FlatMemory vec_memory(CODE_BASE, 4);
+  Ram vec_memory(CODE_BASE, 4);
   Simulator vec_sim(vec_memory);
   load_one(vec_sim, vec_memory,
            make_ebin(EbinOp::add, NpuDomain::vec32, false, 0, 1,
@@ -439,7 +439,7 @@ TEST_CASE(ebin_legality_matrix) {
                              op == EbinOp::div || op == EbinOp::min || op == EbinOp::max;
       const bool legal = dtype == DType::f32 ? f32_legal : op != EbinOp::div;
       for (const bool scalar_src2 : {false, true}) {
-        FlatMemory memory(CODE_BASE, 4);
+        Ram memory(CODE_BASE, 4);
         Simulator sim(memory);
         load_one(sim, memory, make_ebin(op, domain, scalar_src2, 0, 1, 2));
         auto &state = sim.state();

@@ -10,8 +10,8 @@
 
 namespace {
 using tile_npu::DType;
-using tile_npu::FlatMemory;
 using tile_npu::NpuDomain;
+using tile_npu::Ram;
 using tile_npu::Simulator;
 using tile_npu::StepStatus;
 
@@ -21,7 +21,7 @@ constexpr std::uint32_t MASK_FALSE = 0u;
 } // namespace
 
 TEST_CASE(ecmp_acc_i32_lt) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, make_ecmp(NpuDomain::acc, false, 2, 0, 1, 2)); // acmp.lt a0, a1, a2
   auto &state = sim.state();
@@ -47,7 +47,7 @@ TEST_CASE(ecmp_acc_i32_lt) {
 }
 
 TEST_CASE(ecmp_acc_u32_lt_is_unsigned) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, make_ecmp(NpuDomain::acc, false, 2, 0, 1, 2)); // acmp.lt a0, a1, a2
   auto &state = sim.state();
@@ -66,7 +66,7 @@ TEST_CASE(ecmp_acc_u32_lt_is_unsigned) {
 }
 
 TEST_CASE(ecmp_acc_eq_ne_ge_i32) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   auto &state = sim.state();
 
@@ -105,7 +105,7 @@ TEST_CASE(ecmp_acc_eq_ne_ge_i32) {
 }
 
 TEST_CASE(ecmp_vec_f32) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   auto &state = sim.state();
   const auto set_operands = [&] {
@@ -157,7 +157,7 @@ TEST_CASE(ecmp_vec_f32) {
 }
 
 TEST_CASE(ecmp_scalar_form) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, make_ecmp(NpuDomain::acc, true, 0, 0, 1, 5)); // acmpx.eq a0, a1, x5
   auto &state = sim.state();
@@ -174,7 +174,7 @@ TEST_CASE(ecmp_scalar_form) {
 }
 
 TEST_CASE(ecmp_mask_aliases_source) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, make_ecmp(NpuDomain::acc, false, 0, 1, 1, 2)); // acmp.eq a1, a1, a2
   auto &state = sim.state();
@@ -192,7 +192,7 @@ TEST_CASE(ecmp_mask_aliases_source) {
 }
 
 TEST_CASE(ecmp_rejects_invalid) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   auto &state = sim.state();
 

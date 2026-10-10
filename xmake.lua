@@ -34,7 +34,7 @@ option_end()
 
 target("tile_npu_sim")
     set_kind("static")
-    add_files("src/*.cpp|main.cpp", "src/decode/*.cpp", "src/execute/*.cpp")
+    add_files("src/*.cpp|main.cpp", "src/decode/*.cpp", "src/execute/*.cpp", "src/platform/*.cpp")
     add_includedirs("include", {public = true})
     add_includedirs("src")
 target_end()

@@ -87,7 +87,7 @@ TEST_CASE(state) {
 }
 
 TEST_CASE(memory_and_step) {
-  tile_npu::FlatMemory memory(0x1000, 8);
+  tile_npu::Ram memory(0x1000, 8);
   const std::array<std::byte, 4> code{std::byte{0x13}, std::byte{0x00}, std::byte{0x00},
                                       std::byte{0x00}};
   const std::array<std::byte, 4> npu_code{std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
@@ -125,7 +125,7 @@ TEST_CASE(memory_and_step) {
 }
 
 TEST_CASE(add_execution) {
-  tile_npu::FlatMemory memory(0x2000, 8);
+  tile_npu::Ram memory(0x2000, 8);
   write_word(memory, 0x2000, 0x002081b3u); // add x3, x1, x2
   write_word(memory, 0x2004, 0x00208033u); // add x0, x1, x2
 
@@ -143,7 +143,7 @@ TEST_CASE(add_execution) {
 }
 
 TEST_CASE(empty_tadd) {
-  tile_npu::FlatMemory memory(0x3800, 4);
+  tile_npu::Ram memory(0x3800, 4);
   write_word(memory, 0x3800, 0); // tadd t0, t0, t0; zero default shape
   tile_npu::Simulator sim(memory);
   sim.reset(0x3800);
@@ -155,7 +155,7 @@ TEST_CASE(empty_tadd) {
 }
 
 TEST_CASE(failed_execution_is_non_mutating) {
-  tile_npu::FlatMemory memory(0x4000, 8);
+  tile_npu::Ram memory(0x4000, 8);
   write_word(memory, 0x4000, 0x00002080u); // tadd t0, t1, t2
   write_word(memory, 0x4004, 0x00022080u); // reserved4 is nonzero
 

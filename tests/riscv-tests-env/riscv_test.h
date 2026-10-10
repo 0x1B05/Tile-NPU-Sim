@@ -7,6 +7,8 @@
 #ifndef _TILE_NPU_RISCV_TEST_ENV_H
 #define _TILE_NPU_RISCV_TEST_ENV_H
 
+/* clang-format off */ /* macro bodies are assembler, not C */
+
 #define RVTEST_RV64U                                                    \
   .macro init;                                                          \
   .endm

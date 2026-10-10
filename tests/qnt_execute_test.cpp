@@ -11,8 +11,8 @@
 
 namespace {
 using tile_npu::DType;
-using tile_npu::FlatMemory;
 using tile_npu::NpuDomain;
+using tile_npu::Ram;
 using tile_npu::Simulator;
 using tile_npu::StepStatus;
 
@@ -41,7 +41,7 @@ void vec32_f32(tile_npu::State &state, std::size_t index, std::uint8_t len) {
 } // namespace
 
 TEST_CASE(qnt_tquant_dynamic) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // 2x2 f32 source: row0 {127.0, -63.5} -> amax 127.0, scale 1.0,
   //   bits {127, RNE(-63.5) = -64}; row1 {0.0, -0.0} -> amax 0.0, scale +0.0,
@@ -66,7 +66,7 @@ TEST_CASE(qnt_tquant_dynamic) {
 }
 
 TEST_CASE(qnt_tquant_external_scale) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // 1x3 f32 source {64.0, -33.0, 10.0} with external scale 0.5:
   //   64.0/0.5 = 128 saturates to 127, -33.0/0.5 = -66, 10.0/0.5 = 20;
@@ -89,7 +89,7 @@ TEST_CASE(qnt_tquant_external_scale) {
 }
 
 TEST_CASE(qnt_tdequant) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // 1x2 i8 source {100, -2} with per-row scale 0.5 -> {50.0, -1.0}.
   load_one(sim, memory, make_qnt(NpuDomain::acc, 0, 2, 1, 0));
@@ -107,7 +107,7 @@ TEST_CASE(qnt_tdequant) {
 }
 
 TEST_CASE(qnt_vquant) {
-  FlatMemory memory(CODE_BASE, 8);
+  Ram memory(CODE_BASE, 8);
   Simulator sim(memory);
   // v1 = {127.0, 0.0, -63.5}: amax 127.0, scale 1.0 lands only in the lane
   // named by index5/xS; the remaining vScale lanes keep their values.
@@ -140,7 +140,7 @@ TEST_CASE(qnt_vquant) {
 }
 
 TEST_CASE(qnt_bdequant) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // b1 = {100, -2} with vScale lane1 = 0.5 -> v3 = {50.0, -1.0}.
   load_one(sim, memory, make_qnt(NpuDomain::vec32, 0, 3, 1, 2, 1));
@@ -158,7 +158,7 @@ TEST_CASE(qnt_bdequant) {
 }
 
 TEST_CASE(qnt_rejects_invalid) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   auto &state = sim.state();
 
@@ -211,7 +211,7 @@ TEST_CASE(qnt_rounding_ignores_host_fp_mode) {
   // +0.5 and -0.5 with an external scale of 1.0 are exact RNE ties; both
   // quantize to 0 whatever rounding mode the host program left active.
   const auto quantize_ties = [](int rounding_mode) {
-    FlatMemory memory(CODE_BASE, 4);
+    Ram memory(CODE_BASE, 4);
     Simulator sim(memory);
     load_one(sim, memory, make_qnt(NpuDomain::tile, 1, 0, 1, 0));
     auto &state = sim.state();

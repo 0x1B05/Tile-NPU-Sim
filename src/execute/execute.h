@@ -1,7 +1,7 @@
 #pragma once
 
+#include "tile_npu/platform/address_space.h"
 #include "tile_npu/decode.h"
-#include "tile_npu/memory.h"
 #include "tile_npu/state.h"
 #include "utils/overloaded.h"
 
@@ -25,7 +25,7 @@ struct ExecuteResult {
 // touch memory (or will, e.g. descriptor data movement) share one signature.
 struct ExecContext {
   State &state;
-  Memory &memory;
+  AddressSpace &memory;
 };
 
 // Resolves an IndexOperand: the immediate value, or the named Scalar
@@ -59,7 +59,7 @@ ExecuteResult execute_ebcast(const BcastInstr &instr, State &state);
 ExecuteResult execute_er4(const Er4Instr &instr, State &state);
 ExecuteResult execute_emask(const MaskInstr &instr, State &state);
 
-// Memory and movement
+// Memory access and movement
 ExecuteResult execute_mblk(const MblkInstr &instr, ExecContext &ctx);
 ExecuteResult execute_init(const InitInstr &instr, State &state);
 ExecuteResult execute_row_move(const RowInstr &instr, State &state);

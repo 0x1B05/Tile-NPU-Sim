@@ -10,7 +10,7 @@
 #include "support/execute_helpers.h"
 
 namespace {
-using tile_npu::FlatMemory;
+using tile_npu::Ram;
 using tile_npu::Simulator;
 using tile_npu::StepResult;
 using tile_npu::StepStatus;
@@ -72,7 +72,7 @@ struct RegisterCase {
 };
 
 void check_register_case(const RegisterCase &test) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   write_word(memory, CODE_BASE, test.word);
   Simulator sim(memory);
   sim.reset(CODE_BASE);
@@ -120,7 +120,7 @@ void test_integer_arithmetic() {
     check_register_case(test);
   }
 
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   write_word(memory, CODE_BASE, 0x00208033u); // add x0, x1, x2
   Simulator sim(memory);
   sim.reset(CODE_BASE);
@@ -132,7 +132,7 @@ void test_integer_arithmetic() {
 }
 
 void test_control_flow() {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
 
   const auto run = [&](std::uint32_t word, std::uint64_t lhs, std::uint64_t rhs,
@@ -212,7 +212,7 @@ void test_loads() {
       RegisterCase{"negative offset", i(0x03, 3, -1), DATA_BASE + 1, 0, 0x11223344ffffff80ull},
   };
   for (const auto &test : cases) {
-    FlatMemory memory(CODE_BASE, 0x50);
+    Ram memory(CODE_BASE, 0x50);
     write_word(memory, CODE_BASE, test.word);
     check(memory.write(DATA_BASE, data), "initialize load data");
     Simulator sim(memory);
@@ -224,7 +224,7 @@ void test_loads() {
     check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE + 4), what + ": next pc");
   }
 
-  FlatMemory memory(CODE_BASE, 0x50);
+  Ram memory(CODE_BASE, 0x50);
   const auto load_x0 = i(0x03, 2, 0, 0);
   write_word(memory, CODE_BASE, load_x0);
   Simulator sim(memory);
@@ -264,7 +264,7 @@ void test_stores() {
       RegisterCase{"negative offset", s(3, -8), DATA_BASE + 8, 0x8877665544332211ull, 8},
   };
   for (const auto &test : cases) {
-    FlatMemory memory(CODE_BASE, 0x50);
+    Ram memory(CODE_BASE, 0x50);
     write_word(memory, CODE_BASE, test.word);
     Simulator sim(memory);
     sim.reset(CODE_BASE);
@@ -283,7 +283,7 @@ void test_stores() {
     check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE + 4), "store advances pc");
   }
 
-  FlatMemory memory(CODE_BASE, 0x44);
+  Ram memory(CODE_BASE, 0x44);
   const auto misaligned = s(2, 1);
   write_word(memory, CODE_BASE, misaligned);
   Simulator sim(memory);
@@ -357,7 +357,7 @@ void test_m_extension() {
 }
 
 void test_environment_boundary() {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   constexpr std::array cases{
       std::pair{0x00000073u, StepStatus::environment_call},

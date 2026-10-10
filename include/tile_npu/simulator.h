@@ -1,6 +1,6 @@
 #pragma once
 
-#include "tile_npu/memory.h"
+#include "tile_npu/platform/address_space.h"
 #include "tile_npu/state.h"
 
 #include <cstdint>
@@ -17,7 +17,7 @@ struct StepResult {
 
 class Simulator {
 public:
-  explicit Simulator(Memory &memory) : memory_(memory) {}
+  explicit Simulator(AddressSpace &memory) : memory_(memory) {}
 
   State &state() { return state_; }
 
@@ -29,7 +29,7 @@ public:
   StepResult step();
 
 private:
-  Memory &memory_;
+  AddressSpace &memory_;
   State state_{};
 };
 

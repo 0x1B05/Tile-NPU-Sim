@@ -10,14 +10,14 @@
 namespace {
 using tile_npu::ArithMode;
 using tile_npu::DType;
-using tile_npu::FlatMemory;
+using tile_npu::Ram;
 using tile_npu::Simulator;
 using tile_npu::StepStatus;
 
 } // namespace
 
 TEST_CASE(ebcast_tile_byrow_wrap_and_sat) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   auto &state = sim.state();
 
@@ -56,7 +56,7 @@ TEST_CASE(ebcast_tile_byrow_wrap_and_sat) {
 }
 
 TEST_CASE(ebcast_tile_bycol) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // tsubb.bycol t0, t1, b2; column j takes b2[j].
   load_one(sim, memory, make_ebcast(false, true, 1, 0, 1, 2));
@@ -82,7 +82,7 @@ TEST_CASE(ebcast_tile_bycol) {
 }
 
 TEST_CASE(ebcast_acc_byrow) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // amulv.byrow a0, a1, v2 (i32).
   load_one(sim, memory, make_ebcast(true, false, 2, 0, 1, 2));
@@ -106,7 +106,7 @@ TEST_CASE(ebcast_acc_byrow) {
 }
 
 TEST_CASE(ebcast_acc_bycol_f32_div) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // adivv.bycol a0, a1, v2 (f32).
   load_one(sim, memory, make_ebcast(true, true, 3, 0, 1, 2));
@@ -126,7 +126,7 @@ TEST_CASE(ebcast_acc_bycol_f32_div) {
 }
 
 TEST_CASE(ebcast_acc_shift_by_vector) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // ashlv.byrow a0, a1, v2; shift amounts take the low 5 bits.
   load_one(sim, memory, make_ebcast(true, false, 11, 0, 1, 2));
@@ -146,7 +146,7 @@ TEST_CASE(ebcast_acc_shift_by_vector) {
 }
 
 TEST_CASE(ebcast_rejects_invalid) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   auto &state = sim.state();
 
