@@ -69,7 +69,7 @@ int run_images(const Options &options) {
     if (!load_image(image, ram)) return 1;
   }
   tile_npu::SerialConsole serial(std::cout);
-  tile_npu::SystemBus bus(ram, serial);
+  tile_npu::SystemBus bus(ram, {&serial});
   tile_npu::Simulator sim(bus);
   sim.reset(MEMORY_BASE);
   if (options.interactive) {

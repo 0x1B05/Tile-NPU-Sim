@@ -37,7 +37,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `include/tile_npu/state.h` | 架构状态: 五个数据域的寄存器堆 (Tile/Acc/Vec8/Vec32/Scalar), 计算配置 (TC/AC/BC/VC) 与访存描述符 (TM/AM/BM/VM), 物理尺寸常量; 以及步进流水线的状态词表 `StepStatus` (模拟器诊断, 非 ISA trap, 不属于架构状态) |
 | `include/tile_npu/address_space.h` | 可寻址空间接口 `AddressSpace` (`contains`/`read`/`write`, 含多元素传输的原子性预检契约); 主存, MMIO 设备与总线共用 |
 | `include/tile_npu/ram.h`, `src/ram.cpp` | 连续主存 `Ram` (基地址 + 平坦字节数组) |
-| `include/tile_npu/bus.h` | 平台总线 `SystemBus`: MMIO 设备窗口优先路由, 其余进主存 |
+| `include/tile_npu/bus.h` | 平台总线 `SystemBus`: 地址按注册设备的窗口路由 (先声明先中, 设备窗口不得重叠), 未命中进主存; 新设备注册即用, 总线不变 |
 | `include/tile_npu/serial.h`, `src/serial.cpp` | 平台串口控制台 `SerialConsole` (持有自己的地址窗口 `0x10000000`, 16550-lite: THR 写即宿主打印, LSR 恒读就绪) |
 | `include/tile_npu/instruction.h` | typed instruction IR: scalar operands, NPU domains/registers (`domain_register_count`), `IndexOperand` (index5 操作数: `ImmediateIndex` 或 `ScalarRegister` 的 variant; `MblkInstr` 按方向拆 `dest`/`src`, 方向判读共享 `is_store_form`/`accessed_reg`), elementwise (`EbinInstr` + `EBIN_BY_FUNCT4` 操作元数据表, `EunInstr`, `CmpInstr` + `CMP_BY_FUNCT3` 条件元数据表, `BcastInstr`, `Er4Instr`, `MaskInstr`, `CvtInstr`, `ReduceInstr`, `QntInstr` + QNT 域配对谓词, `MmaInstr` + `MMA_BY_FUNCT3` 元数据表, `SysInstr`), config (`CfgInstr`, `ConfigRegType`), 访存 (`MblkInstr`), 初始化 (`InitInstr`) 与行/lane 搬运 (`RowInstr`, `LaneInstr`) 指令类型 |
 | `include/tile_npu/decode.h` | 译码结果类型: typed scalar/NPU instructions, `DecodeError`, `DecodeResult` |

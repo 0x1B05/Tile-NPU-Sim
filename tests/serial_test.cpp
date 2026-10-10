@@ -64,7 +64,7 @@ TEST_CASE(system_bus_routing) {
   Ram ram(0x80000000, 0x1000);
   std::ostringstream out;
   SerialConsole serial(out);
-  SystemBus bus(ram, serial);
+  SystemBus bus(ram, {&serial});
 
   check(bus.contains(SerialConsole::BASE, SerialConsole::SIZE), "serial window");
   check(bus.contains(0x80000000, 4), "ram range");
