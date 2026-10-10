@@ -1,4 +1,4 @@
-#include "tile_npu/serial.h"
+#include "tile_npu/platform/serial.h"
 
 namespace tile_npu {
 namespace {

@@ -1,8 +1,8 @@
 #include "framework.h"
 
-#include "tile_npu/bus.h"
-#include "tile_npu/ram.h"
-#include "tile_npu/serial.h"
+#include "tile_npu/platform/bus.h"
+#include "tile_npu/platform/ram.h"
+#include "tile_npu/platform/serial.h"
 
 #include <cstddef>
 #include <sstream>

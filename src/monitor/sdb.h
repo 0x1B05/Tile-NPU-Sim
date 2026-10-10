@@ -1,6 +1,6 @@
 #pragma once
 
-#include "tile_npu/address_space.h"
+#include "tile_npu/platform/address_space.h"
 #include "tile_npu/simulator.h"
 
 #include <cstdint>

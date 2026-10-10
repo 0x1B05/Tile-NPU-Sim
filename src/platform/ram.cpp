@@ -1,4 +1,4 @@
-#include "tile_npu/ram.h"
+#include "tile_npu/platform/ram.h"
 
 #include <algorithm>
 

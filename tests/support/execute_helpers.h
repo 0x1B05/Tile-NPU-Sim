@@ -5,7 +5,7 @@
 // registration/assertion machinery lives in tests/framework.h.
 #include "framework.h"
 
-#include "tile_npu/ram.h"
+#include "tile_npu/platform/ram.h"
 #include "tile_npu/simulator.h"
 #include "tile_npu/state.h"
 

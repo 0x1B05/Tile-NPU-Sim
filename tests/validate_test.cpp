@@ -9,7 +9,7 @@
 #include "framework.h"
 #include "support/execute_helpers.h"
 
-#include "tile_npu/ram.h"
+#include "tile_npu/platform/ram.h"
 #include "tile_npu/state.h"
 
 #include <cstdint>
