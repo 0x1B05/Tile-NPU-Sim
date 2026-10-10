@@ -44,29 +44,6 @@ bool load_image(const Image &image, FlatMemory &memory) {
   return true;
 }
 
-// A guest stops at ebreak or kernel.end with a0 as the process exit code;
-// a0 = 0 means success. A stop on any other status is an error.
-int run_program(Simulator &sim, std::uint64_t step_limit) {
-  const auto outcome = tile_npu::monitor::run(sim, step_limit);
-  using enum tile_npu::monitor::StopReason;
-  switch (outcome.reason) {
-  case breakpoint:
-  case kernel_end: {
-    const auto exit_code = sim.state().scalar.read_x(10);
-    if (exit_code != 0) {
-      std::cerr << "guest exited with a0=" << exit_code << '\n';
-    }
-    return static_cast<int>(exit_code);
-  }
-  case step_limit:
-    std::cerr << "step limit reached\n";
-    return 1;
-  default:
-    std::cerr << tile_npu::monitor::stop_message(outcome.result) << '\n';
-    return 1;
-  }
-}
-
 } // namespace
 
 bool parse_image(std::string_view arg, Image &image) {
@@ -85,16 +62,36 @@ int run_images(const Options &options) {
   tile_npu::SerialMemory memory(ram, std::cout);
   tile_npu::Simulator sim(memory);
   sim.reset(MEMORY_BASE);
-  if (!options.interactive) return run_program(sim, options.step_limit);
-
-  std::cout << "tile-npu monitor: entry 0x" << std::hex << MEMORY_BASE
-            << std::dec << ", type 'help'\n";
-  for (const auto &image : options.images) {
-    std::cout << "  loaded " << image.path << " at 0x" << std::hex
-              << image.address << std::dec << '\n';
+  if (options.interactive) {
+    std::cout << "tile-npu monitor: entry 0x" << std::hex << MEMORY_BASE
+              << std::dec << ", type 'help'\n";
+    for (const auto &image : options.images) {
+      std::cout << "  loaded " << image.path << " at 0x" << std::hex
+                << image.address << std::dec << '\n';
+    }
+    sdb_loop(sim, memory);
+    return 0;
   }
-  sdb_loop(sim, memory);
-  return 0;
+  // A guest stops at ebreak or kernel.end with a0 as the process exit code;
+  // a0 = 0 means success. A stop on any other status is an error.
+  const auto stop = npu_exec(sim, options.step_limit);
+  using enum StopReason;
+  switch (stop.reason) {
+  case breakpoint:
+  case kernel_end: {
+    const auto exit_code = sim.state().scalar.read_x(10);
+    if (exit_code != 0) {
+      std::cerr << "guest exited with a0=" << exit_code << '\n';
+    }
+    return static_cast<int>(exit_code);
+  }
+  case step_limit:
+    std::cerr << "step limit reached\n";
+    return 1;
+  default:
+    std::cerr << stop_message(stop.result) << '\n';
+    return 1;
+  }
 }
 
 } // namespace tile_npu::monitor

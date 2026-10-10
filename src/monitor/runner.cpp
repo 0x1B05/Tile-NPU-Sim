@@ -2,27 +2,20 @@
 
 namespace tile_npu::monitor {
 
-RunOutcome run(Simulator &sim, std::uint64_t step_limit) {
-  RunOutcome outcome{};
-  for (; outcome.steps < step_limit; ++outcome.steps) {
+StopInfo npu_exec(Simulator &sim, std::uint64_t step_limit) {
+  for (std::uint64_t steps = 0; steps < step_limit; ++steps) {
     const auto result = sim.step();
     if (result.status == StepStatus::retired) continue;
-    outcome.result = result;
     switch (result.status) {
     case StepStatus::breakpoint:
-      outcome.reason = StopReason::breakpoint;
-      break;
+      return {.reason = StopReason::breakpoint, .result = result};
     case StepStatus::kernel_end:
-      outcome.reason = StopReason::kernel_end;
-      break;
+      return {.reason = StopReason::kernel_end, .result = result};
     default:
-      outcome.reason = StopReason::stopped;
-      break;
+      return {.reason = StopReason::stopped, .result = result};
     }
-    return outcome;
   }
-  outcome.reason = StopReason::step_limit;
-  return outcome;
+  return {.reason = StopReason::step_limit};
 }
 
 } // namespace tile_npu::monitor

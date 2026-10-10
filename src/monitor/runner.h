@@ -19,16 +19,15 @@ enum class StopReason {
   stopped,    // any other non-retired StepStatus; result describes it
 };
 
-struct RunOutcome {
+struct StopInfo {
   StopReason reason;
   // The stopping step; a step_limit stop has none.
   StepResult result{};
-  // Retired instructions so far.
-  std::uint64_t steps = 0;
 };
 
-// Step loop shared by the default runner and sdb shell. Simulator::step()
-// remains a single-step API; this runs until a stop or the step budget.
-RunOutcome run(Simulator &sim, std::uint64_t step_limit);
+// Step loop shared by the non-interactive run path and the sdb shell.
+// Simulator::step() remains a single-step API; npu_exec() runs until a stop
+// or the step budget is spent and classifies the stop for the caller.
+StopInfo npu_exec(Simulator &sim, std::uint64_t step_limit);
 
 } // namespace tile_npu::monitor

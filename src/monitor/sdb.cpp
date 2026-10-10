@@ -56,9 +56,9 @@ void cmd_help() {
 }
 
 void cmd_continue(Simulator &sim) {
-  const auto outcome = run(sim, UNLIMITED_STEPS);
-  std::cout << stop_message(outcome.result) << '\n';
-  if (outcome.reason == StopReason::breakpoint) {
+  const auto stop = npu_exec(sim, UNLIMITED_STEPS);
+  std::cout << stop_message(stop.result) << '\n';
+  if (stop.reason == StopReason::breakpoint) {
     std::cout << "a0 = " << sim.state().scalar.read_x(10) << '\n';
   }
 }
@@ -71,9 +71,9 @@ void cmd_si(Simulator &sim, std::string_view arg) {
       return;
     }
   }
-  const auto outcome = run(sim, count);
-  if (outcome.reason != StopReason::step_limit) {
-    std::cout << stop_message(outcome.result) << '\n';
+  const auto stop = npu_exec(sim, count);
+  if (stop.reason != StopReason::step_limit) {
+    std::cout << stop_message(stop.result) << '\n';
   }
 }
 
