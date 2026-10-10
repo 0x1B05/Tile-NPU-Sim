@@ -3,6 +3,8 @@
 #include "parse.h"
 #include "sdb.h"
 
+#include "tile_npu/bus.h"
+#include "tile_npu/ram.h"
 #include "tile_npu/serial.h"
 
 #include <cstddef>
@@ -17,7 +19,7 @@
 namespace tile_npu::monitor {
 namespace {
 
-bool load_image(const Image &image, FlatMemory &memory) {
+bool load_image(const Image &image, Ram &memory) {
   std::ifstream input(image.path, std::ios::binary | std::ios::ate);
   if (!input) {
     std::cerr << "cannot open image: " << image.path << '\n';
@@ -62,12 +64,13 @@ std::optional<StepResult> npu_exec(Simulator &sim, std::uint64_t step_limit) {
 }
 
 int run_images(const Options &options) {
-  tile_npu::FlatMemory ram(MEMORY_BASE, options.memory_mib * 1024 * 1024);
+  tile_npu::Ram ram(MEMORY_BASE, options.memory_mib * 1024 * 1024);
   for (const auto &image : options.images) {
     if (!load_image(image, ram)) return 1;
   }
-  tile_npu::SerialMemory memory(ram, std::cout);
-  tile_npu::Simulator sim(memory);
+  tile_npu::SerialConsole serial(std::cout);
+  tile_npu::SystemBus bus(ram, serial);
+  tile_npu::Simulator sim(bus);
   sim.reset(MEMORY_BASE);
   if (options.interactive) {
     std::cout << "tile-npu monitor: entry 0x" << std::hex << MEMORY_BASE << std::dec
@@ -76,7 +79,7 @@ int run_images(const Options &options) {
       std::cout << "  loaded " << image.path << " at 0x" << std::hex << image.address << std::dec
                 << '\n';
     }
-    sdb_loop(sim, memory);
+    sdb_loop(sim, bus);
     return 0;
   }
   // A guest stops at ebreak or kernel.end with a0 as the process exit code;

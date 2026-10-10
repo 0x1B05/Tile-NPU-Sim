@@ -9,7 +9,7 @@
 #include "framework.h"
 #include "support/execute_helpers.h"
 
-#include "tile_npu/memory.h"
+#include "tile_npu/ram.h"
 #include "tile_npu/state.h"
 
 #include <cstdint>
@@ -35,7 +35,6 @@ using tile_npu::EunOp;
 using tile_npu::exec_npu_instr;
 using tile_npu::ExecContext;
 using tile_npu::Fill5Code;
-using tile_npu::FlatMemory;
 using tile_npu::ImmediateIndex;
 using tile_npu::InitInstr;
 using tile_npu::InitOp;
@@ -51,6 +50,7 @@ using tile_npu::NpuDomain;
 using tile_npu::NpuRegister;
 using tile_npu::QntInstr;
 using tile_npu::QntOp;
+using tile_npu::Ram;
 using tile_npu::ReduceInstr;
 using tile_npu::ReduceOp;
 using tile_npu::RowInstr;
@@ -62,7 +62,7 @@ using tile_npu::SysInstr;
 using tile_npu::SysOp;
 
 struct Env {
-  FlatMemory memory{CODE_BASE, 0x100};
+  Ram memory{CODE_BASE, 0x100};
   State state{};
   ExecContext ctx{state, memory};
 };

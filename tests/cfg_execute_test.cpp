@@ -7,7 +7,7 @@
 
 namespace {
 using tile_npu::DType;
-using tile_npu::FlatMemory;
+using tile_npu::Ram;
 using tile_npu::Simulator;
 using tile_npu::StepStatus;
 
@@ -39,7 +39,7 @@ constexpr std::uint32_t FIELD_ROW_STRIDE = 1;
 } // namespace
 
 TEST_CASE(cfg_seti_writes_field) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, cfg_i(0x5, 0, FIELD_ROWS, 32, 0)); // tc0.rows = 32
   check_eq(sim.step().status, StepStatus::retired, "cfg.seti retires");
@@ -48,7 +48,7 @@ TEST_CASE(cfg_seti_writes_field) {
 }
 
 TEST_CASE(cfg_seti_sign_extends_negative_imm) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // tm0.row_stride_bytes = -4: the signed field keeps the extended value.
   load_one(sim, memory, cfg_i(0x5, 2, FIELD_ROW_STRIDE, -4, 0));
@@ -57,7 +57,7 @@ TEST_CASE(cfg_seti_sign_extends_negative_imm) {
 }
 
 TEST_CASE(cfg_seti_base_addr) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, cfg_i(0x5, 2, FIELD_BASE_ADDR, 0x4000, 0));
   check_eq(sim.step().status, StepStatus::retired, "cfg.seti base_addr retires");
@@ -65,7 +65,7 @@ TEST_CASE(cfg_seti_base_addr) {
 }
 
 TEST_CASE(cfg_seti_rejects_out_of_range_value) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // rows = 33 exceeds MATRIX_EXTENT = 32 -> CFG_ERROR, state untouched.
   load_one(sim, memory, cfg_i(0x5, 0, FIELD_ROWS, 33, 0));
@@ -75,7 +75,7 @@ TEST_CASE(cfg_seti_rejects_out_of_range_value) {
 }
 
 TEST_CASE(cfg_seti_rejects_unsupported_dtype) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // AC supports i32/u32/f32; dtype code 0 (i8) is invalid there.
   load_one(sim, memory, cfg_i(0x5, 1, FIELD_DTYPE, 0, 0));
@@ -84,7 +84,7 @@ TEST_CASE(cfg_seti_rejects_unsupported_dtype) {
 }
 
 TEST_CASE(cfg_seti_rejects_unsupported_field) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // BC has dtype/len only; field code 2 (cols in matrix configs) is absent.
   load_one(sim, memory, cfg_i(0x6, 0, FIELD_COLS, 8, 0));
@@ -92,7 +92,7 @@ TEST_CASE(cfg_seti_rejects_unsupported_field) {
 }
 
 TEST_CASE(cfg_setx_writes_full_scalar_value) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, cfg_reg(2, 0, 0, FIELD_BASE_ADDR, 4, 0));
   sim.state().scalar.write_x(4, 0x8000100020003000ull);
@@ -102,7 +102,7 @@ TEST_CASE(cfg_setx_writes_full_scalar_value) {
 }
 
 TEST_CASE(cfg_setx_from_x0_writes_zero) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, cfg_reg(2, 0, 0, FIELD_BASE_ADDR, 0, 0));
   sim.state().tm[0].base_addr = 0x1234;
@@ -111,7 +111,7 @@ TEST_CASE(cfg_setx_from_x0_writes_zero) {
 }
 
 TEST_CASE(cfg_setx_rejects_out_of_range_value) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, cfg_reg(1, 1, 0, FIELD_LEN, 4, 0));
   sim.state().scalar.write_x(4, 33); // len = 33 exceeds VECTOR_LANES = 32
@@ -120,7 +120,7 @@ TEST_CASE(cfg_setx_rejects_out_of_range_value) {
 }
 
 TEST_CASE(cfg_copy_duplicates_whole_register) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, cfg_reg(0, 0, 1, 0, 3, 7));
   auto &tc3 = sim.state().tc[3];
@@ -137,7 +137,7 @@ TEST_CASE(cfg_copy_duplicates_whole_register) {
 }
 
 TEST_CASE(cfg_get_reads_field_back) {
-  FlatMemory memory(CODE_BASE, 8);
+  Ram memory(CODE_BASE, 8);
   Simulator sim(memory);
   write_word(memory, CODE_BASE, cfg_i(0x5, 0, FIELD_ROWS, 32, 0));
   write_word(memory, CODE_BASE + 4, cfg_reg(0, 0, 2, FIELD_ROWS, 0, 5));
@@ -148,7 +148,7 @@ TEST_CASE(cfg_get_reads_field_back) {
 }
 
 TEST_CASE(cfg_get_returns_enum_code) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, cfg_reg(0, 0, 2, FIELD_DTYPE, 0, 6));
   sim.state().tc[0].dtype = DType::u8;
@@ -157,7 +157,7 @@ TEST_CASE(cfg_get_returns_enum_code) {
 }
 
 TEST_CASE(cfg_get_sign_extends_signed_field) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, cfg_reg(2, 0, 2, FIELD_ROW_STRIDE, 0, 7));
   sim.state().tm[0].row_stride_bytes = -4;
@@ -167,7 +167,7 @@ TEST_CASE(cfg_get_sign_extends_signed_field) {
 }
 
 TEST_CASE(cfg_get_to_x0_is_discarded) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, cfg_reg(0, 0, 2, FIELD_ROWS, 0, 0));
   sim.state().tc[0].rows = 9;
@@ -176,7 +176,7 @@ TEST_CASE(cfg_get_to_x0_is_discarded) {
 }
 
 TEST_CASE(cfg_get_rejects_unsupported_field) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, cfg_reg(0, 1, 2, 4, 0, 5));
   check_eq(sim.step().status, StepStatus::invalid_configuration, "bc field 4 fails");

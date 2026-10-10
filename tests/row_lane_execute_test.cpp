@@ -8,7 +8,7 @@
 
 namespace {
 using tile_npu::DType;
-using tile_npu::FlatMemory;
+using tile_npu::Ram;
 using tile_npu::Simulator;
 using tile_npu::StepStatus;
 
@@ -17,7 +17,7 @@ constexpr std::size_t tindex(std::size_t row, std::size_t col) { return row * 32
 } // namespace
 
 TEST_CASE(row_insert_tile) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, make_row_move(false, false, 0, 1, 3, 0)); // tinsert.row t0[1], b3
   auto &state = sim.state();
@@ -39,7 +39,7 @@ TEST_CASE(row_insert_tile) {
 }
 
 TEST_CASE(row_insert_scalar_index) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, make_row_move(true, true, 0, 5, 1, 2)); // ainsert.row a2[x5], v1
   auto &state = sim.state();
@@ -57,7 +57,7 @@ TEST_CASE(row_insert_scalar_index) {
 }
 
 TEST_CASE(row_insert_rejects_invalid) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   auto &state = sim.state();
 
@@ -76,7 +76,7 @@ TEST_CASE(row_insert_rejects_invalid) {
 }
 
 TEST_CASE(row_extract_tile) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, make_row_move(false, false, 1, 1, 2, 4)); // textract.row b4, t2[1]
   auto &state = sim.state();
@@ -97,7 +97,7 @@ TEST_CASE(row_extract_tile) {
 }
 
 TEST_CASE(lane_extract_extension) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   auto &state = sim.state();
 
@@ -124,7 +124,7 @@ TEST_CASE(lane_extract_extension) {
 }
 
 TEST_CASE(lane_insert_keeps_low_bits) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, make_lane_move(false, true, 1, 9, 7, 1)); // binsert b1[x9], x7
   auto &state = sim.state();
@@ -144,7 +144,7 @@ TEST_CASE(lane_insert_keeps_low_bits) {
 }
 
 TEST_CASE(lane_broadcast) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, make_lane_move(true, false, 2, 1, 3, 4)); // vbroadcast v4, v3[1]
   auto &state = sim.state();

@@ -10,7 +10,7 @@
 
 namespace {
 using tile_npu::DType;
-using tile_npu::FlatMemory;
+using tile_npu::Ram;
 using tile_npu::Simulator;
 using tile_npu::StepStatus;
 
@@ -23,7 +23,7 @@ void acc_f32(tile_npu::State &state, std::size_t index, std::uint8_t rows, std::
 } // namespace
 
 TEST_CASE(areduce_sum_max_min) {
-  FlatMemory memory(CODE_BASE, 12);
+  Ram memory(CODE_BASE, 12);
   Simulator sim(memory);
   // Three row folds over the same 2x3 f32 source:
   //   row0 {1.0, 2.0, 3.5}  -> sum 6.5,  max 3.5, min 1.0
@@ -51,7 +51,7 @@ TEST_CASE(areduce_sum_max_min) {
 }
 
 TEST_CASE(areduce_sumsq_absmax) {
-  FlatMemory memory(CODE_BASE, 8);
+  Ram memory(CODE_BASE, 8);
   Simulator sim(memory);
   // 2x2 f32 source: row0 {3.0, 4.0} -> sumsq 25, absmax 4;
   //                 row1 {-5.0, 2.0} -> sumsq 29, absmax 5.
@@ -75,7 +75,7 @@ TEST_CASE(areduce_sumsq_absmax) {
 }
 
 TEST_CASE(areduce_argmax) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // Row ties take the smaller index; a NaN candidate wins over a non-NaN
   // best, and an established NaN best never loses.
@@ -100,7 +100,7 @@ TEST_CASE(areduce_argmax) {
 }
 
 TEST_CASE(vreduce_folds) {
-  FlatMemory memory(CODE_BASE, 16);
+  Ram memory(CODE_BASE, 16);
   Simulator sim(memory);
   // vS = {1.5, -2.0, 4.0}: sum 3.5, max 4.0, min -2.0, sumsq 22.25; each
   // result lands in the low 32 bits of xD with the high half zeroed.
@@ -126,7 +126,7 @@ TEST_CASE(vreduce_folds) {
 }
 
 TEST_CASE(vreduce_sumsq_rounds_each_product) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // The manual rounds each product to f32 before the f32 add; a host build
   // that contracts the fold into an FMA would produce 0x3f701583 instead
@@ -142,7 +142,7 @@ TEST_CASE(vreduce_sumsq_rounds_each_product) {
 }
 
 TEST_CASE(vreduce_argmax) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // v1 = {1.0, 7.0, NaN}: the NaN candidate wins; xIndex is an i32
   // sign-extended to 64 bits, xValue carries the f32 bits zero-extended.
@@ -160,7 +160,7 @@ TEST_CASE(vreduce_argmax) {
 }
 
 TEST_CASE(reduce_rejects_invalid) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   auto &state = sim.state();
 

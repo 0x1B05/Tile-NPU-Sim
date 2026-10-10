@@ -10,15 +10,15 @@
 
 namespace {
 using tile_npu::DType;
-using tile_npu::FlatMemory;
 using tile_npu::NpuDomain;
+using tile_npu::Ram;
 using tile_npu::Simulator;
 using tile_npu::StepStatus;
 
 } // namespace
 
 TEST_CASE(emask_tile_tail) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // tmask.tail t0, t1, x2, -1 on a 3x3 i8 tile with xBounds = (nRows 2,
   // nCols 1): only the first column of the first two rows keeps the source.
@@ -42,7 +42,7 @@ TEST_CASE(emask_tile_tail) {
 }
 
 TEST_CASE(emask_acc_tril) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // amask.tril a0, a1, x2, +1 on a 3x3 i32 matrix with xDelta = 0: keeps the
   // main diagonal and everything below it.
@@ -67,7 +67,7 @@ TEST_CASE(emask_acc_tril) {
 }
 
 TEST_CASE(emask_acc_triu_f32) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // amask.triu a0, a1, x2, +inf on a 2x2 f32 matrix with xDelta = 0: only
   // (1,0) falls below the diagonal and takes the fill.
@@ -89,7 +89,7 @@ TEST_CASE(emask_acc_triu_f32) {
 }
 
 TEST_CASE(emask_vec_tail) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // vmask.tail v0, v1, x2, +1 on a len-4 i32 vector with xLen = 3.
   load_one(sim, memory, make_emask(NpuDomain::vec32, 0, 0, 1, 2, 1));
@@ -112,7 +112,7 @@ TEST_CASE(emask_vec_tail) {
 }
 
 TEST_CASE(emask_vec8_maskx) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // bmaskx.tail b0, b1, x2, x3 on a len-4 u8 vector with xLen = 2; the fill
   // takes the low 8 bits of xFill.
@@ -135,7 +135,7 @@ TEST_CASE(emask_vec8_maskx) {
 }
 
 TEST_CASE(emask_rejects_invalid) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   auto &state = sim.state();
 

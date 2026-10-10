@@ -5,14 +5,14 @@
 #include "support/execute_helpers.h"
 
 namespace {
-using tile_npu::FlatMemory;
+using tile_npu::Ram;
 using tile_npu::Simulator;
 using tile_npu::StepStatus;
 
 } // namespace
 
 TEST_CASE(sys_fence_retires) {
-  FlatMemory memory(CODE_BASE, 12);
+  Ram memory(CODE_BASE, 12);
   Simulator sim(memory);
   // All three fences are no-ops in the single-hart in-order model.
   write_word(memory, CODE_BASE, 0x80000002u);     // fence.mem
@@ -30,7 +30,7 @@ TEST_CASE(sys_fence_retires) {
 }
 
 TEST_CASE(sys_kernel_end_stops) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   write_word(memory, CODE_BASE, 0x86000002u); // kernel.end
   sim.reset(CODE_BASE);

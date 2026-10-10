@@ -5,7 +5,7 @@
 // registration/assertion machinery lives in tests/framework.h.
 #include "framework.h"
 
-#include "tile_npu/memory.h"
+#include "tile_npu/ram.h"
 #include "tile_npu/simulator.h"
 #include "tile_npu/state.h"
 
@@ -20,13 +20,13 @@
 // resets the simulator onto them.
 inline constexpr std::uint64_t CODE_BASE = 0x1000;
 
-inline void write_word(tile_npu::FlatMemory &memory, std::uint64_t address, std::uint32_t word) {
+inline void write_word(tile_npu::Ram &memory, std::uint64_t address, std::uint32_t word) {
   std::array<std::byte, 4> bytes{};
   tile_npu::store_le(word, bytes);
   check(memory.write(address, bytes), "write instruction word");
 }
 
-inline void load_one(tile_npu::Simulator &sim, tile_npu::FlatMemory &memory, std::uint32_t word) {
+inline void load_one(tile_npu::Simulator &sim, tile_npu::Ram &memory, std::uint32_t word) {
   write_word(memory, CODE_BASE, word);
   sim.reset(CODE_BASE);
 }

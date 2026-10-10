@@ -10,15 +10,15 @@
 
 namespace {
 using tile_npu::DType;
-using tile_npu::FlatMemory;
 using tile_npu::NpuDomain;
+using tile_npu::Ram;
 using tile_npu::Simulator;
 using tile_npu::StepStatus;
 
 } // namespace
 
 TEST_CASE(eun_tile_not) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, make_eun(NpuDomain::tile, 0, 0, 1)); // tnot t0, t1
   auto &state = sim.state();
@@ -38,7 +38,7 @@ TEST_CASE(eun_tile_not) {
 }
 
 TEST_CASE(eun_acc_abs_neg_i32) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   auto &state = sim.state();
 
@@ -68,7 +68,7 @@ TEST_CASE(eun_acc_abs_neg_i32) {
 }
 
 TEST_CASE(eun_vec_f32_abs_neg) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   auto &state = sim.state();
 
@@ -88,7 +88,7 @@ TEST_CASE(eun_vec_f32_abs_neg) {
 }
 
 TEST_CASE(eun_exp2_special_values) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, make_eun(NpuDomain::vec32, 3, 0, 1)); // vexp2 v0, v1
   auto &state = sim.state();
@@ -107,7 +107,7 @@ TEST_CASE(eun_exp2_special_values) {
 }
 
 TEST_CASE(eun_rcp_rsqrt_special_values) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   auto &state = sim.state();
 
@@ -140,7 +140,7 @@ TEST_CASE(eun_rcp_rsqrt_special_values) {
 }
 
 TEST_CASE(eun_silu) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, make_eun(NpuDomain::vec32, 6, 0, 1)); // vsilu v0, v1
   auto &state = sim.state();
@@ -166,7 +166,7 @@ TEST_CASE(eun_silu) {
 }
 
 TEST_CASE(eun_rejects_invalid) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   auto &state = sim.state();
 

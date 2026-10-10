@@ -29,16 +29,17 @@ std::size_t load_width(ScalarOp op) {
   }
 }
 
+// clang-format on
+
 std::size_t store_width(ScalarOp op) {
   switch (op) {
   case ScalarOp::sb: return 1;
   case ScalarOp::sh: return 2;
   case ScalarOp::sw: return 4;
   case ScalarOp::sd: return 8;
-  default:         return 0;
+  default: return 0;
   }
 }
-// clang-format on
 
 ExecuteResult execute_load(const DecodedScalarInstr &instr, ExecContext &ctx) {
   ScalarState &scalar = ctx.state.scalar;
@@ -53,14 +54,12 @@ ExecuteResult execute_load(const DecodedScalarInstr &instr, ExecContext &ctx) {
     return access_fault(StepStatus::load_fault, address);
   }
   std::uint64_t value = load_le<std::uint64_t>(std::span<const std::byte>(bytes.data(), width));
-  // clang-format off
   switch (instr.op) {
-  case ScalarOp::lb: value = sign_extend(value, 8);  break;
+  case ScalarOp::lb: value = sign_extend(value, 8); break;
   case ScalarOp::lh: value = sign_extend(value, 16); break;
   case ScalarOp::lw: value = sign_extend(value, 32); break;
   default: break;
   }
-  // clang-format on
   scalar.write_x(instr.regs.dest, value);
   return {.status = StepStatus::retired};
 }

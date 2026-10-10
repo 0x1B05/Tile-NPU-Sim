@@ -8,16 +8,16 @@
 
 namespace {
 using tile_npu::DType;
-using tile_npu::FlatMemory;
 using tile_npu::InitOp;
 using tile_npu::NpuDomain;
+using tile_npu::Ram;
 using tile_npu::Simulator;
 using tile_npu::StepStatus;
 
 } // namespace
 
 TEST_CASE(init_fill_tile_truncates_imm) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // imm16 = 0xFF80 sign-extends to ...FF80; i8 keeps the low 8 bits (0x80).
   load_one(sim, memory, make_init_fill(NpuDomain::tile, 0, 0xff80u)); // tfill t0, -128
@@ -32,7 +32,7 @@ TEST_CASE(init_fill_tile_truncates_imm) {
 }
 
 TEST_CASE(init_fill_acc_f32_bf16_imm) {
-  FlatMemory memory(CODE_BASE, 8);
+  Ram memory(CODE_BASE, 8);
   Simulator sim(memory);
   // An f32 fill reads imm16 as the bf16 pattern (the high half of the f32
   // bits): 0x3F80 is 1.0f, 0xC000 is -2.0f; the latter must not sign-extend.
@@ -52,7 +52,7 @@ TEST_CASE(init_fill_acc_f32_bf16_imm) {
 }
 
 TEST_CASE(init_fillx_acc_keeps_low32) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, make_init_r2(NpuDomain::acc, 1, 3, 5)); // afillx a3, x5
   auto &state = sim.state();
@@ -66,7 +66,7 @@ TEST_CASE(init_fillx_acc_keeps_low32) {
 }
 
 TEST_CASE(init_fillx_vec8) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, make_init_r2(NpuDomain::vec8, 1, 1, 2)); // bfillx b1, x2
   auto &state = sim.state();
@@ -82,7 +82,7 @@ TEST_CASE(init_fillx_vec8) {
 }
 
 TEST_CASE(init_copy_matrix_effective_region) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, make_init_r2(NpuDomain::tile, 2, 0, 1)); // tcopy t0, t1
   auto &state = sim.state();
@@ -104,7 +104,7 @@ TEST_CASE(init_copy_matrix_effective_region) {
 }
 
 TEST_CASE(init_copy_rejects_mismatch) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   auto &state = sim.state();
 
@@ -126,7 +126,7 @@ TEST_CASE(init_copy_rejects_mismatch) {
 }
 
 TEST_CASE(init_fill_rejects_invalid_config) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, make_init_fill(NpuDomain::tile, 0, 1)); // tfill t0, 1
   auto &state = sim.state();
@@ -135,7 +135,7 @@ TEST_CASE(init_fill_rejects_invalid_config) {
 }
 
 TEST_CASE(init_transpose_tile) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, make_init_r2(NpuDomain::tile, 3, 0, 1)); // ttranspose t0, t1
   auto &state = sim.state();
@@ -163,7 +163,7 @@ TEST_CASE(init_transpose_tile) {
 }
 
 TEST_CASE(init_transpose_inplace) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, make_init_r2(NpuDomain::tile, 3, 0, 0)); // ttranspose t0, t0
   auto &state = sim.state();
@@ -186,7 +186,7 @@ TEST_CASE(init_transpose_inplace) {
 }
 
 TEST_CASE(init_transpose_rejects_dtype_mismatch) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, make_init_r2(NpuDomain::tile, 3, 0, 1)); // ttranspose t0, t1
   auto &state = sim.state();

@@ -20,7 +20,7 @@ namespace {
 // Loads and stores are raw copies at the configured dtype width, little
 // endian.
 template <typename Element>
-bool load_element(const Memory &memory, std::uint64_t address, Element &out) {
+bool load_element(const AddressSpace &memory, std::uint64_t address, Element &out) {
   std::array<std::byte, sizeof(Element)> bytes{};
   if (!memory.read(address, bytes)) {
     return false;
@@ -30,7 +30,7 @@ bool load_element(const Memory &memory, std::uint64_t address, Element &out) {
 }
 
 template <typename Element>
-bool store_element(Memory &memory, std::uint64_t address, Element value) {
+bool store_element(AddressSpace &memory, std::uint64_t address, Element value) {
   std::array<std::byte, sizeof(Element)> bytes{};
   store_le(value, bytes);
   return memory.write(address, bytes);
@@ -64,8 +64,8 @@ std::optional<std::array<std::uint64_t, Max>> fill_addresses(std::size_t count, 
 // the last element arrived, so a mid-transfer fault leaves architectural
 // state unchanged.
 template <typename Reg, typename At>
-ExecuteResult staged_load(const Memory &memory, Reg &reg, std::span<const std::uint64_t> addrs,
-                          At at) {
+ExecuteResult staged_load(const AddressSpace &memory, Reg &reg,
+                          std::span<const std::uint64_t> addrs, At at) {
   auto staging = reg;
   for (std::size_t n = 0; n < addrs.size(); ++n) {
     if (!load_element(memory, addrs[n], at(staging, n))) {
@@ -80,8 +80,8 @@ ExecuteResult staged_load(const Memory &memory, Reg &reg, std::span<const std::u
 // before the first write, so a faulting store leaves architectural state
 // unchanged.
 template <typename Reg, typename At>
-ExecuteResult probed_store(Memory &memory, const Reg &reg, std::span<const std::uint64_t> addrs,
-                           At at) {
+ExecuteResult probed_store(AddressSpace &memory, const Reg &reg,
+                           std::span<const std::uint64_t> addrs, At at) {
   using Element = typename Reg::value_type;
   for (const auto addr : addrs) {
     if (!memory.contains(addr, sizeof(Element))) {

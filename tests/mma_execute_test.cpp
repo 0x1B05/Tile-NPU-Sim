@@ -8,7 +8,7 @@
 
 namespace {
 using tile_npu::DType;
-using tile_npu::FlatMemory;
+using tile_npu::Ram;
 using tile_npu::Simulator;
 using tile_npu::StepStatus;
 
@@ -47,7 +47,7 @@ void poke_rhs_nt(tile_npu::State &state, std::size_t index) {
 } // namespace
 
 TEST_CASE(mma_nn_zero) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // {{1,2,3},{4,-5,6}} x {{7,8},{-9,10},{11,-12}} =
   //   {{22, -8}, {139, -90}}; i8 operands sign-extend before the i32 product.
@@ -67,7 +67,7 @@ TEST_CASE(mma_nn_zero) {
 }
 
 TEST_CASE(mma_nn_acc) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // Same product as mma_nn_zero accumulated onto {INT32_MAX, 2, 3, 4}:
   // D[0,0] wraps to 0x80000015 (wrap32), the rest add normally.
@@ -91,7 +91,7 @@ TEST_CASE(mma_nn_acc) {
 }
 
 TEST_CASE(mma_nt_zero) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // {{1,2,3},{4,-5,6}} x {{7,8,9},{10,11,12}}^T = {{50, 68}, {42, 57}}.
   load_one(sim, memory, make_mma(2, 0, 1, 2));
@@ -110,7 +110,7 @@ TEST_CASE(mma_nt_zero) {
 }
 
 TEST_CASE(bdot_nn_nt) {
-  FlatMemory memory(CODE_BASE, 8);
+  Ram memory(CODE_BASE, 8);
   Simulator sim(memory);
   // bA = {1, -2, 3}; nn over the 3x2 right Tile gives column dots
   // {58, -48}, nt over the 2x3 right Tile gives row dots {18, 24}.
@@ -141,7 +141,7 @@ TEST_CASE(bdot_nn_nt) {
 }
 
 TEST_CASE(mma_rejects_invalid) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   auto &state = sim.state();
 

@@ -9,15 +9,15 @@
 
 namespace {
 using tile_npu::DType;
-using tile_npu::FlatMemory;
 using tile_npu::NpuDomain;
+using tile_npu::Ram;
 using tile_npu::Simulator;
 using tile_npu::StepStatus;
 
 } // namespace
 
 TEST_CASE(cvt_acc_i32_f32) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // acvt.i32.f32 a0, a1 on a 2x2 i32 matrix; the destination dtype flips to
   // f32 on success.
@@ -41,7 +41,7 @@ TEST_CASE(cvt_acc_i32_f32) {
 }
 
 TEST_CASE(cvt_acc_in_place) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // acvt.i32.f32 a0, a0: in-place conversion reads each element before
   // writing it back.
@@ -58,7 +58,7 @@ TEST_CASE(cvt_acc_in_place) {
 }
 
 TEST_CASE(cvt_vec32) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // vcvt.i32.f32 v0, v1 on a len-2 i32 vector.
   load_one(sim, memory, make_cvt(NpuDomain::vec32, 0, 0, 1));
@@ -77,7 +77,7 @@ TEST_CASE(cvt_vec32) {
 }
 
 TEST_CASE(cvt_widen_tile_to_acc) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // twiden.i8.i32 a0, t1 on a 2x3 i8 tile: sign extension into i32.
   load_one(sim, memory, make_cvt(NpuDomain::acc, 1, 0, 1));
@@ -101,7 +101,7 @@ TEST_CASE(cvt_widen_tile_to_acc) {
 }
 
 TEST_CASE(cvt_rejects_invalid) {
-  FlatMemory memory(CODE_BASE, 4);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   auto &state = sim.state();
 
