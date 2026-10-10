@@ -1,7 +1,7 @@
 #include "sdb.h"
 
+#include "monitor.h"
 #include "parse.h"
-#include "runner.h"
 #include "utils/endian.h"
 
 #include <array>
@@ -55,8 +55,9 @@ void cmd_help() {
 
 void cmd_continue(Simulator &sim) {
   const auto stop = npu_exec(sim, UNLIMITED_STEPS);
-  std::cout << stop_message(stop.result) << '\n';
-  if (stop.reason == StopReason::breakpoint) {
+  if (!stop) return; // the unlimited budget cannot run out in practice
+  std::cout << stop_message(*stop) << '\n';
+  if (stop->status == StepStatus::breakpoint) {
     std::cout << "a0 = " << sim.state().scalar.read_x(10) << '\n';
   }
 }
@@ -70,8 +71,8 @@ void cmd_si(Simulator &sim, std::string_view arg) {
     }
   }
   const auto stop = npu_exec(sim, count);
-  if (stop.reason != StopReason::step_limit) {
-    std::cout << stop_message(stop.result) << '\n';
+  if (stop) {
+    std::cout << stop_message(*stop) << '\n';
   }
 }
 

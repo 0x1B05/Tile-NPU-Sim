@@ -1,7 +1,6 @@
 #include "monitor.h"
 
 #include "parse.h"
-#include "runner.h"
 #include "sdb.h"
 
 #include "tile_npu/serial.h"
@@ -54,6 +53,14 @@ bool parse_image(std::string_view arg, Image &image) {
   return parse_u64(arg.substr(at + 1), image.address);
 }
 
+std::optional<StepResult> npu_exec(Simulator &sim, std::uint64_t step_limit) {
+  for (std::uint64_t steps = 0; steps < step_limit; ++steps) {
+    const auto result = sim.step();
+    if (result.status != StepStatus::retired) return result;
+  }
+  return std::nullopt;
+}
+
 int run_images(const Options &options) {
   tile_npu::FlatMemory ram(MEMORY_BASE, options.memory_mib * 1024 * 1024);
   for (const auto &image : options.images) {
@@ -75,18 +82,20 @@ int run_images(const Options &options) {
   // A guest stops at ebreak or kernel.end with a0 as the process exit code;
   // a0 = 0 means success. A stop on any other status is an error.
   const auto stop = npu_exec(sim, options.step_limit);
-  using enum StopReason;
-  switch (stop.reason) {
-  case breakpoint:
-  case kernel_end: {
+  if (!stop) {
+    std::cerr << "step limit reached\n";
+    return 1;
+  }
+  switch (stop->status) {
+  case StepStatus::breakpoint:
+  case StepStatus::kernel_end: {
     const auto exit_code = sim.state().scalar.read_x(10);
     if (exit_code != 0) {
       std::cerr << "guest exited with a0=" << exit_code << '\n';
     }
     return static_cast<int>(exit_code);
   }
-  case step_limit: std::cerr << "step limit reached\n"; return 1;
-  default: std::cerr << stop_message(stop.result) << '\n'; return 1;
+  default: std::cerr << stop_message(*stop) << '\n'; return 1;
   }
 }
 

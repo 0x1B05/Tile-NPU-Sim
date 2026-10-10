@@ -82,9 +82,8 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `apps/qwen3/` | Qwen3-0.6B 推理 guest 程序 (rv64im 裸机, NPU kernel 库 + forward 编排, 末位 prompt token 上带数值对齐探针); `xmake build qwen3_app` 交叉编译, 模型 blob 由 `scripts/qwen3/` 生成 |
 | `scripts/qwen3/` | Qwen3 宿主工具: `fetch_model.sh` 下载模型权重/分词器到 `external/qwen3` (sha256 固定), `convert.py` safetensors→q8s32 模型 blob (含 `--tiny` 随机小模型), `ref.py` tiny 模型 numpy 对齐参考, `tokenizer.py` 纯 Python 分词器, `tiny_check.py` guest 输出与 ref.py 的逐探针对齐比较 (由 `--qwen3test=y` 的 xmake 测试驱动) |
 | `xmake/guest.lua`, `xmake/riscv_tests.lua`, `xmake/apps.lua` | 按关注点拆出的构建脚本 (guest 镜像 / 官方套件 / Qwen3 应用与 tiny 回归), 由根 `xmake.lua` includes; 共享汇编逻辑在 `xmake/modules/guestimg.lua`; 增量重建用 `depend.on_changed` 的 `lastmtime` 锚定产物 mtime (产物缺失即重建) |
-| `src/monitor/monitor.h`, `src/monitor/monitor.cpp` | monitor 平台胶水: 镜像装载 (`image@0xADDR`), 运行/交互分派与结果解释; 入口 main 在 `src/main.cpp` |
+| `src/monitor/monitor.h`, `src/monitor/monitor.cpp` | monitor 平台胶水与运行层: 镜像装载 (`image@0xADDR`), 统一步进循环 `npu_exec` (步数预算, 返回停机的 `StepResult`, 预算耗尽返回 `std::nullopt`), 运行/交互分派与停机解释; ebreak/kernel.end 停机时 a0 作退出码, 属模拟器约定; 入口 main 在 `src/main.cpp` |
 | `src/monitor/parse.h` | 命令行参数与 sdb 命令共享的数值解析 `parse_u64` (base 0, 全串消费) |
-| `src/monitor/runner.h`, `src/monitor/runner.cpp` | monitor 运行层: 统一步进循环 `npu_exec` (步数预算) 与停止分类 (`StopReason`/`StopInfo`); ebreak/kernel.end 停机时 a0 作退出码, 属模拟器约定 |
 | `src/monitor/sdb.cpp` | sdb 交互 shell: `si`/`c`/`info r`/`x`/`q`, 空行重复上一条命令 |
 
 ## 建模约定 (修改前必读)

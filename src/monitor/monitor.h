@@ -1,9 +1,11 @@
 #pragma once
 
-#include "runner.h"
+#include "tile_npu/simulator.h"
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -13,6 +15,10 @@ namespace tile_npu::monitor {
 // Monitor conventions, not ISA-defined behavior.
 inline constexpr std::uint64_t MEMORY_BASE = 0x80000000;
 inline constexpr std::size_t DEFAULT_MEMORY_MIB = 128;
+
+// A step budget of UNLIMITED_STEPS runs until the program stops on its own;
+// a command-line "-1" wraps to this same value (int64 -> uint64).
+inline constexpr std::uint64_t UNLIMITED_STEPS = std::numeric_limits<std::uint64_t>::max();
 
 struct Image {
   std::string path;
@@ -25,6 +31,11 @@ struct Options {
   std::uint64_t step_limit = UNLIMITED_STEPS;
   std::vector<Image> images;
 };
+
+// Step loop shared by the non-interactive run path and the sdb shell.
+// Simulator::step() remains a single-step API; npu_exec() runs until a step
+// does not retire and returns it, or until the step budget is spent.
+std::optional<StepResult> npu_exec(Simulator &sim, std::uint64_t step_limit);
 
 // An image argument is "path" (loaded at the entry address) or
 // "path@0xADDR" (loaded at ADDR).
