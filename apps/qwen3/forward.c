@@ -1,5 +1,7 @@
 #include "qwen3.h"
 
+#include "dims.h"
+
 // Qwen3 forward pass orchestration. Architecture dims come from the blob
 // header at runtime; weight pointers are cached per layer at init.
 
@@ -69,31 +71,31 @@ static uint32_t N_LAYERS, HIDDEN, INTER, N_Q, N_KV, HD, VOCAB, MAX_POS, N_PROMPT
 static uint32_t Q_DIM, KV_DIM;
 static uint32_t SCALE_LOG2E_BITS;
 
-static float x_buf[3072];
-static float h1[3072];
-static float h2[3072];
-static float gate_buf[3072];
-static float up_buf[3072];
-static float attn_buf[3072];
-static float q_buf[2048];
-static float k_buf[1024];
-static float v_buf[1024];
-static float scores[512 + 32];
-static float logits[151936];
+static float x_buf[HIDDEN_CAP];
+static float h1[HIDDEN_CAP];
+static float h2[HIDDEN_CAP];
+static float gate_buf[INTER_CAP];
+static float up_buf[INTER_CAP];
+static float attn_buf[Q_DIM_CAP];
+static float q_buf[Q_DIM_CAP];
+static float k_buf[KV_DIM_CAP];
+static float v_buf[KV_DIM_CAP];
+static float scores[POS_CAP + 32];
+static float logits[VOCAB_CAP];
 static uint32_t rcp_word[1];
 
 // prefill batch buffers: 32 token rows each, row stride = the vector dim
 #define BATCH_ROWS 32
-static float pf_x[BATCH_ROWS * 3072];
-static float pf_h1[BATCH_ROWS * 3072];
-static float pf_h2[BATCH_ROWS * 3072];
-static float pf_gate[BATCH_ROWS * 3072];
-static float pf_up[BATCH_ROWS * 3072];
-static float pf_q[BATCH_ROWS * 2048];
-static float pf_attn[BATCH_ROWS * 2048];
-static float pf_k[BATCH_ROWS * 1024];
-static float pf_v[BATCH_ROWS * 1024];
-static int8_t pf_xq[BATCH_ROWS * 3072];
+static float pf_x[BATCH_ROWS * HIDDEN_CAP];
+static float pf_h1[BATCH_ROWS * HIDDEN_CAP];
+static float pf_h2[BATCH_ROWS * HIDDEN_CAP];
+static float pf_gate[BATCH_ROWS * INTER_CAP];
+static float pf_up[BATCH_ROWS * INTER_CAP];
+static float pf_q[BATCH_ROWS * Q_DIM_CAP];
+static float pf_attn[BATCH_ROWS * Q_DIM_CAP];
+static float pf_k[BATCH_ROWS * KV_DIM_CAP];
+static float pf_v[BATCH_ROWS * KV_DIM_CAP];
+static int8_t pf_xq[BATCH_ROWS * HIDDEN_CAP];
 static float pf_xs[BATCH_ROWS];
 
 static char *const kv_region = (char *)KV_REGION_BASE;
@@ -204,12 +206,13 @@ void forward_init(void) {
   KV_DIM = N_KV * HD;
   // the kernels require dims that are multiples of 32 and rope/score chunks
   // that fit 32-lane vectors; inv_n_bits() computes 1/n as 2^-ctz(n), exact
-  // only when n is a power of two; logits[] and the kernels.S accumulator
-  // buffer are sized 151936. Anything else is rejected up front.
-  if (N_LAYERS > MAX_LAYERS || HIDDEN > 3072 || INTER > 3072 || Q_DIM > 2048 || KV_DIM > 1024 ||
-      MAX_POS > 512 || VOCAB > 151936 || HIDDEN == 0 || INTER == 0 || N_Q == 0 || N_KV == 0 ||
-      VOCAB == 0 || HIDDEN % 32 != 0 || INTER % 32 != 0 || Q_DIM % 32 != 0 || KV_DIM % 32 != 0 ||
-      VOCAB % 32 != 0 || N_Q % N_KV != 0 || (HIDDEN & (HIDDEN - 1)) != 0) {
+  // only when n is a power of two; the buffers and the kernels.S accumulator
+  // are sized by the dims.h capacities. Anything else is rejected up front.
+  if (N_LAYERS > MAX_LAYERS || HIDDEN > HIDDEN_CAP || INTER > INTER_CAP || Q_DIM > Q_DIM_CAP ||
+      KV_DIM > KV_DIM_CAP || MAX_POS > POS_CAP || VOCAB > VOCAB_CAP || HIDDEN == 0 || INTER == 0 ||
+      N_Q == 0 || N_KV == 0 || VOCAB == 0 || HIDDEN % 32 != 0 || INTER % 32 != 0 ||
+      Q_DIM % 32 != 0 || KV_DIM % 32 != 0 || VOCAB % 32 != 0 || N_Q % N_KV != 0 ||
+      (HIDDEN & (HIDDEN - 1)) != 0) {
     print_str("unsupported arch dims\n");
     halt(1);
   }

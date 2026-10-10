@@ -24,6 +24,7 @@ target("qwen3_app")
         local guest_incdir = path.join(os.projectdir(), "tests", "guest",
                                        "include")
         local deps = {linkscript, path.join(app_srcdir, "qwen3.h"),
+                      path.join(app_srcdir, "dims.h"),
                       path.join(guest_incdir, "npu.inc")}
         table.join2(deps, sources)
         -- lastmtime anchors on the outputs: a missing one forces a rebuild.

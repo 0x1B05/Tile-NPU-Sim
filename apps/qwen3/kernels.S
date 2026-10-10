@@ -5,11 +5,12 @@
 # every streamed vector keeps its own descriptor.
 
     .include "npu.inc"
+#include "dims.h"
 
     .bss
     .align 4
     .globl nq_accbuf
-nq_accbuf: .skip 151936 * 4
+nq_accbuf: .skip VOCAB_CAP * 4
 
     .bss
     .align 3
