@@ -12,7 +12,7 @@
 
 namespace tile_npu::monitor {
 
-// Monitor conventions, not ISA-defined behavior.
+// Monitor conventions.
 inline constexpr std::uint64_t MEMORY_BASE = 0x80000000;
 inline constexpr std::size_t DEFAULT_MEMORY_MIB = 128;
 
@@ -33,7 +33,7 @@ struct Options {
 };
 
 // Step loop shared by the non-interactive run path and the sdb shell.
-// Simulator::step() remains a single-step API; npu_exec() runs until a step
+// Simulator::step() is the single-step API; npu_exec() runs until a step
 // does not retire and returns it, or until the step budget is spent.
 std::optional<StepResult> npu_exec(Simulator &sim, std::uint64_t step_limit);
 

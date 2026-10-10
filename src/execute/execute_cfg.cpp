@@ -9,9 +9,8 @@
 namespace tile_npu {
 namespace {
 
-// A failed config access is the ISA's CFG_ERROR. The manual leaves the
-// architectural consequence of CFG_ERROR open, so surfacing it as
-// invalid_configuration is a simulator convention.
+// A failed config access (the ISA's CFG_ERROR) surfaces as
+// invalid_configuration.
 ExecuteResult cfg_write(const CfgInstr &instr, State &state, std::uint64_t value) {
   const auto field = config_field_from_code(instr.reg_type, instr.field);
   const auto *resolved = std::get_if<ConfigField>(&field);

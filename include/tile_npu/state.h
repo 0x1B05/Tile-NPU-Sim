@@ -123,10 +123,9 @@ struct State {
 };
 
 // The step pipeline's status vocabulary, shared by the public Simulator API
-// and the execution layer below it. These are simulator diagnostics, not
-// ISA-defined traps. Values are grouped by the pipeline stage that produces
-// them; every stop other than `retired` ends Simulator::step() at the
-// current pc.
+// and the execution layer below it. Values are grouped by the pipeline stage
+// that produces them; every stop other than `retired` ends Simulator::step()
+// at the current pc.
 enum class StepStatus {
   retired,
 

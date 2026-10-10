@@ -177,8 +177,7 @@ ExecuteResult row_access(const MblkInstr &instr, ExecContext &ctx,
   }
 
   const auto row = resolve_index(instr.index, ctx.state);
-  // The ISA leaves the row bound open; the simulator follows the row-move
-  // convention and rejects row numbers outside the effective shape.
+  // Row numbers outside the effective shape are rejected.
   if (row >= config.rows) {
     return config_error();
   }

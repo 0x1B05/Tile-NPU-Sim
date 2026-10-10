@@ -84,7 +84,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `xmake/guest.lua`, `xmake/riscv_tests.lua`, `xmake/apps.lua` | 按关注点拆出的构建脚本 (guest 镜像 / 官方套件 / Qwen3 应用与 tiny 回归), 由根 `xmake.lua` includes; 共享汇编逻辑在 `xmake/modules/guestimg.lua`; 增量重建用 `depend.on_changed` 的 `lastmtime` 锚定产物 mtime (产物缺失即重建) |
 | `src/monitor/monitor.h`, `src/monitor/monitor.cpp` | monitor 平台胶水与运行层: 镜像装载 (`image@0xADDR`), 统一步进循环 `npu_exec` (步数预算, 返回停机的 `StepResult`, 预算耗尽返回 `std::nullopt`), 运行/交互分派与停机解释; ebreak/kernel.end 停机时 a0 作退出码, 属模拟器约定; 入口 main 在 `src/main.cpp` |
 | `src/monitor/parse.h` | 命令行参数与 sdb 命令共享的数值解析 `parse_u64` (base 0, 全串消费) |
-| `src/monitor/sdb.cpp` | sdb 交互 shell: 命令表驱动 (`SDB_COMMANDS`, NEMU `cmd_table` 风格, help 与分派同表防漂移), handler 返回 false 退出循环; 空行重复上一条命令 |
+| `src/monitor/sdb.cpp` | sdb 交互 shell: 命令表驱动 (`SDB_COMMANDS`, help 与分派同表), handler 返回 false 退出循环; 空行重复上一条命令 |
 
 ## 建模约定 (修改前必读)
 
@@ -98,7 +98,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 - 状态与诊断的区分是刻意的: `illegal` (译码失败的唯一类别: 手册预留编码, 以及本 hart 未实现的 RV64 扩展编码——按 RISC-V 语义后者同为非法指令) / `execution_not_implemented` (新增指令的开发中间态) / `invalid_configuration` 都是**模拟器诊断, 不是 ISA 定义的 trap**。理论上不可达的路径 (不变式被破坏, 即模拟器自身 bug) 用 `unreachable()` 当场中止, 不走 `StepStatus`。
 - 结构合法性只校验一次: `decode()` 产生的 IR 保证结构合法 (op code、domain、操作数 variant、寄存器号都在某个真实编码允许的范围内); `execute_npu` 入口用 `valid_structure` (`src/execute/validate.h`) 统一复查, 手工构造的非法 IR (embedder bug) 报 `illegal_instruction`。各执行器不再重复结构检查, 只负责配置与数据的动态约束 (dtype/shape/len/描述符), 失败报 `invalid_configuration`。
 - `Simulator::reset(entry_pc)` 清模拟器状态并设 PC, 不清内存; ISA 手册未定义架构复位值与入口地址。`sim_run` 的装载地址 (`0x80000000`), RAM 大小 (128 MiB), 串口控制台 MMIO 地址 (`0x10000000`) 与 `EBREAK` 时 `a0 == 0` 判成功, 都是 **runner 约定, 不是架构契约**。
-- 凡是模拟器自有约定 (复位, 装载, 停机判定), 必须在代码注释或文档中明确标注为模拟器约定, 不得写成 ISA 行为。
+- 模拟器自有约定 (复位, 装载, 停机判定, 串口) 统一在本文档说明 (见本节与文件组织表); 代码注释只陈述当前行为, 不反复标注 "convention / not ISA" 公式句。
 
 ## ISA 语义同步规则 (重要)
 
@@ -132,7 +132,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 - 常量名用 `ALL_CAPS` (如 `MATRIX_EXTENT`), 不用 `k` 前缀。
 - 查表性质的 switch、位段拼装和编码枚举/元数据表用对齐排版 (编码枚举可按编码空间分组、一行多个枚举项), 并以 `// clang-format off`/`on` 保护 (格式化器不会动保护区)。
 - 位段一律通过 `encoding::field<Hi,Lo>` 提取, 不在别处散落魔数移位。
-- 注释为英文, 只写"为什么/哪一层约定", 不复述代码; 陈述现状, 不用否定对比句式 (不写"而不是 X / 不再 X / X 不会到这里"), 不描述历史行为。模拟器自有约定的标注 (如"simulator convention") 是必留说明, 不受此限。
+- 注释为英文, 只写"为什么/哪一层约定", 不复述代码; 见名知意处不写注释; 陈述现状, 不用否定对比句式 (不写"而不是 X / 不再 X / X 不会到这里"), 不描述历史行为。
 
 ## 架构扩展约定
 

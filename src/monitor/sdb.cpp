@@ -42,8 +42,8 @@ std::pair<std::string_view, std::string_view> split_command(std::string_view lin
           first == std::string_view::npos ? std::string_view{} : rest.substr(first)};
 }
 
-// One row per sdb command, in the spirit of NEMU's cmd_table: the dispatch
-// loop and the help listing read the same table, so they cannot drift apart.
+// One row per sdb command: the dispatch loop and the help listing read the
+// same table.
 struct SdbCommand {
   std::string_view name;
   std::string_view summary;

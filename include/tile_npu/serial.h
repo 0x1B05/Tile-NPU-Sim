@@ -9,10 +9,9 @@
 
 namespace tile_npu {
 
-// Platform serial console (a simulator convention, not ISA behavior), mapped
-// at SERIAL_BASE for SERIAL_SIZE bytes. 16550-lite: a byte stored at offset
-// 0 (THR) is printed to the host; offset 5 (LSR) always reads ready (0x60),
-// other offsets read as 0.
+// Platform serial console mapped at SERIAL_BASE for SERIAL_SIZE bytes.
+// 16550-lite: a byte stored at offset 0 (THR) is printed to the host; offset
+// 5 (LSR) always reads ready (0x60), other offsets read as 0.
 inline constexpr std::uint64_t SERIAL_BASE = 0x10000000;
 inline constexpr std::size_t SERIAL_SIZE = 8;
 

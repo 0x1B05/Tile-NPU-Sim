@@ -336,9 +336,8 @@ TEST_CASE(npu_guest_mma) {
 
 TEST_CASE(npu_guest_sys) {
   // tests/guest/npu/sys.S interleaves the three fences with a tfill/tstore
-  // pair, checks the stored bytes, then terminates with kernel.end. The step
-  // stops with StepStatus::kernel_end (a simulator convention: the ISA does
-  // not define the architectural behavior after kernel completion).
+  // pair, checks the stored bytes, then terminates with kernel.end; the step
+  // stops with StepStatus::kernel_end.
   check_guest_image("sys", 256, tile_npu::StepStatus::kernel_end);
 }
 

@@ -11,8 +11,7 @@
 namespace tile_npu {
 namespace detail {
 
-// Base-address overflow is rejected: the ISA manual leaves address
-// wraparound undefined, so rejection is a simulator convention.
+// Base-address overflow is rejected.
 inline std::optional<std::uint64_t> add_signed_offset(std::uint64_t base, std::int64_t offset) {
   if (offset >= 0) {
     const auto positive = static_cast<std::uint64_t>(offset);

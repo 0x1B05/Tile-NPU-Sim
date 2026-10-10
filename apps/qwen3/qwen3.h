@@ -1,8 +1,7 @@
 #pragma once
 
 // Qwen3 inference app for the Tile-NPU simulator: shared layout constants,
-// the Q3B1 blob format view, and console I/O (platform conventions, not
-// ISA behavior).
+// the Q3B1 blob format view, and console I/O.
 //
 // Guest memory map (sim_run -m 2048):
 //   0x80000000  this image (code + rodata + data + bss, a few MB)
@@ -38,9 +37,9 @@ struct q3b_section {
   uint32_t size;
 };
 
-// Console I/O (platform conventions, not ISA behavior): storing a byte at
-// the serial THR prints it on the host (see include/tile_npu/serial.h);
-// ebreak stops the simulator with a0 as the process exit code.
+// Console I/O: storing a byte at the serial THR prints it on the host (see
+// include/tile_npu/serial.h); ebreak stops the simulator with a0 as the
+// process exit code.
 #define SERIAL_THR ((volatile unsigned char *)0x10000000ull)
 
 static inline void serial_putc(int c) { *SERIAL_THR = (unsigned char)c; }
