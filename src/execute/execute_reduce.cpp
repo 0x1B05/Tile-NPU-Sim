@@ -49,17 +49,10 @@ float fold_identity(ReduceOp op) {
 // and ties keep the smaller index. Shapes are validated non-empty, so the
 // scan always sees a first element.
 struct ArgmaxScan {
-  std::uint32_t best_index = 0;
-  float best_value = 0.0f;
-  bool started = false;
+  std::uint32_t best_index;
+  float best_value;
 
   void feed(std::uint32_t index, float candidate) {
-    if (!started) {
-      best_index = index;
-      best_value = candidate;
-      started = true;
-      return;
-    }
     const bool candidate_nan = std::isnan(candidate);
     const bool best_nan = std::isnan(best_value);
     if (candidate_nan) {
@@ -92,8 +85,8 @@ ExecuteResult areduce(const ReduceInstr &instr, State &state) {
   auto &dst_reg = state.v[dst.index];
   for (std::size_t row = 0; row < src_config.rows; ++row) {
     if (instr.op == ReduceOp::argmax) {
-      ArgmaxScan scan;
-      for (std::size_t col = 0; col < src_config.cols; ++col) {
+      ArgmaxScan scan{0, std::bit_cast<float>(src.at(row, 0))};
+      for (std::size_t col = 1; col < src_config.cols; ++col) {
         scan.feed(static_cast<std::uint32_t>(col), std::bit_cast<float>(src.at(row, col)));
       }
       dst_reg[row] = scan.best_index;
@@ -122,8 +115,8 @@ ExecuteResult vreduce(const ReduceInstr &instr, State &state) {
   if (instr.op == ReduceOp::argmax) {
     const auto &x_index = std::get<ScalarRegister>(instr.dest);
     const auto &x_value = std::get<ScalarRegister>(instr.dest2);
-    ArgmaxScan scan;
-    for (std::size_t lane = 0; lane < src_config.len; ++lane) {
+    ArgmaxScan scan{0, std::bit_cast<float>(src_reg[0])};
+    for (std::size_t lane = 1; lane < src_config.len; ++lane) {
       scan.feed(static_cast<std::uint32_t>(lane), std::bit_cast<float>(src_reg[lane]));
     }
     state.scalar.write_x(x_index.index, static_cast<std::uint64_t>(static_cast<std::int64_t>(
