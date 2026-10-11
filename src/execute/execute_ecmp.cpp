@@ -107,7 +107,7 @@ ExecuteResult run_cmp_acc(const CmpInstr &instr, State &state, RightAt right_at)
 // An unsuccessful execution leaves architectural state unchanged.
 ExecuteResult cmp_acc(const CmpInstr &instr, State &state) {
   if (!operands_valid(instr, state.ac)) {
-    return {.status = StepStatus::invalid_configuration};
+    return config_error();
   }
   return with_src2_matrix(instr.src2, state, state.a,
                           [&](auto right_at) { return run_cmp_acc(instr, state, right_at); });
@@ -128,7 +128,7 @@ ExecuteResult run_cmp_vec32(const CmpInstr &instr, State &state, RightAt right_a
 
 ExecuteResult cmp_vec32(const CmpInstr &instr, State &state) {
   if (!operands_valid(instr, state.vc)) {
-    return {.status = StepStatus::invalid_configuration};
+    return config_error();
   }
   return with_src2_vector(instr.src2, state, state.v,
                           [&](auto right_at) { return run_cmp_vec32(instr, state, right_at); });

@@ -58,9 +58,8 @@ template <typename Element, typename Config, std::size_t RegCount>
 ExecuteResult er4_matrix(const Er4Instr &instr,
                          std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
                          const std::array<Config, RegCount> &configs) {
-  const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   if (!operands_valid<Element>(instr, configs)) {
-    return fail;
+    return config_error();
   }
   const auto &dst_config = configs[instr.dest.index];
   const auto view = [&](RegisterIndex index) { return matrix_view(std::as_const(regs[index])); };
@@ -81,9 +80,8 @@ template <typename Element, typename Config, std::size_t RegCount>
 ExecuteResult er4_vector(const Er4Instr &instr,
                          std::array<std::array<Element, VECTOR_LANES>, RegCount> &regs,
                          const std::array<Config, RegCount> &configs) {
-  const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   if (!operands_valid<Element>(instr, configs)) {
-    return fail;
+    return config_error();
   }
   const auto &dst_config = configs[instr.dest.index];
   auto &dst_reg = regs[instr.dest.index];

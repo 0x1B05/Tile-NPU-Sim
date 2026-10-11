@@ -23,7 +23,6 @@ ExecuteResult bcast(const BcastInstr &instr,
                     const std::array<MatConfig, MatCount> &matrix_configs,
                     const std::array<std::array<Element, VECTOR_LANES>, VecCount> &vector_regs,
                     const std::array<VecConfig, VecCount> &vector_configs) {
-  const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   const auto &dst_config = matrix_configs[instr.dest.index];
   const auto &src_config = matrix_configs[instr.src1.index];
   const auto &vec_config = vector_configs[instr.vector.index];
@@ -32,7 +31,7 @@ ExecuteResult bcast(const BcastInstr &instr,
       vec_config.dtype != dst_config.dtype ||
       vec_config.len != (instr.by_col ? dst_config.cols : dst_config.rows) ||
       !ebin_op_supports_dtype(instr.op, dst_config.dtype)) {
-    return fail;
+    return config_error();
   }
 
   auto dst = matrix_view(matrix_regs[instr.dest.index]);

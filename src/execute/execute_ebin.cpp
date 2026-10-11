@@ -57,7 +57,7 @@ ExecuteResult elementwise_matrix(const EbinInstr &instr, State &state,
                                  std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
                                  const std::array<Config, RegCount> &configs) {
   if (!operands_valid(instr, configs)) {
-    return {.status = StepStatus::invalid_configuration};
+    return config_error();
   }
   return with_src2_matrix(instr.src2, state, regs, [&](auto right_at) {
     return run_matrix(instr, regs, configs, right_at);
@@ -84,7 +84,7 @@ ExecuteResult elementwise_vector(const EbinInstr &instr, State &state,
                                  std::array<std::array<Element, VECTOR_LANES>, RegCount> &regs,
                                  const std::array<Config, RegCount> &configs) {
   if (!operands_valid(instr, configs)) {
-    return {.status = StepStatus::invalid_configuration};
+    return config_error();
   }
   return with_src2_vector(instr.src2, state, regs, [&](auto right_at) {
     return run_vector(instr, regs, configs, right_at);

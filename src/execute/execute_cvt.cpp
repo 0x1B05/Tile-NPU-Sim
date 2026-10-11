@@ -30,9 +30,8 @@ constexpr std::uint32_t i32_to_f32_bits(std::uint32_t bits) {
 }
 
 ExecuteResult cvt_acc(const CvtInstr &instr, State &state) {
-  const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   if (!operands_valid(instr, state.ac)) {
-    return fail;
+    return config_error();
   }
   const auto &dst_config = state.ac[instr.dest.index];
   auto dst = matrix_view(state.a[instr.dest.index]);
@@ -47,9 +46,8 @@ ExecuteResult cvt_acc(const CvtInstr &instr, State &state) {
 }
 
 ExecuteResult cvt_vec32(const CvtInstr &instr, State &state) {
-  const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   if (!operands_valid(instr, state.vc)) {
-    return fail;
+    return config_error();
   }
   const auto &dst_config = state.vc[instr.dest.index];
   auto &dst_reg = state.v[instr.dest.index];
@@ -64,13 +62,12 @@ ExecuteResult cvt_vec32(const CvtInstr &instr, State &state) {
 // twiden: cross-domain Tile i8 -> Acc i32 sign extension; the destination
 // keeps its i32 dtype and takes the source's effective shape.
 ExecuteResult widen_tile_to_acc(const CvtInstr &instr, State &state) {
-  const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   const auto &dst_config = state.ac[instr.dest.index];
   const auto &src_config = state.tc[instr.src.index];
   if (!valid_domain_config(dst_config) || !valid_domain_config(src_config) ||
       dst_config.dtype != DType::i32 || src_config.dtype != DType::i8 ||
       dst_config.rows != src_config.rows || dst_config.cols != src_config.cols) {
-    return fail;
+    return config_error();
   }
   auto dst = matrix_view(state.a[instr.dest.index]);
   auto src = matrix_view(std::as_const(state.t[instr.src.index]));

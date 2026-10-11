@@ -73,12 +73,11 @@ template <typename Element, typename Config, std::size_t RegCount>
 ExecuteResult unary_matrix(const EunInstr &instr,
                            std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
                            const std::array<Config, RegCount> &configs) {
-  const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   const auto &dst_config = configs[instr.dest.index];
   const auto &src_config = configs[instr.src.index];
   if (!valid_elementwise_config(dst_config) || !valid_elementwise_config(src_config) ||
       !configs_match(dst_config, src_config) || !op_supports_dtype(instr.op, dst_config.dtype)) {
-    return fail;
+    return config_error();
   }
 
   auto dst = matrix_view(regs[instr.dest.index]);
@@ -95,12 +94,11 @@ template <typename Element, typename Config, std::size_t RegCount>
 ExecuteResult unary_vector(const EunInstr &instr,
                            std::array<std::array<Element, VECTOR_LANES>, RegCount> &regs,
                            const std::array<Config, RegCount> &configs) {
-  const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   const auto &dst_config = configs[instr.dest.index];
   const auto &src_config = configs[instr.src.index];
   if (!valid_elementwise_config(dst_config) || !valid_elementwise_config(src_config) ||
       !configs_match(dst_config, src_config) || !op_supports_dtype(instr.op, dst_config.dtype)) {
-    return fail;
+    return config_error();
   }
 
   auto &dst_reg = regs[instr.dest.index];

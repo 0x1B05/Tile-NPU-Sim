@@ -71,7 +71,6 @@ struct ArgmaxScan {
 // equals the source row count (i32 destination for argmax). An unsuccessful
 // execution leaves architectural state unchanged.
 ExecuteResult areduce(const ReduceInstr &instr, State &state) {
-  const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   const auto &dst = std::get<NpuRegister>(instr.dest);
   const auto &src_config = state.ac[instr.src.index];
   const auto &dst_config = state.vc[dst.index];
@@ -79,7 +78,7 @@ ExecuteResult areduce(const ReduceInstr &instr, State &state) {
   if (!valid_domain_config(src_config) || src_config.dtype != DType::f32 ||
       !valid_domain_config(dst_config) || dst_config.dtype != dst_dtype ||
       dst_config.len != src_config.rows) {
-    return fail;
+    return config_error();
   }
   auto src = matrix_view(std::as_const(state.a[instr.src.index]));
   auto &dst_reg = state.v[dst.index];
@@ -105,10 +104,9 @@ ExecuteResult areduce(const ReduceInstr &instr, State &state) {
 // sumsq write the f32 bit pattern into the low 32 bits of xD (high bits
 // zeroed); argmax writes xIndex (i32, sign-extended) and xValue (f32 bits).
 ExecuteResult vreduce(const ReduceInstr &instr, State &state) {
-  const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   const auto &src_config = state.vc[instr.src.index];
   if (!valid_domain_config(src_config) || src_config.dtype != DType::f32) {
-    return fail;
+    return config_error();
   }
   const auto &src_reg = state.v[instr.src.index];
 

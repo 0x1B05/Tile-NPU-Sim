@@ -29,14 +29,13 @@ constexpr bool accumulates(MmaOp op) { return op == MmaOp::nn_acc || op == MmaOp
 // destination's old value. An unsuccessful execution leaves architectural
 // state unchanged.
 ExecuteResult mma(const MmaInstr &instr, State &state) {
-  const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   const auto &dst_config = state.ac[instr.dest.index];
   const auto &lhs_config = state.tc[instr.src_a.index];
   const auto &rhs_config = state.tc[instr.src_b.index];
   if (!valid_domain_config(dst_config) || dst_config.dtype != DType::i32 ||
       !valid_domain_config(lhs_config) || lhs_config.dtype != DType::i8 ||
       !valid_domain_config(rhs_config) || rhs_config.dtype != DType::i8) {
-    return fail;
+    return config_error();
   }
   const bool nt = is_nt(instr.op);
   const auto m = lhs_config.rows;
@@ -44,7 +43,7 @@ ExecuteResult mma(const MmaInstr &instr, State &state) {
   const auto n = nt ? rhs_config.rows : rhs_config.cols;
   if ((nt ? rhs_config.cols : rhs_config.rows) != k || dst_config.rows != m ||
       dst_config.cols != n) {
-    return fail;
+    return config_error();
   }
   auto dst = matrix_view(state.a[instr.dest.index]);
   auto lhs = matrix_view(std::as_const(state.t[instr.src_a.index]));
@@ -66,20 +65,19 @@ ExecuteResult mma(const MmaInstr &instr, State &state) {
 // bdot.{nn,nt}.i8.i32: vD[j] = dot(bA, tB column j) for nn, dot(bA, tB row j)
 // for nt.
 ExecuteResult bdot(const MmaInstr &instr, State &state) {
-  const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   const auto &dst_config = state.vc[instr.dest.index];
   const auto &lhs_config = state.bc[instr.src_a.index];
   const auto &rhs_config = state.tc[instr.src_b.index];
   if (!valid_domain_config(dst_config) || dst_config.dtype != DType::i32 ||
       !valid_domain_config(lhs_config) || lhs_config.dtype != DType::i8 ||
       !valid_domain_config(rhs_config) || rhs_config.dtype != DType::i8) {
-    return fail;
+    return config_error();
   }
   const bool nt = is_nt(instr.op);
   const auto k = nt ? rhs_config.cols : rhs_config.rows;
   const auto n = nt ? rhs_config.rows : rhs_config.cols;
   if (lhs_config.len != k || dst_config.len != n) {
-    return fail;
+    return config_error();
   }
   auto rhs = matrix_view(std::as_const(state.t[instr.src_b.index]));
   const auto &lhs = state.b[instr.src_a.index];

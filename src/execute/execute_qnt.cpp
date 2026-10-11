@@ -66,7 +66,6 @@ std::optional<std::uint32_t> scale_lane(const QntInstr &instr, const State &stat
 // into vScale. An unsuccessful execution leaves architectural state
 // unchanged.
 ExecuteResult tquant(const QntInstr &instr, State &state) {
-  const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   const auto &dst_config = state.tc[instr.dest.index];
   const auto &src_config = state.ac[instr.src.index];
   const auto &scale_config = state.vc[instr.scale];
@@ -75,7 +74,7 @@ ExecuteResult tquant(const QntInstr &instr, State &state) {
       !valid_domain_config(scale_config) || scale_config.dtype != DType::f32 ||
       dst_config.rows != src_config.rows || dst_config.cols != src_config.cols ||
       scale_config.len != src_config.rows) {
-    return fail;
+    return config_error();
   }
   auto dst = matrix_view(state.t[instr.dest.index]);
   auto src = matrix_view(std::as_const(state.a[instr.src.index]));
@@ -98,7 +97,6 @@ ExecuteResult tquant(const QntInstr &instr, State &state) {
 
 // tdequant.rows.f32: aD[i,j] = f32(tS[i,j]) x vScale[i].
 ExecuteResult tdequant(const QntInstr &instr, State &state) {
-  const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   const auto &dst_config = state.ac[instr.dest.index];
   const auto &src_config = state.tc[instr.src.index];
   const auto &scale_config = state.vc[instr.scale];
@@ -107,7 +105,7 @@ ExecuteResult tdequant(const QntInstr &instr, State &state) {
       !valid_domain_config(scale_config) || scale_config.dtype != DType::f32 ||
       dst_config.rows != src_config.rows || dst_config.cols != src_config.cols ||
       scale_config.len != src_config.rows) {
-    return fail;
+    return config_error();
   }
   auto dst = matrix_view(state.a[instr.dest.index]);
   auto src = matrix_view(std::as_const(state.t[instr.src.index]));
@@ -125,7 +123,6 @@ ExecuteResult tdequant(const QntInstr &instr, State &state) {
 // vquant.q8s32: quantizes an f32 Vec32 into an i8 Vec8 of the same length;
 // the single scale lands in vScale[index].
 ExecuteResult vquant(const QntInstr &instr, State &state) {
-  const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   const auto &dst_config = state.bc[instr.dest.index];
   const auto &src_config = state.vc[instr.src.index];
   const auto &scale_config = state.vc[instr.scale];
@@ -133,11 +130,11 @@ ExecuteResult vquant(const QntInstr &instr, State &state) {
       !valid_domain_config(src_config) || src_config.dtype != DType::f32 ||
       !valid_domain_config(scale_config) || scale_config.dtype != DType::f32 ||
       dst_config.len != src_config.len) {
-    return fail;
+    return config_error();
   }
   const auto lane = scale_lane(instr, state, scale_config.len);
   if (!lane) {
-    return fail;
+    return config_error();
   }
   const auto &src_reg = state.v[instr.src.index];
   auto &dst_reg = state.b[instr.dest.index];
@@ -152,7 +149,6 @@ ExecuteResult vquant(const QntInstr &instr, State &state) {
 
 // bdequant.f32: vD[j] = f32(bS[j]) x vScale[index].
 ExecuteResult bdequant(const QntInstr &instr, State &state) {
-  const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   const auto &dst_config = state.vc[instr.dest.index];
   const auto &src_config = state.bc[instr.src.index];
   const auto &scale_config = state.vc[instr.scale];
@@ -160,11 +156,11 @@ ExecuteResult bdequant(const QntInstr &instr, State &state) {
       !valid_domain_config(src_config) || src_config.dtype != DType::i8 ||
       !valid_domain_config(scale_config) || scale_config.dtype != DType::f32 ||
       dst_config.len != src_config.len) {
-    return fail;
+    return config_error();
   }
   const auto lane = scale_lane(instr, state, scale_config.len);
   if (!lane) {
-    return fail;
+    return config_error();
   }
   const float scale = std::bit_cast<float>(state.v[instr.scale][*lane]);
   const auto &src_reg = state.b[instr.src.index];

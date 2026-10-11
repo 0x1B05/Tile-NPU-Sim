@@ -56,15 +56,14 @@ template <typename Element, typename Config, std::size_t RegCount>
 ExecuteResult mask_matrix(const MaskInstr &instr, State &state,
                           std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
                           const std::array<Config, RegCount> &configs) {
-  const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   const auto &dst_config = configs[instr.dest.index];
   const auto &src_config = configs[instr.src.index];
   if (!valid_elementwise_config(dst_config) || !valid_elementwise_config(src_config) ||
       !configs_match(dst_config, src_config)) {
-    return fail;
+    return config_error();
   }
   const auto fill = fill_value<Element>(instr, state, dst_config.dtype);
-  if (!fill) return fail;
+  if (!fill) return config_error();
 
   const auto bound = state.scalar.read_x(instr.bound);
   const auto n_rows = static_cast<std::uint32_t>(bound);
@@ -92,15 +91,14 @@ template <typename Element, typename Config, std::size_t RegCount>
 ExecuteResult mask_vector(const MaskInstr &instr, State &state,
                           std::array<std::array<Element, VECTOR_LANES>, RegCount> &regs,
                           const std::array<Config, RegCount> &configs) {
-  const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
   const auto &dst_config = configs[instr.dest.index];
   const auto &src_config = configs[instr.src.index];
   if (!valid_elementwise_config(dst_config) || !valid_elementwise_config(src_config) ||
       !configs_match(dst_config, src_config)) {
-    return fail;
+    return config_error();
   }
   const auto fill = fill_value<Element>(instr, state, dst_config.dtype);
-  if (!fill) return fail;
+  if (!fill) return config_error();
 
   const auto x_len = state.scalar.read_x(instr.bound);
   auto &dst_reg = regs[instr.dest.index];
