@@ -148,6 +148,10 @@ public:
     return true;
   }
 
+  // Commit a base value that was prevalidated by incremented_base after the
+  // associated memory transfer succeeds.
+  void commit_base(std::uint64_t next_base) { descriptor_->base_addr = next_base; }
+
   const Value &descriptor() const { return *descriptor_; }
 
 private:

@@ -135,7 +135,8 @@ ExecuteResult block_access(const MblkInstr &instr, ExecContext &ctx,
   }
   const auto rows = std::size_t{config.rows};
   const auto cols = std::size_t{config.cols};
-  if (!desc.incremented_base(rows, cols)) {
+  const auto next_base = desc.incremented_base(rows, cols);
+  if (!next_base) {
     return config_error();
   }
 
@@ -156,9 +157,7 @@ ExecuteResult block_access(const MblkInstr &instr, ExecContext &ctx,
   if (result.status != StepStatus::retired) {
     return result;
   }
-  if (!desc.post_increment(rows, cols)) {
-    unreachable("increment failed after the pre-validation passed");
-  }
+  desc.commit_base(*next_base);
   return result;
 }
 
@@ -182,7 +181,8 @@ ExecuteResult row_access(const MblkInstr &instr, ExecContext &ctx,
     return config_error();
   }
   const auto cols = std::size_t{config.cols};
-  if (!desc.incremented_base(1, cols)) {
+  const auto next_base = desc.incremented_base(1, cols);
+  if (!next_base) {
     return config_error();
   }
 
@@ -204,9 +204,7 @@ ExecuteResult row_access(const MblkInstr &instr, ExecContext &ctx,
   if (result.status != StepStatus::retired) {
     return result;
   }
-  if (!desc.post_increment(1, cols)) {
-    unreachable("increment failed after the pre-validation passed");
-  }
+  desc.commit_base(*next_base);
   return result;
 }
 
@@ -305,7 +303,8 @@ ExecuteResult vector_access(const MblkInstr &instr, ExecContext &ctx,
     return {.status = StepStatus::retired};
   }
 
-  if (!desc.incremented_base(len)) {
+  const auto next_base = desc.incremented_base(len);
+  if (!next_base) {
     return config_error();
   }
   const auto addrs =
@@ -320,9 +319,7 @@ ExecuteResult vector_access(const MblkInstr &instr, ExecContext &ctx,
   if (result.status != StepStatus::retired) {
     return result;
   }
-  if (!desc.post_increment(len)) {
-    unreachable("increment failed after the pre-validation passed");
-  }
+  desc.commit_base(*next_base);
   return result;
 }
 
