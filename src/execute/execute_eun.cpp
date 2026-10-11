@@ -70,7 +70,7 @@ template <typename E> E apply_unary(EunOp op, DType dtype, E value) {
 // the vector domain over the effective length. An unsuccessful execution
 // leaves architectural state unchanged.
 template <typename Element, typename Config, std::size_t RegCount>
-ExecuteResult unary_matrix(const EunInstr &instr, State &,
+ExecuteResult unary_matrix(const EunInstr &instr,
                            std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
                            const std::array<Config, RegCount> &configs) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
@@ -92,7 +92,7 @@ ExecuteResult unary_matrix(const EunInstr &instr, State &,
 }
 
 template <typename Element, typename Config, std::size_t RegCount>
-ExecuteResult unary_vector(const EunInstr &instr, State &,
+ExecuteResult unary_vector(const EunInstr &instr,
                            std::array<std::array<Element, VECTOR_LANES>, RegCount> &regs,
                            const std::array<Config, RegCount> &configs) {
   const auto fail = ExecuteResult{.status = StepStatus::invalid_configuration};
@@ -115,9 +115,9 @@ ExecuteResult unary_vector(const EunInstr &instr, State &,
 
 ExecuteResult execute_eun(const EunInstr &instr, State &state) {
   switch (instr.dest.domain) {
-  case NpuDomain::tile: return unary_matrix(instr, state, state.t, state.tc);
-  case NpuDomain::acc: return unary_matrix(instr, state, state.a, state.ac);
-  case NpuDomain::vec32: return unary_vector(instr, state, state.v, state.vc);
+  case NpuDomain::tile: return unary_matrix(instr, state.t, state.tc);
+  case NpuDomain::acc: return unary_matrix(instr, state.a, state.ac);
+  case NpuDomain::vec32: return unary_vector(instr, state.v, state.vc);
   case NpuDomain::vec8: break; // E_UNARY has no vec8 encoding
   }
   unreachable("execute_eun on the vec8 domain");
