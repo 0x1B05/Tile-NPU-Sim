@@ -2,6 +2,7 @@
 
 #include "parse.h"
 #include "sdb.h"
+#include "utils/format.h"
 
 #include "tile_npu/platform/bus.h"
 #include "tile_npu/platform/ram.h"
@@ -38,8 +39,7 @@ bool load_image(const Image &image, Ram &memory) {
     return false;
   }
   if (!memory.write(image.address, std::span<const std::byte>(bytes))) {
-    std::cerr << "cannot load image at 0x" << std::hex << image.address << std::dec << ": "
-              << image.path << '\n';
+    std::cerr << "cannot load image at " << hex64(image.address) << ": " << image.path << '\n';
     return false;
   }
   return true;
@@ -74,11 +74,9 @@ int run_images(const Options &options) {
   sim.reset(MEMORY_BASE);
 
   if (options.interactive) {
-    std::cout << "tile-npu monitor: entry 0x" << std::hex << MEMORY_BASE << std::dec
-              << ", type 'help'\n";
+    std::cout << "tile-npu monitor: entry " << hex64(MEMORY_BASE) << ", type 'help'\n";
     for (const auto &image : options.images) {
-      std::cout << "  loaded " << image.path << " at 0x" << std::hex << image.address << std::dec
-                << '\n';
+      std::cout << "  loaded " << image.path << " at " << hex64(image.address) << '\n';
     }
     sdb_loop(sim, bus);
     return 0;

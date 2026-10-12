@@ -3,6 +3,7 @@
 #include "monitor.h"
 #include "parse.h"
 #include "utils/endian.h"
+#include "utils/format.h"
 
 #include <algorithm>
 #include <array>
@@ -26,18 +27,6 @@ constexpr std::string_view GPR_NAMES[32] = {
     "s8",   "s9", "s10", "s11", "t3", "t4", "t5", "t6",
 };
 // clang-format on
-
-std::string hex32(std::uint32_t value) {
-  std::ostringstream out;
-  out << "0x" << std::hex << std::setw(8) << std::setfill('0') << value;
-  return out.str();
-}
-
-std::string hex64(std::uint64_t value) {
-  std::ostringstream out;
-  out << "0x" << std::hex << std::setw(16) << std::setfill('0') << value;
-  return out.str();
-}
 
 std::pair<std::string_view, std::string_view> split_command(std::string_view line) {
   const auto space = line.find(' ');
@@ -115,9 +104,7 @@ bool cmd_examine(Simulator &, AddressSpace &memory, std::string_view arg) {
       if (i != 0) std::cout << '\n';
       std::cout << hex64(current) << ':';
     }
-    std::ostringstream formatted;
-    formatted << " 0x" << std::hex << std::setw(8) << std::setfill('0') << word;
-    std::cout << formatted.str();
+    std::cout << ' ' << hex32(word);
   }
   std::cout << '\n';
   return true;
