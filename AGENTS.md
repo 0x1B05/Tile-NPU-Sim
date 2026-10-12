@@ -105,10 +105,11 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 
 ## ISA 语义同步规则 (重要)
 
-**最终事实来源是 ISA 手册仓库** (`../Tile-NPU-ISA/`): 规范语义以 `yai-isa.typ` 为准, 编码细节以 `编码设计规则.md` 与 `rivet/*.yaml` 为准。
+**最终事实来源是 ISA 手册仓库** (`../ISA/`): 规范语义以 `yai-isa.typ` 为准; `编码设计规则.md` 仅用于指令空间分配与字段布局设计, `rivet/*.yaml` 定义编码图中的位段。
 
 - 模拟器不得实现手册未定义的行为; 手册语焉不详时, 先在手册仓库澄清/修正, 模拟器再跟随。
-- 编码或语义变更需三处同步: `yai-isa.typ` (+ 重新编译 PDF 确认), `编码设计规则.md`, 本仓库 (译码/执行/测试)。
+- 指令语义及其说明在 `yai-isa.typ` 中维护, 修改后重新编译 PDF; 若行为发生变化, 同步本仓库中受影响的译码、执行与测试。
+- 仅在指令空间分配、字段布局或编码发生变化时, 更新 `编码设计规则.md`、`rivet/*.yaml` 及相关译码实现; 按实际受影响的内容修改, 不要求每次同步所有文件。
 - 发现手册与模拟器行为不一致时, 默认按手册修模拟器; 认为手册有误时, 先改手册再改模拟器, 不要只改一边。
 
 ## 新增指令的实现流程
@@ -142,6 +143,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 - 译码结果必须表达语义操作数的域和类型; 不要为新指令复用一个含义不明确的 `dest/src1/src2` 三元组。
 - 矩阵执行通过 `MatrixView` 访问逻辑坐标, 描述符访存通过 `DescriptorView` 计算地址与提交 `base_addr` 自增; 不在具体指令中散落行主序索引或描述符位标志解释。
 - 配置指令通过 `read_config_field`/`write_config_field` 和 `config_field_from_code` 访问字段, 不在各个执行器中复制字段编号与范围检查。
+- `read_config_field` 返回纯值 `ConfigFieldValue`, 要求配置类型、寄存器编号及字段组合已验证合法; 非法调用通过 `unreachable()` 中止。字段编号解析与配置写入仍返回可检查的失败状态。
 - 配置类型与字段编号的组合未定义时, `cfg.seti`/`cfg.setx`/`cfg.get` 在译码阶段报 `illegal`; 执行入口对手工构造的 IR 复查同一规则, 并要求 `cfg.copy` 的字段编号为零。
 - 写入校验的拒绝规则有手册依据: 合法字段的非法写入值对应 `cfg.seti`/`cfg.setx` 的 `CFG_ERROR`, 模拟器上报 `invalid_configuration`。手册未定义 `CFG_ERROR` 的后续架构行为, `invalid_configuration` 是模拟器诊断, 具体 ISA trap 行为以手册为准。
 

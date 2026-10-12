@@ -168,6 +168,7 @@ TEST_CASE(validate_rejects_bad_cfg) {
                 "reserved register type");
   check_illegal(CfgInstr{CfgOp::seti, ConfigRegType::tc, 16, 0, 1, 0}, "seti dest index 16");
   check_illegal(CfgInstr{CfgOp::get, ConfigRegType::tc, 32, 0, 1, 0}, "get xD index 32");
+  check_illegal(CfgInstr{CfgOp::get, ConfigRegType::ac, 0, 12, 0, 0}, "get ac12 out of range");
   check_illegal(CfgInstr{CfgOp::copy, ConfigRegType::tc, 0, 16, 0, 0}, "copy src index 16");
   check_illegal(CfgInstr{CfgOp::copy, ConfigRegType::tc, 0, 1, 1, 0}, "copy field must be zero");
 }

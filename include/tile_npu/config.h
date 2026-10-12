@@ -37,29 +37,22 @@ enum class ConfigField : std::uint8_t {
 
 using ConfigFieldValue = std::variant<DType, ArithMode, std::uint8_t, std::int32_t, std::uint64_t>;
 
-enum class ConfigAccessError : std::uint8_t {
-  none,
+enum class ConfigAccessStatus : std::uint8_t {
+  success,
   invalid_register,
   unsupported_field,
   invalid_value,
 };
 
-// Read results are flattened for convenient `std::get_if<T>` use by cfg.get
-// and debugger clients; ConfigFieldValue remains the write-side value type.
-using ConfigReadResult =
-    std::variant<DType, ArithMode, std::uint8_t, std::int32_t, std::uint64_t, ConfigAccessError>;
-
-ConfigReadResult read_config_field(const State &state, ConfigRegType reg_type, std::uint8_t index,
+ConfigFieldValue read_config_field(const State &state, ConfigRegType reg_type, std::uint8_t index,
                                    ConfigField field);
 
-ConfigAccessError write_config_field(State &state, ConfigRegType reg_type, std::uint8_t index,
-                                     ConfigField field, const ConfigFieldValue &value);
+ConfigAccessStatus write_config_field(State &state, ConfigRegType reg_type, std::uint8_t index,
+                                      ConfigField field, const ConfigFieldValue &value);
 
-// Convert a decoded field code to its semantic field. The mapping depends on
-// the register type: the same field3 value means `rows` for a matrix config
-// and `len` for a vector config.
-std::variant<ConfigField, ConfigAccessError> config_field_from_code(ConfigRegType reg_type,
-                                                                    std::uint8_t field_code);
+// Convert a decoded field code to its semantic field.
+std::variant<ConfigField, ConfigAccessStatus> config_field_from_code(ConfigRegType reg_type,
+                                                                     std::uint8_t field_code);
 
 // This is the value written by cfg.get. Enum fields are returned as their
 // architectural numeric code; signed fields preserve their two's-complement

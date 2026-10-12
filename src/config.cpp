@@ -1,5 +1,7 @@
 #include "tile_npu/config.h"
 
+#include "utils/unreachable.h"
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -68,164 +70,160 @@ template <typename T> bool coerce_scalar(const ConfigFieldValue &value, T &resul
   return false;
 }
 
-template <typename T> ConfigAccessError write_scalar(T &target, const ConfigFieldValue &value) {
+template <typename T> ConfigAccessStatus write_scalar(T &target, const ConfigFieldValue &value) {
   T raw;
   if (!coerce_scalar(value, raw)) {
-    return ConfigAccessError::invalid_value;
+    return ConfigAccessStatus::invalid_value;
   }
   target = raw;
-  return ConfigAccessError::none;
+  return ConfigAccessStatus::success;
 }
 
 template <typename T>
-ConfigAccessError write_scalar(T &target, const ConfigFieldValue &value,
-                               std::type_identity_t<T> max) {
+ConfigAccessStatus write_scalar(T &target, const ConfigFieldValue &value,
+                                std::type_identity_t<T> max) {
   T raw;
   if (!coerce_scalar(value, raw) || raw > max) {
-    return ConfigAccessError::invalid_value;
+    return ConfigAccessStatus::invalid_value;
   }
   target = raw;
-  return ConfigAccessError::none;
+  return ConfigAccessStatus::success;
 }
 
-ConfigAccessError write_dtype(ConfigRegType reg_type, DType &target,
-                              const ConfigFieldValue &value) {
+ConfigAccessStatus write_dtype(ConfigRegType reg_type, DType &target,
+                               const ConfigFieldValue &value) {
   DType dtype;
   if (!coerce_scalar(value, dtype) || !valid_dtype(reg_type, dtype)) {
-    return ConfigAccessError::invalid_value;
+    return ConfigAccessStatus::invalid_value;
   }
   target = dtype;
-  return ConfigAccessError::none;
+  return ConfigAccessStatus::success;
 }
 
 template <typename Config>
-ConfigAccessError write_matrix_shape(Config &config, ConfigField field,
-                                     const ConfigFieldValue &value) {
+ConfigAccessStatus write_matrix_shape(Config &config, ConfigField field,
+                                      const ConfigFieldValue &value) {
   std::uint8_t raw;
   if (!coerce_scalar(value, raw)) {
-    return ConfigAccessError::invalid_value;
+    return ConfigAccessStatus::invalid_value;
   }
   // Effective matrix dimensions range from 1 to the physical extent; the
   // canonical layout is the only one defined.
   switch (field) {
   case ConfigField::rows:
     if (raw == 0 || raw > MATRIX_EXTENT) {
-      return ConfigAccessError::invalid_value;
+      return ConfigAccessStatus::invalid_value;
     }
     config.rows = raw;
-    return ConfigAccessError::none;
+    return ConfigAccessStatus::success;
   case ConfigField::cols:
     if (raw == 0 || raw > MATRIX_EXTENT) {
-      return ConfigAccessError::invalid_value;
+      return ConfigAccessStatus::invalid_value;
     }
     config.cols = raw;
-    return ConfigAccessError::none;
+    return ConfigAccessStatus::success;
   case ConfigField::layout:
-    if (raw != 0) return ConfigAccessError::invalid_value;
+    if (raw != 0) return ConfigAccessStatus::invalid_value;
     config.layout = raw;
-    return ConfigAccessError::none;
-  default: return ConfigAccessError::unsupported_field;
+    return ConfigAccessStatus::success;
+  default: return ConfigAccessStatus::unsupported_field;
   }
 }
 
 // clang-format off
-ConfigAccessError write_tile_config(TileConfig &config, ConfigField field, const ConfigFieldValue &value) {
+ConfigAccessStatus write_tile_config(TileConfig &config, ConfigField field, const ConfigFieldValue &value) {
   if (field == ConfigField::dtype)      return write_dtype(ConfigRegType::tc, config.dtype, value);
   if (field == ConfigField::arith_mode) return write_scalar(config.arith_mode, value, ArithMode::sat);
   if (field == ConfigField::rows || field == ConfigField::cols || field == ConfigField::layout)
     return write_matrix_shape(config, field, value);
-  return ConfigAccessError::unsupported_field;
+  return ConfigAccessStatus::unsupported_field;
 }
 
-ConfigAccessError write_acc_config(AccConfig &config, ConfigField field, const ConfigFieldValue &value) {
+ConfigAccessStatus write_acc_config(AccConfig &config, ConfigField field, const ConfigFieldValue &value) {
   if (field == ConfigField::dtype) return write_dtype(ConfigRegType::ac, config.dtype, value);
   if (field == ConfigField::rows || field == ConfigField::cols || field == ConfigField::layout)
     return write_matrix_shape(config, field, value);
-  return ConfigAccessError::unsupported_field;
+  return ConfigAccessStatus::unsupported_field;
 }
 
 template <typename Config>
-ConfigAccessError write_vector_config(Config &config, ConfigRegType reg_type, ConfigField field, const ConfigFieldValue &value) {
+ConfigAccessStatus write_vector_config(Config &config, ConfigRegType reg_type, ConfigField field, const ConfigFieldValue &value) {
   if (field == ConfigField::len) {
     // The effective lane count ranges from 1 to the physical lane count.
     std::uint8_t len;
     if (!coerce_scalar(value, len) || len == 0 || len > VECTOR_LANES) {
-      return ConfigAccessError::invalid_value;
+      return ConfigAccessStatus::invalid_value;
     }
     config.len = len;
-    return ConfigAccessError::none;
+    return ConfigAccessStatus::success;
   }
   if (field == ConfigField::dtype) return write_dtype(reg_type, config.dtype, value);
-  return ConfigAccessError::unsupported_field;
+  return ConfigAccessStatus::unsupported_field;
 }
 
-ConfigAccessError write_matrix_descriptor(MatrixDescriptor &descriptor, ConfigField field, const ConfigFieldValue &value) {
+ConfigAccessStatus write_matrix_descriptor(MatrixDescriptor &descriptor, ConfigField field, const ConfigFieldValue &value) {
   if (field == ConfigField::flags)            return write_scalar(descriptor.flags, value, MATRIX_DESC_FLAGS_MAX);
   if (field == ConfigField::transform)        return write_scalar(descriptor.transform, value, DESC_TRANSFORM_MAX);
   if (field == ConfigField::base_addr)        return write_scalar(descriptor.base_addr, value);
   if (field == ConfigField::row_stride_bytes) return write_scalar(descriptor.row_stride_bytes, value);
   if (field == ConfigField::col_stride_bytes) return write_scalar(descriptor.col_stride_bytes, value);
-  return ConfigAccessError::unsupported_field;
+  return ConfigAccessStatus::unsupported_field;
 }
 
-ConfigAccessError write_vector_descriptor(VectorDescriptor &descriptor, ConfigField field, const ConfigFieldValue &value) {
+ConfigAccessStatus write_vector_descriptor(VectorDescriptor &descriptor, ConfigField field, const ConfigFieldValue &value) {
   if (field == ConfigField::flags)        return write_scalar(descriptor.flags, value, VECTOR_DESC_FLAGS_MAX);
   if (field == ConfigField::base_addr)    return write_scalar(descriptor.base_addr, value);
   if (field == ConfigField::stride_bytes) return write_scalar(descriptor.stride_bytes, value);
-  return ConfigAccessError::unsupported_field;
+  return ConfigAccessStatus::unsupported_field;
 }
 
-ConfigReadResult unsupported_field() {
-  return ConfigAccessError::unsupported_field;
-}
-
-ConfigReadResult read_tile_config(const TileConfig &config, ConfigField field) {
+ConfigFieldValue read_tile_config(const TileConfig &config, ConfigField field) {
   switch (field) {
   case ConfigField::dtype:      return config.dtype;
   case ConfigField::rows:       return config.rows;
   case ConfigField::cols:       return config.cols;
   case ConfigField::layout:     return config.layout;
   case ConfigField::arith_mode: return config.arith_mode;
-  default:                      return unsupported_field();
+  default:                      unreachable("invalid field for tile config");
   }
 }
 
-ConfigReadResult read_acc_config(const AccConfig &config, ConfigField field) {
+ConfigFieldValue read_acc_config(const AccConfig &config, ConfigField field) {
   switch (field) {
   case ConfigField::dtype:  return config.dtype;
   case ConfigField::rows:   return config.rows;
   case ConfigField::cols:   return config.cols;
   case ConfigField::layout: return config.layout;
-  default:                  return unsupported_field();
+  default:                  unreachable("invalid field for acc config");
   }
 }
 
 template <typename Config>
-ConfigReadResult read_vector_config(const Config &config, ConfigField field) {
+ConfigFieldValue read_vector_config(const Config &config, ConfigField field) {
   switch (field) {
   case ConfigField::dtype: return config.dtype;
   case ConfigField::len:   return config.len;
-  default:                 return unsupported_field();
+  default:                 unreachable("invalid field for vector config");
   }
 }
 
-ConfigReadResult read_matrix_descriptor(const MatrixDescriptor &descriptor, ConfigField field) {
+ConfigFieldValue read_matrix_descriptor(const MatrixDescriptor &descriptor, ConfigField field) {
   switch (field) {
   case ConfigField::base_addr:        return descriptor.base_addr;
   case ConfigField::row_stride_bytes: return descriptor.row_stride_bytes;
   case ConfigField::col_stride_bytes: return descriptor.col_stride_bytes;
   case ConfigField::transform:        return descriptor.transform;
   case ConfigField::flags:            return descriptor.flags;
-  default:                            return unsupported_field();
+  default:                            unreachable("invalid field for matrix descriptor");
   }
 }
 
-ConfigReadResult read_vector_descriptor(const VectorDescriptor &descriptor, ConfigField field) {
+ConfigFieldValue read_vector_descriptor(const VectorDescriptor &descriptor, ConfigField field) {
   switch (field) {
   case ConfigField::base_addr:    return descriptor.base_addr;
   case ConfigField::stride_bytes: return descriptor.stride_bytes;
   case ConfigField::flags:        return descriptor.flags;
-  default:                        return unsupported_field();
+  default:                        unreachable("invalid field for vector descriptor");
   }
 }
 
@@ -256,9 +254,11 @@ constexpr auto FIELD_BY_TYPE_AND_CODE = [] {
 
 } // namespace
 
-ConfigReadResult read_config_field(const State &state, ConfigRegType reg_type, std::uint8_t index,
+ConfigFieldValue read_config_field(const State &state, ConfigRegType reg_type, std::uint8_t index,
                                    ConfigField field) {
-  if (!valid_register_index(reg_type, index)) return ConfigAccessError::invalid_register;
+  if (!valid_register_index(reg_type, index)) {
+    unreachable("invalid config register type or index");
+  }
 
   switch (reg_type) {
   case ConfigRegType::tc: return read_tile_config(state.tc[index], field);
@@ -270,15 +270,13 @@ ConfigReadResult read_config_field(const State &state, ConfigRegType reg_type, s
   case ConfigRegType::bm: return read_vector_descriptor(state.bm[index], field);
   case ConfigRegType::vm: return read_vector_descriptor(state.vm[index], field);
   }
-  // clang-format on
-  return ConfigAccessError::unsupported_field;
+  unreachable("invalid config register type");
 }
 
-ConfigAccessError write_config_field(State &state, ConfigRegType reg_type, std::uint8_t index,
-                                     ConfigField field, const ConfigFieldValue &value) {
-  if (!valid_register_index(reg_type, index)) return ConfigAccessError::invalid_register;
+ConfigAccessStatus write_config_field(State &state, ConfigRegType reg_type, std::uint8_t index,
+                                      ConfigField field, const ConfigFieldValue &value) {
+  if (!valid_register_index(reg_type, index)) return ConfigAccessStatus::invalid_register;
 
-  // clang-format off
   switch (reg_type) {
   case ConfigRegType::tc: return write_tile_config(state.tc[index], field, value);
   case ConfigRegType::ac: return write_acc_config(state.ac[index], field, value);
@@ -289,19 +287,18 @@ ConfigAccessError write_config_field(State &state, ConfigRegType reg_type, std::
   case ConfigRegType::bm: return write_vector_descriptor(state.bm[index], field, value);
   case ConfigRegType::vm: return write_vector_descriptor(state.vm[index], field, value);
   }
-  // clang-format on
-  return ConfigAccessError::unsupported_field;
+  return ConfigAccessStatus::unsupported_field;
 }
 
-std::variant<ConfigField, ConfigAccessError> config_field_from_code(ConfigRegType reg_type,
-                                                                    std::uint8_t field_code) {
+std::variant<ConfigField, ConfigAccessStatus> config_field_from_code(ConfigRegType reg_type,
+                                                                     std::uint8_t field_code) {
   const auto type = static_cast<std::uint8_t>(reg_type);
   if (type >= FIELD_BY_TYPE_AND_CODE.size()) {
-    return ConfigAccessError::unsupported_field;
+    return ConfigAccessStatus::unsupported_field;
   }
   const auto &fields = FIELD_BY_TYPE_AND_CODE[type];
   if (field_code >= fields.size() || !fields[field_code]) {
-    return ConfigAccessError::unsupported_field;
+    return ConfigAccessStatus::unsupported_field;
   }
   return *fields[field_code];
 }
