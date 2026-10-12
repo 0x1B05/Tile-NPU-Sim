@@ -35,11 +35,11 @@ _start:
     lla       x3, srcbuf + 2
     CFG_REG   2, 0, 0, 0, 3, 1
     CFG_SETI  5, 2, 2, 1, 1
-    # tm2: base = gthbuf, row_stride = 1, col_stride = 2
+    # tm2: base = gthbuf, row_stride = 2, col_stride = 1
     lla       x3, gthbuf
     CFG_REG   2, 0, 0, 0, 3, 2
-    CFG_SETI  5, 2, 1, 1, 2
-    CFG_SETI  5, 2, 2, 2, 2
+    CFG_SETI  5, 2, 1, 2, 2
+    CFG_SETI  5, 2, 2, 1, 2
     # vm2: base = idxbuf, stride = 4
     lla       x3, idxbuf
     CFG_REG   3, 1, 0, 0, 3, 2
@@ -81,18 +81,46 @@ _start:
     li        a0, 3
     bne       x4, x5, fail
 
+    # Ordinary load and gather share tm2 unchanged. Copy the ordinary
+    # result to t0, whose descriptor already points at dstbuf.
+    TLOAD     2
+    TCOPY     0, 2
+    TSTORE    0
+    lla       x3, dstbuf
+    lw        x4, 0(x3)
+    li        x5, 0x281e140a  # bytes {10, 20, 30, 40}
+    li        a0, 4
+    bne       x4, x5, fail
+
     # Gather: vload v2 = {1, 0}, then tload.gather t2, v2 picks rows
     # {base + 2} = {30, 40} and {base + 0} = {10, 20} from gthbuf.
     VLOAD     2
     TGATHER   2, 2
     lla       x3, gthdst
     CFG_REG   2, 0, 0, 0, 3, 2
-    CFG_SETI  5, 2, 1, 2, 2   # store back with row_stride = 2, col_stride = 1
-    CFG_SETI  5, 2, 2, 1, 2
     TSTORE    2
     lw        x4, 0(x3)
     li        x5, 0x140a281e  # bytes {30, 40, 10, 20}
-    li        a0, 4
+    li        a0, 5
+    bne       x4, x5, fail
+
+    # Signed indices and strides: base = gthbuf + 1, row_stride = -2,
+    # col_stride = -1, indices = {-1, 0} select {40, 30} and {20, 10}.
+    lla       x3, gthbuf + 1
+    CFG_REG   2, 0, 0, 0, 3, 2
+    CFG_SETI  5, 2, 1, -2, 2
+    CFG_SETI  5, 2, 2, -1, 2
+    li        x6, -1
+    VINSERT   2, 0, 6
+    TGATHER   2, 2
+    lla       x3, gthdst
+    CFG_REG   2, 0, 0, 0, 3, 2
+    CFG_SETI  5, 2, 1, 2, 2
+    CFG_SETI  5, 2, 2, 1, 2
+    TSTORE    2
+    lw        x4, 0(x3)
+    li        x5, 0x0a141e28  # bytes {40, 30, 20, 10}
+    li        a0, 6
     bne       x4, x5, fail
 
     # Auto-increment along rows: base advances by rows * row_stride = 4.
@@ -103,7 +131,7 @@ _start:
     TLOAD     0
     CFG_REG   2, 0, 2, 0, 0, 5  # cfg.get x5, tm0, base_addr
     lla       x6, srcbuf + 4
-    li        a0, 5
+    li        a0, 7
     bne       x5, x6, fail
 
     li        a0, 0

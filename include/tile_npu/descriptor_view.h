@@ -76,14 +76,14 @@ public:
 
   // Gather addressing (the ISA's gaddr): a lane of the index vector, read as
   // i32, selects the indexed element. The matrix form locates the gathered
-  // row's first element through col_stride_bytes, then walks the row along
-  // row_stride_bytes.
+  // row's first element through row_stride_bytes, then walks the row along
+  // col_stride_bytes.
   template <typename D = Descriptor>
   std::optional<std::uint64_t> gather_row_base(std::int32_t index) const {
     static_assert(std::is_same_v<std::remove_const_t<D>, MatrixDescriptor>);
     if (!valid()) return std::nullopt;
     return detail::add_signed_offset(descriptor_->base_addr,
-                                     std::int64_t{index} * descriptor_->col_stride_bytes);
+                                     std::int64_t{index} * descriptor_->row_stride_bytes);
   }
 
   template <typename D = Descriptor>
@@ -91,7 +91,7 @@ public:
     static_assert(std::is_same_v<std::remove_const_t<D>, MatrixDescriptor>);
     if (!valid()) return std::nullopt;
     const auto offset =
-        std::int64_t{descriptor_->row_stride_bytes} * static_cast<std::int64_t>(col);
+        std::int64_t{descriptor_->col_stride_bytes} * static_cast<std::int64_t>(col);
     return detail::add_signed_offset(row_base, offset);
   }
 

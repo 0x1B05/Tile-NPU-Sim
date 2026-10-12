@@ -203,7 +203,7 @@ TEST_CASE(mblk_gather_tile) {
   MblkRun run(block(NpuDomain::tile, 2, 0, 2)); // tload.gather t0, v2
   auto &state = run.sim.state();
   config_tile_2x2(state, 0);
-  stride_desc(state.tm[0], DATA, 1, 2);
+  stride_desc(state.tm[0], DATA, 2, 1);
   state.v[2][0] = 2; // i32 indices
   state.v[2][1] = 0;
   state.vc[2].len = 2;
@@ -220,7 +220,7 @@ TEST_CASE(mblk_gather_tile) {
   MblkRun short_run(block(NpuDomain::tile, 2, 0, 2));
   auto &short_state = short_run.sim.state();
   config_tile_2x2(short_state, 0);
-  stride_desc(short_state.tm[0], DATA, 1, 2);
+  stride_desc(short_state.tm[0], DATA, 2, 1);
   short_state.v[2][0] = 1;
   short_state.vc[2].len = 1; // row 1 lies beyond the index vector
   short_state.t[0][tile_index(1, 0)] = 0x77;
@@ -386,7 +386,7 @@ TEST_CASE(mblk_rejects_invalid_configs) {
     MblkRun run(block(NpuDomain::tile, 2, 0, 2)); // tload.gather t0, v2
     auto &state = run.sim.state();
     config_tile_2x2(state, 0);
-    stride_desc(state.tm[0], DATA, 1, 2);
+    stride_desc(state.tm[0], DATA, 2, 1);
     state.vc[2].len = 33; // beyond the lane count
     check_eq(run.sim.step().status, StepStatus::invalid_configuration,
              "index vector length beyond the lane count rejects");
@@ -395,7 +395,7 @@ TEST_CASE(mblk_rejects_invalid_configs) {
     MblkRun run(block(NpuDomain::tile, 2, 0, 2)); // tload.gather t0, v2
     auto &state = run.sim.state();
     config_tile_2x2(state, 0);
-    stride_desc(state.tm[0], DATA, 1, 2);
+    stride_desc(state.tm[0], DATA, 2, 1);
     state.vc[2].len = 0; // empty index vector
     check_eq(run.sim.step().status, StepStatus::invalid_configuration,
              "empty index vector rejects");
@@ -540,7 +540,7 @@ TEST_CASE(mblk_gather_faults_leave_state_unchanged) {
     MblkRun run(block(NpuDomain::tile, 2, 0, 2)); // tload.gather t0, v2
     auto &state = run.sim.state();
     config_tile_2x2(state, 0);
-    stride_desc(state.tm[0], MEM_END - 1, 1, 2);
+    stride_desc(state.tm[0], MEM_END - 1, 2, 1);
     state.v[2][0] = 0;
     state.vc[2].len = 1;
     state.t[0][tile_index(0, 0)] = 0x11;
@@ -575,6 +575,41 @@ TEST_CASE(mblk_gather_faults_leave_state_unchanged) {
     check_eq(hex(*result.fault_address), hex(MEM_END), "fault address");
     check_eq(hex(state.v[3][0]), hex(0xdeadbeefu), "staged lanes are discarded on fault");
     check_eq(hex(state.v[3][1]), hex(0xcafebabeu), "fault runs no zero-fill");
+  }
+}
+
+TEST_CASE(mblk_gather_address_overflow_leaves_state_unchanged) {
+  struct Scenario {
+    const char *name;
+    std::uint64_t base;
+    std::int32_t row_stride;
+    std::int32_t col_stride;
+    std::uint32_t second_index;
+  };
+
+  constexpr std::array scenarios{
+      Scenario{"row overflow", 0xfffffffffffffffeull, 2, 1, 1},
+      Scenario{"row underflow", 0, 2, 1, 0xffffffffu},
+      Scenario{"column overflow", 0xffffffffffffffffull, 2, 1, 0},
+      Scenario{"column underflow", 0, 2, -1, 0},
+  };
+  for (const auto &test : scenarios) {
+    MblkRun run(block(NpuDomain::tile, 2, 0, 2)); // tload.gather t0, v2
+    auto &state = run.sim.state();
+    config_tile_2x2(state, 0);
+    stride_desc(state.tm[0], test.base, test.row_stride, test.col_stride);
+    state.vc[2].len = 2;
+    state.v[2][0] = 0;
+    state.v[2][1] = test.second_index;
+    state.t[0].fill(0x5a);
+    const auto old_tile = state.t[0];
+    const auto what = std::string(test.name);
+
+    check_eq(run.sim.step().status, StepStatus::invalid_configuration,
+             what + " rejects before memory access");
+    check(state.t[0] == old_tile, what + " leaves destination unchanged");
+    check_eq(hex(state.tm[0].base_addr), hex(test.base), what + " leaves base unchanged");
+    check_eq(hex(state.scalar.pc), hex(CODE_BASE), what + " leaves PC unchanged");
   }
 }
 
