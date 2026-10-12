@@ -49,7 +49,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `src/utils/format.h` | 内部工具: `hex32`/`hex64` 将整数格式化为带 `0x` 前缀、补零至 8/16 位的十六进制字符串, monitor 与 SDB 共用 |
 | `src/utils/unreachable.h` | 内部工具: 不变式违背时当场中止的 `unreachable()` (始终生效, 不随 NDEBUG 消失); guest 可见错误不走这里 |
 | `src/decode/encoding.h` | 位段提取 (`field<Hi,Lo>`) 与 RISC-V R/I/S/B/U/J/Shift, NPU 各格式的字段解析 |
-| `src/decode/pattern.h` | INSTPAT 风格译码机制: 编译期 `Pattern` 位型解析, `DecodeEntry` 译码表, `match` 匹配与 `fail` 错误 handler |
+| `src/decode/pattern.h` | INSTPAT 风格译码机制: 编译期 `Pattern` 位型解析, `DecodeEntry` 译码表, `match` 匹配与 `illegal` 错误 handler |
 | `src/decode/decode.cpp` | 顶层译码分派: `q = 11` 走 RV64IM 译码表, 其余 quadrant 走 NPU 译码表 |
 | `src/decode/decode_npu.cpp` | NPU 译码表 (q != 11): major4/sel3/funct4 由 pattern 直接匹配, 首条命中生效 |
 | `src/decode/decode_rv64im.cpp` | RV64IM 译码表 (q = 11): 一行一条指令的 pattern; 文件内的 `make_instr`/`as`/`no_operands` 构造标量 IR, 表尾 catch-all 拒绝非法编码 |

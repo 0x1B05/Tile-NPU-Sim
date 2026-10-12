@@ -54,6 +54,6 @@ template <std::size_t N> DecodeResult match(const DecodeEntry (&table)[N], std::
   return DecodeError::illegal;
 }
 
-template <DecodeError E> DecodeResult fail(std::uint32_t) { return E; }
+inline DecodeResult illegal(std::uint32_t) { return DecodeError::illegal; }
 
 } // namespace tile_npu
