@@ -1,6 +1,7 @@
 #include "execute.h"
 
 #include "config_check.h"
+#include "operand.h"
 #include "tile_npu/descriptor_view.h"
 #include "tile_npu/matrix_view.h"
 #include "utils/endian.h"

@@ -1,13 +1,11 @@
 #pragma once
 
-#include "tile_npu/platform/address_space.h"
 #include "tile_npu/decode.h"
+#include "tile_npu/platform/address_space.h"
 #include "tile_npu/state.h"
-#include "utils/overloaded.h"
 
 #include <cstdint>
 #include <optional>
-#include <variant>
 
 namespace tile_npu {
 
@@ -27,15 +25,6 @@ struct ExecContext {
   State &state;
   AddressSpace &memory;
 };
-
-// Resolves an IndexOperand: the immediate value, or the named Scalar
-// register's value.
-inline std::uint64_t resolve_index(const IndexOperand &index, const State &state) {
-  return std::visit(
-      Overloaded{[](ImmediateIndex imm) { return static_cast<std::uint64_t>(imm.value); },
-                 [&state](ScalarRegister reg) { return state.scalar.read_x(reg.index); }},
-      index);
-}
 
 // The shared failure constructors: a dynamic constraint violation reports
 // invalid_configuration, and a faulting access carries its address.

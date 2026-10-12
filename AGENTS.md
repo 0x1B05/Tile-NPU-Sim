@@ -49,11 +49,11 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `src/utils/format.h` | 内部工具: `hex32`/`hex64` 将整数格式化为带 `0x` 前缀、补零至 8/16 位的十六进制字符串, monitor 与 SDB 共用 |
 | `src/utils/unreachable.h` | 内部工具: 不变式违背时当场中止的 `unreachable()` (始终生效, 不随 NDEBUG 消失); guest 可见错误不走这里 |
 | `src/decode/encoding.h` | 位段提取 (`field<Hi,Lo>`) 与 RISC-V R/I/S/B/U/J/Shift, NPU 各格式的字段解析 |
-| `src/decode/pattern.h` | INSTPAT 风格译码机制: 编译期 `Pattern` 位型解析, `DecodeEntry` 译码表, `as`/`fail`/`match` 通用 handler |
+| `src/decode/pattern.h` | INSTPAT 风格译码机制: 编译期 `Pattern` 位型解析, `DecodeEntry` 译码表, `match` 匹配与 `fail` 错误 handler |
 | `src/decode/decode.cpp` | 顶层译码分派: `q = 11` 走 RV64IM 译码表, 其余 quadrant 走 NPU 译码表 |
 | `src/decode/decode_npu.cpp` | NPU 译码表 (q != 11): major4/sel3/funct4 由 pattern 直接匹配, 首条命中生效 |
-| `src/decode/decode_rv64im.cpp` | RV64IM 译码表 (q = 11): 一行一条指令的 pattern, 表尾 catch-all 划分 illegal / not_implemented |
-| `src/execute/execute.cpp` | 执行分派 (标量 / NPU 各域执行器); `execute_npu` 先做结构校验再分派 |
+| `src/decode/decode_rv64im.cpp` | RV64IM 译码表 (q = 11): 一行一条指令的 pattern; 文件内的 `make_instr`/`as`/`no_operands` 构造标量 IR, 表尾 catch-all 拒绝非法编码 |
+| `src/execute/execute.cpp` | 执行分派 (标量 / NPU 各域执行器); `exec_npu_instr` 通过文件内的 `FpEnvGuard` 管理浮点环境, 先做结构校验再分派 |
 | `src/execute/validate.h` | 执行入口的统一结构校验 `valid_structure` (每个 IR 类型一个 overload): op code/domain/操作数 variant/寄存器号是否可能来自某个真实编码 |
 | `src/execute/config_check.h` | 各执行器共享的配置合法性 (`valid_domain_config` / `valid_elementwise_config`) 与同源同形约束 (`configs_match`) |
 | `src/execute/execute_cfg.cpp` | 配置指令 (`cfg.*`) 执行器: 经 `config.h` 字段访问器读写, 校验失败上报 `invalid_configuration` (CFG_ERROR) |
@@ -62,7 +62,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `src/execute/execute_ecmp.cpp` | 比较 (E_CMP) 族执行器: Acc/Vec32 only, 目的为同形 u32 mask (全一/零); i32 有符号, u32 无符号, f32 用 IEEE 语义 (NaN 使有序条件为假, unord 查 NaN) |
 | `src/execute/ebin_op.h` | E_BIN/E_BCAST 共享的逐元素语义: 操作 dtype 合法性 (`ebin_op_supports_dtype`, 读 `EBIN_BY_FUNCT4`), 溢出模式查询 (`arith_mode_of`) 与单元素操作 (`apply_ebin_op`) |
 | `src/execute/f32_util.h` | 执行器共享的 f32 工具: 位模式转换 `f32_bits` 与 absmax 扫描 (`f32_absmax_step`/`f32_absmax`, NaN 候选不胜出), 规约与量化族共用 |
-| `src/execute/operand.h` | 双源逐元素族 (E_BIN/E_CMP) 共享的操作数读取: xS 标量操作数低位截取 (`scalar_operand`) 与 src2 (寄存器或标量) 到元素访问器的解析 (`with_src2_matrix`/`with_src2_vector`) |
+| `src/execute/operand.h` | 执行器共享的操作数读取: 立即数/Scalar 索引解析 (`resolve_index`), 双源逐元素族 (E_BIN/E_CMP) 的 xS 低位截取 (`scalar_operand`) 与 src2 到元素访问器的解析 (`with_src2_matrix`/`with_src2_vector`) |
 | `src/execute/execute_ebcast.cpp` | 向量广播 (E_BCAST) 族执行器: 矩阵二元操作, 第二源为配对向量按行/列广播; 向量 dtype 同矩阵, len 等于 rows (byrow) 或 cols (bycol) |
 | `src/execute/execute_er4.cpp` | 四寄存器 (E_R4) 族执行器: select 按 mask 位选 (mask dtype 固定 u8/u32, 数据 dtype 无关), fmadd 为 f32 单次舍入融合乘加 (`std::fma`) |
 | `src/execute/execute_emask.cpp` | mask (E_MASK) 族执行器: tail 按打包 nRows/nCols (矩阵) 或 xLen (向量) 保留头部, tril/triu 按有符号 xDelta 保留下/上三角; 保留区域之外写 fill (fill5 码表或 xFill 低元素位宽位), fill5 码 5..8 (±0.5/±inf) 仅 f32 目的 |
@@ -96,8 +96,8 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 - Tile 按行主序存储, 对应 canonical layout。
 - 标量执行: 64-bit 回绕算术, 小端访存, load/store 要求自然对齐; 非对齐访问只报告状态, 不改变架构状态。
 - 单 hart 模型下 RV64 `FENCE` 与 NPU `fence.*` 均为 no-op; `ECALL`/`EBREAK`/`kernel.end` 使 `step()` 停在当前 PC, 交给调用方处理。
-- 主机浮点策略: 构建经 `-ffp-contract=off` (xmake.lua) 禁止编译器隐式乘加融合, 手册逐次舍入的运算 (如 sumsq 先乘积舍入再累加) 依赖此约定; `fmadd` 的单次舍入经显式 `std::fma` 表达。`FpEnvGuard` (src/execute/fp_env.h) 管运行时浮点环境 (舍入模式/异常标志), 约束不了编译期融合, 两者各管一层。
-- NPU 指令统一在默认浮点环境 (RNE 舍入, 默认 subnormal 处理) 下执行: `execute_npu` 入口的 `FpEnvGuard` (`src/execute/fp_env.h`) 保存并恢复宿主的浮点环境, 执行结果只取决于架构输入。
+- 主机浮点策略: 构建经 `-ffp-contract=off` (xmake.lua) 禁止编译器隐式乘加融合, 手册逐次舍入的运算 (如 sumsq 先乘积舍入再累加) 依赖此约定; `fmadd` 的单次舍入经显式 `std::fma` 表达。`FpEnvGuard` (`src/execute/execute.cpp`) 管运行时浮点环境 (舍入模式/异常标志), 约束不了编译期融合, 两者各管一层。
+- NPU 指令统一在默认浮点环境 (RNE 舍入, 默认 subnormal 处理) 下执行: `exec_npu_instr` 入口的 `FpEnvGuard` (`src/execute/execute.cpp`) 保存并恢复宿主的浮点环境, 执行结果只取决于架构输入。
 - 状态与诊断的区分是刻意的: `illegal` (译码失败的唯一类别: 手册预留编码, 以及本 hart 未实现的 RV64 扩展编码——按 RISC-V 语义后者同为非法指令) / `execution_not_implemented` (新增指令的开发中间态) / `invalid_configuration` 都是**模拟器诊断, 不是 ISA 定义的 trap**。理论上不可达的路径 (不变式被破坏, 即模拟器自身 bug) 用 `unreachable()` 当场中止, 不走 `StepStatus`。
 - 结构合法性只校验一次: `decode()` 产生的 IR 保证结构合法 (op code、domain、操作数 variant、寄存器号都在某个真实编码允许的范围内); `execute_npu` 入口用 `valid_structure` (`src/execute/validate.h`) 统一复查, 手工构造的非法 IR (embedder bug) 报 `illegal_instruction`。各执行器不再重复结构检查, 只负责配置与数据的动态约束 (dtype/shape/len/描述符), 失败报 `invalid_configuration`。
 - `Simulator::reset(entry_pc)` 清模拟器状态并设 PC, 不清内存; ISA 手册未定义架构复位值与入口地址。`sim_run` 的装载地址 (`0x80000000`), RAM 大小 (128 MiB), 串口控制台 MMIO 地址 (`0x10000000`) 与 `EBREAK` 时 `a0 == 0` 判成功, 都是 **runner 约定, 不是架构契约**。

@@ -17,6 +17,41 @@ using encoding::RiscvU;
 
 template <unsigned ShamtBits> using Shift = encoding::RiscvShift<ShamtBits>;
 
+// Format-driven scalar operand extraction: the format alone determines how
+// the word becomes a DecodedScalarInstr.
+DecodedScalarInstr make_instr(ScalarOp op, const RiscvR &f) {
+  return {op, {f.dest, f.src1, f.src2}};
+}
+
+DecodedScalarInstr make_instr(ScalarOp op, const RiscvI &f) {
+  return {op, {f.dest, f.src1, 0}, f.imm};
+}
+
+DecodedScalarInstr make_instr(ScalarOp op, const RiscvS &f) {
+  return {op, {0, f.src1, f.src2}, f.imm};
+}
+
+DecodedScalarInstr make_instr(ScalarOp op, const RiscvB &f) {
+  return {op, {0, f.src1, f.src2}, f.imm};
+}
+
+DecodedScalarInstr make_instr(ScalarOp op, const RiscvU &f) { return {op, {f.dest, 0, 0}, f.imm}; }
+
+DecodedScalarInstr make_instr(ScalarOp op, const RiscvJ &f) { return {op, {f.dest, 0, 0}, f.imm}; }
+
+template <unsigned ShamtBits>
+DecodedScalarInstr make_instr(ScalarOp op, const Shift<ShamtBits> &f) {
+  return {op, {f.dest, f.src1, 0}, f.shamt};
+}
+
+template <typename Format, ScalarOp Op> DecodeResult as(std::uint32_t word) {
+  return make_instr(Op, Format::from(word));
+}
+
+template <ScalarOp Op> DecodeResult no_operands(std::uint32_t) {
+  return DecodedScalarInstr{Op, {0, 0, 0}};
+}
+
 // Base implementations ignore FENCE's reserved rd, rs1, and fm settings.
 DecodeResult decode_fence(std::uint32_t word) {
   return DecodedScalarInstr{

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "encoding.h"
 #include "tile_npu/decode.h"
 
 #include <cstddef>
@@ -53,45 +52,6 @@ template <std::size_t N> DecodeResult match(const DecodeEntry (&table)[N], std::
     }
   }
   return DecodeError::illegal;
-}
-
-// Format-driven scalar operand extraction: the format alone determines how
-// the word becomes a DecodedScalarInstr.
-inline DecodedScalarInstr make_instr(ScalarOp op, const encoding::RiscvR &f) {
-  return {op, {f.dest, f.src1, f.src2}};
-}
-
-inline DecodedScalarInstr make_instr(ScalarOp op, const encoding::RiscvI &f) {
-  return {op, {f.dest, f.src1, 0}, f.imm};
-}
-
-inline DecodedScalarInstr make_instr(ScalarOp op, const encoding::RiscvS &f) {
-  return {op, {0, f.src1, f.src2}, f.imm};
-}
-
-inline DecodedScalarInstr make_instr(ScalarOp op, const encoding::RiscvB &f) {
-  return {op, {0, f.src1, f.src2}, f.imm};
-}
-
-inline DecodedScalarInstr make_instr(ScalarOp op, const encoding::RiscvU &f) {
-  return {op, {f.dest, 0, 0}, f.imm};
-}
-
-inline DecodedScalarInstr make_instr(ScalarOp op, const encoding::RiscvJ &f) {
-  return {op, {f.dest, 0, 0}, f.imm};
-}
-
-template <unsigned ShamtBits>
-DecodedScalarInstr make_instr(ScalarOp op, const encoding::RiscvShift<ShamtBits> &f) {
-  return {op, {f.dest, f.src1, 0}, f.shamt};
-}
-
-template <typename Format, ScalarOp Op> DecodeResult as(std::uint32_t word) {
-  return make_instr(Op, Format::from(word));
-}
-
-template <ScalarOp Op> DecodeResult no_operands(std::uint32_t) {
-  return DecodedScalarInstr{Op, {0, 0, 0}};
 }
 
 template <DecodeError E> DecodeResult fail(std::uint32_t) { return E; }

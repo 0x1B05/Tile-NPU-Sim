@@ -133,8 +133,6 @@ bool cmd_help(Simulator &, AddressSpace &, std::string_view) {
   return true;
 }
 
-} // namespace
-
 std::string_view status_name(StepStatus status) {
   using enum StepStatus;
   // clang-format off
@@ -156,6 +154,8 @@ std::string_view status_name(StepStatus status) {
   // clang-format on
   return "unknown";
 }
+
+} // namespace
 
 std::string halt_message(const StepResult &result) {
   std::ostringstream out;

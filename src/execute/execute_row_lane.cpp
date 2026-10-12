@@ -1,6 +1,7 @@
 #include "execute.h"
 
 #include "config_check.h"
+#include "operand.h"
 #include "tile_npu/matrix_view.h"
 #include "utils/unreachable.h"
 
