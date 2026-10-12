@@ -27,6 +27,12 @@ constexpr std::string_view GPR_NAMES[32] = {
 };
 // clang-format on
 
+std::string hex32(std::uint32_t value) {
+  std::ostringstream out;
+  out << "0x" << std::hex << std::setw(8) << std::setfill('0') << value;
+  return out.str();
+}
+
 std::string hex64(std::uint64_t value) {
   std::ostringstream out;
   out << "0x" << std::hex << std::setw(16) << std::setfill('0') << value;
@@ -54,7 +60,7 @@ struct SdbCommand {
 bool cmd_continue(Simulator &sim, AddressSpace &, std::string_view) {
   const auto stop = npu_exec(sim, UNLIMITED_STEPS);
   if (!stop) return true; // the unlimited budget cannot run out in practice
-  std::cout << stop_message(*stop) << '\n';
+  std::cout << halt_message(*stop) << '\n';
   if (stop->status == StepStatus::breakpoint) {
     std::cout << "a0 = " << sim.state().scalar.read_x(REG_A0) << '\n';
   }
@@ -71,7 +77,7 @@ bool cmd_si(Simulator &sim, AddressSpace &, std::string_view arg) {
   }
   const auto stop = npu_exec(sim, count);
   if (stop) {
-    std::cout << stop_message(*stop) << '\n';
+    std::cout << halt_message(*stop) << '\n';
   }
   return true;
 }
@@ -164,13 +170,11 @@ std::string_view status_name(StepStatus status) {
   return "unknown";
 }
 
-std::string stop_message(const StepResult &result) {
+std::string halt_message(const StepResult &result) {
   std::ostringstream out;
-  out << "stopped: " << status_name(result.status) << " at pc=" << hex64(result.pc);
+  out << status_name(result.status) << " at pc=" << hex64(result.pc);
   if (result.instr) {
-    std::ostringstream word;
-    word << "0x" << std::hex << std::setw(8) << std::setfill('0') << *result.instr;
-    out << " instruction=" << word.str();
+    out << " instruction=" << hex32(*result.instr);
   }
   if (result.fault_address) {
     out << " address=" << hex64(*result.fault_address);

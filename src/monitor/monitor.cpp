@@ -72,6 +72,7 @@ int run_images(const Options &options) {
   tile_npu::SystemBus bus(ram, {&serial});
   tile_npu::Simulator sim(bus);
   sim.reset(MEMORY_BASE);
+
   if (options.interactive) {
     std::cout << "tile-npu monitor: entry 0x" << std::hex << MEMORY_BASE << std::dec
               << ", type 'help'\n";
@@ -82,14 +83,14 @@ int run_images(const Options &options) {
     sdb_loop(sim, bus);
     return 0;
   }
-  // A guest stops at ebreak or kernel.end with a0 as the process exit code;
-  // a0 = 0 means success. A stop on any other status is an error.
-  const auto stop = npu_exec(sim, options.step_limit);
-  if (!stop) {
+
+  // A guest stops at ebreak or kernel.end with a0 as the process exit code.
+  const auto halt_result = npu_exec(sim, options.step_limit);
+  if (!halt_result) {
     std::cerr << "step limit reached\n";
     return 1;
   }
-  switch (stop->status) {
+  switch (halt_result->status) {
   case StepStatus::breakpoint:
   case StepStatus::kernel_end: {
     const auto exit_code = sim.state().scalar.read_x(REG_A0);
@@ -98,7 +99,7 @@ int run_images(const Options &options) {
     }
     return static_cast<int>(exit_code);
   }
-  default: std::cerr << stop_message(*stop) << '\n'; return 1;
+  default: std::cerr << halt_message(*halt_result) << '\n'; return 1;
   }
 }
 
