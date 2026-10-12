@@ -56,7 +56,7 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 | `src/execute/execute.cpp` | 执行分派 (标量 / NPU 各域执行器); `exec_npu_instr` 通过文件内的 `FpEnvGuard` 管理浮点环境, 先做结构校验再分派 |
 | `src/execute/validate.h` | 执行入口的统一结构校验 `valid_structure` (每个 IR 类型一个 overload): op code/domain/操作数 variant/寄存器号是否可能来自某个真实编码 |
 | `src/execute/config_check.h` | 各执行器共享的配置合法性 (`valid_domain_config` / `valid_elementwise_config`) 与同源同形约束 (`configs_match`) |
-| `src/execute/execute_cfg.cpp` | 配置指令 (`cfg.*`) 执行器: 经 `config.h` 字段访问器读写, 校验失败上报 `invalid_configuration` (CFG_ERROR) |
+| `src/execute/execute_cfg.cpp` | 配置指令 (`cfg.*`) 执行器: 经 `config.h` 字段访问器读写, 字段值校验失败上报 `invalid_configuration` (CFG_ERROR) |
 | `src/execute/execute_ebin.cpp` | 逐元素二元 (E_BIN) 族执行器: 公共约束校验与矩阵/向量循环抽象为模板, 操作语义集中在 `apply_op` |
 | `src/execute/execute_eun.cpp` | 逐元素一元 (E_UNARY) 族执行器: not/abs/neg 为精确整数语义, exp2/rcp/rsqrt/silu 用 host libm 近似 (特殊值表现由测试锁定) |
 | `src/execute/execute_ecmp.cpp` | 比较 (E_CMP) 族执行器: Acc/Vec32 only, 目的为同形 u32 mask (全一/零); i32 有符号, u32 无符号, f32 用 IEEE 语义 (NaN 使有序条件为假, unord 查 NaN) |
@@ -142,7 +142,8 @@ xmake project -k compile_commands      # 为 clangd 生成编译数据库
 - 译码结果必须表达语义操作数的域和类型; 不要为新指令复用一个含义不明确的 `dest/src1/src2` 三元组。
 - 矩阵执行通过 `MatrixView` 访问逻辑坐标, 描述符访存通过 `DescriptorView` 计算地址与提交 `base_addr` 自增; 不在具体指令中散落行主序索引或描述符位标志解释。
 - 配置指令通过 `read_config_field`/`write_config_field` 和 `config_field_from_code` 访问字段, 不在各个执行器中复制字段编号与范围检查。
-- 写入校验的拒绝规则有手册依据: `ConfigAccessError` 对应手册中 `cfg.seti`/`cfg.setx` 校验失败时的 `CFG_ERROR`; 手册未定义 `CFG_ERROR` 的后续架构行为, 模拟器以错误状态上报属于模拟器约定。`invalid_configuration` 仍是模拟器诊断, 具体 ISA trap 行为以手册为准。
+- 配置类型与字段编号的组合未定义时, `cfg.seti`/`cfg.setx`/`cfg.get` 在译码阶段报 `illegal`; 执行入口对手工构造的 IR 复查同一规则, 并要求 `cfg.copy` 的字段编号为零。
+- 写入校验的拒绝规则有手册依据: 合法字段的非法写入值对应 `cfg.seti`/`cfg.setx` 的 `CFG_ERROR`, 模拟器上报 `invalid_configuration`。手册未定义 `CFG_ERROR` 的后续架构行为, `invalid_configuration` 是模拟器诊断, 具体 ISA trap 行为以手册为准。
 
 ## Git 工作流
 

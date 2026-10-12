@@ -88,7 +88,10 @@ TEST_CASE(cfg_seti_rejects_unsupported_field) {
   Simulator sim(memory);
   // BC has dtype/len only; field code 2 (cols in matrix configs) is absent.
   load_one(sim, memory, cfg_i(0x6, 0, FIELD_COLS, 8, 0));
-  check_eq(sim.step().status, StepStatus::invalid_configuration, "bc cols fails");
+  sim.state().bc[0].len = 7;
+  check_eq(sim.step().status, StepStatus::illegal_instruction, "bc cols is reserved");
+  check_eq(sim.state().bc[0].len, std::uint8_t{7}, "illegal seti preserves config");
+  check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE), "illegal seti keeps pc");
 }
 
 TEST_CASE(cfg_setx_writes_full_scalar_value) {
@@ -117,6 +120,18 @@ TEST_CASE(cfg_setx_rejects_out_of_range_value) {
   sim.state().scalar.write_x(4, 33); // len = 33 exceeds VECTOR_LANES = 32
   check_eq(sim.step().status, StepStatus::invalid_configuration, "vc0 len = 33 fails");
   check_eq(sim.state().vc[0].len, std::uint8_t{0}, "failed write preserves len");
+}
+
+TEST_CASE(cfg_setx_rejects_reserved_field) {
+  Ram memory(CODE_BASE, 4);
+  Simulator sim(memory);
+  load_one(sim, memory, cfg_reg(0, 0, 0, 5, 4, 0));
+  sim.state().tc[0].rows = 7;
+  sim.state().scalar.write_x(4, 32);
+  check_eq(sim.step().status, StepStatus::illegal_instruction, "tc field 5 is reserved");
+  check_eq(sim.state().tc[0].rows, std::uint8_t{7}, "illegal setx preserves config");
+  check_eq(sim.state().scalar.read_x(4), std::uint64_t{32}, "illegal setx preserves xS");
+  check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE), "illegal setx keeps pc");
 }
 
 TEST_CASE(cfg_copy_duplicates_whole_register) {
@@ -179,5 +194,10 @@ TEST_CASE(cfg_get_rejects_unsupported_field) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, cfg_reg(0, 1, 2, 4, 0, 5));
-  check_eq(sim.step().status, StepStatus::invalid_configuration, "bc field 4 fails");
+  sim.state().bc[0].len = 7;
+  sim.state().scalar.write_x(5, 0x1234);
+  check_eq(sim.step().status, StepStatus::illegal_instruction, "bc field 4 is reserved");
+  check_eq(sim.state().bc[0].len, std::uint8_t{7}, "illegal get preserves config");
+  check_eq(hex(sim.state().scalar.read_x(5)), hex(0x1234u), "illegal get preserves xD");
+  check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE), "illegal get keeps pc");
 }

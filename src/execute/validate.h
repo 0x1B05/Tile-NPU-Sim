@@ -184,7 +184,13 @@ inline bool valid_structure(const LaneInstr &instr) {
 }
 
 inline bool valid_structure(const CfgInstr &instr) {
-  if (instr.op > CfgOp::get || instr.reg_type > ConfigRegType::vm || instr.field > 6) {
+  if (instr.op > CfgOp::get || instr.reg_type > ConfigRegType::vm) {
+    return false;
+  }
+  if (instr.op == CfgOp::copy) {
+    if (instr.field != 0) return false;
+  } else if (!std::holds_alternative<ConfigField>(
+                 config_field_from_code(instr.reg_type, instr.field))) {
     return false;
   }
   const auto count = config_register_count(instr.reg_type);

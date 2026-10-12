@@ -1,6 +1,7 @@
 #include "execute.h"
 
 #include "tile_npu/config.h"
+#include "utils/unreachable.h"
 
 #include <cstdint>
 #include <type_traits>
@@ -9,29 +10,33 @@
 namespace tile_npu {
 namespace {
 
-// A failed config access (the ISA's CFG_ERROR) surfaces as
-// invalid_configuration.
-ExecuteResult cfg_write(const CfgInstr &instr, State &state, std::uint64_t value) {
+ConfigField cfg_field(const CfgInstr &instr) {
   const auto field = config_field_from_code(instr.reg_type, instr.field);
-  const auto *resolved = std::get_if<ConfigField>(&field);
-  if (resolved == nullptr) {
-    return config_error();
+  if (const auto *resolved = std::get_if<ConfigField>(&field)) {
+    return *resolved;
   }
-  return write_config_field(state, instr.reg_type, instr.dest, *resolved, value) ==
-                 ConfigAccessError::none
-             ? ExecuteResult{.status = StepStatus::retired}
-             : config_error();
+  unreachable("validated config instruction has an undefined field");
 }
 
-std::variant<std::uint64_t, ConfigAccessError>
-read_as_scalar(const State &state, ConfigRegType reg_type, std::uint8_t index, ConfigField field) {
+// An invalid field value (the ISA's CFG_ERROR) surfaces as
+// invalid_configuration.
+ExecuteResult cfg_write(const CfgInstr &instr, State &state, std::uint64_t value) {
+  switch (write_config_field(state, instr.reg_type, instr.dest, cfg_field(instr), value)) {
+  case ConfigAccessError::none: return {.status = StepStatus::retired};
+  case ConfigAccessError::invalid_value: return config_error();
+  default: unreachable("validated config write has an invalid register or field");
+  }
+}
+
+std::uint64_t read_as_scalar(const State &state, ConfigRegType reg_type, std::uint8_t index,
+                             ConfigField field) {
   return std::visit(
-      [](const auto &typed) -> std::variant<std::uint64_t, ConfigAccessError> {
+      [](const auto &typed) -> std::uint64_t {
         using T = std::decay_t<decltype(typed)>;
-        if constexpr (std::is_same_v<T, ConfigAccessError>) {
-          return typed;
-        } else {
+        if constexpr (!std::is_same_v<T, ConfigAccessError>) {
           return config_field_as_scalar(ConfigFieldValue{typed});
+        } else {
+          unreachable("validated config read has an invalid register or field");
         }
       },
       read_config_field(state, reg_type, index, field));
@@ -66,20 +71,12 @@ ExecuteResult execute_cfg(const CfgInstr &instr, ExecContext &ctx) {
     return {.status = StepStatus::retired};
   }
   case CfgOp::get: {
-    const auto field = config_field_from_code(instr.reg_type, instr.field);
-    const auto *resolved = std::get_if<ConfigField>(&field);
-    if (resolved == nullptr) {
-      return config_error();
-    }
-    const auto value = read_as_scalar(state, instr.reg_type, instr.src, *resolved);
-    if (const auto *bits = std::get_if<std::uint64_t>(&value)) {
-      state.scalar.write_x(instr.dest, *bits);
-      return {.status = StepStatus::retired};
-    }
-    return config_error();
+    const auto value = read_as_scalar(state, instr.reg_type, instr.src, cfg_field(instr));
+    state.scalar.write_x(instr.dest, value);
+    return {.status = StepStatus::retired};
   }
   }
-  return {.status = StepStatus::execution_not_implemented};
+  unreachable("invalid config operation");
 }
 
 } // namespace tile_npu

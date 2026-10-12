@@ -12,7 +12,9 @@
 #include "tile_npu/platform/ram.h"
 #include "tile_npu/state.h"
 
+#include <array>
 #include <cstdint>
+#include <string>
 
 namespace {
 
@@ -167,6 +169,31 @@ TEST_CASE(validate_rejects_bad_cfg) {
   check_illegal(CfgInstr{CfgOp::seti, ConfigRegType::tc, 16, 0, 1, 0}, "seti dest index 16");
   check_illegal(CfgInstr{CfgOp::get, ConfigRegType::tc, 32, 0, 1, 0}, "get xD index 32");
   check_illegal(CfgInstr{CfgOp::copy, ConfigRegType::tc, 0, 16, 0, 0}, "copy src index 16");
+  check_illegal(CfgInstr{CfgOp::copy, ConfigRegType::tc, 0, 1, 1, 0}, "copy field must be zero");
+}
+
+TEST_CASE(validate_rejects_cfg_reserved_fields) {
+  struct RegisterCase {
+    ConfigRegType type;
+    std::uint8_t fields;
+  };
+
+  constexpr std::array registers{
+      RegisterCase{ConfigRegType::tc, 5}, RegisterCase{ConfigRegType::ac, 4},
+      RegisterCase{ConfigRegType::bc, 2}, RegisterCase{ConfigRegType::vc, 2},
+      RegisterCase{ConfigRegType::tm, 5}, RegisterCase{ConfigRegType::am, 5},
+      RegisterCase{ConfigRegType::bm, 3}, RegisterCase{ConfigRegType::vm, 3},
+  };
+  for (const auto &reg : registers) {
+    for (std::uint8_t field = reg.fields; field < 8; ++field) {
+      for (const auto op : {CfgOp::seti, CfgOp::setx, CfgOp::get}) {
+        const std::string what = "cfg op " + std::to_string(static_cast<unsigned>(op)) + " type " +
+                                 std::to_string(static_cast<unsigned>(reg.type)) + " field " +
+                                 std::to_string(field);
+        check_illegal(CfgInstr{op, reg.type, 0, 0, field, 0}, what.c_str());
+      }
+    }
+  }
 }
 
 TEST_CASE(validate_rejects_bad_cvt) {

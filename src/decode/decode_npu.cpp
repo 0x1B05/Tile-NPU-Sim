@@ -407,8 +407,8 @@ constexpr std::uint8_t MAJOR4_CFG_VEC_SETI = 0b0110;
 DecodeResult decode_cfg_seti(std::uint32_t word) {
   const auto f = encoding::NpuI::from(word);
   const auto reg_type = cfg_reg_type(f.sel2, f.major4 == MAJOR4_CFG_VEC_SETI);
-  // Out-of-range config register numbers are reserved encodings.
-  if (f.dest >= config_register_count(reg_type)) {
+  if (f.dest >= config_register_count(reg_type) ||
+      !std::holds_alternative<ConfigField>(config_field_from_code(reg_type, f.field3))) {
     return DecodeError::illegal;
   }
   return DecodedNpuInstr{CfgInstr{CfgOp::seti, reg_type, f.dest, 0, f.field3, f.imm}};
@@ -426,8 +426,13 @@ template <CfgOp Op> DecodeResult decode_cfg_reg(std::uint32_t word) {
   if (Op != CfgOp::setx && f.src1 >= count) {
     return DecodeError::illegal;
   }
-  return DecodedNpuInstr{CfgInstr{Op, reg_type, f.dest, f.src1,
-                                  static_cast<std::uint8_t>(encoding::field<2, 0>(f.arg)), 0}};
+  const auto field = static_cast<std::uint8_t>(encoding::field<2, 0>(f.arg));
+  if constexpr (Op != CfgOp::copy) {
+    if (!std::holds_alternative<ConfigField>(config_field_from_code(reg_type, field))) {
+      return DecodeError::illegal;
+    }
+  }
+  return DecodedNpuInstr{CfgInstr{Op, reg_type, f.dest, f.src1, field, 0}};
 }
 
 // clang-format off
@@ -524,17 +529,14 @@ constexpr DecodeEntry NPU_TABLE[] = {
     // position; one pattern, the handler rejects the reserved funct3 and
     // matrix-form IS/index5 encodings.
     {"0100 ??? ??? ????? ????? ????? ????? 10", decode_qnt},
-    // CFG_MAT_SETI / CFG_VEC_SETI (I format); field3 = 111 is reserved.
-    {"0101 ?? 111 ???? ???? ???? ???? ????? 10", fail<DecodeError::illegal>},
-    {"0110 ?? 111 ???? ???? ???? ???? ????? 10", fail<DecodeError::illegal>},
+    // CFG_MAT_SETI / CFG_VEC_SETI (I format): the handler checks the field
+    // code against the selected config register type.
     {"0101 ?? ??? ???? ???? ???? ???? ????? 10", decode_cfg_seti},
     {"0110 ?? ??? ???? ???? ???? ???? ????? 10", decode_cfg_seti},
 
-    // CFG_REG (R4): funct3 000/001/010 = setx/copy/get; field5 high bits must
-    // be 0, field code 111 is reserved; copy requires field5 = 0; the src2
-    // position (reserved5) must be 0. Everything else is reserved.
-    {"0111 ??? 000 00111 00000 ????? ????? 10", fail<DecodeError::illegal>},
-    {"0111 ??? 010 00111 00000 ????? ????? 10", fail<DecodeError::illegal>},
+    // CFG_REG (R4): funct3 000/001/010 = setx/copy/get; field5 high bits and
+    // reserved5 must be 0; copy requires field5 = 0. The handlers check
+    // setx/get field codes against the selected config register type.
     {"0111 ??? 000 00??? 00000 ????? ????? 10", decode_cfg_reg<CfgOp::setx>},
     {"0111 ??? 001 00000 00000 ????? ????? 10", decode_cfg_reg<CfgOp::copy>},
     {"0111 ??? 010 00??? 00000 ????? ????? 10", decode_cfg_reg<CfgOp::get>},

@@ -115,6 +115,46 @@ TEST_CASE(cfg_decode_reg) {
   check_cases(cases);
 }
 
+TEST_CASE(cfg_decode_field_codes_by_register_type) {
+  struct RegisterCase {
+    const char *name;
+    ConfigRegType type;
+    std::uint32_t sel2;
+    std::uint32_t mv;
+    std::uint32_t fields;
+  };
+
+  constexpr std::array registers{
+      RegisterCase{"tc", ConfigRegType::tc, 0, 0, 5},
+      RegisterCase{"ac", ConfigRegType::ac, 1, 0, 4},
+      RegisterCase{"bc", ConfigRegType::bc, 0, 1, 2},
+      RegisterCase{"vc", ConfigRegType::vc, 1, 1, 2},
+      RegisterCase{"tm", ConfigRegType::tm, 2, 0, 5},
+      RegisterCase{"am", ConfigRegType::am, 3, 0, 5},
+      RegisterCase{"bm", ConfigRegType::bm, 2, 1, 3},
+      RegisterCase{"vm", ConfigRegType::vm, 3, 1, 3},
+  };
+  for (const auto &reg : registers) {
+    for (std::uint8_t field = 0; field < 8; ++field) {
+      const std::array cases{
+          Case{reg.name, cfg_i(0x5 + reg.mv, reg.sel2, field, 32, 0), CfgOp::seti, reg.type, 0, 0,
+               field, 32},
+          Case{reg.name, cfg_reg(reg.sel2, reg.mv, 0, field, 4, 0), CfgOp::setx, reg.type, 0, 4,
+               field, 0},
+          Case{reg.name, cfg_reg(reg.sel2, reg.mv, 2, field, 0, 5), CfgOp::get, reg.type, 5, 0,
+               field, 0},
+      };
+      if (field < reg.fields) {
+        check_cases(cases);
+      } else {
+        for (const auto &test : cases) {
+          check_errors(std::array{ErrorCase{test.name, test.word, DecodeError::illegal}});
+        }
+      }
+    }
+  }
+}
+
 TEST_CASE(cfg_decode_rejects_reserved) {
   const std::array cases{
       ErrorCase{"seti field3 = 111 reserved", cfg_i(0x5, 0, 7, 0, 0), DecodeError::illegal},
