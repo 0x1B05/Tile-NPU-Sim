@@ -24,10 +24,9 @@ constexpr bool is_nt(MmaOp op) {
 
 constexpr bool accumulates(MmaOp op) { return op == MmaOp::nn_acc || op == MmaOp::nt_acc; }
 
-// mma.{nn,nt}.{zero,acc}.i8.i32: D = A x B with the right Tile logically
-// transposed for nt; the acc form wraps the i32 partial into the
-// destination's old value. An unsuccessful execution leaves architectural
-// state unchanged.
+// mma.{nn,nt}.{zero,acc}.i8.i32: D = A x B,
+// nt logically transposed B;
+// acc adds the i32 partial into the existing value.
 ExecuteResult mma(const MmaInstr &instr, State &state) {
   const auto &dst_config = state.ac[instr.dest.index];
   const auto &lhs_config = state.tc[instr.src_a.index];
@@ -62,8 +61,8 @@ ExecuteResult mma(const MmaInstr &instr, State &state) {
   return {.status = StepStatus::retired};
 }
 
-// bdot.{nn,nt}.i8.i32: vD[j] = dot(bA, tB column j) for nn, dot(bA, tB row j)
-// for nt.
+// bdot.{nn,nt}.i8.i32: vD[j] = dot(bA, tB column j) for nn,
+//                              dot(bA, tB row j) for nt.
 ExecuteResult bdot(const MmaInstr &instr, State &state) {
   const auto &dst_config = state.vc[instr.dest.index];
   const auto &lhs_config = state.bc[instr.src_a.index];

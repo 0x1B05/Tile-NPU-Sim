@@ -38,11 +38,12 @@ std::optional<NpuOperand> decode_bx_src2(std::uint8_t sel3, std::uint8_t src2, N
   return NpuOperand{NpuRegister{domain, src2}};
 }
 
-// E_BIN (R3): sel3 = {dom2, BX}; BX=0 takes src2 from the same domain, BX=1
-// from scalar xS. Unassigned funct4 values and tile mul/div are reserved;
-// both come from the shared EBIN_BY_FUNCT4 table. The dtype-dependent
-// restrictions (div is f32-only, shifts/bitwise are integer-only) fail at
-// execution.
+// E_BIN (R3): major4 = 0000, q = 00.
+// 31    28 27  26  25  24    21 20       17 16      12 11       7 6        2 1   0
+// [major4] [dom2] [BX] [funct4] [reserved4] [   B5   ] [   A5   ] [   D5   ] [ q ]
+// dom2: 00 Tile, 01 Acc, 11 Vec32; 10 reserved.
+// BX: 0 = same-domain B5, 1 = Scalar xS in B5.
+// funct4 = {G, op3}, decoded by EBIN_BY_FUNCT4; Tile mul/div are reserved.
 DecodeResult decode_ebin(std::uint32_t word) {
   const auto f = encoding::NpuR3::from(word);
   const auto domain = sel3_domain(f.sel3);
@@ -61,9 +62,12 @@ DecodeResult decode_ebin(std::uint32_t word) {
   return DecodedNpuInstr{EbinInstr{info->op, {domain, f.dest}, {domain, f.src1}, *src2}};
 }
 
-// E_UNARY (R2): sel3 = {dom2, 0}. dom2 = 10 (Vec8) is reserved, funct3 = 111
-// is reserved, and on the tile domain only `not` exists (the first pattern
-// pins funct3 = 000 for tile and vec8).
+// E_UNARY (R2): major4 = 0001, q = 00.
+// 31    28 27  26 25  24    22 21                12 11       7 6        2 1   0
+// [major4] [dom2] [0] [funct3] [    reserved10    ] [   S5   ] [   D5   ] [ q ]
+// dom2: 00 Tile (only the not operation), 01 Acc, 11 Vec32; 10 reserved.
+// funct3: 000 not, 001 abs, 010 neg, 011 exp2.approx, 100 rcp.approx,
+//         101 rsqrt.approx, 110 silu.approx; 111 reserved.
 DecodeResult decode_eun(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = sel3_domain(f.sel3);
@@ -78,10 +82,12 @@ DecodeResult decode_eun(std::uint32_t word) {
       EunInstr{static_cast<EunOp>(f.funct3), {domain, f.dest}, {domain, f.src2}}};
 }
 
-// E_CMP (R4): sel3 = {dom2, BX}; the patterns pin dom2 to Acc/Vec32 (the only
-// domains with comparisons) and the reserved5 position to 0. funct3 is the
-// condition code; the dtype-dependent restrictions (ne/ge are integer-only,
-// le/unord f32-only) fail at execution.
+// E_CMP (R4): major4 = 0010, q = 00.
+// 31    28 27  26  25  24    22 21       17 16      12 11       7 6        2 1   0
+// [major4] [dom2] [BX] [funct3] [reserved5] [   B5   ] [   A5   ] [   M5   ] [ q ]
+// dom2: 01 Acc, 11 Vec32; 00/10 reserved. M5 is the u32 mask destination.
+// BX: 0 = same-domain B5, 1 = Scalar xS in B5.
+// funct3: 000 eq, 001 ne, 010 lt, 011 ge, 100 le, 101 unord; 110/111 reserved.
 DecodeResult decode_ecmp(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domain = sel3_domain(f.sel3);
@@ -100,10 +106,11 @@ DecodeResult decode_ecmp(std::uint32_t word) {
   return DecodedNpuInstr{CmpInstr{info->op, {domain, f.dest}, {domain, f.src1}, *src2}};
 }
 
-// E_BCAST (R3): sel3 = {TA, 0, DIR}; TA pairs Tile with Vec8 (0) or Acc with
-// Vec32 (1), DIR picks byrow (0) or bycol (1). The funct4 operation codes are
-// shared with E_BIN (including tile having no mul/div); the dtype-dependent
-// restrictions fail at execution.
+// E_BCAST (R3): major4 = 0101, q = 00.
+// 31    28  27  26   25   24    21 20       17 16      12 11       7 6        2 1   0
+// [major4] [TA] [0] [DIR] [funct4] [reserved4] [   S5   ] [   A5   ] [   D5   ] [ q ]
+// TA: 0 = Tile/Vec8, 1 = Acc/Vec32; A5/D5 are matrices, S5 is a vector.
+// DIR: 0 = byrow, 1 = bycol. funct4 = {G, op3}, shared with E_BIN.
 DecodeResult decode_ebcast(std::uint32_t word) {
   const auto f = encoding::NpuR3::from(word);
   const auto domains = paired_domains(f.sel3);
@@ -122,9 +129,12 @@ DecodeResult decode_ebcast(std::uint32_t word) {
                                     (f.sel3 & 1) != 0}};
 }
 
-// E_R4 (R4): sel3 = {dom2, 0}; funct3 = 000 select, 001 fmadd. Vec8 has no
-// E_R4, fmadd has no tile encoding, and funct3 >= 010 is reserved; the f32
-// dtype restriction on fmadd fails at execution.
+// E_R4 (R4): major4 = 0011, q = 00.
+// 31    28 27  26 25  24    22 21      17 16      12 11       7 6        2 1   0
+// [major4] [dom2] [0] [funct3] [  arg5  ] [   B5   ] [   A5   ] [   D5   ] [ q ]
+// dom2: 00 Tile, 01 Acc, 11 Vec32; 10 reserved.
+// funct3: 000 select (arg5 = mask M), 001 fmadd (arg5 = addend C);
+//         010..111 reserved. fmadd requires Acc/Vec32 with f32 dtype.
 DecodeResult decode_er4(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domain = sel3_domain(f.sel3);
@@ -143,10 +153,13 @@ DecodeResult decode_er4(std::uint32_t word) {
                                   {domain, f.src2}}};
 }
 
-// E_MASK (R4): sel3 = {dom2, FS}; FS = 0 takes the fill from the fill5
-// immediate table (codes 9-31 are reserved), FS = 1 from Scalar xFill.
-// tril/triu are matrix-only, funct3 >= 011 is reserved. The fill5 dtype
-// restriction (codes 5-8 are f32-only) fails at execution.
+// E_MASK (R4): major4 = 0100, q = 00.
+// 31    28 27  26  25  24    22 21      17 16      12 11       7 6        2 1   0
+// [major4] [dom2] [FS] [funct3] [  arg5  ] [xBound5 ] [   S5   ] [   D5   ] [ q ]
+// dom2: 00 Tile, 01 Acc, 10 Vec8, 11 Vec32.
+// FS: 0 = fill5 code in arg5, 1 = Scalar xFill in arg5.
+// funct3: 000 tail, 001 tril, 010 triu; 011..111 reserved. tril/triu are matrix-only.
+// xBound5 names Scalar xBounds/xLen for tail, or xDelta for tril/triu.
 DecodeResult decode_emask(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domain = sel3_domain(f.sel3);
@@ -166,11 +179,11 @@ DecodeResult decode_emask(std::uint32_t word) {
       MaskInstr{static_cast<MaskOp>(f.funct3), {domain, f.dest}, {domain, f.src1}, f.src2, fill}};
 }
 
-// CVT (R2): sel3 = {dom2, 0}; dom2 selects the destination domain (Acc or
-// Vec32). funct3 = 000 converts i32 -> f32 with the source in the same
-// domain; funct3 = 001 widens a Tile i8 source into Acc i32 (Acc
-// destinations only). funct3 >= 010 and Vec32 widen are reserved. The dtype
-// preconditions fail at execution.
+// CVT (R2): major4 = 0011, q = 10.
+// 31    28 27  26 25  24    22 21                12 11       7 6        2 1   0
+// [major4] [dom2] [0] [funct3] [    reserved10    ] [   S5   ] [   D5   ] [ q ]
+// dom2: destination 01 Acc, 11 Vec32; 00/10 reserved.
+// funct3: 000 i32 -> f32 (same-domain S5/D5), 001 Tile i8 -> Acc i32;
 DecodeResult decode_cvt(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = sel3_domain(f.sel3);
@@ -191,10 +204,11 @@ DecodeResult decode_cvt(std::uint32_t word) {
   return DecodedNpuInstr{CvtInstr{CvtOp::cvt, {domain, f.dest}, {domain, f.src2}}};
 }
 
-// AREDUCE (R2): reserved3/reserved10 are pinned by the pattern; S5 is the
-// Acc source, D5 the Vec32 destination (any 5-bit number is a valid Vec32
-// register). funct3 >= 110 is reserved. The f32 dtype and length constraints
-// fail at execution.
+// AREDUCE (R2): major4 = 0001, q = 10.
+// 31    28 27       25 24    22 21                12 11       7 6        2 1   0
+// [major4] [reserved3] [funct3] [    reserved10    ] [   S5   ] [   D5   ] [ q ]
+// funct3: 000 sum, 001 max, 010 min, 011 sumsq, 100 argmax, 101 absmax;
+//         110/111 reserved. S5 is Acc; D5 is Vec32.
 DecodeResult decode_areduce(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   if (f.funct3 > 0b101 || f.src2 >= ACC_REGISTERS) {
@@ -206,9 +220,11 @@ DecodeResult decode_areduce(std::uint32_t word) {
                                      {NpuDomain::acc, f.src2}}};
 }
 
-// VREDUCE sum/max/min/sumsq (R2): D5 is the Scalar destination, S5 the Vec32
-// source; any 5-bit number is a valid register on both sides. The f32 dtype
-// constraint fails at execution.
+// VREDUCE sum/max/min/sumsq (R2): major4 = 0010, q = 10.
+// 31    28 27       25 24    22 21                12 11       7 6        2 1   0
+// [major4] [reserved3] [funct3] [    reserved10    ] [   S5   ] [   D5   ] [ q ]
+// funct3: 000 sum, 001 max, 010 min, 011 sumsq. S5 is Vec32; D5 is Scalar.
+// funct3 = 100 uses the argmax layout below; 101..111 are reserved.
 DecodeResult decode_vreduce(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   return DecodedNpuInstr{ReduceInstr{static_cast<ReduceOp>(f.funct3),
@@ -217,9 +233,10 @@ DecodeResult decode_vreduce(std::uint32_t word) {
                                      {NpuDomain::vec32, f.src2}}};
 }
 
-// vreduce.argmax (R4 two-destination variant): D5 = xIndex, the src2
-// position carries xVal5 (xValue); reserved5 is pinned by the pattern. All
-// register fields are 5-bit Scalar/Vec32 positions, always in range.
+// VREDUCE argmax (R4): major4 = 0010, q = 10.
+// 31    28 27       25 24    22 21       17 16      12 11       7 6        2 1   0
+// [major4] [reserved3] [funct3] [reserved5] [ xVal5  ] [   S5   ] [   D5   ] [ q ]
+// funct3 = 100. S5 is Vec32; D5/xVal5 are the Scalar xIndex/xValue destinations.
 DecodeResult decode_vreduce_argmax(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   return DecodedNpuInstr{ReduceInstr{ReduceOp::argmax,
@@ -228,17 +245,19 @@ DecodeResult decode_vreduce_argmax(std::uint32_t word) {
                                      {NpuDomain::vec32, f.src1}}};
 }
 
-// QNT (R4): sel3 = {dom2, IS}; dom2 selects the main destination domain and
-// with it the direction (Tile = tquant, Acc = tdequant, Vec8 = vquant,
-// Vec32 = bdequant). funct3 = 001 is the external-scale row quantization and
-// exists for Tile destinations only; funct3 >= 010 is reserved. IS/index5
-// carry the scale lane for the vector forms and are reserved (0) for the
-// matrix forms. All dtype/shape constraints fail at execution.
 // index5 with the IS bit: an immediate index, or the named Scalar register.
 IndexOperand decode_index(RegisterIndex raw, bool is_scalar) {
   return is_scalar ? IndexOperand{ScalarRegister{raw}} : IndexOperand{ImmediateIndex{raw}};
 }
 
+// QNT (R4): major4 = 0100, q = 10.
+// 31    28 27  26  25  24    22 21      17 16      12 11       7 6        2 1   0
+// [major4] [dom2] [IS] [funct3] [vScale5 ] [ index5 ] [   S5   ] [   D5   ] [ q ]
+// dom2: 00 tquant (Tile), 01 tdequant (Acc), 10 vquant (Vec8), 11 bdequant (Vec32).
+// funct3: 000 quant/dequant, 001 external-scale tquant; 010..111 reserved.
+// vScale5 is an output for dynamic quant, an input for external-scale quant/dequant.
+// Vector forms use IS: 0 = immediate scale lane, 1 = Scalar register in index5.
+// Matrix forms require IS = 0 and index5 = 0.
 DecodeResult decode_qnt(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domain = sel3_domain(f.sel3);
@@ -261,17 +280,18 @@ DecodeResult decode_qnt(std::uint32_t word) {
       op, {domain, f.dest}, {src_domain, f.src1}, f.arg, decode_index(f.src2, index_is_scalar)}};
 }
 
-// MMA_BDOT (R4): funct3 bit2 picks mma (Acc destination) or bdot (Vec32
-// destination); bdot has no accumulate form, so funct3 codes 101/111 are
-// reserved (the pattern pins reserved3/reserved5 to 0). The operation and
-// its operand domains come from the shared MMA_BY_FUNCT3 table; the right
-// source is always a Tile. All dtype/shape constraints fail at execution.
+// MMA_BDOT (R4): major4 = 0000, q = 10.
+// 31    28 27       25 24    22 21       17 16      12 11       7 6        2 1   0
+// [major4] [reserved3] [funct3] [reserved5] [   B5   ] [   A5   ] [   D5   ] [ q ]
+// funct3 = {mma/bdot, nn/nt, zero/acc}; bdot has only zero, so 101/111 are reserved.
+// B5 is Tile; A5 is Tile/Vec8 and D5 is Acc/Vec32 for mma/bdot.
 DecodeResult decode_mma(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto &info = MMA_BY_FUNCT3[f.funct3];
   if (!info) {
     return DecodeError::illegal;
   }
+  // src2 is always tile
   if (f.dest >= domain_register_count(info->dest_domain) ||
       f.src1 >= domain_register_count(info->lhs_domain) || f.src2 >= TILE_REGISTERS) {
     return DecodeError::illegal;
@@ -282,8 +302,11 @@ DecodeResult decode_mma(std::uint32_t word) {
                                   {NpuDomain::tile, f.src2}}};
 }
 
-// SYS (Z format): funct3 selects the fence granularity or kernel.end; the
-// pattern pins reserved23 to 0. funct3 codes 100-111 are reserved.
+// SYS (Z): major4 = 1000, q = 10.
+// 31    28 27    25 24                                           2 1   0
+// [major4] [funct3] [                 reserved23                 ] [ q ]
+// funct3: 000 fence.mem, 001 fence.sa, 010 fence.all, 011 kernel.end;
+//         100..111 reserved.
 DecodeResult decode_sys(std::uint32_t word) {
   const auto funct3 = encoding::field<27, 25>(word);
   if (funct3 > 0b011) {
@@ -292,9 +315,13 @@ DecodeResult decode_sys(std::uint32_t word) {
   return DecodedNpuInstr{SysInstr{static_cast<SysOp>(funct3)}};
 }
 
-// M_BLK block/gather forms (R2): sel3 = {dom2, 0}; funct3 = {form2, LS} with
-// LS picking load (0) or store (1). S5 names the gather index vector (a Vec32
-// register) and the patterns pin it to 0 for the block forms.
+// M_BLK block/gather (R2): major4 = 0000, q = 01.
+// 31    28 27  26 25  24    22 21                12 11       7 6        2 1   0
+// [major4] [dom2] [0] [funct3] [    reserved10    ] [   S5   ] [   D5   ] [ q ]
+// dom2: 00 Tile, 01 Acc, 10 Vec8, 11 Vec32; Acc gather is reserved.
+// funct3 = {form2, LS}: 000 block load, 001 block store, 010 gather load.
+// S5 names the gather index vector vS; block forms require S5 = 0.
+// D5 names the load destination or store source and its bound descriptor.
 DecodeResult decode_mblk(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = sel3_domain(f.sel3);
@@ -313,8 +340,12 @@ DecodeResult decode_mblk(std::uint32_t word) {
                                            : MblkInstr{op, reg, {}, ImmediateIndex{}, gather_src}};
 }
 
-// M_BLK row forms (MR): sel3 = {TA, 0, IS}; IS=0 takes the row number from
-// index5, IS=1 from the Scalar register index5 names.
+// M_BLK row (MR): major4 = 0000, q = 01.
+// 31    28  27  26   25  24    22 21       17 16      12 11        7 6        2 1   0
+// [major4] [TA] [0] [IS] [funct3] [reserved5] [ index5 ] [reserved5] [  reg5  ] [ q ]
+// TA: 0 = Tile, 1 = Acc. IS: 0 = immediate row, 1 = Scalar register in index5.
+// funct3 = {form2, LS}: 100 row load, 101 row store.
+// reg5 names the data register and its bound TM/AM descriptor.
 DecodeResult decode_mblk_row(std::uint32_t word) {
   const auto f = encoding::NpuMR::from(word);
   const auto domain = paired_domains(f.sel3).matrix;
@@ -328,8 +359,12 @@ DecodeResult decode_mblk_row(std::uint32_t word) {
                                            : MblkInstr{op, reg, {}, index, 0}};
 }
 
-// INIT_MOVE fill (I format): the sel2/field3 positions carry dom2/funct3;
-// the patterns pin funct3 = 000.
+// INIT_MOVE fill (I): major4 = 0010, q = 01.
+// 31    28 27  26 25    23 22                             7 6        2 1   0
+// [major4] [dom2] [funct3] [            imm16             ] [   D5   ] [ q ]
+// dom2: 00 Tile, 01 Acc, 10 Vec8, 11 Vec32. funct3[25:23] = 000.
+// imm16 is interpreted according to the destination dtype.
+// Encodings with imm16 = 0x8000..0x801F select fillx.
 DecodeResult decode_init_fill(std::uint32_t word) {
   const auto f = encoding::NpuI::from(word);
   const auto domain = static_cast<NpuDomain>(f.sel2);
@@ -339,8 +374,12 @@ DecodeResult decode_init_fill(std::uint32_t word) {
   return DecodedNpuInstr{InitInstr{InitOp::fill, {domain, f.dest}, 0, f.imm}};
 }
 
-// INIT_MOVE R2 forms: fillx (S5 = xS), copy (S5 = same-domain source) and
-// ttranspose (Tile only), distinguished by funct3.
+// INIT_MOVE fillx/copy/ttranspose (R2): major4 = 0010, q = 01.
+// 31    28 27  26 25  24    22 21                12 11       7 6        2 1   0
+// [major4] [dom2] [0] [funct3] [    reserved10    ] [   S5   ] [   D5   ] [ q ]
+// dom2: 00 Tile, 01 Acc, 10 Vec8, 11 Vec32.
+// funct3[24:22]: 001 fillx (S5 = xS), 010 copy (S5 = same-domain source),
+//               011 ttranspose (Tile only).
 DecodeResult decode_init_move(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = sel3_domain(f.sel3);
@@ -357,9 +396,14 @@ DecodeResult decode_init_move(std::uint32_t word) {
   return DecodedNpuInstr{InitInstr{op, {domain, f.dest}, f.src2, 0}};
 }
 
-// ROW_MOVE (R4): sel3 = {EW, 0, IS}; EW pairs Tile <-> Vec8 (0) or
-// Acc <-> Vec32 (1). The vector side has 32 registers, so only the matrix
-// register number needs a bounds check.
+// ROW_MOVE (R4): major4 = 0011, q = 01.
+// 31    28  27  26   25  24    22 21       17 16      12 11       7 6        2 1   0
+// [major4] [EW] [0] [IS] [funct3] [reserved5] [ index5 ] [   S5   ] [   D5   ] [ q ]
+// EW: 0 = 8-bit Tile/Vec8, 1 = 32-bit Acc/Vec32.
+// IS: 0 = immediate row, 1 = Scalar register in index5.
+// funct3: 000 insert.row (vector S5 -> matrix D5),
+//         001 extract.row (matrix S5 -> vector D5); 010..111 reserved.
+
 DecodeResult decode_row_move(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domains = paired_domains(f.sel3);
@@ -374,8 +418,13 @@ DecodeResult decode_row_move(std::uint32_t word) {
                                   decode_index(f.src2, (f.sel3 & 1) != 0)}};
 }
 
-// LANE_MOVE (R4): sel3 = {EW, 0, IS}; EW picks Vec8 (0) or Vec32 (1). Both
-// sides take any 5-bit register number.
+// LANE_MOVE (R4): major4 = 0100, q = 01.
+// 31    28  27  26   25  24    22 21       17 16      12 11       7 6        2 1   0
+// [major4] [EW] [0] [IS] [funct3] [reserved5] [ index5 ] [   S5   ] [   D5   ] [ q ]
+// EW: 0 = 8-bit Vec8, 1 = 32-bit Vec32.
+// IS: 0 = immediate lane, 1 = Scalar register in index5.
+// funct3: 000 extract (vector S5 -> Scalar D5), 001 insert (Scalar S5 -> vector D5),
+//         010 broadcast (vector S5 -> vector D5); 011..111 reserved.
 DecodeResult decode_lane_move(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domain = paired_domains(f.sel3).vector;
@@ -404,6 +453,11 @@ constexpr ConfigRegType cfg_reg_type(std::uint8_t sel2, bool vector_side) {
 // vector side (BC/VC/BM/VM).
 constexpr std::uint8_t MAJOR4_CFG_VEC_SETI = 0b0110;
 
+// CFG_MAT_SETI / CFG_VEC_SETI (I): major4 = 0101 / 0110, q = 10.
+// 31    28 27  26 25    23 22                             7 6        2 1   0
+// [major4] [sel2] [field3] [            imm16             ] [   C5   ] [ q ]
+// sel2: 00 TC/BC, 01 AC/VC, 10 TM/BM, 11 AM/VM (matrix/vector major).
+// field3 selects the field in C5; imm16 supplies its value.
 DecodeResult decode_cfg_seti(std::uint32_t word) {
   const auto f = encoding::NpuI::from(word);
   const auto reg_type = cfg_reg_type(f.sel2, f.major4 == MAJOR4_CFG_VEC_SETI);
@@ -414,6 +468,13 @@ DecodeResult decode_cfg_seti(std::uint32_t word) {
   return DecodedNpuInstr{CfgInstr{CfgOp::seti, reg_type, f.dest, 0, f.field3, f.imm}};
 }
 
+// CFG_REG (R4): major4 = 0111, q = 10.
+// 31    28 27  26  25  24    22 21      17 16       12 11       7 6        2 1   0
+// [major4] [sel2] [MV] [funct3] [ field5 ] [reserved5] [   S5   ] [   D5   ] [ q ]
+// sel2: 00 TC/BC, 01 AC/VC, 10 TM/BM, 11 AM/VM; MV: 0 = matrix, 1 = vector.
+// funct3: 000 setx (xS -> C), 001 copy (CS -> CD), 010 get (C -> xD).
+// field5[4:3] = 00; field5[2:0] holds the field number. copy requires field5 = 0.
+// S5/D5 hold the source/destination above; undefined fields are illegal.
 template <CfgOp Op> DecodeResult decode_cfg_reg(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto reg_type = cfg_reg_type(f.sel3 >> 1, (f.sel3 & 1) != 0);
@@ -483,9 +544,8 @@ constexpr DecodeEntry NPU_TABLE[] = {
     {"0000 ?0? 101 00000 ????? 00000 ????? 01", decode_mblk_row},                     // row store
     {"0000 ??? ??? ????? ????? ????? ????? 01", illegal},                             // reserved M_BLK encodings
     // INIT_MOVE R2 forms: sel3 = {dom2, 0}, funct3 = fillx/copy/ttranspose.
-    // They come before fill: an R2 word (reserved10 = 0) is also a valid
-    // fill word with imm16 in [0x8000, 0x801F], and the R2 reading wins —
-    // that immediate range is shadowed for fill (see the ISA manual).
+    // fillx precedes fill: imm16 = 0x8000..0x801F matches both patterns,
+    // and the ISA assigns these encodings to fillx.
     {"0010 ??0 001 0000000000 ????? ????? 01", decode_init_move},                     // fillx
     {"0010 ??0 010 0000000000 ????? ????? 01", decode_init_move},                     // copy
     {"0010 ??0 011 0000000000 ????? ????? 01", decode_init_move},                     // ttranspose
