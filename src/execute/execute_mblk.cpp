@@ -153,8 +153,8 @@ ExecuteResult block_access(const MblkInstr &instr, ExecContext &ctx,
   auto &reg = regs[accessed_reg(instr).index];
   const std::span<const std::uint64_t> range(addrs->data(), rows * cols);
   const auto at = matrix_at(config);
-  const auto result = is_store_form(instr.op) ? probed_store(ctx.memory, reg, range, at)
-                                              : staged_load(ctx.memory, reg, range, at);
+  const auto result = is_store(instr.op) ? probed_store(ctx.memory, reg, range, at)
+                                         : staged_load(ctx.memory, reg, range, at);
   if (result.status != StepStatus::retired) {
     return result;
   }
@@ -200,8 +200,8 @@ ExecuteResult row_access(const MblkInstr &instr, ExecContext &ctx,
     const auto view = matrix_view(storage);
     return view.at(row, n);
   };
-  const auto result = is_store_form(instr.op) ? probed_store(ctx.memory, reg, range, at)
-                                              : staged_load(ctx.memory, reg, range, at);
+  const auto result = is_store(instr.op) ? probed_store(ctx.memory, reg, range, at)
+                                         : staged_load(ctx.memory, reg, range, at);
   if (result.status != StepStatus::retired) {
     return result;
   }
@@ -315,8 +315,8 @@ ExecuteResult vector_access(const MblkInstr &instr, ExecContext &ctx,
   }
 
   const std::span<const std::uint64_t> range(addrs->data(), len);
-  const auto result = is_store_form(instr.op) ? probed_store(ctx.memory, reg, range, vector_at())
-                                              : staged_load(ctx.memory, reg, range, vector_at());
+  const auto result = is_store(instr.op) ? probed_store(ctx.memory, reg, range, vector_at())
+                                         : staged_load(ctx.memory, reg, range, vector_at());
   if (result.status != StepStatus::retired) {
     return result;
   }

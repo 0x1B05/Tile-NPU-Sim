@@ -184,24 +184,14 @@ DecodeResult decode_emask(std::uint32_t word) {
 // [major4] [dom2] [0] [funct3] [    reserved10    ] [   S5   ] [   D5   ] [ q ]
 // dom2: destination 01 Acc, 11 Vec32; 00/10 reserved.
 // funct3: 000 i32 -> f32 (same-domain S5/D5), 001 Tile i8 -> Acc i32;
-DecodeResult decode_cvt(std::uint32_t word) {
+template <CvtOp Op> DecodeResult decode_cvt(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = sel3_domain(f.sel3);
-  const auto count = domain_register_count(domain);
-  if (f.dest >= count) {
+  const auto src_domain = Op == CvtOp::widen ? NpuDomain::tile : domain;
+  if (f.dest >= domain_register_count(domain) || f.src2 >= domain_register_count(src_domain)) {
     return DecodeError::illegal;
   }
-  if (f.funct3 == 0b001) {
-    // The twiden pattern pins sel3 = 010, so the destination is an Acc.
-    if (f.src2 >= TILE_REGISTERS) {
-      return DecodeError::illegal;
-    }
-    return DecodedNpuInstr{CvtInstr{CvtOp::widen, {domain, f.dest}, {NpuDomain::tile, f.src2}}};
-  }
-  if (f.src2 >= count) {
-    return DecodeError::illegal;
-  }
-  return DecodedNpuInstr{CvtInstr{CvtOp::cvt, {domain, f.dest}, {domain, f.src2}}};
+  return DecodedNpuInstr{CvtInstr{Op, {domain, f.dest}, {src_domain, f.src2}}};
 }
 
 // AREDUCE (R2): major4 = 0001, q = 10.
@@ -319,22 +309,16 @@ DecodeResult decode_sys(std::uint32_t word) {
 // [major4] [dom2] [0] [funct3] [    reserved10    ] [   S5   ] [   D5   ] [ q ]
 // dom2: 00 Tile, 01 Acc, 10 Vec8, 11 Vec32; Acc gather is reserved.
 // funct3 = {form2, LS}: 000 block load, 001 block store, 010 gather load.
-DecodeResult decode_mblk(std::uint32_t word) {
+template <MblkOp Op> DecodeResult decode_mblk(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = sel3_domain(f.sel3);
-  const bool gather = f.funct3 == 0b010;
-  // Gather is defined for Tile/Vec8/Vec32 only.
-  if (gather && domain == NpuDomain::acc) {
+  if ((Op == MblkOp::gather && domain == NpuDomain::acc) ||
+      f.dest >= domain_register_count(domain)) {
     return DecodeError::illegal;
   }
-  if (f.dest >= domain_register_count(domain)) {
-    return DecodeError::illegal;
-  }
-  const auto op = gather ? MblkOp::gather : (f.funct3 & 1) != 0 ? MblkOp::store : MblkOp::load;
-  const auto gather_src = gather ? f.src2 : RegisterIndex{0};
   const NpuRegister reg{domain, f.dest};
-  return DecodedNpuInstr{is_store_form(op) ? MblkInstr{op, {}, reg, ImmediateIndex{}, gather_src}
-                                           : MblkInstr{op, reg, {}, ImmediateIndex{}, gather_src}};
+  return DecodedNpuInstr{is_store(Op) ? MblkInstr{Op, {}, reg, ImmediateIndex{}, f.src2}
+                                      : MblkInstr{Op, reg, {}, ImmediateIndex{}, f.src2}};
 }
 
 // M_BLK row (MR): major4 = 0000, q = 01.
@@ -342,17 +326,16 @@ DecodeResult decode_mblk(std::uint32_t word) {
 // [major4] [TA] [0] [IS] [funct3] [reserved5] [ index5 ] [reserved5] [  reg5  ] [ q ]
 // TA: 0 = Tile, 1 = Acc. IS: 0 = immediate row, 1 = Scalar register in index5.
 // funct3 = {form2, LS}: 100 row load, 101 row store.
-DecodeResult decode_mblk_row(std::uint32_t word) {
+template <MblkOp Op> DecodeResult decode_mblk_row(std::uint32_t word) {
   const auto f = encoding::NpuMR::from(word);
   const auto domain = paired_domains(f.sel3).matrix;
   if (f.reg >= domain_register_count(domain)) {
     return DecodeError::illegal;
   }
-  const auto op = (f.funct3 & 1) != 0 ? MblkOp::row_store : MblkOp::row_load;
   const NpuRegister reg{domain, f.reg};
   const auto index = decode_index(f.index, (f.sel3 & 1) != 0);
-  return DecodedNpuInstr{is_store_form(op) ? MblkInstr{op, {}, reg, index, 0}
-                                           : MblkInstr{op, reg, {}, index, 0}};
+  return DecodedNpuInstr{is_store(Op) ? MblkInstr{Op, {}, reg, index, 0}
+                                      : MblkInstr{Op, reg, {}, index, 0}};
 }
 
 // INIT_MOVE fill (I): major4 = 0010, q = 01.
@@ -374,20 +357,17 @@ DecodeResult decode_init_fill(std::uint32_t word) {
 // dom2: 00 Tile, 01 Acc, 10 Vec8, 11 Vec32.
 // funct3[24:22]: 001 fillx (S5 = xS), 010 copy (S5 = same-domain source),
 //               011 ttranspose (Tile only).
-DecodeResult decode_init_move(std::uint32_t word) {
+template <InitOp Op> DecodeResult decode_init_move(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = sel3_domain(f.sel3);
-  if (f.funct3 == 0b011 && domain != NpuDomain::tile) {
+  if (Op == InitOp::transpose && domain != NpuDomain::tile) {
     return DecodeError::illegal; // ttranspose is Tile-only
   }
   const auto count = domain_register_count(domain);
-  if (f.dest >= count || (f.funct3 != 0b001 && f.src2 >= count)) {
+  if (f.dest >= count || (Op != InitOp::fillx && f.src2 >= count)) {
     return DecodeError::illegal;
   }
-  const auto op = f.funct3 == 0b001   ? InitOp::fillx
-                  : f.funct3 == 0b010 ? InitOp::copy
-                                      : InitOp::transpose;
-  return DecodedNpuInstr{InitInstr{op, {domain, f.dest}, f.src2, 0}};
+  return DecodedNpuInstr{InitInstr{Op, {domain, f.dest}, f.src2, 0}};
 }
 
 // ROW_MOVE (R4): major4 = 0011, q = 01.
@@ -397,15 +377,15 @@ DecodeResult decode_init_move(std::uint32_t word) {
 // IS: 0 = immediate row, 1 = Scalar register in index5.
 // funct3: 000 insert.row (vector S5 -> matrix D5),
 //         001 extract.row (matrix S5 -> vector D5); 010..111 reserved.
-DecodeResult decode_row_move(std::uint32_t word) {
+template <RowOp Op> DecodeResult decode_row_move(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domains = paired_domains(f.sel3);
-  const bool insert = f.funct3 == 0b000;
+  constexpr bool insert = Op == RowOp::insert;
   const auto matrix_index = insert ? f.dest : f.src1;
   if (matrix_index >= domain_register_count(domains.matrix)) {
     return DecodeError::illegal;
   }
-  return DecodedNpuInstr{RowInstr{insert ? RowOp::insert : RowOp::extract,
+  return DecodedNpuInstr{RowInstr{Op,
                                   {domains.matrix, matrix_index},
                                   {domains.vector, insert ? f.src1 : f.dest},
                                   decode_index(f.src2, (f.sel3 & 1) != 0)}};
@@ -418,17 +398,14 @@ DecodeResult decode_row_move(std::uint32_t word) {
 // IS: 0 = immediate lane, 1 = Scalar register in index5.
 // funct3: 000 extract (vector S5 -> Scalar D5), 001 insert (Scalar S5 -> vector D5),
 //         010 broadcast (vector S5 -> vector D5)
-DecodeResult decode_lane_move(std::uint32_t word) {
+template <LaneOp Op> DecodeResult decode_lane_move(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domain = paired_domains(f.sel3).vector;
-  const auto op = f.funct3 == 0b000   ? LaneOp::extract
-                  : f.funct3 == 0b001 ? LaneOp::insert
-                                      : LaneOp::broadcast;
-  auto dst = op == LaneOp::extract ? NpuOperand{ScalarRegister{f.dest}}
-                                   : NpuOperand{NpuRegister{domain, f.dest}};
-  auto src = op == LaneOp::insert ? NpuOperand{ScalarRegister{f.src1}}
-                                  : NpuOperand{NpuRegister{domain, f.src1}};
-  return DecodedNpuInstr{LaneInstr{op, dst, src, decode_index(f.src2, (f.sel3 & 1) != 0)}};
+  const auto dst = Op == LaneOp::extract ? NpuOperand{ScalarRegister{f.dest}}
+                                         : NpuOperand{NpuRegister{domain, f.dest}};
+  const auto src = Op == LaneOp::insert ? NpuOperand{ScalarRegister{f.src1}}
+                                        : NpuOperand{NpuRegister{domain, f.src1}};
+  return DecodedNpuInstr{LaneInstr{Op, dst, src, decode_index(f.src2, (f.sel3 & 1) != 0)}};
 }
 
 // sel2 selects the register family pair, the vector-side bit picks within it:
@@ -465,7 +442,6 @@ DecodeResult decode_cfg_seti(std::uint32_t word) {
 // [major4] [sel2] [MV] [funct3] [ field5 ] [reserved5] [   S5   ] [   D5   ] [ q ]
 // sel2: 00 TC/BC, 01 AC/VC, 10 TM/BM, 11 AM/VM; MV: 0 = matrix, 1 = vector.
 // funct3: 000 setx (xS -> C), 001 copy (CS -> CD), 010 get (C -> xD).
-// field5[4:3] = 00; field5[2:0] holds the field number. copy requires field5 = 0.
 template <CfgOp Op> DecodeResult decode_cfg_reg(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto reg_type = cfg_reg_type(f.sel3 >> 1, (f.sel3 & 1) != 0);
@@ -526,31 +502,31 @@ constexpr DecodeEntry NPU_TABLE[] = {
 
     // M_BLK (R2): sel3 = {dom2, 0}; S5 is the gather index vector, 0 for the
     // block forms. funct3 = {form2, LS}: 00x block, 010 gather.
-    {"0000 ??0 000 0000000000 00000 ????? 01", decode_mblk},                          // block load
-    {"0000 ??0 001 0000000000 00000 ????? 01", decode_mblk},                          // block store
-    {"0000 ??0 010 0000000000 ????? ????? 01", decode_mblk},                          // gather load
+    {"0000 ??0 000 0000000000 00000 ????? 01", decode_mblk<MblkOp::load>},           // block load
+    {"0000 ??0 001 0000000000 00000 ????? 01", decode_mblk<MblkOp::store>},          // block store
+    {"0000 ??0 010 0000000000 ????? ????? 01", decode_mblk<MblkOp::gather>},         // gather load
     // M_BLK row forms (MR): sel3 = {TA, 0, IS}, funct3 = 10x.
-    {"0000 ?0? 100 00000 ????? 00000 ????? 01", decode_mblk_row},                     // row load
-    {"0000 ?0? 101 00000 ????? 00000 ????? 01", decode_mblk_row},                     // row store
+    {"0000 ?0? 100 00000 ????? 00000 ????? 01", decode_mblk_row<MblkOp::row_load>},   // row load
+    {"0000 ?0? 101 00000 ????? 00000 ????? 01", decode_mblk_row<MblkOp::row_store>},  // row store
     {"0000 ??? ??? ????? ????? ????? ????? 01", illegal},                             // reserved M_BLK encodings
     // INIT_MOVE R2 forms: sel3 = {dom2, 0}, funct3 = fillx/copy/ttranspose.
     // fillx precedes fill: imm16 = 0x8000..0x801F matches both patterns,
     // and the ISA assigns these encodings to fillx.
-    {"0010 ??0 001 0000000000 ????? ????? 01", decode_init_move},                     // fillx
-    {"0010 ??0 010 0000000000 ????? ????? 01", decode_init_move},                     // copy
-    {"0010 ??0 011 0000000000 ????? ????? 01", decode_init_move},                     // ttranspose
+    {"0010 ??0 001 0000000000 ????? ????? 01", decode_init_move<InitOp::fillx>},       // fillx
+    {"0010 ??0 010 0000000000 ????? ????? 01", decode_init_move<InitOp::copy>},        // copy
+    {"0010 ??0 011 0000000000 ????? ????? 01", decode_init_move<InitOp::transpose>},   // ttranspose
     // INIT_MOVE fill (I format): dom2 + funct3 = 000 + imm16; other funct3
     // values in the I layout are reserved.
     {"0010 ?? 000 ???? ???? ???? ???? ????? 01", decode_init_fill},                   // fill
     {"0010 ??? ??? ????? ????? ????? ????? 01", illegal},                             // reserved INIT_MOVE encodings
     // ROW_MOVE (R4): sel3 = {EW, 0, IS}, funct3 = insert.row/extract.row.
-    {"0011 ?0? 000 00000 ????? ????? ????? 01", decode_row_move},                     // insert.row
-    {"0011 ?0? 001 00000 ????? ????? ????? 01", decode_row_move},                     // extract.row
+    {"0011 ?0? 000 00000 ????? ????? ????? 01", decode_row_move<RowOp::insert>},       // insert.row
+    {"0011 ?0? 001 00000 ????? ????? ????? 01", decode_row_move<RowOp::extract>},      // extract.row
     {"0011 ??? ??? ????? ????? ????? ????? 01", illegal},                             // reserved ROW_MOVE encodings
     // LANE_MOVE (R4): sel3 = {EW, 0, IS}, funct3 = extract/insert/broadcast.
-    {"0100 ?0? 000 00000 ????? ????? ????? 01", decode_lane_move},                    // extract
-    {"0100 ?0? 001 00000 ????? ????? ????? 01", decode_lane_move},                    // insert
-    {"0100 ?0? 010 00000 ????? ????? ????? 01", decode_lane_move},                    // broadcast
+    {"0100 ?0? 000 00000 ????? ????? ????? 01", decode_lane_move<LaneOp::extract>},     // extract
+    {"0100 ?0? 001 00000 ????? ????? ????? 01", decode_lane_move<LaneOp::insert>},      // insert
+    {"0100 ?0? 010 00000 ????? ????? ????? 01", decode_lane_move<LaneOp::broadcast>},   // broadcast
     {"0100 ??? ??? ????? ????? ????? ????? 01", illegal},                             // reserved LANE_MOVE encodings
     // All assigned data movement majors decode above; the rest is reserved.
     {"???? ??? ???? ???? ????? ????? ????? 01", illegal},
@@ -560,8 +536,8 @@ constexpr DecodeEntry NPU_TABLE[] = {
     {"0000 ??? ??? ????? ????? ????? ????? 10", illegal},                             // reserved MMA_BDOT encodings
     // CVT (R2): sel3 = {dom2, 0}, dom2 = Acc/Vec32 only. funct3 = 000 cvt,
     // 001 twiden (Acc destination only).
-    {"0011 ?10 000 0000000000 ????? ????? 10", decode_cvt},                           // acvt/vcvt
-    {"0011 010 001 0000000000 ????? ????? 10", decode_cvt},                           // twiden
+    {"0011 ?10 000 0000000000 ????? ????? 10", decode_cvt<CvtOp::cvt>},               // acvt/vcvt
+    {"0011 010 001 0000000000 ????? ????? 10", decode_cvt<CvtOp::widen>},             // twiden
     {"0011 ??? ??? ????? ????? ????? ????? 10", illegal},                             // reserved CVT encodings
     // AREDUCE (R2): reserved3/reserved10 pinned to 0; funct3 = 000 sum,
     // 001 max, 010 min, 011 sumsq, 100 argmax, 101 absmax.
@@ -569,10 +545,7 @@ constexpr DecodeEntry NPU_TABLE[] = {
     {"0001 ??? ??? ????? ????? ????? ????? 10", illegal},                             // reserved AREDUCE encodings
     // VREDUCE (R2): funct3 = 000 sum, 001 max, 010 min, 011 sumsq; argmax
     // uses the R4 two-destination variant (xVal5 in the src2 position).
-    {"0010 000 000 0000000000 ????? ????? 10", decode_vreduce},
-    {"0010 000 001 0000000000 ????? ????? 10", decode_vreduce},
-    {"0010 000 010 0000000000 ????? ????? 10", decode_vreduce},
-    {"0010 000 011 0000000000 ????? ????? 10", decode_vreduce},
+    {"0010 000 0?? 0000000000 ????? ????? 10", decode_vreduce},
     {"0010 000 100 00000 ????? ????? ????? 10", decode_vreduce_argmax},
     {"0010 ??? ??? ????? ????? ????? ????? 10", illegal},                             // reserved VREDUCE encodings
     // QNT (R4): sel3 = {dom2, IS}, vScale5 in arg5, index5 in the src2

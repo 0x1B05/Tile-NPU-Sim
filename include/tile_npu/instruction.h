@@ -158,15 +158,12 @@ struct MblkInstr {
 };
 
 // The store forms read the transferred register from src; every other form
-// writes dest. Decode, the structural validation, the executor and tests
-// share this reading.
-inline constexpr bool is_store_form(MblkOp op) {
-  return op == MblkOp::store || op == MblkOp::row_store;
-}
+// writes dest.
+inline constexpr bool is_store(MblkOp op) { return op == MblkOp::store || op == MblkOp::row_store; }
 
 // The register the access transfers.
 inline constexpr const NpuRegister &accessed_reg(const MblkInstr &instr) {
-  return is_store_form(instr.op) ? instr.src : instr.dest;
+  return is_store(instr.op) ? instr.src : instr.dest;
 }
 
 // INIT_MOVE data initialization and intra-domain moves: immediate fill (I),
