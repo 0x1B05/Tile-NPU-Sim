@@ -431,12 +431,14 @@ inline constexpr bool qnt_dest_legal(QntOp op, NpuDomain dest) {
 // (nn = 0, nt = 1); bit0 picks zero-fill or accumulate for mma (bdot only
 // has the zero form, so funct3 codes 101/111 are reserved).
 enum class MmaOp : std::uint8_t {
+  // clang-format off
   nn_zero = 0b000,
-  nn_acc = 0b001,
+  nn_acc  = 0b001,
   nt_zero = 0b010,
-  nt_acc = 0b011,
-  bdot_nn = 0b100,
-  bdot_nt = 0b110,
+  nt_acc  = 0b011,
+  nn_bdot = 0b100,
+  nt_bdot = 0b110,
+  // clang-format on
 };
 
 // Operand reading: dest = aD (Acc) for mma, vD (Vec32) for bdot; src_a = tA
@@ -466,8 +468,8 @@ inline constexpr std::array<std::optional<MmaInfo>, 8> MMA_BY_FUNCT3 = [] {
   table[0b001] = MmaInfo{MmaOp::nn_acc , NpuDomain::acc  , NpuDomain::tile};
   table[0b010] = MmaInfo{MmaOp::nt_zero, NpuDomain::acc  , NpuDomain::tile};
   table[0b011] = MmaInfo{MmaOp::nt_acc , NpuDomain::acc  , NpuDomain::tile};
-  table[0b100] = MmaInfo{MmaOp::bdot_nn, NpuDomain::vec32, NpuDomain::vec8};
-  table[0b110] = MmaInfo{MmaOp::bdot_nt, NpuDomain::vec32, NpuDomain::vec8};
+  table[0b100] = MmaInfo{MmaOp::nn_bdot, NpuDomain::vec32, NpuDomain::vec8};
+  table[0b110] = MmaInfo{MmaOp::nt_bdot, NpuDomain::vec32, NpuDomain::vec8};
   // clang-format on
   return table;
 }();

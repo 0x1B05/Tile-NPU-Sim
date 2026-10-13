@@ -284,7 +284,6 @@ DecodeResult decode_qnt(std::uint32_t word) {
 // 31    28 27       25 24    22 21       17 16      12 11       7 6        2 1   0
 // [major4] [reserved3] [funct3] [reserved5] [   B5   ] [   A5   ] [   D5   ] [ q ]
 // funct3 = {mma/bdot, nn/nt, zero/acc}; bdot has only zero, so 101/111 are reserved.
-// B5 is Tile; A5 is Tile/Vec8 and D5 is Acc/Vec32 for mma/bdot.
 DecodeResult decode_mma(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto &info = MMA_BY_FUNCT3[f.funct3];
@@ -320,8 +319,6 @@ DecodeResult decode_sys(std::uint32_t word) {
 // [major4] [dom2] [0] [funct3] [    reserved10    ] [   S5   ] [   D5   ] [ q ]
 // dom2: 00 Tile, 01 Acc, 10 Vec8, 11 Vec32; Acc gather is reserved.
 // funct3 = {form2, LS}: 000 block load, 001 block store, 010 gather load.
-// S5 names the gather index vector vS; block forms require S5 = 0.
-// D5 names the load destination or store source and its bound descriptor.
 DecodeResult decode_mblk(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = sel3_domain(f.sel3);
@@ -345,7 +342,6 @@ DecodeResult decode_mblk(std::uint32_t word) {
 // [major4] [TA] [0] [IS] [funct3] [reserved5] [ index5 ] [reserved5] [  reg5  ] [ q ]
 // TA: 0 = Tile, 1 = Acc. IS: 0 = immediate row, 1 = Scalar register in index5.
 // funct3 = {form2, LS}: 100 row load, 101 row store.
-// reg5 names the data register and its bound TM/AM descriptor.
 DecodeResult decode_mblk_row(std::uint32_t word) {
   const auto f = encoding::NpuMR::from(word);
   const auto domain = paired_domains(f.sel3).matrix;
@@ -363,8 +359,6 @@ DecodeResult decode_mblk_row(std::uint32_t word) {
 // 31    28 27  26 25    23 22                             7 6        2 1   0
 // [major4] [dom2] [funct3] [            imm16             ] [   D5   ] [ q ]
 // dom2: 00 Tile, 01 Acc, 10 Vec8, 11 Vec32. funct3[25:23] = 000.
-// imm16 is interpreted according to the destination dtype.
-// Encodings with imm16 = 0x8000..0x801F select fillx.
 DecodeResult decode_init_fill(std::uint32_t word) {
   const auto f = encoding::NpuI::from(word);
   const auto domain = static_cast<NpuDomain>(f.sel2);
@@ -403,7 +397,6 @@ DecodeResult decode_init_move(std::uint32_t word) {
 // IS: 0 = immediate row, 1 = Scalar register in index5.
 // funct3: 000 insert.row (vector S5 -> matrix D5),
 //         001 extract.row (matrix S5 -> vector D5); 010..111 reserved.
-
 DecodeResult decode_row_move(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domains = paired_domains(f.sel3);
@@ -424,7 +417,7 @@ DecodeResult decode_row_move(std::uint32_t word) {
 // EW: 0 = 8-bit Vec8, 1 = 32-bit Vec32.
 // IS: 0 = immediate lane, 1 = Scalar register in index5.
 // funct3: 000 extract (vector S5 -> Scalar D5), 001 insert (Scalar S5 -> vector D5),
-//         010 broadcast (vector S5 -> vector D5); 011..111 reserved.
+//         010 broadcast (vector S5 -> vector D5)
 DecodeResult decode_lane_move(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domain = paired_domains(f.sel3).vector;
@@ -457,7 +450,6 @@ constexpr std::uint8_t MAJOR4_CFG_VEC_SETI = 0b0110;
 // 31    28 27  26 25    23 22                             7 6        2 1   0
 // [major4] [sel2] [field3] [            imm16             ] [   C5   ] [ q ]
 // sel2: 00 TC/BC, 01 AC/VC, 10 TM/BM, 11 AM/VM (matrix/vector major).
-// field3 selects the field in C5; imm16 supplies its value.
 DecodeResult decode_cfg_seti(std::uint32_t word) {
   const auto f = encoding::NpuI::from(word);
   const auto reg_type = cfg_reg_type(f.sel2, f.major4 == MAJOR4_CFG_VEC_SETI);
@@ -474,7 +466,6 @@ DecodeResult decode_cfg_seti(std::uint32_t word) {
 // sel2: 00 TC/BC, 01 AC/VC, 10 TM/BM, 11 AM/VM; MV: 0 = matrix, 1 = vector.
 // funct3: 000 setx (xS -> C), 001 copy (CS -> CD), 010 get (C -> xD).
 // field5[4:3] = 00; field5[2:0] holds the field number. copy requires field5 = 0.
-// S5/D5 hold the source/destination above; undefined fields are illegal.
 template <CfgOp Op> DecodeResult decode_cfg_reg(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto reg_type = cfg_reg_type(f.sel3 >> 1, (f.sel3 & 1) != 0);
@@ -498,7 +489,6 @@ template <CfgOp Op> DecodeResult decode_cfg_reg(std::uint32_t word) {
 
 // clang-format off
 
-// Pattern field groups mirror the family's format:
 //   R3: major4 sel3 funct4 reserved4 src2 src1 dest q
 //   I:  major4 sel2 field3 imm16(4x4)  C5   q
 //   R4: major4 sel3 funct3 arg5    src2 src1 dest q

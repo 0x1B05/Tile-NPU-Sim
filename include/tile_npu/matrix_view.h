@@ -9,9 +9,7 @@
 namespace tile_npu {
 
 // A non-owning view over one fixed-size physical matrix register, mapping
-// the logical coordinate (row, col) to the canonical row-major storage
-// offset. The view carries no shape or layout: shape and layout legality
-// are config-layer concerns (valid_domain_config).
+// the logical coordinate (row, col) to the row-major storage offset.
 template <typename Element> class MatrixView {
 public:
   explicit MatrixView(std::span<Element, MATRIX_ELEMENTS> storage) : storage_(storage) {}
@@ -24,9 +22,6 @@ private:
   std::span<Element, MATRIX_ELEMENTS> storage_;
 };
 
-// Executors always view a register; the fixed-extent span makes a
-// wrong-sized register a compile error. Constness follows the source
-// register.
 template <typename Element, std::size_t N>
   requires(N == MATRIX_ELEMENTS)
 MatrixView<Element> matrix_view(std::array<Element, N> &reg) {

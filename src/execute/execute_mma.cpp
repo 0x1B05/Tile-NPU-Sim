@@ -19,10 +19,10 @@ constexpr std::int32_t i8_product(std::uint8_t lhs, std::uint8_t rhs) {
 }
 
 constexpr bool is_nt(MmaOp op) {
-  return op == MmaOp::nt_zero || op == MmaOp::nt_acc || op == MmaOp::bdot_nt;
+  return op == MmaOp::nt_zero || op == MmaOp::nt_acc || op == MmaOp::nt_bdot;
 }
 
-constexpr bool accumulates(MmaOp op) { return op == MmaOp::nn_acc || op == MmaOp::nt_acc; }
+constexpr bool is_accumulate(MmaOp op) { return op == MmaOp::nn_acc || op == MmaOp::nt_acc; }
 
 // mma.{nn,nt}.{zero,acc}.i8.i32: D = A x B,
 // nt logically transposed B;
@@ -37,25 +37,25 @@ ExecuteResult mma(const MmaInstr &instr, State &state) {
     return config_error();
   }
   const bool nt = is_nt(instr.op);
-  const auto m = lhs_config.rows;
-  const auto k = lhs_config.cols;
-  const auto n = nt ? rhs_config.rows : rhs_config.cols;
-  if ((nt ? rhs_config.cols : rhs_config.rows) != k || dst_config.rows != m ||
-      dst_config.cols != n) {
+  const auto m_size = lhs_config.rows;
+  const auto n_size = nt ? rhs_config.rows : rhs_config.cols;
+  const auto k_size = lhs_config.cols;
+  if (dst_config.rows != m_size || dst_config.cols != n_size ||
+      (nt ? rhs_config.cols : rhs_config.rows) != k_size) {
     return config_error();
   }
   auto dst = matrix_view(state.a[instr.dest.index]);
   auto lhs = matrix_view(std::as_const(state.t[instr.src_a.index]));
   auto rhs = matrix_view(std::as_const(state.t[instr.src_b.index]));
-  for (std::size_t i = 0; i < m; ++i) {
-    for (std::size_t j = 0; j < n; ++j) {
+  for (std::size_t i = 0; i < m_size; ++i) {
+    for (std::size_t j = 0; j < n_size; ++j) {
       std::int32_t partial = 0;
-      for (std::size_t e = 0; e < k; ++e) {
-        partial += i8_product(lhs.at(i, e), nt ? rhs.at(j, e) : rhs.at(e, j));
+      for (std::size_t k = 0; k < k_size; ++k) {
+        partial += i8_product(lhs.at(i, k), nt ? rhs.at(j, k) : rhs.at(k, j));
       }
       auto &cell = dst.at(i, j);
-      cell = accumulates(instr.op) ? cell + std::bit_cast<std::uint32_t>(partial)
-                                   : std::bit_cast<std::uint32_t>(partial);
+      cell = is_accumulate(instr.op) ? cell + std::bit_cast<std::uint32_t>(partial)
+                                     : std::bit_cast<std::uint32_t>(partial);
     }
   }
   return {.status = StepStatus::retired};
@@ -73,18 +73,18 @@ ExecuteResult bdot(const MmaInstr &instr, State &state) {
     return config_error();
   }
   const bool nt = is_nt(instr.op);
-  const auto k = nt ? rhs_config.cols : rhs_config.rows;
-  const auto n = nt ? rhs_config.rows : rhs_config.cols;
-  if (lhs_config.len != k || dst_config.len != n) {
+  const auto k_size = nt ? rhs_config.cols : rhs_config.rows;
+  const auto n_size = nt ? rhs_config.rows : rhs_config.cols;
+  if (lhs_config.len != k_size || dst_config.len != n_size) {
     return config_error();
   }
   auto rhs = matrix_view(std::as_const(state.t[instr.src_b.index]));
   const auto &lhs = state.b[instr.src_a.index];
   auto &dst = state.v[instr.dest.index];
-  for (std::size_t j = 0; j < n; ++j) {
+  for (std::size_t j = 0; j < n_size; ++j) {
     std::int32_t sum = 0;
-    for (std::size_t e = 0; e < k; ++e) {
-      sum += i8_product(lhs[e], nt ? rhs.at(j, e) : rhs.at(e, j));
+    for (std::size_t k = 0; k < k_size; ++k) {
+      sum += i8_product(lhs[k], nt ? rhs.at(j, k) : rhs.at(k, j));
     }
     dst[j] = std::bit_cast<std::uint32_t>(sum);
   }
