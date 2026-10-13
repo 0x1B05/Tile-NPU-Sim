@@ -36,7 +36,7 @@ inline bool valid_domain_config(const Vec32Config &config) {
 
 // Elementwise (E_BIN/E_UNARY) adds arith_mode constraint on top of valid_domain_config.
 inline bool valid_elementwise_config(const TileConfig &config) {
-  return valid_domain_config(config) && config.arith_mode <= ArithMode::sat;
+  return valid_domain_config(config) && config.arith_mode < ArithMode::count;
 }
 
 inline bool valid_elementwise_config(const AccConfig &config) {

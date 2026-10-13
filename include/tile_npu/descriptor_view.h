@@ -29,10 +29,10 @@ public:
 
   bool is_valid() const {
     if constexpr (is_matrix) {
-      return descriptor_->flags <= MATRIX_DESC_FLAGS_MAX &&
-             descriptor_->transform <= DESC_TRANSFORM_MAX;
+      return descriptor_->flags < static_cast<std::uint8_t>(MatrixIncMode::count) &&
+             descriptor_->transform < static_cast<std::uint8_t>(DescriptorTransform::count);
     } else {
-      return descriptor_->flags <= VECTOR_DESC_FLAGS_MAX;
+      return (descriptor_->flags & ~VECTOR_INC_ENABLE_MASK) == 0;
     }
   }
 

@@ -81,9 +81,9 @@ template <typename T> ConfigAccessStatus write_scalar(T &target, const ConfigFie
 
 template <typename T>
 ConfigAccessStatus write_scalar(T &target, const ConfigFieldValue &value,
-                                std::type_identity_t<T> max) {
+                                std::type_identity_t<T> limit) {
   T raw;
-  if (!coerce_scalar(value, raw) || raw > max) {
+  if (!coerce_scalar(value, raw) || raw >= limit) {
     return ConfigAccessStatus::invalid_value;
   }
   target = raw;
@@ -133,7 +133,7 @@ ConfigAccessStatus write_matrix_shape(Config &config, ConfigField field,
 // clang-format off
 ConfigAccessStatus write_tile_config(TileConfig &config, ConfigField field, const ConfigFieldValue &value) {
   if (field == ConfigField::dtype)      return write_dtype(ConfigRegType::tc, config.dtype, value);
-  if (field == ConfigField::arith_mode) return write_scalar(config.arith_mode, value, ArithMode::sat);
+  if (field == ConfigField::arith_mode) return write_scalar(config.arith_mode, value, ArithMode::count);
   if (field == ConfigField::rows || field == ConfigField::cols || field == ConfigField::layout)
     return write_matrix_shape(config, field, value);
   return ConfigAccessStatus::unsupported_field;
@@ -162,8 +162,11 @@ ConfigAccessStatus write_vector_config(Config &config, ConfigRegType reg_type, C
 }
 
 ConfigAccessStatus write_matrix_descriptor(MatrixDescriptor &descriptor, ConfigField field, const ConfigFieldValue &value) {
-  if (field == ConfigField::flags)            return write_scalar(descriptor.flags, value, MATRIX_DESC_FLAGS_MAX);
-  if (field == ConfigField::transform)        return write_scalar(descriptor.transform, value, DESC_TRANSFORM_MAX);
+  if (field == ConfigField::flags)
+    return write_scalar(descriptor.flags, value, static_cast<std::uint8_t>(MatrixIncMode::count));
+  if (field == ConfigField::transform)
+    return write_scalar(descriptor.transform, value,
+                        static_cast<std::uint8_t>(DescriptorTransform::count));
   if (field == ConfigField::base_addr)        return write_scalar(descriptor.base_addr, value);
   if (field == ConfigField::row_stride_bytes) return write_scalar(descriptor.row_stride_bytes, value);
   if (field == ConfigField::col_stride_bytes) return write_scalar(descriptor.col_stride_bytes, value);
@@ -171,7 +174,8 @@ ConfigAccessStatus write_matrix_descriptor(MatrixDescriptor &descriptor, ConfigF
 }
 
 ConfigAccessStatus write_vector_descriptor(VectorDescriptor &descriptor, ConfigField field, const ConfigFieldValue &value) {
-  if (field == ConfigField::flags)        return write_scalar(descriptor.flags, value, VECTOR_DESC_FLAGS_MAX);
+  if (field == ConfigField::flags)
+    return write_scalar(descriptor.flags, value, static_cast<std::uint8_t>(VECTOR_INC_ENABLE_MASK + 1));
   if (field == ConfigField::base_addr)    return write_scalar(descriptor.base_addr, value);
   if (field == ConfigField::stride_bytes) return write_scalar(descriptor.stride_bytes, value);
   return ConfigAccessStatus::unsupported_field;

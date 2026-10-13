@@ -25,7 +25,8 @@ using Vec32 = std::array<std::uint32_t, VECTOR_LANES>;
 
 // The numeric values match the dtype codes in the ISA configuration registers.
 enum class DType : std::uint8_t { i8 = 0, u8 = 1, i32 = 2, u32 = 3, f32 = 4 };
-enum class ArithMode : std::uint8_t { wrap = 0, sat = 1 };
+// `count` is a sentinel for range checks, not an architectural mode.
+enum class ArithMode : std::uint8_t { wrap = 0, sat = 1, count };
 
 struct TileConfig {
   DType dtype = DType::i8;
@@ -66,20 +67,17 @@ struct VectorDescriptor {
   std::uint8_t flags = 0;
 };
 
-// Descriptor flags bit layout, shared by the write validation in config.cpp
-// and the reserved-bit checks in DescriptorView: a matrix descriptor holds
-// the post-access increment mode in the low two bits, a vector descriptor a
-// single increment-enable bit.
-inline constexpr std::uint8_t MATRIX_INC_MODE_MASK = 0x3u;
-inline constexpr std::uint8_t MATRIX_DESC_FLAGS_MAX = 0x2u;
-inline constexpr std::uint8_t VECTOR_INC_ENABLE_MASK = 0x1u;
-inline constexpr std::uint8_t VECTOR_DESC_FLAGS_MAX = 0x1u;
-
 // The matrix inc_mode values (TM/AM flags[1:0] in the manual)
-enum class MatrixIncMode : std::uint8_t { off = 0, row = 1, col = 2, reserved = 3 };
+enum class MatrixIncMode : std::uint8_t { off = 0, row = 1, col = 2, count };
 
 // The TM/AM transform values: 0 = normal, 1 = transpose.
-inline constexpr std::uint8_t DESC_TRANSFORM_MAX = 0x1u;
+enum class DescriptorTransform : std::uint8_t { normal = 0, transpose = 1, count };
+
+// Descriptor flags bit layout: a matrix descriptor holds the post-access
+// increment mode in the low two bits, a vector descriptor a single
+// increment-enable bit.
+inline constexpr std::uint8_t MATRIX_INC_MODE_MASK = 0x3u;
+inline constexpr std::uint8_t VECTOR_INC_ENABLE_MASK = 0x1u;
 
 // The ABI number of a0, guest exit code
 inline constexpr std::size_t REG_A0 = 10;

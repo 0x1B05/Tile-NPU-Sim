@@ -43,9 +43,7 @@ bool transform_legal(const MblkInstr &instr, const MatrixDescriptor &desc) {
 }
 
 // Every access runs in two phases: all addresses are computed first, then
-// the transfer happens. Address overflow is a property of the descriptor and
-// shape alone, so it reports deterministically as a config error before any
-// element is touched.
+// the transfer happens.
 template <std::size_t Max, typename Next>
 std::optional<std::array<std::uint64_t, Max>> fill_addresses(std::size_t count, Next next) {
   std::array<std::uint64_t, Max> addrs{};
@@ -60,8 +58,7 @@ std::optional<std::array<std::uint64_t, Max>> fill_addresses(std::size_t count, 
 }
 
 // A load stages a copy of the destination register and commits it only after
-// the last element arrived, so a mid-transfer fault leaves architectural
-// state unchanged.
+// the last element arrived.
 template <typename Reg, typename At>
 ExecuteResult staged_load(const AddressSpace &memory, Reg &reg,
                           std::span<const std::uint64_t> addrs, At at) {
