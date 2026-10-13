@@ -21,20 +21,22 @@ namespace tile_npu {
 namespace {
 
 template <typename Element>
-bool load_element(const AddressSpace &memory, std::uint64_t address, Element &out) {
+void load_element(const AddressSpace &memory, std::uint64_t address, Element &out) {
   std::array<std::byte, sizeof(Element)> bytes{};
   if (!memory.read(address, bytes)) {
-    return false;
+    unreachable("AddressSpace::read failed after range prevalidation");
   }
   out = load_le<Element>(bytes);
-  return true;
 }
 
 template <typename Element>
-bool store_element(AddressSpace &memory, std::uint64_t address, Element value) {
+void store_element(AddressSpace &memory, std::uint64_t address, Element value) {
   std::array<std::byte, sizeof(Element)> bytes{};
   store_le(value, bytes);
-  return memory.write(address, bytes);
+
+  if (!memory.write(address, bytes)) {
+    unreachable("AddressSpace::write failed after range prevalidation");
+  }
 }
 
 bool transform_legal(const MblkInstr &instr, const MatrixDescriptor &desc) {
@@ -57,18 +59,19 @@ std::optional<std::array<std::uint64_t, Max>> fill_addresses(std::size_t count, 
   return addrs;
 }
 
-// A load stages a copy of the destination register and commits it only after
-// the last element arrived.
+// A load prevalidates the full range, then fills the destination register.
 template <typename Reg, typename At>
-ExecuteResult staged_load(const AddressSpace &memory, Reg &reg,
-                          std::span<const std::uint64_t> addrs, At at) {
-  auto staging = reg;
-  for (std::size_t n = 0; n < addrs.size(); ++n) {
-    if (!load_element(memory, addrs[n], at(staging, n))) {
-      return access_fault(StepStatus::load_fault, addrs[n]);
+ExecuteResult load_elements(const AddressSpace &memory, Reg &reg,
+                            std::span<const std::uint64_t> addrs, At at) {
+  using Element = typename Reg::value_type;
+  for (const auto addr : addrs) {
+    if (!memory.contains(addr, sizeof(Element))) {
+      return access_fault(StepStatus::load_fault, addr);
     }
   }
-  reg = staging;
+  for (std::size_t n = 0; n < addrs.size(); ++n) {
+    load_element(memory, addrs[n], at(reg, n));
+  }
   return {.status = StepStatus::retired};
 }
 
@@ -76,8 +79,8 @@ ExecuteResult staged_load(const AddressSpace &memory, Reg &reg,
 // before the first write, so a faulting store leaves architectural state
 // unchanged.
 template <typename Reg, typename At>
-ExecuteResult probed_store(AddressSpace &memory, const Reg &reg,
-                           std::span<const std::uint64_t> addrs, At at) {
+ExecuteResult store_elements(AddressSpace &memory, const Reg &reg,
+                             std::span<const std::uint64_t> addrs, At at) {
   using Element = typename Reg::value_type;
   for (const auto addr : addrs) {
     if (!memory.contains(addr, sizeof(Element))) {
@@ -85,9 +88,7 @@ ExecuteResult probed_store(AddressSpace &memory, const Reg &reg,
     }
   }
   for (std::size_t n = 0; n < addrs.size(); ++n) {
-    if (!store_element(memory, addrs[n], at(reg, n))) {
-      unreachable("store failed after the range probe passed");
-    }
+    store_element(memory, addrs[n], at(reg, n));
   }
   return {.status = StepStatus::retired};
 }
@@ -158,8 +159,8 @@ template <NpuDomain Domain> ExecuteResult block_access(const MblkInstr &instr, E
 
   const std::span<const std::uint64_t> range(addrs->data(), rows * cols);
   const auto at = matrix_at(config);
-  const auto result = is_store(instr.op) ? probed_store(ctx.memory, reg, range, at)
-                                         : staged_load(ctx.memory, reg, range, at);
+  const auto result = is_store(instr.op) ? store_elements(ctx.memory, reg, range, at)
+                                         : load_elements(ctx.memory, reg, range, at);
   if (result.status != StepStatus::retired) {
     return result;
   }
@@ -201,8 +202,8 @@ template <NpuDomain Domain> ExecuteResult row_access(const MblkInstr &instr, Exe
     const auto view = matrix_view(storage);
     return view.at(row, n);
   };
-  const auto result = is_store(instr.op) ? probed_store(ctx.memory, reg, range, at)
-                                         : staged_load(ctx.memory, reg, range, at);
+  const auto result = is_store(instr.op) ? store_elements(ctx.memory, reg, range, at)
+                                         : load_elements(ctx.memory, reg, range, at);
   if (result.status != StepStatus::retired) {
     return result;
   }
@@ -247,7 +248,7 @@ ExecuteResult gather_tile(const MblkInstr &instr, ExecContext &ctx) {
 
   auto &reg = ctx.state.t[index];
   const std::span<const std::uint64_t> range(addrs.data(), indexed_rows * cols);
-  const auto result = staged_load(ctx.memory, reg, range, matrix_at(config));
+  const auto result = load_elements(ctx.memory, reg, range, matrix_at(config));
   if (result.status != StepStatus::retired) {
     return result;
   }
@@ -288,7 +289,7 @@ template <NpuDomain Domain> ExecuteResult vector_access(const MblkInstr &instr, 
       return config_error();
     }
     const std::span<const std::uint64_t> range(addrs->data(), indexed);
-    const auto result = staged_load(ctx.memory, reg, range, vector_at());
+    const auto result = load_elements(ctx.memory, reg, range, vector_at());
     if (result.status != StepStatus::retired) {
       return result;
     }
@@ -309,8 +310,8 @@ template <NpuDomain Domain> ExecuteResult vector_access(const MblkInstr &instr, 
   }
 
   const std::span<const std::uint64_t> range(addrs->data(), len);
-  const auto result = is_store(instr.op) ? probed_store(ctx.memory, reg, range, vector_at())
-                                         : staged_load(ctx.memory, reg, range, vector_at());
+  const auto result = is_store(instr.op) ? store_elements(ctx.memory, reg, range, vector_at())
+                                         : load_elements(ctx.memory, reg, range, vector_at());
   if (result.status != StepStatus::retired) {
     return result;
   }
