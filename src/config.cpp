@@ -108,7 +108,7 @@ ConfigAccessStatus write_matrix_shape(Config &config, ConfigField field,
     return ConfigAccessStatus::invalid_value;
   }
   // Effective matrix dimensions range from 1 to the physical extent; the
-  // canonical layout is the only one defined.
+  // row-major layout is the only one defined.
   switch (field) {
   case ConfigField::rows:
     if (raw == 0 || raw > MATRIX_EXTENT) {

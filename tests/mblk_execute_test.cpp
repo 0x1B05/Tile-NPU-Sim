@@ -401,6 +401,26 @@ TEST_CASE(mblk_rejects_invalid_configs) {
              "empty index vector rejects");
   }
   {
+    MblkRun run(block(NpuDomain::tile, 2, 0, 2)); // tload.gather t0, v2
+    auto &state = run.sim.state();
+    config_tile_2x2(state, 0);
+    stride_desc(state.tm[0], DATA, 2, 1);
+    state.vc[2].dtype = DType::u32;
+    state.vc[2].len = 1;
+    check_eq(run.sim.step().status, StepStatus::invalid_configuration, "u32 index vector rejects");
+  }
+  {
+    MblkRun run(block(NpuDomain::vec32, 2, 0, 2)); // vload.gather v0, v2
+    auto &state = run.sim.state();
+    state.vc[0].dtype = DType::f32;
+    state.vc[0].len = 1;
+    state.vm[0].base_addr = DATA;
+    state.vm[0].stride_bytes = 4;
+    state.vc[2].dtype = DType::f32;
+    state.vc[2].len = 1;
+    check_eq(run.sim.step().status, StepStatus::invalid_configuration, "f32 index vector rejects");
+  }
+  {
     MblkRun run(block(NpuDomain::tile, 0, 0));
     auto &state = run.sim.state();
     config_tile_2x2(state, 0);

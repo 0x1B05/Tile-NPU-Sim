@@ -59,11 +59,9 @@ public:
   std::optional<std::uint64_t> address(std::size_t row, std::size_t col) const {
     static_assert(std::is_same_v<std::remove_const_t<D>, MatrixDescriptor>);
     if (!valid()) return std::nullopt;
-    // clang-format off
     const auto offset =
         std::int64_t{descriptor_->row_stride_bytes} * static_cast<std::int64_t>(row) +
         std::int64_t{descriptor_->col_stride_bytes} * static_cast<std::int64_t>(col);
-    // clang-format on
     return detail::add_signed_offset(descriptor_->base_addr, offset);
   }
 
@@ -130,7 +128,7 @@ public:
                                          static_cast<std::int64_t>(len));
   }
 
-  template <typename D = Descriptor> bool post_increment(std::size_t rows, std::size_t cols) {
+  template <typename D = Descriptor> bool post_inc(std::size_t rows, std::size_t cols) {
     static_assert(std::is_same_v<std::remove_const_t<D>, MatrixDescriptor>);
     static_assert(!std::is_const_v<D>);
     const auto next = incremented_base(rows, cols);
@@ -139,7 +137,7 @@ public:
     return true;
   }
 
-  template <typename D = Descriptor> bool post_increment(std::size_t len) {
+  template <typename D = Descriptor> bool post_inc(std::size_t len) {
     static_assert(std::is_same_v<std::remove_const_t<D>, VectorDescriptor>);
     static_assert(!std::is_const_v<D>);
     const auto next = incremented_base(len);

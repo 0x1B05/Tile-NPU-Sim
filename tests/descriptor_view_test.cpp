@@ -15,7 +15,7 @@ TEST_CASE(descriptor_view) {
   check(matrix_view.valid(), "matrix descriptor with increment mode is valid");
   check_eq(hex(matrix_view.address(1, 2).value_or(0)), hex(0x1044),
            "matrix descriptor address calculation");
-  check(matrix_view.post_increment(2, 3), "matrix descriptor row increment");
+  check(matrix_view.post_inc(2, 3), "matrix descriptor row increment");
   check_eq(hex(matrix.base_addr), hex(0x1080), "matrix descriptor increments base address");
 
   tile_npu::VectorDescriptor vector{};
@@ -25,12 +25,12 @@ TEST_CASE(descriptor_view) {
   tile_npu::VectorDescView vector_view(vector);
   check(vector_view.valid(), "vector descriptor with increment mode is valid");
   check_eq(hex(vector_view.address(2).value_or(0)), hex(0x1ff8), "vector descriptor signed stride");
-  check(vector_view.post_increment(4), "vector descriptor increment");
+  check(vector_view.post_inc(4), "vector descriptor increment");
   check_eq(hex(vector.base_addr), hex(0x1ff0), "vector descriptor decrements base address");
 
   matrix.flags = 3;
   check(!matrix_view.valid(), "descriptor view rejects reserved inc mode");
-  check(!matrix_view.post_increment(1, 1),
+  check(!matrix_view.post_inc(1, 1),
         "descriptor view rejects increment with reserved inc mode");
 
   tile_npu::MatrixDescriptor overflow{};

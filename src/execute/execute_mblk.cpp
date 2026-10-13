@@ -20,8 +20,6 @@
 namespace tile_npu {
 namespace {
 
-// Loads and stores are raw copies at the configured dtype width, little
-// endian.
 template <typename Element>
 bool load_element(const AddressSpace &memory, std::uint64_t address, Element &out) {
   std::array<std::byte, sizeof(Element)> bytes{};
@@ -39,8 +37,6 @@ bool store_element(AddressSpace &memory, std::uint64_t address, Element value) {
   return memory.write(address, bytes);
 }
 
-// The ISA defines the transpose transform only for a full tload; any other
-// access with transform != 0 is an undefined combination.
 bool transform_legal(const MblkInstr &instr, const MatrixDescriptor &desc) {
   return desc.transform == 0 ||
          (instr.op == MblkOp::load && accessed_reg(instr).domain == NpuDomain::tile);
@@ -100,7 +96,7 @@ ExecuteResult probed_store(AddressSpace &memory, const Reg &reg,
 }
 
 // The element accessor for a matrix transfer: position n is the logical
-// coordinate (n / cols, n % cols), read through the canonical-layout view.
+// coordinate (n / cols, n % cols), read through the row-major view.
 template <typename Config> auto matrix_at(const Config &config) {
   return [&config](auto &storage, std::size_t n) -> decltype(auto) {
     const auto view = matrix_view(storage);
@@ -113,10 +109,9 @@ auto vector_at() {
   return [](auto &storage, std::size_t n) -> decltype(auto) { return storage[n]; };
 }
 
-// The gather index vector: the ISA bounds the index lanes by len(vS) and
-// leaves out-of-range index behavior open, so only the length is checked.
+// The gather index vector must use a valid Vec32 configuration with i32 elements.
 bool valid_gather_index(const Vec32Config &config) {
-  return config.len != 0 && config.len <= VECTOR_LANES;
+  return config.dtype == DType::i32 && valid_domain_config(config);
 }
 
 std::int32_t gather_index(const Vec32 &reg, std::size_t lane) {
@@ -217,9 +212,7 @@ template <NpuDomain Domain> ExecuteResult row_access(const MblkInstr &instr, Exe
   return result;
 }
 
-// tload.gather: rows beyond the index vector's effective length are
-// zero-filled. Gather never increments the descriptor, and index legality is
-// software's contract.
+// tload.gather
 ExecuteResult gather_tile(const MblkInstr &instr, ExecContext &ctx) {
   const auto index = accessed_reg(instr).index;
   const auto &config = ctx.state.tc[index];
