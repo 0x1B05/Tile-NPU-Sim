@@ -139,7 +139,7 @@ template <NpuDomain Domain> ExecuteResult block_access(const MblkInstr &instr, E
     return config_error();
   }
   MatrixDescView desc(descriptor);
-  if (!desc.valid() || !transform_legal(instr, desc.descriptor())) {
+  if (!desc.is_valid() || !transform_legal(instr, desc.descriptor())) {
     return config_error();
   }
   const auto rows = std::size_t{config.rows};
@@ -152,7 +152,8 @@ template <NpuDomain Domain> ExecuteResult block_access(const MblkInstr &instr, E
   // A transpose load swaps the coordinates handed to the descriptor.
   const bool transpose = desc.descriptor().transform != 0;
   const auto addrs = fill_addresses<MATRIX_ELEMENTS>(rows * cols, [&](std::size_t n) {
-    return transpose ? desc.address(n % cols, n / cols) : desc.address(n / cols, n % cols);
+    return transpose ? desc.matrix_element_addr(n % cols, n / cols)
+                     : desc.matrix_element_addr(n / cols, n % cols);
   });
   if (!addrs) {
     return config_error();
@@ -176,7 +177,7 @@ template <NpuDomain Domain> ExecuteResult row_access(const MblkInstr &instr, Exe
     return config_error();
   }
   MatrixDescView desc(descriptor);
-  if (!desc.valid() || !transform_legal(instr, desc.descriptor())) {
+  if (!desc.is_valid() || !transform_legal(instr, desc.descriptor())) {
     return config_error();
   }
 
@@ -191,8 +192,8 @@ template <NpuDomain Domain> ExecuteResult row_access(const MblkInstr &instr, Exe
     return config_error();
   }
 
-  const auto addrs =
-      fill_addresses<MATRIX_EXTENT>(cols, [&](std::size_t j) { return desc.address(0, j); });
+  const auto addrs = fill_addresses<MATRIX_EXTENT>(
+      cols, [&](std::size_t j) { return desc.matrix_element_addr(0, j); });
   if (!addrs) {
     return config_error();
   }
@@ -224,7 +225,7 @@ ExecuteResult gather_tile(const MblkInstr &instr, ExecContext &ctx) {
     return config_error();
   }
   MatrixDescView desc(ctx.state.tm[index]);
-  if (!desc.valid() || !transform_legal(instr, desc.descriptor())) {
+  if (!desc.is_valid() || !transform_legal(instr, desc.descriptor())) {
     return config_error();
   }
 
@@ -239,7 +240,7 @@ ExecuteResult gather_tile(const MblkInstr &instr, ExecContext &ctx) {
       return config_error();
     }
     for (std::size_t j = 0; j < cols; ++j) {
-      const auto addr = desc.gather_address(*row_base, j);
+      const auto addr = desc.gather_matrix_addr(*row_base, j);
       if (!addr) {
         return config_error();
       }
@@ -269,7 +270,7 @@ template <NpuDomain Domain> ExecuteResult vector_access(const MblkInstr &instr, 
     return config_error();
   }
   VectorDescView desc(descriptor);
-  if (!desc.valid()) {
+  if (!desc.is_valid()) {
     return config_error();
   }
   const auto len = std::size_t{config.len};
@@ -283,8 +284,9 @@ template <NpuDomain Domain> ExecuteResult vector_access(const MblkInstr &instr, 
     }
     const auto indexed = std::min(len, std::size_t{index_config.len});
     const auto &index_reg = ctx.state.v[instr.gather_src];
-    const auto addrs = fill_addresses<VECTOR_LANES>(
-        indexed, [&](std::size_t j) { return desc.gather_address(gather_index(index_reg, j)); });
+    const auto addrs = fill_addresses<VECTOR_LANES>(indexed, [&](std::size_t j) {
+      return desc.gather_vector_addr(gather_index(index_reg, j));
+    });
     if (!addrs) {
       return config_error();
     }
@@ -304,7 +306,7 @@ template <NpuDomain Domain> ExecuteResult vector_access(const MblkInstr &instr, 
     return config_error();
   }
   const auto addrs =
-      fill_addresses<VECTOR_LANES>(len, [&](std::size_t j) { return desc.address(j); });
+      fill_addresses<VECTOR_LANES>(len, [&](std::size_t j) { return desc.vector_element_addr(j); });
   if (!addrs) {
     return config_error();
   }

@@ -69,22 +69,19 @@ struct VectorDescriptor {
 // Descriptor flags bit layout, shared by the write validation in config.cpp
 // and the reserved-bit checks in DescriptorView: a matrix descriptor holds
 // the post-access increment mode in the low two bits, a vector descriptor a
-// single increment-enable bit; all higher bits are reserved.
+// single increment-enable bit.
 inline constexpr std::uint8_t MATRIX_INC_MODE_MASK = 0x3u;
 inline constexpr std::uint8_t MATRIX_DESC_FLAGS_MAX = 0x2u;
 inline constexpr std::uint8_t VECTOR_INC_ENABLE_MASK = 0x1u;
 inline constexpr std::uint8_t VECTOR_DESC_FLAGS_MAX = 0x1u;
 
-// The matrix inc_mode values (TM/AM flags[1:0] in the manual): the base
-// address does not advance, advances along rows, or advances along columns
-// after each access.
+// The matrix inc_mode values (TM/AM flags[1:0] in the manual)
 enum class MatrixIncMode : std::uint8_t { off = 0, row = 1, col = 2, reserved = 3 };
 
 // The TM/AM transform values: 0 = normal, 1 = transpose.
 inline constexpr std::uint8_t DESC_TRANSFORM_MAX = 0x1u;
 
-// The ABI number of a0, the register the runner conventions read the guest
-// exit code from.
+// The ABI number of a0, guest exit code
 inline constexpr std::size_t REG_A0 = 10;
 
 class ScalarState {
