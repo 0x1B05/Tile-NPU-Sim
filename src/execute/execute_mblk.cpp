@@ -14,6 +14,8 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <tuple>
+#include <utility>
 
 namespace tile_npu {
 namespace {
@@ -121,16 +123,27 @@ std::int32_t gather_index(const Vec32 &reg, std::size_t lane) {
   return std::bit_cast<std::int32_t>(reg[lane]);
 }
 
-template <typename Element, typename Config, std::size_t RegCount>
-ExecuteResult block_access(const MblkInstr &instr, ExecContext &ctx,
-                           std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
-                           const std::array<Config, RegCount> &configs,
-                           std::array<MatrixDescriptor, RegCount> &descs) {
-  const auto &config = configs[accessed_reg(instr).index];
+// Bind the data, read-only compute config, and memory descriptor of one register.
+template <NpuDomain Domain> auto register_state(State &state, RegisterIndex index) {
+  if constexpr (Domain == NpuDomain::tile) {
+    return std::tie(state.t[index], std::as_const(state.tc[index]), state.tm[index]);
+  } else if constexpr (Domain == NpuDomain::acc) {
+    return std::tie(state.a[index], std::as_const(state.ac[index]), state.am[index]);
+  } else if constexpr (Domain == NpuDomain::vec8) {
+    return std::tie(state.b[index], std::as_const(state.bc[index]), state.bm[index]);
+  } else {
+    static_assert(Domain == NpuDomain::vec32);
+    return std::tie(state.v[index], std::as_const(state.vc[index]), state.vm[index]);
+  }
+}
+
+template <NpuDomain Domain> ExecuteResult block_access(const MblkInstr &instr, ExecContext &ctx) {
+  static_assert(Domain == NpuDomain::tile || Domain == NpuDomain::acc);
+  auto [reg, config, descriptor] = register_state<Domain>(ctx.state, accessed_reg(instr).index);
   if (!valid_domain_config(config)) {
     return config_error();
   }
-  MatrixDescView desc(descs[accessed_reg(instr).index]);
+  MatrixDescView desc(descriptor);
   if (!desc.valid() || !transform_legal(instr, desc.descriptor())) {
     return config_error();
   }
@@ -150,7 +163,6 @@ ExecuteResult block_access(const MblkInstr &instr, ExecContext &ctx,
     return config_error();
   }
 
-  auto &reg = regs[accessed_reg(instr).index];
   const std::span<const std::uint64_t> range(addrs->data(), rows * cols);
   const auto at = matrix_at(config);
   const auto result = is_store(instr.op) ? probed_store(ctx.memory, reg, range, at)
@@ -162,16 +174,13 @@ ExecuteResult block_access(const MblkInstr &instr, ExecContext &ctx,
   return result;
 }
 
-template <typename Element, typename Config, std::size_t RegCount>
-ExecuteResult row_access(const MblkInstr &instr, ExecContext &ctx,
-                         std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
-                         const std::array<Config, RegCount> &configs,
-                         std::array<MatrixDescriptor, RegCount> &descs) {
-  const auto &config = configs[accessed_reg(instr).index];
+template <NpuDomain Domain> ExecuteResult row_access(const MblkInstr &instr, ExecContext &ctx) {
+  static_assert(Domain == NpuDomain::tile || Domain == NpuDomain::acc);
+  auto [reg, config, descriptor] = register_state<Domain>(ctx.state, accessed_reg(instr).index);
   if (!valid_domain_config(config)) {
     return config_error();
   }
-  MatrixDescView desc(descs[accessed_reg(instr).index]);
+  MatrixDescView desc(descriptor);
   if (!desc.valid() || !transform_legal(instr, desc.descriptor())) {
     return config_error();
   }
@@ -193,7 +202,6 @@ ExecuteResult row_access(const MblkInstr &instr, ExecContext &ctx,
     return config_error();
   }
 
-  auto &reg = regs[accessed_reg(instr).index];
   const std::span<const std::uint64_t> range(addrs->data(), cols);
   // The view spans the whole matrix; only row `row` is transferred.
   const auto at = [row](auto &storage, std::size_t n) -> decltype(auto) {
@@ -212,11 +220,9 @@ ExecuteResult row_access(const MblkInstr &instr, ExecContext &ctx,
 // tload.gather: rows beyond the index vector's effective length are
 // zero-filled. Gather never increments the descriptor, and index legality is
 // software's contract.
-ExecuteResult gather_tile(const MblkInstr &instr, ExecContext &ctx,
-                          std::array<Tile, TILE_REGISTERS> &regs,
-                          const std::array<TileConfig, TILE_REGISTERS> &configs,
-                          std::array<MatrixDescriptor, TILE_REGISTERS> &descs) {
-  const auto &config = configs[accessed_reg(instr).index];
+ExecuteResult gather_tile(const MblkInstr &instr, ExecContext &ctx) {
+  const auto index = accessed_reg(instr).index;
+  const auto &config = ctx.state.tc[index];
   if (!valid_domain_config(config)) {
     return config_error();
   }
@@ -224,7 +230,7 @@ ExecuteResult gather_tile(const MblkInstr &instr, ExecContext &ctx,
   if (!valid_gather_index(index_config)) {
     return config_error();
   }
-  MatrixDescView desc(descs[accessed_reg(instr).index]);
+  MatrixDescView desc(ctx.state.tm[index]);
   if (!desc.valid() || !transform_legal(instr, desc.descriptor())) {
     return config_error();
   }
@@ -248,7 +254,7 @@ ExecuteResult gather_tile(const MblkInstr &instr, ExecContext &ctx,
     }
   }
 
-  auto &reg = regs[accessed_reg(instr).index];
+  auto &reg = ctx.state.t[index];
   const std::span<const std::uint64_t> range(addrs.data(), indexed_rows * cols);
   const auto result = staged_load(ctx.memory, reg, range, matrix_at(config));
   if (result.status != StepStatus::retired) {
@@ -263,21 +269,17 @@ ExecuteResult gather_tile(const MblkInstr &instr, ExecContext &ctx,
   return {.status = StepStatus::retired};
 }
 
-template <typename Element, typename Config, std::size_t RegCount>
-ExecuteResult vector_access(const MblkInstr &instr, ExecContext &ctx,
-                            std::array<std::array<Element, VECTOR_LANES>, RegCount> &regs,
-                            const std::array<Config, RegCount> &configs,
-                            std::array<VectorDescriptor, RegCount> &descs) {
-  const auto &config = configs[accessed_reg(instr).index];
+template <NpuDomain Domain> ExecuteResult vector_access(const MblkInstr &instr, ExecContext &ctx) {
+  static_assert(Domain == NpuDomain::vec8 || Domain == NpuDomain::vec32);
+  auto [reg, config, descriptor] = register_state<Domain>(ctx.state, accessed_reg(instr).index);
   if (!valid_domain_config(config)) {
     return config_error();
   }
-  VectorDescView desc(descs[accessed_reg(instr).index]);
+  VectorDescView desc(descriptor);
   if (!desc.valid()) {
     return config_error();
   }
   const auto len = std::size_t{config.len};
-  auto &reg = regs[accessed_reg(instr).index];
 
   // {b,v}load.gather: lanes beyond the index vector's effective length are
   // zero-filled. No descriptor increment.
@@ -299,7 +301,7 @@ ExecuteResult vector_access(const MblkInstr &instr, ExecContext &ctx,
       return result;
     }
     for (std::size_t j = indexed; j < len; ++j) {
-      reg[j] = Element{0};
+      reg[j] = 0;
     }
     return {.status = StepStatus::retired};
   }
@@ -326,32 +328,28 @@ ExecuteResult vector_access(const MblkInstr &instr, ExecContext &ctx,
 
 } // namespace
 
-// The op/domain combinations and register bounds are checked by the
-// structural validation at execute_npu; this dispatch is exhaustive over
-// what remains.
 ExecuteResult execute_mblk(const MblkInstr &instr, ExecContext &ctx) {
-  State &state = ctx.state;
   switch (accessed_reg(instr).domain) {
   case NpuDomain::tile:
     switch (instr.op) {
     case MblkOp::load:
-    case MblkOp::store: return block_access(instr, ctx, state.t, state.tc, state.tm);
+    case MblkOp::store: return block_access<NpuDomain::tile>(instr, ctx);
     case MblkOp::row_load:
-    case MblkOp::row_store: return row_access(instr, ctx, state.t, state.tc, state.tm);
-    case MblkOp::gather: return gather_tile(instr, ctx, state.t, state.tc, state.tm);
+    case MblkOp::row_store: return row_access<NpuDomain::tile>(instr, ctx);
+    case MblkOp::gather: return gather_tile(instr, ctx);
     }
     break;
   case NpuDomain::acc:
     switch (instr.op) {
     case MblkOp::load:
-    case MblkOp::store: return block_access(instr, ctx, state.a, state.ac, state.am);
+    case MblkOp::store: return block_access<NpuDomain::acc>(instr, ctx);
     case MblkOp::row_load:
-    case MblkOp::row_store: return row_access(instr, ctx, state.a, state.ac, state.am);
+    case MblkOp::row_store: return row_access<NpuDomain::acc>(instr, ctx);
     case MblkOp::gather: break; // gather has no Acc-domain encoding
     }
     break;
-  case NpuDomain::vec8: return vector_access(instr, ctx, state.b, state.bc, state.bm);
-  case NpuDomain::vec32: return vector_access(instr, ctx, state.v, state.vc, state.vm);
+  case NpuDomain::vec8: return vector_access<NpuDomain::vec8>(instr, ctx);
+  case NpuDomain::vec32: return vector_access<NpuDomain::vec32>(instr, ctx);
   }
   unreachable("M_BLK op/domain combination rejected by validation");
 }
