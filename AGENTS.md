@@ -32,11 +32,11 @@ xmake project -k compile_commands      # 为 clangd 生成 compile_commands.json
 
 | 路径 | 职责 |
 | ---- | ---- |
-| `include/tile_npu/state.h` | 寄存器堆、配置、描述符与物理尺寸常量；步进状态词表 `StepStatus` |
+| `include/tile_npu/state.h` | 寄存器堆、配置、描述符与物理尺寸常量 |
 | `include/tile_npu/instruction.h` | 标量/NPU 语义 IR 与操作数类型 |
 | `src/op_info.h` | 译码与结构检查共享的操作元数据：寄存器数量、操作/数据域合法性与 funct 表 |
 | `include/tile_npu/decode.h` | `DecodeResult` 与译码接口 |
-| `include/tile_npu/simulator.h`、`src/simulator.cpp` | `Simulator::reset` / `step`、取指与步进状态处理 |
+| `include/tile_npu/simulator.h`、`src/simulator.cpp` | `Simulator::reset` / `step`、取指与步进状态词表 `StepStatus` |
 | `src/config.h`、`src/config.cpp` | 配置字段编号映射、字段读写、值转换与写入校验 |
 | `src/execute/matrix_view.h` | 固定大小矩阵寄存器的非拥有视图，只负责物理坐标映射 |
 | `src/execute/descriptor_view.h` | 描述符地址计算、保留位检查及访存后基地址自增 |

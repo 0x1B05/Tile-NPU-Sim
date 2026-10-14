@@ -51,7 +51,7 @@ bool cmd_continue(Simulator &sim, AddressSpace &, std::string_view) {
   if (!stop) return true; // the unlimited budget cannot run out in practice
   std::cout << halt_message(*stop) << '\n';
   if (stop->status == StepStatus::breakpoint) {
-    std::cout << "a0 = " << sim.state().scalar.read_x(REG_A0) << '\n';
+    std::cout << "a0 = " << sim.state().scalar.read_x(EXIT_CODE_REG) << '\n';
   }
   return true;
 }

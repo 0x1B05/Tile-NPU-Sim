@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 
+#include "monitor/monitor.h"
 #include "support/execute_helpers.h"
 
 namespace {
@@ -369,7 +370,7 @@ void test_environment_boundary() {
     sim.state().scalar.write_x(10, 0xfeed);
     expect_step(sim.step(), status, word);
     check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE), "environment boundary preserves pc");
-    check_eq(hex(sim.state().scalar.read_x(tile_npu::REG_A0)), hex(0xfeed),
+    check_eq(hex(sim.state().scalar.read_x(tile_npu::monitor::EXIT_CODE_REG)), hex(0xfeed),
              "environment boundary preserves architectural state");
   }
 

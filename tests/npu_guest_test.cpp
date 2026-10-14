@@ -10,6 +10,7 @@
 #include <string_view>
 #include <vector>
 
+#include "monitor/monitor.h"
 #include "support/execute_helpers.h"
 
 namespace {
@@ -85,7 +86,7 @@ void check_guest_image(std::string_view name, std::uint64_t memory_size,
   const auto result = run_until_stop(sim, memory);
   check(result.status == stop, std::string(name) + " image stops (status=" +
                                    std::string(status_name(result.status)) + ")");
-  check_eq(hex(sim.state().scalar.read_x(tile_npu::REG_A0)), hex(0x0u),
+  check_eq(hex(sim.state().scalar.read_x(tile_npu::monitor::EXIT_CODE_REG)), hex(0x0u),
            std::string(name) + " image reports success via a0");
 }
 
@@ -213,7 +214,7 @@ TEST_CASE(npu_guest_ebin) {
   check(result.status == tile_npu::StepStatus::breakpoint,
         std::string("ebin image reaches ebreak (status=") +
             std::string(status_name(result.status)) + ")");
-  check_eq(hex(state.scalar.read_x(tile_npu::REG_A0)), hex(0x0u),
+  check_eq(hex(state.scalar.read_x(tile_npu::monitor::EXIT_CODE_REG)), hex(0x0u),
            "ebin image reports success via a0");
 
   // tsub (wrap): 0 - 1 = -1; -128 - 1 = -129 wraps to 127; 5 - 10 = -5;

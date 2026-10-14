@@ -16,6 +16,9 @@ namespace tile_npu::monitor {
 inline constexpr std::uint64_t MEMORY_BASE = 0x80000000;
 inline constexpr std::size_t DEFAULT_MEMORY_MIB = 128;
 
+// ebreak and kernel.end stop the guest with its exit code in a0 (x10).
+inline constexpr std::size_t EXIT_CODE_REG = 10;
+
 // A step budget of UNLIMITED_STEPS runs until the program stops on its own;
 // a command-line "-1" wraps to this same value (int64 -> uint64).
 inline constexpr std::uint64_t UNLIMITED_STEPS = std::numeric_limits<std::uint64_t>::max();

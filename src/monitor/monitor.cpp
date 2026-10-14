@@ -91,7 +91,7 @@ int run_images(const Options &options) {
   switch (halt_result->status) {
   case StepStatus::breakpoint:
   case StepStatus::kernel_end: {
-    const auto exit_code = sim.state().scalar.read_x(REG_A0);
+    const auto exit_code = sim.state().scalar.read_x(EXIT_CODE_REG);
     if (exit_code != 0) {
       std::cerr << "guest exited with a0=" << exit_code << '\n';
     }

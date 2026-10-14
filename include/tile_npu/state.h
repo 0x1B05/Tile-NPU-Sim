@@ -79,9 +79,6 @@ enum class DescriptorTransform : std::uint8_t { normal = 0, transpose = 1, count
 inline constexpr std::uint8_t MATRIX_INC_MODE_MASK = 0x3u;
 inline constexpr std::uint8_t VECTOR_INC_ENABLE_MASK = 0x1u;
 
-// The ABI number of a0, guest exit code
-inline constexpr std::size_t REG_A0 = 10;
-
 class ScalarState {
 public:
   std::uint64_t pc = 0;
@@ -115,36 +112,6 @@ struct State {
   std::array<MatrixDescriptor, ACC_REGISTERS> am{};
   std::array<VectorDescriptor, VECTOR_REGISTERS> bm{};
   std::array<VectorDescriptor, VECTOR_REGISTERS> vm{};
-};
-
-// The step pipeline's status vocabulary, shared by the public Simulator API
-// and the execution layer below it. Values are grouped by the pipeline stage
-// that produces them; every stop other than `retired` ends Simulator::step()
-// at the current pc.
-enum class StepStatus {
-  retired,
-
-  // fetch
-  fetch_fault,
-  // A jump/branch to a non-4-aligned target reports against the redirecting
-  // instruction, mirroring RISC-V's misaligned-target exception.
-  instruction_address_misaligned,
-
-  // decode
-  illegal_instruction,
-
-  // execute
-  execution_not_implemented, // decoded, but this op has no executor path yet
-  invalid_configuration,     // dynamic dtype/shape/descriptor violation
-  load_address_misaligned,
-  store_address_misaligned,
-  load_fault,
-  store_fault,
-
-  // stop requests from the executed instruction
-  environment_call,
-  breakpoint,
-  kernel_end,
 };
 
 } // namespace tile_npu
