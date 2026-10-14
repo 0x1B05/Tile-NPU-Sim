@@ -47,7 +47,7 @@ bool transform_legal(const MblkInstr &instr, const MatrixDescriptor &desc) {
 // Every access runs in two phases: all addresses are computed first, then
 // the transfer happens.
 template <std::size_t Max, typename Next>
-std::optional<std::array<std::uint64_t, Max>> fill_addresses(std::size_t count, Next next) {
+std::optional<std::array<std::uint64_t, Max>> collect_addresses(std::size_t count, Next next) {
   std::array<std::uint64_t, Max> addrs{};
   for (std::size_t n = 0; n < count; ++n) {
     const auto addr = next(n);
@@ -95,15 +95,23 @@ ExecuteResult store_elements(AddressSpace &memory, const Reg &reg,
 
 // The element accessor for a matrix transfer: position n is the logical
 // coordinate (n / cols, n % cols), read through the row-major view.
-template <typename Config> auto matrix_at(const Config &config) {
-  return [&config](auto &storage, std::size_t n) -> decltype(auto) {
-    const auto view = matrix_view(storage);
-    return view.at(n / config.cols, n % config.cols);
+template <typename Config> auto matrix_accessor(const Config &config) {
+  const auto cols = std::size_t{config.cols};
+  return [cols](auto &storage, std::size_t n) -> decltype(auto) {
+    return matrix_view(storage).at(n / cols, n % cols);
+  };
+}
+
+// The element accessor for a matrix row transfer: position n is column n in
+// the selected row.
+auto matrix_row_accessor(std::size_t row) {
+  return [row](auto &storage, std::size_t n) -> decltype(auto) {
+    return matrix_view(storage).at(row, n);
   };
 }
 
 // The element accessor for a vector transfer: position n is lane n.
-auto vector_at() {
+auto vector_accessor() {
   return [](auto &storage, std::size_t n) -> decltype(auto) { return storage[n]; };
 }
 
@@ -124,10 +132,10 @@ template <NpuDomain Domain> auto register_state(State &state, RegisterIndex inde
     return std::tie(state.a[index], std::as_const(state.ac[index]), state.am[index]);
   } else if constexpr (Domain == NpuDomain::vec8) {
     return std::tie(state.b[index], std::as_const(state.bc[index]), state.bm[index]);
-  } else {
-    static_assert(Domain == NpuDomain::vec32);
+  } else if constexpr (Domain == NpuDomain::vec32) {
     return std::tie(state.v[index], std::as_const(state.vc[index]), state.vm[index]);
   }
+  unreachable("unknown NpuDomain value");
 }
 
 template <NpuDomain Domain> ExecuteResult block_access(const MblkInstr &instr, ExecContext &ctx) {
@@ -149,7 +157,7 @@ template <NpuDomain Domain> ExecuteResult block_access(const MblkInstr &instr, E
 
   // A transpose load swaps the coordinates handed to the descriptor.
   const bool transpose = desc.descriptor().transform != 0;
-  const auto addrs = fill_addresses<MATRIX_ELEMENTS>(rows * cols, [&](std::size_t n) {
+  const auto addrs = collect_addresses<MATRIX_ELEMENTS>(rows * cols, [&](std::size_t n) {
     return transpose ? desc.matrix_element_addr(n % cols, n / cols)
                      : desc.matrix_element_addr(n / cols, n % cols);
   });
@@ -158,7 +166,7 @@ template <NpuDomain Domain> ExecuteResult block_access(const MblkInstr &instr, E
   }
 
   const std::span<const std::uint64_t> range(addrs->data(), rows * cols);
-  const auto at = matrix_at(config);
+  const auto at = matrix_accessor(config);
   const auto result = is_store(instr.op) ? store_elements(ctx.memory, reg, range, at)
                                          : load_elements(ctx.memory, reg, range, at);
   if (result.status != StepStatus::retired) {
@@ -190,18 +198,14 @@ template <NpuDomain Domain> ExecuteResult row_access(const MblkInstr &instr, Exe
     return config_error();
   }
 
-  const auto addrs = fill_addresses<MATRIX_EXTENT>(
+  const auto addrs = collect_addresses<MATRIX_EXTENT>(
       cols, [&](std::size_t j) { return desc.matrix_element_addr(0, j); });
   if (!addrs) {
     return config_error();
   }
 
   const std::span<const std::uint64_t> range(addrs->data(), cols);
-  // The view spans the whole matrix; only row `row` is transferred.
-  const auto at = [row](auto &storage, std::size_t n) -> decltype(auto) {
-    const auto view = matrix_view(storage);
-    return view.at(row, n);
-  };
+  const auto at = matrix_row_accessor(row);
   const auto result = is_store(instr.op) ? store_elements(ctx.memory, reg, range, at)
                                          : load_elements(ctx.memory, reg, range, at);
   if (result.status != StepStatus::retired) {
@@ -212,7 +216,7 @@ template <NpuDomain Domain> ExecuteResult row_access(const MblkInstr &instr, Exe
 }
 
 // tload.gather
-ExecuteResult gather_tile(const MblkInstr &instr, ExecContext &ctx) {
+ExecuteResult gather_tile_access(const MblkInstr &instr, ExecContext &ctx) {
   const auto index = accessed_reg(instr).index;
   const auto &config = ctx.state.tc[index];
   if (!valid_domain_config(config)) {
@@ -248,7 +252,8 @@ ExecuteResult gather_tile(const MblkInstr &instr, ExecContext &ctx) {
 
   auto &reg = ctx.state.t[index];
   const std::span<const std::uint64_t> range(addrs.data(), indexed_rows * cols);
-  const auto result = load_elements(ctx.memory, reg, range, matrix_at(config));
+  const auto at = matrix_accessor(config);
+  const auto result = load_elements(ctx.memory, reg, range, at);
   if (result.status != StepStatus::retired) {
     return result;
   }
@@ -259,6 +264,58 @@ ExecuteResult gather_tile(const MblkInstr &instr, ExecContext &ctx) {
     }
   }
   return {.status = StepStatus::retired};
+}
+
+template <typename Reg, typename At>
+ExecuteResult gather_vector_access(const MblkInstr &instr, ExecContext &ctx, VectorDescView &desc,
+                                   std::size_t len, Reg &reg, At at) {
+  const auto &index_config = ctx.state.vc[instr.gather_src];
+  if (!valid_gather_index(index_config)) {
+    return config_error();
+  }
+
+  // Lanes beyond the index vector's effective length are zero-filled. No
+  // descriptor increment is performed for gather.
+  const auto indexed = std::min(len, std::size_t{index_config.len});
+  const auto &index_reg = ctx.state.v[instr.gather_src];
+  const auto addrs = collect_addresses<VECTOR_LANES>(
+      indexed, [&](std::size_t j) { return desc.gather_vector_addr(gather_index(index_reg, j)); });
+  if (!addrs) {
+    return config_error();
+  }
+
+  const std::span<const std::uint64_t> range(addrs->data(), indexed);
+  const auto result = load_elements(ctx.memory, reg, range, at);
+  if (result.status != StepStatus::retired) {
+    return result;
+  }
+  for (std::size_t j = indexed; j < len; ++j) {
+    reg[j] = 0;
+  }
+  return {.status = StepStatus::retired};
+}
+
+template <typename Reg, typename At>
+ExecuteResult strided_vector_access(const MblkInstr &instr, ExecContext &ctx, VectorDescView &desc,
+                                    std::size_t len, Reg &reg, At at) {
+  const auto next_base = desc.incremented_base(len);
+  if (!next_base) {
+    return config_error();
+  }
+  const auto addrs = collect_addresses<VECTOR_LANES>(
+      len, [&](std::size_t j) { return desc.vector_element_addr(j); });
+  if (!addrs) {
+    return config_error();
+  }
+
+  const std::span<const std::uint64_t> range(addrs->data(), len);
+  const auto result = is_store(instr.op) ? store_elements(ctx.memory, reg, range, at)
+                                         : load_elements(ctx.memory, reg, range, at);
+  if (result.status != StepStatus::retired) {
+    return result;
+  }
+  desc.commit_base(*next_base);
+  return result;
 }
 
 template <NpuDomain Domain> ExecuteResult vector_access(const MblkInstr &instr, ExecContext &ctx) {
@@ -272,51 +329,12 @@ template <NpuDomain Domain> ExecuteResult vector_access(const MblkInstr &instr, 
     return config_error();
   }
   const auto len = std::size_t{config.len};
+  const auto at = vector_accessor();
 
-  // {b,v}load.gather: lanes beyond the index vector's effective length are
-  // zero-filled. No descriptor increment.
   if (instr.op == MblkOp::gather) {
-    const auto &index_config = ctx.state.vc[instr.gather_src];
-    if (!valid_gather_index(index_config)) {
-      return config_error();
-    }
-    const auto indexed = std::min(len, std::size_t{index_config.len});
-    const auto &index_reg = ctx.state.v[instr.gather_src];
-    const auto addrs = fill_addresses<VECTOR_LANES>(indexed, [&](std::size_t j) {
-      return desc.gather_vector_addr(gather_index(index_reg, j));
-    });
-    if (!addrs) {
-      return config_error();
-    }
-    const std::span<const std::uint64_t> range(addrs->data(), indexed);
-    const auto result = load_elements(ctx.memory, reg, range, vector_at());
-    if (result.status != StepStatus::retired) {
-      return result;
-    }
-    for (std::size_t j = indexed; j < len; ++j) {
-      reg[j] = 0;
-    }
-    return {.status = StepStatus::retired};
+    return gather_vector_access(instr, ctx, desc, len, reg, at);
   }
-
-  const auto next_base = desc.incremented_base(len);
-  if (!next_base) {
-    return config_error();
-  }
-  const auto addrs =
-      fill_addresses<VECTOR_LANES>(len, [&](std::size_t j) { return desc.vector_element_addr(j); });
-  if (!addrs) {
-    return config_error();
-  }
-
-  const std::span<const std::uint64_t> range(addrs->data(), len);
-  const auto result = is_store(instr.op) ? store_elements(ctx.memory, reg, range, vector_at())
-                                         : load_elements(ctx.memory, reg, range, vector_at());
-  if (result.status != StepStatus::retired) {
-    return result;
-  }
-  desc.commit_base(*next_base);
-  return result;
+  return strided_vector_access(instr, ctx, desc, len, reg, at);
 }
 
 } // namespace
@@ -329,7 +347,7 @@ ExecuteResult execute_mblk(const MblkInstr &instr, ExecContext &ctx) {
     case MblkOp::store: return block_access<NpuDomain::tile>(instr, ctx);
     case MblkOp::row_load:
     case MblkOp::row_store: return row_access<NpuDomain::tile>(instr, ctx);
-    case MblkOp::gather: return gather_tile(instr, ctx);
+    case MblkOp::gather: return gather_tile_access(instr, ctx);
     }
     break;
   case NpuDomain::acc:
