@@ -15,15 +15,15 @@ namespace {
 // sel3 = {dom2, ...}: the two high bits name the data domain directly.
 constexpr NpuDomain sel3_domain(std::uint8_t sel3) { return static_cast<NpuDomain>(sel3 >> 1); }
 
-// sel3 bit 2 pairs a matrix domain with a vector domain: Tile with Vec8 (0),
-// Acc with Vec32 (1).
+// sel3 = {0, EW, ...}: EW at bit 26 pairs a matrix domain with a vector
+// domain, Tile with Vec8 (0) and Acc with Vec32 (1).
 struct PairedDomains {
   NpuDomain matrix;
   NpuDomain vector;
 };
 
 constexpr PairedDomains paired_domains(std::uint8_t sel3) {
-  return (sel3 & 0b100) != 0 ? PairedDomains{NpuDomain::acc, NpuDomain::vec32}
+  return (sel3 & 0b010) != 0 ? PairedDomains{NpuDomain::acc, NpuDomain::vec32}
                              : PairedDomains{NpuDomain::tile, NpuDomain::vec8};
 }
 
@@ -106,8 +106,8 @@ DecodeResult decode_ecmp(std::uint32_t word) {
 
 // E_BCAST (R3): major4 = 0101, q = 00.
 // 31    28  27  26   25   24    21 20       17 16      12 11       7 6        2 1   0
-// [major4] [TA] [0] [DIR] [funct4] [reserved4] [   S5   ] [   A5   ] [   D5   ] [ q ]
-// TA: 0 = Tile/Vec8, 1 = Acc/Vec32; A5/D5 are matrices, S5 is a vector.
+// [major4] [0] [EW] [DIR] [funct4] [reserved4] [   S5   ] [   A5   ] [   D5   ] [ q ]
+// EW: 0 = Tile/Vec8, 1 = Acc/Vec32; A5/D5 are matrices, S5 is a vector.
 // DIR: 0 = byrow, 1 = bycol. funct4 = {G, op3}, shared with E_BIN.
 DecodeResult decode_ebcast(std::uint32_t word) {
   const auto f = encoding::NpuR3::from(word);
@@ -316,8 +316,8 @@ template <MblkOp Op> DecodeResult decode_mblk(std::uint32_t word) {
 
 // M_BLK row (MR): major4 = 0000, q = 01.
 // 31    28  27  26   25  24    22 21       17 16      12 11        7 6        2 1   0
-// [major4] [TA] [0] [IS] [funct3] [reserved5] [ index5 ] [reserved5] [  reg5  ] [ q ]
-// TA: 0 = Tile, 1 = Acc. IS: 0 = immediate row, 1 = Scalar register in index5.
+// [major4] [0] [EW] [IS] [funct3] [reserved5] [ index5 ] [reserved5] [  reg5  ] [ q ]
+// EW: 0 = Tile, 1 = Acc. IS: 0 = immediate row, 1 = Scalar register in index5.
 // funct3 = {form2, LS}: 100 row load, 101 row store.
 template <MblkOp Op> DecodeResult decode_mblk_row(std::uint32_t word) {
   const auto f = encoding::NpuMR::from(word);
@@ -365,7 +365,7 @@ template <InitOp Op> DecodeResult decode_init_move(std::uint32_t word) {
 
 // ROW_MOVE (R4): major4 = 0011, q = 01.
 // 31    28  27  26   25  24    22 21       17 16      12 11       7 6        2 1   0
-// [major4] [EW] [0] [IS] [funct3] [reserved5] [ index5 ] [   S5   ] [   D5   ] [ q ]
+// [major4] [0] [EW] [IS] [funct3] [reserved5] [ index5 ] [   S5   ] [   D5   ] [ q ]
 // EW: 0 = 8-bit Tile/Vec8, 1 = 32-bit Acc/Vec32.
 // IS: 0 = immediate row, 1 = Scalar register in index5.
 // funct3: 000 insert.row (vector S5 -> matrix D5),
@@ -386,7 +386,7 @@ template <RowOp Op> DecodeResult decode_row_move(std::uint32_t word) {
 
 // LANE_MOVE (R4): major4 = 0100, q = 01.
 // 31    28  27  26   25  24    22 21       17 16      12 11       7 6        2 1   0
-// [major4] [EW] [0] [IS] [funct3] [reserved5] [ index5 ] [   S5   ] [   D5   ] [ q ]
+// [major4] [0] [EW] [IS] [funct3] [reserved5] [ index5 ] [   S5   ] [   D5   ] [ q ]
 // EW: 0 = 8-bit Vec8, 1 = 32-bit Vec32.
 // IS: 0 = immediate lane, 1 = Scalar register in index5.
 // funct3: 000 extract (vector S5 -> Scalar D5), 001 insert (Scalar S5 -> vector D5),
@@ -481,8 +481,8 @@ constexpr DecodeEntry NPU_TABLE[] = {
     {"0010 01? ??? 00000 ????? ????? ????? 00", decode_ecmp},                           // acc
     {"0010 11? ??? 00000 ????? ????? ????? 00", decode_ecmp},                           // vec32
     {"0010 ??? ??? ????? ????? ????? ????? 00", illegal},                               // reserved E_CMP encodings
-    // E_BCAST (R3): sel3 = {TA, 0, DIR}, reserved4 pinned to 0.
-    {"0101 ?0? ???? 0000 ????? ????? ????? 00", decode_ebcast},
+    // E_BCAST (R3): sel3 = {0, EW, DIR}, reserved4 pinned to 0.
+    {"0101 0?? ???? 0000 ????? ????? ????? 00", decode_ebcast},
     {"0101 ??? ???? ???? ????? ????? ????? 00", illegal},                               // reserved E_BCAST encodings
     // E_R4 (R4): sel3 = {dom2, 0}, arg5 is the fourth operand (mask/addend).
     {"0011 ??0 ??? ????? ????? ????? ????? 00", decode_er4},
@@ -498,9 +498,9 @@ constexpr DecodeEntry NPU_TABLE[] = {
     {"0000 ??0 000 0000000000 00000 ????? 01", decode_mblk<MblkOp::load>},           // block load
     {"0000 ??0 001 0000000000 00000 ????? 01", decode_mblk<MblkOp::store>},          // block store
     {"0000 ??0 010 0000000000 ????? ????? 01", decode_mblk<MblkOp::gather>},         // gather load
-    // M_BLK row forms (MR): sel3 = {TA, 0, IS}, funct3 = 10x.
-    {"0000 ?0? 100 00000 ????? 00000 ????? 01", decode_mblk_row<MblkOp::row_load>},   // row load
-    {"0000 ?0? 101 00000 ????? 00000 ????? 01", decode_mblk_row<MblkOp::row_store>},  // row store
+    // M_BLK row forms (MR): sel3 = {0, EW, IS}, funct3 = 10x.
+    {"0000 0?? 100 00000 ????? 00000 ????? 01", decode_mblk_row<MblkOp::row_load>},   // row load
+    {"0000 0?? 101 00000 ????? 00000 ????? 01", decode_mblk_row<MblkOp::row_store>},  // row store
     {"0000 ??? ??? ????? ????? ????? ????? 01", illegal},                             // reserved M_BLK encodings
     // INIT_MOVE R2 forms: sel3 = {dom2, 0}, funct3 = fillx/copy/ttranspose.
     // fillx precedes fill: imm16 = 0x8000..0x801F matches both patterns,
@@ -512,14 +512,14 @@ constexpr DecodeEntry NPU_TABLE[] = {
     // values in the I layout are reserved.
     {"0010 ?? 000 ???? ???? ???? ???? ????? 01", decode_init_fill},                   // fill
     {"0010 ??? ??? ????? ????? ????? ????? 01", illegal},                             // reserved INIT_MOVE encodings
-    // ROW_MOVE (R4): sel3 = {EW, 0, IS}, funct3 = insert.row/extract.row.
-    {"0011 ?0? 000 00000 ????? ????? ????? 01", decode_row_move<RowOp::insert>},       // insert.row
-    {"0011 ?0? 001 00000 ????? ????? ????? 01", decode_row_move<RowOp::extract>},      // extract.row
+    // ROW_MOVE (R4): sel3 = {0, EW, IS}, funct3 = insert.row/extract.row.
+    {"0011 0?? 000 00000 ????? ????? ????? 01", decode_row_move<RowOp::insert>},       // insert.row
+    {"0011 0?? 001 00000 ????? ????? ????? 01", decode_row_move<RowOp::extract>},      // extract.row
     {"0011 ??? ??? ????? ????? ????? ????? 01", illegal},                             // reserved ROW_MOVE encodings
-    // LANE_MOVE (R4): sel3 = {EW, 0, IS}, funct3 = extract/insert/broadcast.
-    {"0100 ?0? 000 00000 ????? ????? ????? 01", decode_lane_move<LaneOp::extract>},     // extract
-    {"0100 ?0? 001 00000 ????? ????? ????? 01", decode_lane_move<LaneOp::insert>},      // insert
-    {"0100 ?0? 010 00000 ????? ????? ????? 01", decode_lane_move<LaneOp::broadcast>},   // broadcast
+    // LANE_MOVE (R4): sel3 = {0, EW, IS}, funct3 = extract/insert/broadcast.
+    {"0100 0?? 000 00000 ????? ????? ????? 01", decode_lane_move<LaneOp::extract>},     // extract
+    {"0100 0?? 001 00000 ????? ????? ????? 01", decode_lane_move<LaneOp::insert>},      // insert
+    {"0100 0?? 010 00000 ????? ????? ????? 01", decode_lane_move<LaneOp::broadcast>},   // broadcast
     {"0100 ??? ??? ????? ????? ????? ????? 01", illegal},                             // reserved LANE_MOVE encodings
     // All assigned data movement majors decode above; the rest is reserved.
     {"???? ??? ???? ???? ????? ????? ????? 01", illegal},

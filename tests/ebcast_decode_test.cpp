@@ -129,8 +129,8 @@ TEST_CASE(ebcast_decode) {
 
 TEST_CASE(ebcast_decode_rejects_reserved) {
   constexpr std::array cases{
-      // sel3 bit 1 and reserved4 must be 0.
-      ErrorCase{"sel3 bit1", make_ebcast(false, false, 0, 0, 0, 0) | (1u << 26),
+      // sel3 bit 2 and reserved4 must be 0.
+      ErrorCase{"sel3 bit2", make_ebcast(false, false, 0, 0, 0, 0) | (1u << 27),
                 DecodeError::illegal},
       ErrorCase{"reserved4", make_ebcast(false, false, 0, 0, 0, 0) | (1u << 17),
                 DecodeError::illegal},

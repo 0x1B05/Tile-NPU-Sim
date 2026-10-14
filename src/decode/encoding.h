@@ -202,7 +202,7 @@ struct NpuR2 {
   }
 };
 
-// M_BLK row forms (MR): sel3 = {TA, 0, IS}; index5 is the row immediate or a
+// M_BLK row forms (MR): sel3 = {0, EW, IS}; index5 is the row immediate or a
 // Scalar register number, selected by IS.
 struct NpuMR {
   std::uint8_t major4;

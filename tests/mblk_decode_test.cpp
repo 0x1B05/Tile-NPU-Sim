@@ -184,7 +184,7 @@ TEST_CASE(mblk_decode_rejects_reserved) {
       // MR reserved fields must be 0.
       ErrorCase{"row load reserved5[21:17]", 0x01020001u, DecodeError::illegal},
       ErrorCase{"row load reserved5[11:7]", 0x01000081u, DecodeError::illegal},
-      ErrorCase{"row load bit26", 0x05000001u, DecodeError::illegal},
+      ErrorCase{"row load bit27", 0x09000001u, DecodeError::illegal},
       // Unassigned data-movement majors are reserved.
       ErrorCase{"major4 0101", 0x50000001u, DecodeError::illegal},
   };

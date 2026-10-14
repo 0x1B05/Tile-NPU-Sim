@@ -203,7 +203,7 @@ struct CmpInstr {
 
 // E_BCAST vector-broadcast elementwise operations (R3): a matrix binary op
 // whose second source is a paired vector register, broadcast along rows
-// (byrow: S[i] feeds row i) or columns (bycol: S[j] feeds column j). TA pairs
+// (byrow: S[i] feeds row i) or columns (bycol: S[j] feeds column j). EW pairs
 // Tile with Vec8 and Acc with Vec32. The funct4 operation codes are shared
 // with E_BIN (EBIN_BY_FUNCT4).
 struct BcastInstr {

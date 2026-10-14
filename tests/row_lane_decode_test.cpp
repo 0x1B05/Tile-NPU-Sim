@@ -208,8 +208,8 @@ TEST_CASE(lane_move_decode) {
 
 TEST_CASE(row_lane_decode_rejects_reserved) {
   constexpr std::array cases{
-      // sel3 bit 26 and reserved5 must be 0.
-      ErrorCase{"row sel3 bit26", make_row_move(false, false, 0, 0, 0, 0) | (1u << 26),
+      // sel3 bit 27 and reserved5 must be 0.
+      ErrorCase{"row sel3 bit27", make_row_move(false, false, 0, 0, 0, 0) | (1u << 27),
                 DecodeError::illegal},
       ErrorCase{"lane reserved5", make_lane_move(true, false, 0, 0, 0, 0) | (1u << 17),
                 DecodeError::illegal},

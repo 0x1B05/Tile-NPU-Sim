@@ -125,13 +125,13 @@
 .endm
 
 # M_BLK row form (MR format), mirroring NpuMR in src/decode/encoding.h:
-#   [31:28] major4 = 0000  [27] TA  [26] 0  [25] IS  [24:22] funct3
+#   [31:28] major4 = 0000  [27] 0  [26] EW  [25] IS  [24:22] funct3
 #   [21:17] reserved(0)  [16:12] index5  [11:7] reserved(0)
 #   [6:2] reg5  [1:0] q = 01
-# funct3: 100 = row load, 101 = row store. IS = 0: index5 is an immediate
+# EW: 0 = Tile, 1 = Acc. funct3: 100 = row load, 101 = row store. IS = 0: index5 is an immediate
 # row number; IS = 1: index5 names xS holding the row number.
-.macro M_ROW ta, is, funct3, index5, reg5
-    .word ((\ta << 27) | (\is << 25) | (\funct3 << 22) | (\index5 << 12) | (\reg5 << 2) | 1)
+.macro M_ROW ew, is, funct3, index5, reg5
+    .word ((\ew << 26) | (\is << 25) | (\funct3 << 22) | (\index5 << 12) | (\reg5 << 2) | 1)
 .endm
 
 .macro TLOAD d5
@@ -260,14 +260,14 @@
 .endm
 
 # ROW_MOVE (R4), mirroring NpuR4 in src/decode/encoding.h:
-#   [31:28] major4 = 3  [27] EW  [26] 0  [25] IS  [24:22] funct3
+#   [31:28] major4 = 3  [27] 0  [26] EW  [25] IS  [24:22] funct3
 #   [21:17] reserved(0)  [16:12] index5  [11:7] S5  [6:2] D5  [1:0] q = 01
 # EW = 0: Tile <-> Vec8; EW = 1: Acc <-> Vec32.
 # funct3: 0 = insert.row (D5 = matrix, S5 = vector),
 #         1 = extract.row (D5 = vector, S5 = matrix).
 # IS = 0: index5 is an immediate row number; IS = 1: index5 names xS.
 .macro ROW_MOVE ew, is, funct3, index5, s5, d5
-    .word ((3 << 28) | (\ew << 27) | (\is << 25) | (\funct3 << 22) | (\index5 << 12) | (\s5 << 7) | (\d5 << 2) | 1)
+    .word ((3 << 28) | (\ew << 26) | (\is << 25) | (\funct3 << 22) | (\index5 << 12) | (\s5 << 7) | (\d5 << 2) | 1)
 .endm
 
 .macro TINSROW d5, idx, s5
@@ -291,7 +291,7 @@
 # funct3: 0 = extract (D5 = xD, S5 = vector), 1 = insert (D5 = vector,
 #         S5 = xS), 2 = broadcast (D5/S5 vectors).
 .macro LANE_MOVE ew, is, funct3, index5, s5, d5
-    .word ((4 << 28) | (\ew << 27) | (\is << 25) | (\funct3 << 22) | (\index5 << 12) | (\s5 << 7) | (\d5 << 2) | 1)
+    .word ((4 << 28) | (\ew << 26) | (\is << 25) | (\funct3 << 22) | (\index5 << 12) | (\s5 << 7) | (\d5 << 2) | 1)
 .endm
 
 .macro BEXTRACT xd, s5, idx
@@ -388,11 +388,11 @@
 .endm
 
 # E_BCAST (R3), mirroring NpuR3 in src/decode/encoding.h:
-#   [31:28] major4 = 5  [27] TA  [26] 0  [25] DIR  [24:21] funct4
+#   [31:28] major4 = 5  [27] 0  [26] EW  [25] DIR  [24:21] funct4
 #   [20:17] reserved(0)  [16:12] S5  [11:7] A5  [6:2] D5  [1:0] q = 00
-# TA: 0 = Tile + Vec8, 1 = Acc + Vec32. DIR: 0 = byrow, 1 = bycol.
-.macro E_BCAST ta, dir, funct4, d5, a5, s5
-    .word ((5 << 28) | (\ta << 27) | (\dir << 25) | (\funct4 << 21) | (\s5 << 12) | (\a5 << 7) | (\d5 << 2))
+# EW: 0 = Tile + Vec8, 1 = Acc + Vec32. DIR: 0 = byrow, 1 = bycol.
+.macro E_BCAST ew, dir, funct4, d5, a5, s5
+    .word ((5 << 28) | (\ew << 26) | (\dir << 25) | (\funct4 << 21) | (\s5 << 12) | (\a5 << 7) | (\d5 << 2))
 .endm
 
 .macro TADDB_ROW d5, a5, s5
