@@ -5,51 +5,58 @@
 
 #include "framework.h"
 
+namespace {
+
+constexpr std::uint64_t code(tile_npu::DType dtype) { return static_cast<std::uint64_t>(dtype); }
+
+} // namespace
+
 TEST_CASE(config_fields) {
+  using tile_npu::ConfigAccessStatus;
+  using tile_npu::ConfigField;
+  using tile_npu::ConfigRegType;
   tile_npu::State state{};
 
-  check_eq(tile_npu::write_config_field(state, tile_npu::ConfigRegType::tc, 0,
-                                        tile_npu::ConfigField::rows, std::uint64_t{7}),
-           tile_npu::ConfigAccessStatus::success, "write TC rows through raw scalar value");
-  const auto rows = tile_npu::read_config_field(state, tile_npu::ConfigRegType::tc, 0,
-                                                tile_npu::ConfigField::rows);
-  const auto *rows_value = std::get_if<std::uint8_t>(&rows);
-  check(rows_value != nullptr, "TC rows reads back as a u8 field");
-  check_eq(*rows_value, std::uint8_t{7}, "read TC rows through typed value");
+  check_eq(tile_npu::write_config_field(state, ConfigRegType::tc, 0, ConfigField::rows, 7),
+           ConfigAccessStatus::success, "write TC rows");
+  check_eq(tile_npu::read_config_field(state, ConfigRegType::tc, 0, ConfigField::rows),
+           std::uint64_t{7}, "read TC rows");
 
-  check_eq(tile_npu::write_config_field(state, tile_npu::ConfigRegType::tc, 0,
-                                        tile_npu::ConfigField::dtype,
-                                        tile_npu::ConfigFieldValue{tile_npu::DType::u8}),
-           tile_npu::ConfigAccessStatus::success, "write TC dtype");
-  const auto dtype = tile_npu::read_config_field(state, tile_npu::ConfigRegType::tc, 0,
-                                                 tile_npu::ConfigField::dtype);
-  const auto *dtype_value = std::get_if<tile_npu::DType>(&dtype);
-  check(dtype_value != nullptr, "TC dtype reads back as a DType field");
-  check_eq(*dtype_value, tile_npu::DType::u8, "read TC dtype");
+  check_eq(tile_npu::write_config_field(state, ConfigRegType::tc, 0, ConfigField::dtype,
+                                        code(tile_npu::DType::u8)),
+           ConfigAccessStatus::success, "write TC dtype");
+  check_eq(state.tc[0].dtype, tile_npu::DType::u8, "TC dtype holds the written enum");
+  check_eq(tile_npu::read_config_field(state, ConfigRegType::tc, 0, ConfigField::dtype),
+           code(tile_npu::DType::u8), "read TC dtype as its numeric code");
 
-  check_eq(tile_npu::write_config_field(state, tile_npu::ConfigRegType::tc, 0,
-                                        tile_npu::ConfigField::dtype,
-                                        tile_npu::ConfigFieldValue{tile_npu::DType::f32}),
-           tile_npu::ConfigAccessStatus::invalid_value, "reject dtype from the wrong domain");
+  check_eq(tile_npu::write_config_field(state, ConfigRegType::tc, 0, ConfigField::dtype,
+                                        code(tile_npu::DType::f32)),
+           ConfigAccessStatus::invalid_value, "reject dtype from the wrong domain");
+  check_eq(tile_npu::write_config_field(state, ConfigRegType::tc, 0, ConfigField::dtype, 0x100),
+           ConfigAccessStatus::invalid_value, "reject out-of-range dtype code");
   check_eq(state.tc[0].dtype, tile_npu::DType::u8, "rejected config write is non-mutating");
 
-  const auto field = tile_npu::config_field_from_code(tile_npu::ConfigRegType::tm, 2);
-  const auto *field_value = std::get_if<tile_npu::ConfigField>(&field);
+  const auto field = tile_npu::config_field_from_code(ConfigRegType::tm, 2);
+  const auto *field_value = std::get_if<ConfigField>(&field);
   check(field_value != nullptr, "TM field code 2 maps to a field");
-  check_eq(*field_value, tile_npu::ConfigField::col_stride_bytes, "decode TM field code");
-  const auto invalid_field = tile_npu::config_field_from_code(tile_npu::ConfigRegType::ac, 4);
-  check(std::get_if<tile_npu::ConfigAccessStatus>(&invalid_field) != nullptr,
+  check_eq(*field_value, ConfigField::col_stride_bytes, "decode TM field code");
+  const auto invalid_field = tile_npu::config_field_from_code(ConfigRegType::ac, 4);
+  check(std::get_if<ConfigAccessStatus>(&invalid_field) != nullptr,
         "reject unsupported AC field code");
 
-  const auto scalar =
-      tile_npu::config_field_as_scalar(tile_npu::ConfigFieldValue{std::int32_t{-1}});
-  check_eq(hex(scalar), hex(UINT64_MAX), "preserve signed field bits for cfg.get");
+  check_eq(tile_npu::write_config_field(state, ConfigRegType::tm, 0, ConfigField::row_stride_bytes,
+                                        UINT64_MAX),
+           ConfigAccessStatus::success, "write negative stride");
+  check_eq(
+      hex(tile_npu::read_config_field(state, ConfigRegType::tm, 0, ConfigField::row_stride_bytes)),
+      hex(UINT64_MAX), "preserve signed field bits for cfg.get");
+  check_eq(tile_npu::write_config_field(state, ConfigRegType::tm, 0, ConfigField::row_stride_bytes,
+                                        0x80000000u),
+           ConfigAccessStatus::invalid_value, "reject stride outside i32");
 
-  check_eq(tile_npu::write_config_field(state, tile_npu::ConfigRegType::tc, 0,
-                                        tile_npu::ConfigField::rows, std::uint64_t{0}),
-           tile_npu::ConfigAccessStatus::invalid_value, "reject zero TC rows");
+  check_eq(tile_npu::write_config_field(state, ConfigRegType::tc, 0, ConfigField::rows, 0),
+           ConfigAccessStatus::invalid_value, "reject zero TC rows");
   check_eq(state.tc[0].rows, std::uint8_t{7}, "rejected shape write is non-mutating");
-  check_eq(tile_npu::write_config_field(state, tile_npu::ConfigRegType::vc, 0,
-                                        tile_npu::ConfigField::len, std::uint64_t{0}),
-           tile_npu::ConfigAccessStatus::invalid_value, "reject zero VC len");
+  check_eq(tile_npu::write_config_field(state, ConfigRegType::vc, 0, ConfigField::len, 0),
+           ConfigAccessStatus::invalid_value, "reject zero VC len");
 }

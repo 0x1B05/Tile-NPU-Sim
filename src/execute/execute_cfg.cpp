@@ -53,8 +53,8 @@ ExecuteResult execute(const CfgInstr &instr, ExecContext &ctx) {
     return {.status = StepStatus::retired};
   }
   case CfgOp::get: {
-    const auto value = read_config_field(state, instr.reg_type, instr.src, cfg_field(instr));
-    state.scalar.write_x(instr.dest, config_field_as_scalar(value));
+    state.scalar.write_x(instr.dest,
+                         read_config_field(state, instr.reg_type, instr.src, cfg_field(instr)));
     return {.status = StepStatus::retired};
   }
   }

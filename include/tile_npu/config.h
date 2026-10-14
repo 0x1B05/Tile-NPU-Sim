@@ -35,8 +35,6 @@ enum class ConfigField : std::uint8_t {
 };
 // clang-format on
 
-using ConfigFieldValue = std::variant<DType, ArithMode, std::uint8_t, std::int32_t, std::uint64_t>;
-
 enum class ConfigAccessStatus : std::uint8_t {
   success,
   invalid_register,
@@ -44,19 +42,22 @@ enum class ConfigAccessStatus : std::uint8_t {
   invalid_value,
 };
 
-ConfigFieldValue read_config_field(const State &state, ConfigRegType reg_type, std::uint8_t index,
-                                   ConfigField field);
+// Field values cross this interface as the raw 64-bit scalar the ISA moves:
+// enum fields as their architectural numeric code, signed strides as
+// sign-extended i32 bit patterns.
 
+// The value cfg.get writes into xD. Requires a legal register type, index and
+// field combination.
+std::uint64_t read_config_field(const State &state, ConfigRegType reg_type, std::uint8_t index,
+                                ConfigField field);
+
+// Writes a cfg.seti/setx source value; a value outside the field's range
+// (the ISA's CFG_ERROR) reports invalid_value and leaves the state unchanged.
 ConfigAccessStatus write_config_field(State &state, ConfigRegType reg_type, std::uint8_t index,
-                                      ConfigField field, const ConfigFieldValue &value);
+                                      ConfigField field, std::uint64_t value);
 
 // Convert a decoded field code to its semantic field.
 std::variant<ConfigField, ConfigAccessStatus> config_field_from_code(ConfigRegType reg_type,
                                                                      std::uint8_t field_code);
-
-// This is the value written by cfg.get. Enum fields are returned as their
-// architectural numeric code; signed fields preserve their two's-complement
-// bit pattern in the low 32 bits.
-std::uint64_t config_field_as_scalar(const ConfigFieldValue &value);
 
 } // namespace tile_npu

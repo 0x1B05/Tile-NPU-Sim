@@ -75,7 +75,7 @@ xmake project -k compile_commands      # 为 clangd 生成 compile_commands.json
 
 - 配置访问使用 `config_field_from_code`、`read_config_field`、`write_config_field`，字段编号和写入范围检查集中在 `config.cpp`。
 - 配置类型与字段编号的组合未定义时，`cfg.seti/setx/get` 在译码阶段报 `illegal`；执行入口对手工构造的 IR 复查，并要求 `cfg.copy` 的字段编号为零。
-- `read_config_field` 返回纯值 `ConfigFieldValue`，要求寄存器类型、编号和字段组合已合法；非法调用进入 `unreachable()`。字段编号解析和配置写入保留可检查的错误状态。
+- 字段值以 ISA 传递的 64-bit 原始值进出配置接口：枚举字段为架构编码，带符号步长为符号扩展的 i32。`read_config_field` 返回 `cfg.get` 写入 `xD` 的值，要求寄存器类型、编号和字段组合已合法；非法调用进入 `unreachable()`。字段编号解析和配置写入保留可检查的错误状态。
 - `write_config_field` 的 `ConfigAccessStatus::success` 表示写入成功；合法字段的非法值对应手册的 `CFG_ERROR`，执行器映射为 `invalid_configuration`。模拟器不自行定义 `CFG_ERROR` 的 trap 行为。
 
 ## 新增指令与测试
