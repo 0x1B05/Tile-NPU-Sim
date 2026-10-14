@@ -14,9 +14,10 @@ namespace tile_npu {
 // centralizes address calculation, reserved-bit validation, and post-access
 // base-address updates for all memory instructions.
 //
-// Callers provide element indices within the configured shape (at most 32 per
-// dimension). Strides are 32-bit, so scaled offsets for valid accesses fit in
-// int64; this view still checks the final base-address arithmetic for overflow.
+// Callers check is_valid() once before computing addresses and provide element
+// indices within the configured shape (at most 32 per dimension). Strides are
+// 32-bit, so scaled offsets for valid accesses fit in int64; this view still
+// checks the final base-address arithmetic for overflow.
 template <typename Descriptor> class DescriptorView {
   using Value = std::remove_const_t<Descriptor>;
 
@@ -79,13 +80,12 @@ public:
   }
 
   // The base address after the post-access increment, or nullopt when the
-  // descriptor is invalid or the increment overflows. With the increment
+  // increment overflows. With the increment
   // disabled this is the current base, so callers can pre-validate the update
   // before touching architectural state.
   std::optional<std::uint64_t> incremented_base(std::size_t rows, std::size_t cols) const
     requires(is_matrix)
   {
-    if (!is_valid()) return std::nullopt;
     const auto mode = static_cast<MatrixIncMode>(descriptor_->flags & MATRIX_INC_MODE_MASK);
     if (mode == MatrixIncMode::off) return descriptor_->base_addr;
     const auto index = mode == MatrixIncMode::row ? rows : cols;
@@ -98,22 +98,9 @@ public:
   std::optional<std::uint64_t> incremented_base(std::size_t len) const
     requires(is_vector)
   {
-    if (!is_valid()) return std::nullopt;
     if ((descriptor_->flags & VECTOR_INC_ENABLE_MASK) == 0) return descriptor_->base_addr;
     return addr_with_offset(descriptor_->base_addr, std::int64_t{descriptor_->stride_bytes} *
                                                         static_cast<std::int64_t>(len));
-  }
-
-  bool post_inc(std::size_t rows, std::size_t cols)
-    requires(is_matrix && !std::is_const_v<Descriptor>)
-  {
-    return commit_increment(incremented_base(rows, cols));
-  }
-
-  bool post_inc(std::size_t len)
-    requires(is_vector && !std::is_const_v<Descriptor>)
-  {
-    return commit_increment(incremented_base(len));
   }
 
   // Commit a base value that was prevalidated by incremented_base after the
@@ -129,8 +116,6 @@ public:
 private:
   // base + offset with overflow checked.
   std::optional<std::uint64_t> addr_with_offset(std::uint64_t base, std::int64_t offset) const {
-    if (!is_valid()) return std::nullopt;
-
     if (offset >= 0) {
       const auto positive = static_cast<std::uint64_t>(offset);
       if (base > std::numeric_limits<std::uint64_t>::max() - positive) {
@@ -146,20 +131,10 @@ private:
     return base - magnitude;
   }
 
-  bool commit_increment(std::optional<std::uint64_t> next)
-    requires(!std::is_const_v<Descriptor>)
-  {
-    if (!next) return false;
-    commit_base(*next);
-    return true;
-  }
-
   Descriptor *descriptor_;
 };
 
 using MatrixDescView = DescriptorView<MatrixDescriptor>;
-using ConstMatrixDescView = DescriptorView<const MatrixDescriptor>;
 using VectorDescView = DescriptorView<VectorDescriptor>;
-using ConstVectorDescView = DescriptorView<const VectorDescriptor>;
 
 } // namespace tile_npu
