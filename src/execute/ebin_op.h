@@ -21,13 +21,10 @@ inline ArithMode arith_mode_of(const AccConfig &) { return ArithMode::wrap; }
 inline ArithMode arith_mode_of(const Vec32Config &) { return ArithMode::wrap; }
 
 // div is f32-only; bitwise and shift operations are integer-only. Legality
-// comes from the shared EBIN_BY_FUNCT4 table.
+// comes from the shared EBIN_BY_FUNCT4 table; the op is structurally valid.
 inline bool ebin_op_supports_dtype(EbinOp op, DType dtype) {
-  const auto code = static_cast<std::uint8_t>(op);
-  if (code >= EBIN_BY_FUNCT4.size()) return false;
-  const auto &info = EBIN_BY_FUNCT4[code];
-  if (!info) return false;
-  return dtype == DType::f32 ? info->f32_allowed : info->integer_allowed;
+  const auto &info = *EBIN_BY_FUNCT4[static_cast<std::uint8_t>(op)];
+  return dtype == DType::f32 ? info.f32_allowed : info.integer_allowed;
 }
 
 // One element of an E_BIN/E_BCAST operation on raw storage bits; the dtype

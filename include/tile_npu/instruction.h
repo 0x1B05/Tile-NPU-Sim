@@ -72,6 +72,17 @@ inline constexpr std::size_t domain_register_count(NpuDomain domain) {
   return 0;
 }
 
+inline constexpr bool is_vector_domain(NpuDomain domain) {
+  return domain == NpuDomain::vec8 || domain == NpuDomain::vec32;
+}
+
+// The matrix/vector pairing used by row moves and broadcasts: Tile with Vec8,
+// Acc with Vec32.
+inline constexpr bool domains_paired(NpuDomain matrix, NpuDomain vector) {
+  return (matrix == NpuDomain::tile && vector == NpuDomain::vec8) ||
+         (matrix == NpuDomain::acc && vector == NpuDomain::vec32);
+}
+
 using NpuOperand = std::variant<NpuRegister, ScalarRegister>;
 
 // An index5-style operand: either an immediate index or the name of the
@@ -138,6 +149,15 @@ inline constexpr std::array<std::optional<EbinInfo>, 16> EBIN_BY_FUNCT4 = [] {
   // clang-format on
   return table;
 }();
+
+// E_BIN/E_BCAST op legality on a destination domain: an assigned funct4 code,
+// no Vec8 form, and no Tile mul/div.
+inline constexpr bool ebin_legal(EbinOp op, NpuDomain domain) {
+  const auto code = static_cast<std::uint8_t>(op);
+  if (code >= EBIN_BY_FUNCT4.size() || !EBIN_BY_FUNCT4[code]) return false;
+  return domain != NpuDomain::vec8 &&
+         (domain != NpuDomain::tile || EBIN_BY_FUNCT4[code]->tile_allowed);
+}
 
 // M_BLK memory access: block load/store, gather load (R2) and row load/store
 // (MR). The bound descriptor (TM/AM/BM/VM) is implied by the accessed
@@ -222,6 +242,12 @@ enum class EunOp : std::uint8_t {
   silu = 0b110,
 };
 
+// Vec8 has no E_UNARY form; Tile only has `not`.
+inline constexpr bool eun_legal(EunOp op, NpuDomain domain) {
+  return op <= EunOp::silu && domain != NpuDomain::vec8 &&
+         (domain != NpuDomain::tile || op == EunOp::bit_not);
+}
+
 struct EunInstr {
   EunOp op = EunOp::bit_not;
   NpuRegister dest{};
@@ -296,6 +322,12 @@ enum class Er4Op : std::uint8_t { select = 0b000, fmadd = 0b001 };
 // Operand reading per op:
 //   select: dest = D, arg = mask M (u8/u32 per domain), src1 = A, src2 = B
 //   fmadd:  dest = D, arg = addend C, src1 = A, src2 = B
+// Vec8 has no E_R4 form; fmadd excludes Tile.
+inline constexpr bool er4_legal(Er4Op op, NpuDomain domain) {
+  return op <= Er4Op::fmadd && domain != NpuDomain::vec8 &&
+         (op != Er4Op::fmadd || domain != NpuDomain::tile);
+}
+
 struct Er4Instr {
   Er4Op op = Er4Op::select;
   NpuRegister dest{};
@@ -310,6 +342,11 @@ struct Er4Instr {
 // (packed nRows/nCols for matrix tail, xLen for vector tail, signed xDelta
 // for tril/triu). tril/triu are matrix-only.
 enum class MaskOp : std::uint8_t { tail = 0b000, tril = 0b001, triu = 0b010 };
+
+// tril/triu are matrix-only.
+inline constexpr bool mask_legal(MaskOp op, NpuDomain domain) {
+  return op <= MaskOp::triu && (op == MaskOp::tail || !is_vector_domain(domain));
+}
 
 // An E_MASK fill operand (the FS encoding bit selects the form): either a
 // code into the fill5 immediate table or the Scalar register xFill whose low

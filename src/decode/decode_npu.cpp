@@ -47,8 +47,8 @@ std::optional<NpuOperand> decode_bx_src2(std::uint8_t sel3, std::uint8_t src2, N
 DecodeResult decode_ebin(std::uint32_t word) {
   const auto f = encoding::NpuR3::from(word);
   const auto domain = sel3_domain(f.sel3);
-  const auto &info = EBIN_BY_FUNCT4[f.funct4];
-  if (!info || (domain == NpuDomain::tile && !info->tile_allowed)) {
+  const auto op = static_cast<EbinOp>(f.funct4);
+  if (!ebin_legal(op, domain)) {
     return DecodeError::illegal;
   }
   const auto count = domain_register_count(domain);
@@ -59,7 +59,7 @@ DecodeResult decode_ebin(std::uint32_t word) {
   if (!src2) {
     return DecodeError::illegal;
   }
-  return DecodedNpuInstr{EbinInstr{info->op, {domain, f.dest}, {domain, f.src1}, *src2}};
+  return DecodedNpuInstr{EbinInstr{op, {domain, f.dest}, {domain, f.src1}, *src2}};
 }
 
 // E_UNARY (R2): major4 = 0001, q = 00.
@@ -71,15 +71,12 @@ DecodeResult decode_ebin(std::uint32_t word) {
 DecodeResult decode_eun(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = sel3_domain(f.sel3);
-  if (domain == NpuDomain::vec8 || f.funct3 == 0b111) {
-    return DecodeError::illegal;
-  }
+  const auto op = static_cast<EunOp>(f.funct3);
   const auto count = domain_register_count(domain);
-  if (f.dest >= count || f.src2 >= count) {
+  if (!eun_legal(op, domain) || f.dest >= count || f.src2 >= count) {
     return DecodeError::illegal;
   }
-  return DecodedNpuInstr{
-      EunInstr{static_cast<EunOp>(f.funct3), {domain, f.dest}, {domain, f.src2}}};
+  return DecodedNpuInstr{EunInstr{op, {domain, f.dest}, {domain, f.src2}}};
 }
 
 // E_CMP (R4): major4 = 0010, q = 00.
@@ -114,15 +111,15 @@ DecodeResult decode_ecmp(std::uint32_t word) {
 DecodeResult decode_ebcast(std::uint32_t word) {
   const auto f = encoding::NpuR3::from(word);
   const auto domains = paired_domains(f.sel3);
-  const auto &info = EBIN_BY_FUNCT4[f.funct4];
-  if (!info || (domains.matrix == NpuDomain::tile && !info->tile_allowed)) {
+  const auto op = static_cast<EbinOp>(f.funct4);
+  if (!ebin_legal(op, domains.matrix)) {
     return DecodeError::illegal;
   }
   const auto count = domain_register_count(domains.matrix);
   if (f.dest >= count || f.src1 >= count) {
     return DecodeError::illegal;
   }
-  return DecodedNpuInstr{BcastInstr{info->op,
+  return DecodedNpuInstr{BcastInstr{op,
                                     {domains.matrix, f.dest},
                                     {domains.matrix, f.src1},
                                     {domains.vector, f.src2},
@@ -138,19 +135,16 @@ DecodeResult decode_ebcast(std::uint32_t word) {
 DecodeResult decode_er4(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domain = sel3_domain(f.sel3);
-  if (domain == NpuDomain::vec8 || f.funct3 > 0b001 ||
-      (f.funct3 == 0b001 && domain == NpuDomain::tile)) {
+  const auto op = static_cast<Er4Op>(f.funct3);
+  if (!er4_legal(op, domain)) {
     return DecodeError::illegal;
   }
   const auto count = domain_register_count(domain);
   if (f.dest >= count || f.arg >= count || f.src1 >= count || f.src2 >= count) {
     return DecodeError::illegal;
   }
-  return DecodedNpuInstr{Er4Instr{static_cast<Er4Op>(f.funct3),
-                                  {domain, f.dest},
-                                  {domain, f.arg},
-                                  {domain, f.src1},
-                                  {domain, f.src2}}};
+  return DecodedNpuInstr{
+      Er4Instr{op, {domain, f.dest}, {domain, f.arg}, {domain, f.src1}, {domain, f.src2}}};
 }
 
 // E_MASK (R4): major4 = 0100, q = 00.
@@ -164,9 +158,8 @@ DecodeResult decode_emask(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domain = sel3_domain(f.sel3);
   const bool fill_is_scalar = (f.sel3 & 1) != 0;
-  const bool vector_domain = domain == NpuDomain::vec8 || domain == NpuDomain::vec32;
-  if (f.funct3 > 0b010 || (vector_domain && f.funct3 != 0b000) ||
-      (!fill_is_scalar && f.arg > FILL5_MAX)) {
+  const auto op = static_cast<MaskOp>(f.funct3);
+  if (!mask_legal(op, domain) || (!fill_is_scalar && f.arg > FILL5_MAX)) {
     return DecodeError::illegal;
   }
   const auto count = domain_register_count(domain);
@@ -175,8 +168,7 @@ DecodeResult decode_emask(std::uint32_t word) {
   }
   const auto fill =
       fill_is_scalar ? FillOperand{ScalarRegister{f.arg}} : FillOperand{Fill5Code{f.arg}};
-  return DecodedNpuInstr{
-      MaskInstr{static_cast<MaskOp>(f.funct3), {domain, f.dest}, {domain, f.src1}, f.src2, fill}};
+  return DecodedNpuInstr{MaskInstr{op, {domain, f.dest}, {domain, f.src1}, f.src2, fill}};
 }
 
 // CVT (R2): major4 = 0011, q = 10.
@@ -252,7 +244,7 @@ DecodeResult decode_qnt(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domain = sel3_domain(f.sel3);
   const bool index_is_scalar = (f.sel3 & 1) != 0;
-  const bool vector_form = domain == NpuDomain::vec8 || domain == NpuDomain::vec32;
+  const bool vector_form = is_vector_domain(domain);
   // funct3 = 000 quantizes into Tile/Vec8 destinations and dequantizes into
   // Acc/Vec32 destinations; the source is the paired domain.
   const auto op = f.funct3 == 0b001                 ? QntOp::quant_ext_scale
