@@ -116,15 +116,29 @@ TEST_CASE(mma_decode) {
            .lhs_domain = NpuDomain::vec8,
            .src_a = 17,
            .src_b = 15},
+      Case{.name = "bdot.nn.acc.i8.i32 v18, b19, t14",
+           .word = make_mma(5, 18, 19, 14),
+           .op = MmaOp::nn_bdot_acc,
+           .dest_domain = NpuDomain::vec32,
+           .dest = 18,
+           .lhs_domain = NpuDomain::vec8,
+           .src_a = 19,
+           .src_b = 14},
+      Case{.name = "bdot.nt.acc.i8.i32 v31, b31, t0",
+           .word = make_mma(7, 31, 31, 0),
+           .op = MmaOp::nt_bdot_acc,
+           .dest_domain = NpuDomain::vec32,
+           .dest = 31,
+           .lhs_domain = NpuDomain::vec8,
+           .src_a = 31,
+           .src_b = 0},
   };
   check_cases(cases);
 }
 
 TEST_CASE(mma_decode_rejects_reserved) {
   constexpr std::array cases{
-      // bdot has no accumulate form.
-      ErrorCase{"funct3 101", make_mma(5, 0, 0, 0), DecodeError::illegal},
-      ErrorCase{"funct3 111", make_mma(7, 0, 0, 0), DecodeError::illegal},
+      ErrorCase{"bdot.acc tB16", make_mma(5, 0, 0, 16), DecodeError::illegal},
       // reserved3/reserved5 must be 0.
       ErrorCase{"reserved3", 0x02003106u, DecodeError::illegal},
       ErrorCase{"reserved5", 0x00023106u, DecodeError::illegal},

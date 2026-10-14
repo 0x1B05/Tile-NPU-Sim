@@ -266,7 +266,7 @@ DecodeResult decode_qnt(std::uint32_t word) {
 // MMA_BDOT (R4): major4 = 0000, q = 10.
 // 31    28 27       25 24    22 21       17 16      12 11       7 6        2 1   0
 // [major4] [reserved3] [funct3] [reserved5] [   B5   ] [   A5   ] [   D5   ] [ q ]
-// funct3 = {mma/bdot, nn/nt, zero/acc}; bdot has only zero, so 101/111 are reserved.
+// funct3 = {mma/bdot, nn/nt, zero/acc}; every code is assigned.
 DecodeResult decode_mma(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto &info = MMA_BY_FUNCT3[f.funct3];
@@ -543,7 +543,7 @@ constexpr DecodeEntry NPU_TABLE[] = {
     // All assigned data movement majors decode above; the rest is reserved.
     {"???? ??? ???? ???? ????? ????? ????? 01", illegal},
     // MMA_BDOT (R4): reserved3/reserved5 pinned to 0; one pattern, the
-    // handler rejects the reserved funct3 codes 101/111.
+    // handler bounds the register numbers per domain.
     {"0000 000 ??? 00000 ????? ????? ????? 10", decode_mma},
     {"0000 ??? ??? ????? ????? ????? ????? 10", illegal},                             // reserved MMA_BDOT encodings
     // CVT (R2): sel3 = {dom2, 0}, dom2 = Acc/Vec32 only. funct3 = 000 cvt,

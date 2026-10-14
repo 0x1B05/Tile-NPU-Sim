@@ -2,8 +2,8 @@
 
 # Self-checking MMA_BDOT image: programs configs and descriptors, loads a
 # shared left Tile plus two right Tiles (nn and nt layouts) and a Vec8, then
-# runs mma.nn.zero, mma.nt.acc (accumulating onto the first result) and
-# bdot.nt. Results are stored back and compared word-wise. Ends with ebreak:
+# runs mma.nn.zero, mma.nt.acc (accumulating onto the first result),
+# bdot.nt and bdot.nt.acc (accumulating onto the bdot result). Results are stored back and compared word-wise. Ends with ebreak:
 # a0 = 0 pass, a0 = N identifies the failing check.
 #
 # Buffer addresses go through lla (pc-relative): the image is loaded at
@@ -108,6 +108,20 @@ _start:
     bne       x4, x5, fail
     lwu       x4, 4(x3)
     li        x5, 24
+    bne       x4, x5, fail
+
+    # Stage 4 - bdot.nt.acc.i8.i32 v4, b0, t2 adds {18, 24} again -> {36, 48}
+    BDOT_NT_ACC 4, 0, 2
+    lla       x3, dstbuf2
+    CFG_REG   3, 1, 0, 0, 3, 4
+    VSTORE    4
+    lla       x3, dstbuf2
+    lwu       x4, 0(x3)
+    li        x5, 36
+    li        a0, 4
+    bne       x4, x5, fail
+    lwu       x4, 4(x3)
+    li        x5, 48
     bne       x4, x5, fail
 
     li        a0, 0

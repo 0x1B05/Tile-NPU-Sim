@@ -18,11 +18,10 @@ constexpr std::int32_t i8_product(std::uint8_t lhs, std::uint8_t rhs) {
          static_cast<std::int32_t>(std::bit_cast<std::int8_t>(rhs));
 }
 
-constexpr bool is_nt(MmaOp op) {
-  return op == MmaOp::nt_zero || op == MmaOp::nt_acc || op == MmaOp::nt_bdot;
-}
+// The op codes are the funct3 values: bit1 selects nt, bit0 accumulate.
+constexpr bool is_nt(MmaOp op) { return (static_cast<std::uint8_t>(op) & 0b010) != 0; }
 
-constexpr bool is_accumulate(MmaOp op) { return op == MmaOp::nn_acc || op == MmaOp::nt_acc; }
+constexpr bool is_accumulate(MmaOp op) { return (static_cast<std::uint8_t>(op) & 0b001) != 0; }
 
 // mma.{nn,nt}.{zero,acc}.i8.i32: D = A x B,
 // nt logically transposed B;
@@ -60,8 +59,9 @@ ExecuteResult mma(const MmaInstr &instr, State &state) {
   return {.status = StepStatus::retired};
 }
 
-// bdot.{nn,nt}.i8.i32: vD[j] = dot(bA, tB column j) for nn,
-//                              dot(bA, tB row j) for nt.
+// bdot.{nn,nt}[.acc].i8.i32: vD[j] = dot(bA, tB column j) for nn,
+//                                    dot(bA, tB row j) for nt;
+// acc adds the i32 partial into the existing lane value.
 ExecuteResult bdot(const MmaInstr &instr, State &state) {
   const auto &dst_config = state.vc[instr.dest.index];
   const auto &lhs_config = state.bc[instr.src_a.index];
@@ -84,7 +84,8 @@ ExecuteResult bdot(const MmaInstr &instr, State &state) {
     for (std::size_t k = 0; k < k_size; ++k) {
       sum += i8_product(lhs[k], nt ? rhs.at(j, k) : rhs.at(k, j));
     }
-    dst[j] = std::bit_cast<std::uint32_t>(sum);
+    const auto partial = std::bit_cast<std::uint32_t>(sum);
+    dst[j] = is_accumulate(instr.op) ? dst[j] + partial : partial;
   }
   return {.status = StepStatus::retired};
 }

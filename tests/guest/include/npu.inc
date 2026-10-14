@@ -543,7 +543,7 @@
 #   [21:17] reserved5  [16:12] B5 (tB)  [11:7] A5 (tA/bA)  [6:2] D5 (aD/vD)
 #   [1:0] q = 10
 # funct3: 000 mma.nn.zero, 001 mma.nn.acc, 010 mma.nt.zero, 011 mma.nt.acc,
-#         100 bdot.nn, 110 bdot.nt (101/111 reserved).
+#         100 bdot.nn, 101 bdot.nn.acc, 110 bdot.nt, 111 bdot.nt.acc.
 .macro MMA_BDOT funct3, d5, a5, b5
     .word ((\funct3 << 22) | (\b5 << 12) | (\a5 << 7) | (\d5 << 2) | 2)
 .endm
@@ -562,6 +562,14 @@
 
 .macro BDOT_NT d5, a5, b5
     MMA_BDOT 6, \d5, \a5, \b5
+.endm
+
+.macro BDOT_NN_ACC d5, a5, b5
+    MMA_BDOT 5, \d5, \a5, \b5
+.endm
+
+.macro BDOT_NT_ACC d5, a5, b5
+    MMA_BDOT 7, \d5, \a5, \b5
 .endm
 
 # SYS (Z format):

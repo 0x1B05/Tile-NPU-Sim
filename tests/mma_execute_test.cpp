@@ -140,6 +140,42 @@ TEST_CASE(bdot_nn_nt) {
   check_eq(state.v[3][1], std::uint32_t{24}, "vD[1]");
 }
 
+TEST_CASE(bdot_acc) {
+  Ram memory(CODE_BASE, 8);
+  Simulator sim(memory);
+  // Same operands as bdot_nn_nt; the acc forms add into the old lanes.
+  write_word(memory, CODE_BASE, make_mma(5, 0, 1, 2));
+  write_word(memory, CODE_BASE + 4, make_mma(7, 3, 1, 4));
+  sim.reset(CODE_BASE);
+  auto &state = sim.state();
+  state.vc[0].dtype = DType::i32;
+  state.vc[0].len = 2;
+  state.vc[3].dtype = DType::i32;
+  state.vc[3].len = 2;
+  state.bc[1].dtype = DType::i8;
+  state.bc[1].len = 3;
+  tile_i8(state, 2, 3, 2);
+  tile_i8(state, 4, 2, 3);
+  state.b[1][0] = 1;
+  state.b[1][1] = 0xfeu; // -2
+  state.b[1][2] = 3;
+  poke_rhs_nn(state, 2);
+  poke_rhs_nt(state, 4);
+  state.v[0][0] = 100;
+  state.v[0][1] = 0x7fffffffu; // wraps on overflow
+  state.v[0][2] = 0x5a5a5a5au; // outside len, kept
+  state.v[3][0] = 0xfffffff6u; // -10
+  state.v[3][1] = 0;
+
+  check_eq(sim.step().status, StepStatus::retired, "bdot.nn.acc retires");
+  check_eq(state.v[0][0], std::uint32_t{158}, "vD[0] = 100 + 58");
+  check_eq(hex(state.v[0][1]), hex(0x7fffffcfu), "vD[1] wraps: INT32_MAX - 48");
+  check_eq(hex(state.v[0][2]), hex(0x5a5a5a5au), "lane past len kept");
+  check_eq(sim.step().status, StepStatus::retired, "bdot.nt.acc retires");
+  check_eq(state.v[3][0], std::uint32_t{8}, "vD[0] = -10 + 18");
+  check_eq(state.v[3][1], std::uint32_t{24}, "vD[1] = 0 + 24");
+}
+
 TEST_CASE(mma_rejects_invalid) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);

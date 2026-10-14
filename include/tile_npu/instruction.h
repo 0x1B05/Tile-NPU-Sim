@@ -317,16 +317,17 @@ struct QntInstr {
 
 // MMA_BDOT operations (R4): funct3 bit2 picks matrix multiply (0, mma.*) or
 // vector-matrix dot (1, bdot.*); bit1 picks the right-operand orientation
-// (nn = 0, nt = 1); bit0 picks zero-fill or accumulate for mma (bdot only
-// has the zero form, so funct3 codes 101/111 are reserved).
+// (nn = 0, nt = 1); bit0 picks zero-fill (0) or accumulate (1) for both.
 enum class MmaOp : std::uint8_t {
   // clang-format off
   nn_zero = 0b000,
   nn_acc  = 0b001,
   nt_zero = 0b010,
   nt_acc  = 0b011,
-  nn_bdot = 0b100,
-  nt_bdot = 0b110,
+  nn_bdot     = 0b100,
+  nn_bdot_acc = 0b101,
+  nt_bdot     = 0b110,
+  nt_bdot_acc = 0b111,
   // clang-format on
 };
 
