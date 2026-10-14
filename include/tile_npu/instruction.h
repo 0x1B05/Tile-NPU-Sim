@@ -1,5 +1,7 @@
 #pragma once
 
+#include "tile_npu/state.h"
+
 #include <cstdint>
 #include <variant>
 
@@ -371,6 +373,21 @@ struct CfgInstr {
   RegisterIndex src = 0;
   std::uint8_t field = 0;
   std::int32_t imm = 0;
+};
+
+// cfg.shape (CFG_SHAPE, R4 layout): writes every field of `count`
+// consecutive compute configs of one domain, starting at `first`. dtype is
+// the raw dtype code (an illegal code for the domain is CFG_ERROR at
+// execution); rows/cols/len are the decoded sizes, cols and arith_mode only
+// apply to TC/AC and TC respectively.
+struct ShapeInstr {
+  NpuDomain domain = NpuDomain::tile;
+  RegisterIndex first = 0;
+  std::uint8_t count = 1;
+  std::uint8_t dtype = 0;
+  std::uint8_t rows = 1; // len for BC/VC
+  std::uint8_t cols = 1;
+  ArithMode arith_mode = ArithMode::wrap;
 };
 
 } // namespace tile_npu

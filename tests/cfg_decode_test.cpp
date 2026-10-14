@@ -174,7 +174,7 @@ TEST_CASE(cfg_decode_rejects_reserved) {
       ErrorCase{"copy tc16 src out of range", cfg_reg(0, 0, 1, 0, 16, 0), DecodeError::illegal},
       ErrorCase{"get ac12 out of range", cfg_reg(1, 0, 2, 0, 12, 5), DecodeError::illegal},
       // Reserved major4 encodings report illegal.
-      ErrorCase{"reserved major4 1001", (0x9u << 28) | 0x2u, DecodeError::illegal},
+      ErrorCase{"reserved major4 1010", (0xau << 28) | 0x2u, DecodeError::illegal},
   };
   check_errors(cases);
 }

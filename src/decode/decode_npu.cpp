@@ -456,6 +456,25 @@ template <CfgOp Op> DecodeResult decode_cfg_reg(std::uint32_t word) {
   return DecodedNpuInstr{CfgInstr{Op, reg_type, f.dest, f.src1, field, 0}};
 }
 
+// CFG_SHAPE (R4 layout, all fields immediate): major4 = 1001, q = 10.
+// 31    28 27  26  25  24    22 21      17 16      12 11       7 6        2 1   0
+// [major4] [dom2] [SAT] [dtype3] [ cols5  ] [ rows5  ] [   N5   ] [   C5   ] [ q ]
+// dom2: 00 TC, 01 AC, 10 BC, 11 VC. Sizes and the count are encoded minus one.
+// BC/VC reserve cols5/SAT, AC reserves SAT; C5 + N5 must name a register.
+DecodeResult decode_cfg_shape(std::uint32_t word) {
+  const auto f = encoding::NpuR4::from(word);
+  const auto domain = sel3_domain(f.sel3);
+  const bool sat = (f.sel3 & 1) != 0;
+  if ((sat && domain != NpuDomain::tile) || (is_vector_domain(domain) && f.arg != 0) ||
+      f.dest + f.src1 >= domain_register_count(domain)) {
+    return DecodeError::illegal;
+  }
+  return DecodedNpuInstr{ShapeInstr{domain, f.dest, static_cast<std::uint8_t>(f.src1 + 1), f.funct3,
+                                    static_cast<std::uint8_t>(f.src2 + 1),
+                                    static_cast<std::uint8_t>(f.arg + 1),
+                                    sat ? ArithMode::sat : ArithMode::wrap}};
+}
+
 // clang-format off
 
 //   R3: major4 sel3 funct4 reserved4 src2 src1 dest q
@@ -562,6 +581,10 @@ constexpr DecodeEntry NPU_TABLE[] = {
     // the reserved funct3 codes 100-111.
     {"1000 ??? 00000000000000000000000 10", decode_sys},
     {"1000 ??? ????? ????? ????? ????? ??? 10", illegal},                           // reserved SYS encodings
+
+    // CFG_SHAPE (R4 layout): every field is an immediate; the handler rejects
+    // the reserved SAT/cols5 and out-of-range register spans.
+    {"1001 ??? ??? ????? ????? ????? ????? 10", decode_cfg_shape},
 
     {"???? ??? ???? ???? ????? ????? ????? 10", illegal},                           // reserved major encodings
 };
