@@ -9,6 +9,7 @@
 #include "tile_npu/simulator.h"
 #include "tile_npu/state.h"
 
+#include "execute/f32_util.h"
 #include "utils/endian.h"
 
 #include <array>
@@ -53,7 +54,7 @@ inline void vec_cfg(tile_npu::State &state, std::size_t index, tile_npu::DType d
   state.vc[index].len = len;
 }
 
-constexpr std::uint32_t f32_bits(float value) { return std::bit_cast<std::uint32_t>(value); }
+using tile_npu::f32_bits;
 
 constexpr std::uint8_t i8_bits(std::int32_t value) {
   return static_cast<std::uint8_t>(static_cast<std::int8_t>(value));

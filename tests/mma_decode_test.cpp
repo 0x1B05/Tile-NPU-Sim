@@ -7,7 +7,7 @@
 #include <variant>
 
 #include "framework.h"
-#include "mma_helpers.h"
+#include "support/mma_helpers.h"
 
 namespace {
 

@@ -7,8 +7,8 @@
 #include <variant>
 
 #include "framework.h"
-#include "index_helpers.h"
-#include "qnt_helpers.h"
+#include "support/index_helpers.h"
+#include "support/qnt_helpers.h"
 
 namespace {
 

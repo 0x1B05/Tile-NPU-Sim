@@ -5,8 +5,8 @@
 #include <cstdint>
 #include <string>
 
-#include "mblk_helpers.h"
 #include "support/execute_helpers.h"
+#include "support/mblk_helpers.h"
 
 namespace {
 using tile_npu::DType;

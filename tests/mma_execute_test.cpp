@@ -3,8 +3,8 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "mma_helpers.h"
 #include "support/execute_helpers.h"
+#include "support/mma_helpers.h"
 
 namespace {
 using tile_npu::DType;

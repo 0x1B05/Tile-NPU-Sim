@@ -7,8 +7,8 @@
 #include <variant>
 
 #include "framework.h"
-#include "index_helpers.h"
-#include "row_lane_helpers.h"
+#include "support/index_helpers.h"
+#include "support/row_lane_helpers.h"
 
 namespace {
 

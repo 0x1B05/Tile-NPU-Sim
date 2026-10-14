@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "ebcast_helpers.h"
+#include "support/ebcast_helpers.h"
 #include "support/execute_helpers.h"
 
 namespace {

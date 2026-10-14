@@ -6,8 +6,8 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "qnt_helpers.h"
 #include "support/execute_helpers.h"
+#include "support/qnt_helpers.h"
 
 namespace {
 using tile_npu::DType;

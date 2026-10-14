@@ -7,7 +7,7 @@
 #include <variant>
 
 #include "framework.h"
-#include "reduce_helpers.h"
+#include "support/reduce_helpers.h"
 
 namespace {
 

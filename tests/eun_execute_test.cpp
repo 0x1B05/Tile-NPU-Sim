@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "eun_helpers.h"
+#include "support/eun_helpers.h"
 #include "support/execute_helpers.h"
 
 namespace {

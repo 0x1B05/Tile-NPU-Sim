@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "emask_helpers.h"
+#include "support/emask_helpers.h"
 #include "support/execute_helpers.h"
 
 namespace {

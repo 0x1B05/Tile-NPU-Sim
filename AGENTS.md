@@ -88,7 +88,7 @@ xmake project -k compile_commands      # 为 clangd 生成 compile_commands.json
 
 测试放置与运行约定：
 
-- `tests/framework.h` 提供 `TEST_CASE` 与 `check_eq`；`sim_tests --list` 列出用例，`--filter SUBSTR` 按名称筛选。公共执行 fixture 在 `tests/support/execute_helpers.h`。
+- `tests/framework.h` 提供 `TEST_CASE` 与 `check_eq`；`sim_tests --list` 列出用例，`--filter SUBSTR` 按名称筛选。公共执行 fixture 在 `tests/support/execute_helpers.h`，各指令族的编码构造器在 `tests/support/<族>_helpers.h`。
 - host 译码测试直接内联机器码常量，行尾标注汇编；指令字和地址的断言用 `hex()` 包装。
 - NPU 正例优先放在 `tests/guest/npu/*.S`，复用 `tests/guest/include/npu.inc` 的编码宏；`tests/npu_guest_test.cpp` 负责装载、执行与断言。复用 `run_until_stop` 的步数上限和停机诊断，或 `check_guest_image` 的自校验流程；非法编码负例放在 host 测试。
 - guest C 程序链接共享 `crt0.S`，裸 `.S` 提供自己的 `_start`，生成到构建目录的 `guest/`。标量自校验程序放在 `tests/guest/rv64im/`，按 `ebreak/a0` 约定退出。

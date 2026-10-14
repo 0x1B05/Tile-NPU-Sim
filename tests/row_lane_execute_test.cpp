@@ -3,8 +3,8 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "row_lane_helpers.h"
 #include "support/execute_helpers.h"
+#include "support/row_lane_helpers.h"
 
 namespace {
 using tile_npu::DType;

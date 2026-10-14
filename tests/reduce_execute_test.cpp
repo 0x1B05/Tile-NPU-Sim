@@ -5,8 +5,8 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "reduce_helpers.h"
 #include "support/execute_helpers.h"
+#include "support/reduce_helpers.h"
 
 namespace {
 using tile_npu::DType;

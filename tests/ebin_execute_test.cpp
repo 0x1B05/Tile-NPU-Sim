@@ -8,7 +8,7 @@
 #include <cstdint>
 #include <string>
 
-#include "ebin_helpers.h"
+#include "support/ebin_helpers.h"
 #include "support/execute_helpers.h"
 
 namespace {
