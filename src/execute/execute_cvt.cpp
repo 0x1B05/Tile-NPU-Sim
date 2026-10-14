@@ -62,7 +62,7 @@ ExecuteResult widen_tile_to_acc(const CvtInstr &instr, State &state) {
 
 } // namespace
 
-ExecuteResult execute_cvt(const CvtInstr &instr, State &state) {
+ExecuteResult execute(const CvtInstr &instr, State &state) {
   if (instr.op == CvtOp::widen) {
     return widen_tile_to_acc(instr, state);
   }

@@ -68,7 +68,7 @@ template <typename E> E apply_unary(EunOp op, DType dtype, E value) {
 
 // Runs over the destination's effective region; an unsuccessful execution
 // leaves architectural state unchanged.
-ExecuteResult execute_eun(const EunInstr &instr, State &state) {
+ExecuteResult execute(const EunInstr &instr, State &state) {
   return with_domain<NpuDomain::tile, NpuDomain::acc, NpuDomain::vec32>(
       state, instr.dest.domain, [&](auto &regs, const auto &configs) {
         const auto &dst_config = configs[instr.dest.index];

@@ -126,7 +126,7 @@ ExecuteResult lane_move(const LaneInstr &instr, State &state,
 
 // The Tile <-> Vec8 and Acc <-> Vec32 pairings are part of the structural
 // validation at execute_npu.
-ExecuteResult execute_row_move(const RowInstr &instr, State &state) {
+ExecuteResult execute(const RowInstr &instr, State &state) {
   const bool insert = instr.op == RowOp::insert;
   switch (instr.matrix.domain) {
   case NpuDomain::tile:
@@ -141,7 +141,7 @@ ExecuteResult execute_row_move(const RowInstr &instr, State &state) {
 }
 
 // The dispatched register file is the vector operand's domain.
-ExecuteResult execute_lane_move(const LaneInstr &instr, State &state) {
+ExecuteResult execute(const LaneInstr &instr, State &state) {
   const auto &vec = instr.op == LaneOp::extract ? std::get<NpuRegister>(instr.src)
                                                 : std::get<NpuRegister>(instr.dst);
   switch (vec.domain) {

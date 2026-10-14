@@ -93,7 +93,7 @@ ExecuteResult bdot(const MmaInstr &instr, State &state) {
 
 } // namespace
 
-ExecuteResult execute_mma(const MmaInstr &instr, State &state) {
+ExecuteResult execute(const MmaInstr &instr, State &state) {
   if (instr.dest.domain == NpuDomain::vec32) {
     return bdot(instr, state);
   }

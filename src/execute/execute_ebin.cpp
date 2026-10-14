@@ -31,7 +31,7 @@ template <typename Configs> bool operands_valid(const EbinInstr &instr, const Co
 
 // Runs over the destination's effective region; an unsuccessful execution
 // leaves architectural state unchanged.
-ExecuteResult execute_ebin(const EbinInstr &instr, State &state) {
+ExecuteResult execute(const EbinInstr &instr, State &state) {
   return with_domain<NpuDomain::tile, NpuDomain::acc, NpuDomain::vec32>(
       state, instr.dest.domain, [&](auto &regs, const auto &configs) {
         if (!operands_valid(instr, configs)) {

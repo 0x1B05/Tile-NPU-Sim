@@ -134,7 +134,7 @@ ExecuteResult vreduce(const ReduceInstr &instr, State &state) {
 
 } // namespace
 
-ExecuteResult execute_reduce(const ReduceInstr &instr, State &state) {
+ExecuteResult execute(const ReduceInstr &instr, State &state) {
   if (instr.src.domain == NpuDomain::acc) {
     return areduce(instr, state);
   }

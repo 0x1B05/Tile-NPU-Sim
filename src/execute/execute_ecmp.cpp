@@ -79,7 +79,7 @@ template <typename Configs> bool operands_valid(const CmpInstr &instr, const Con
 
 // Runs over the destination's effective region; an unsuccessful execution
 // leaves architectural state unchanged.
-ExecuteResult execute_ecmp(const CmpInstr &instr, State &state) {
+ExecuteResult execute(const CmpInstr &instr, State &state) {
   return with_domain<NpuDomain::acc, NpuDomain::vec32>(
       state, instr.dest.domain, [&](auto &regs, const auto &configs) {
         if (!operands_valid(instr, configs)) {

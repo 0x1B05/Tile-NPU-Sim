@@ -49,7 +49,7 @@ ExecuteResult bcast(const BcastInstr &instr,
 
 } // namespace
 
-ExecuteResult execute_ebcast(const BcastInstr &instr, State &state) {
+ExecuteResult execute(const BcastInstr &instr, State &state) {
   // The matrix/vector domain pairing is part of the structural validation.
   switch (instr.dest.domain) {
   case NpuDomain::tile: return bcast(instr, state.t, state.tc, state.b, state.bc);

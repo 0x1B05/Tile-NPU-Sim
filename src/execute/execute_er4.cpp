@@ -58,7 +58,7 @@ template <typename E> E apply_er4_op(Er4Op op, E arg, E lhs, E rhs) {
 
 // Runs over the destination's effective region; an unsuccessful execution
 // leaves architectural state unchanged.
-ExecuteResult execute_er4(const Er4Instr &instr, State &state) {
+ExecuteResult execute(const Er4Instr &instr, State &state) {
   return with_domain<NpuDomain::tile, NpuDomain::acc, NpuDomain::vec32>(
       state, instr.dest.domain, [&](auto &regs, const auto &configs) {
         using Element = typename std::remove_cvref_t<decltype(regs)>::value_type::value_type;

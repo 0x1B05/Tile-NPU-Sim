@@ -325,7 +325,7 @@ template <NpuDomain Domain> ExecuteResult vector_access(const MblkInstr &instr, 
 
 } // namespace
 
-ExecuteResult execute_mblk(const MblkInstr &instr, ExecContext &ctx) {
+ExecuteResult execute(const MblkInstr &instr, ExecContext &ctx) {
   switch (accessed_reg(instr).domain) {
   case NpuDomain::tile:
     switch (instr.op) {

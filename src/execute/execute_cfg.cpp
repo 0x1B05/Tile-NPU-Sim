@@ -28,7 +28,7 @@ ExecuteResult cfg_write(const CfgInstr &instr, State &state, std::uint64_t value
 
 } // namespace
 
-ExecuteResult execute_cfg(const CfgInstr &instr, ExecContext &ctx) {
+ExecuteResult execute(const CfgInstr &instr, ExecContext &ctx) {
   State &state = ctx.state;
   switch (instr.op) {
   case CfgOp::seti: {

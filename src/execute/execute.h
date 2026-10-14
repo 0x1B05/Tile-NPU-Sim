@@ -40,29 +40,30 @@ inline ExecuteResult access_fault(StepStatus status, std::uint64_t address) {
 ExecuteResult execute_rv64i(const DecodedScalarInstr &instr, ExecContext &ctx);
 ExecuteResult execute_rv64m(const DecodedScalarInstr &instr, ScalarState &scalar);
 
+// NPU family executors, one execute() overload per decoded instruction type.
 // Elementwise execution
-ExecuteResult execute_ebin(const EbinInstr &instr, State &state);
-ExecuteResult execute_eun(const EunInstr &instr, State &state);
-ExecuteResult execute_ecmp(const CmpInstr &instr, State &state);
-ExecuteResult execute_ebcast(const BcastInstr &instr, State &state);
-ExecuteResult execute_er4(const Er4Instr &instr, State &state);
-ExecuteResult execute_emask(const MaskInstr &instr, State &state);
+ExecuteResult execute(const EbinInstr &instr, State &state);
+ExecuteResult execute(const EunInstr &instr, State &state);
+ExecuteResult execute(const CmpInstr &instr, State &state);
+ExecuteResult execute(const BcastInstr &instr, State &state);
+ExecuteResult execute(const Er4Instr &instr, State &state);
+ExecuteResult execute(const MaskInstr &instr, State &state);
 
 // Memory access and movement
-ExecuteResult execute_mblk(const MblkInstr &instr, ExecContext &ctx);
-ExecuteResult execute_init(const InitInstr &instr, State &state);
-ExecuteResult execute_row_move(const RowInstr &instr, State &state);
-ExecuteResult execute_lane_move(const LaneInstr &instr, State &state);
+ExecuteResult execute(const MblkInstr &instr, ExecContext &ctx);
+ExecuteResult execute(const InitInstr &instr, State &state);
+ExecuteResult execute(const RowInstr &instr, State &state);
+ExecuteResult execute(const LaneInstr &instr, State &state);
 
 // Numeric operations
-ExecuteResult execute_cvt(const CvtInstr &instr, State &state);
-ExecuteResult execute_reduce(const ReduceInstr &instr, State &state);
-ExecuteResult execute_qnt(const QntInstr &instr, State &state);
-ExecuteResult execute_mma(const MmaInstr &instr, State &state);
+ExecuteResult execute(const CvtInstr &instr, State &state);
+ExecuteResult execute(const ReduceInstr &instr, State &state);
+ExecuteResult execute(const QntInstr &instr, State &state);
+ExecuteResult execute(const MmaInstr &instr, State &state);
 
 // Configuration and system
-ExecuteResult execute_cfg(const CfgInstr &instr, ExecContext &ctx);
-ExecuteResult execute_sys(const SysInstr &instr, State &state);
+ExecuteResult execute(const CfgInstr &instr, ExecContext &ctx);
+ExecuteResult execute(const SysInstr &instr, State &state);
 
 // Dispatch entry points
 ExecuteResult exec_scalar_instr(const DecodedScalarInstr &instr, ExecContext &ctx);

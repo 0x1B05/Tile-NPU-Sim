@@ -84,7 +84,7 @@ ExecuteResult transpose_tile(const InitInstr &instr, State &state) {
 } // namespace
 
 // ttranspose is tile-only by the structural validation at execute_npu.
-ExecuteResult execute_init(const InitInstr &instr, State &state) {
+ExecuteResult execute(const InitInstr &instr, State &state) {
   if (instr.op == InitOp::transpose) {
     return transpose_tile(instr, state);
   }

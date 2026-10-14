@@ -30,70 +30,14 @@ private:
 
 constexpr bool is_rv64m(ScalarOp op) { return op >= ScalarOp::mul && op <= ScalarOp::remuw; }
 
-// One overload per decoded NPU instruction type; std::visit keeps the
-// dispatch exhaustive as new instruction families are added.
-ExecuteResult exec_npu_family(const EbinInstr &instr, ExecContext &ctx) {
-  return execute_ebin(instr, ctx.state);
-}
-
-ExecuteResult exec_npu_family(const EunInstr &instr, ExecContext &ctx) {
-  return execute_eun(instr, ctx.state);
-}
-
-ExecuteResult exec_npu_family(const CmpInstr &instr, ExecContext &ctx) {
-  return execute_ecmp(instr, ctx.state);
-}
-
-ExecuteResult exec_npu_family(const BcastInstr &instr, ExecContext &ctx) {
-  return execute_ebcast(instr, ctx.state);
-}
-
-ExecuteResult exec_npu_family(const Er4Instr &instr, ExecContext &ctx) {
-  return execute_er4(instr, ctx.state);
-}
-
-ExecuteResult exec_npu_family(const MaskInstr &instr, ExecContext &ctx) {
-  return execute_emask(instr, ctx.state);
-}
-
-ExecuteResult exec_npu_family(const MblkInstr &instr, ExecContext &ctx) {
-  return execute_mblk(instr, ctx);
-}
-
-ExecuteResult exec_npu_family(const InitInstr &instr, ExecContext &ctx) {
-  return execute_init(instr, ctx.state);
-}
-
-ExecuteResult exec_npu_family(const RowInstr &instr, ExecContext &ctx) {
-  return execute_row_move(instr, ctx.state);
-}
-
-ExecuteResult exec_npu_family(const LaneInstr &instr, ExecContext &ctx) {
-  return execute_lane_move(instr, ctx.state);
-}
-
-ExecuteResult exec_npu_family(const CfgInstr &instr, ExecContext &ctx) {
-  return execute_cfg(instr, ctx);
-}
-
-ExecuteResult exec_npu_family(const CvtInstr &instr, ExecContext &ctx) {
-  return execute_cvt(instr, ctx.state);
-}
-
-ExecuteResult exec_npu_family(const ReduceInstr &instr, ExecContext &ctx) {
-  return execute_reduce(instr, ctx.state);
-}
-
-ExecuteResult exec_npu_family(const QntInstr &instr, ExecContext &ctx) {
-  return execute_qnt(instr, ctx.state);
-}
-
-ExecuteResult exec_npu_family(const MmaInstr &instr, ExecContext &ctx) {
-  return execute_mma(instr, ctx.state);
-}
-
-ExecuteResult exec_npu_family(const SysInstr &instr, ExecContext &ctx) {
-  return execute_sys(instr, ctx.state);
+// Each family executor is an overload of execute() taking either the full
+// context (memory access) or only the architectural state.
+template <typename Instr> ExecuteResult exec_npu_family(const Instr &instr, ExecContext &ctx) {
+  if constexpr (requires { execute(instr, ctx); }) {
+    return execute(instr, ctx);
+  } else {
+    return execute(instr, ctx.state);
+  }
 }
 
 } // namespace

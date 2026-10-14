@@ -177,7 +177,7 @@ ExecuteResult bdequant(const QntInstr &instr, State &state) {
 
 // The op fixes the direction; the destination domain only picks the matrix
 // or vector shape of the form (validated structurally at execute_npu).
-ExecuteResult execute_qnt(const QntInstr &instr, State &state) {
+ExecuteResult execute(const QntInstr &instr, State &state) {
   switch (instr.op) {
   case QntOp::quant:
     return instr.dest.domain == NpuDomain::tile ? tquant(instr, state) : vquant(instr, state);
