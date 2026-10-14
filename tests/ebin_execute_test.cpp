@@ -1,5 +1,7 @@
 #include "tile_npu/simulator.h"
 
+#include "op_info.h"
+
 #include <array>
 #include <bit>
 #include <cstddef>

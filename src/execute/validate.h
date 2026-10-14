@@ -8,6 +8,7 @@
 // illegal_instruction. Executors below this layer only handle the dynamic
 // constraints (config validity, dtype, shape, effective lengths).
 #include "config.h"
+#include "op_info.h"
 #include "tile_npu/instruction.h"
 #include "tile_npu/state.h"
 #include "utils/overloaded.h"

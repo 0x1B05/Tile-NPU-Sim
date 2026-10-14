@@ -2,6 +2,7 @@
 
 #include "config.h"
 #include "encoding.h"
+#include "op_info.h"
 #include "pattern.h"
 #include "tile_npu/state.h"
 

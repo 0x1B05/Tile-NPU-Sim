@@ -33,7 +33,8 @@ xmake project -k compile_commands      # 为 clangd 生成 compile_commands.json
 | 路径 | 职责 |
 | ---- | ---- |
 | `include/tile_npu/state.h` | 寄存器堆、配置、描述符与物理尺寸常量；步进状态词表 `StepStatus` |
-| `include/tile_npu/instruction.h` | 标量/NPU 语义 IR、操作元数据表、域配对与操作数类型 |
+| `include/tile_npu/instruction.h` | 标量/NPU 语义 IR 与操作数类型 |
+| `src/op_info.h` | 译码与结构检查共享的操作元数据：寄存器数量、操作/数据域合法性与 funct 表 |
 | `include/tile_npu/decode.h` | `DecodeResult` 与译码接口 |
 | `include/tile_npu/simulator.h`、`src/simulator.cpp` | `Simulator::reset` / `step`、取指与步进状态处理 |
 | `src/config.h`、`src/config.cpp` | 配置字段编号映射、字段读写、值转换与写入校验 |
@@ -80,7 +81,7 @@ xmake project -k compile_commands      # 为 clangd 生成 compile_commands.json
 
 ## 新增指令与测试
 
-1. 在 `instruction.h` 添加带域与语义操作数的 IR；已有 `IndexOperand` / `FillOperand` 等 variant 可表达立即数与 Scalar 来源。避免用裸整数加 bool 维护二选一关系。
+1. 在 `instruction.h` 添加带域与语义操作数的 IR，操作元数据与合法性规则放在 `src/op_info.h`；已有 `IndexOperand` / `FillOperand` 等 variant 可表达立即数与 Scalar 来源。避免用裸整数加 bool 维护二选一关系。
 2. 必要时补充 `encoding.h` 的格式解析，在译码表增加 pattern 与 handler。首条匹配生效，需检查编码重叠；保留编码和超出实际寄存器数量的编号报 `illegal`。
 3. 在 `validate.h` 补充结构检查，在 `execute.cpp` 接入分派，并在所属指令族实现语义。开发中尚未实现的执行显式返回 `execution_not_implemented`。
 4. 每个新增操作覆盖合法编码、保留/非法编码和边界值，包括立即数、寄存器号与有效 shape 边界。

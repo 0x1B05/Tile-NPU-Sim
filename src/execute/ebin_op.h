@@ -1,6 +1,6 @@
 #pragma once
 
-#include "tile_npu/instruction.h"
+#include "op_info.h"
 #include "tile_npu/state.h"
 #include "utils/unreachable.h"
 

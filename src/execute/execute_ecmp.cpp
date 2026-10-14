@@ -2,6 +2,7 @@
 
 #include "config_check.h"
 #include "domain.h"
+#include "op_info.h"
 #include "operand.h"
 #include "utils/overloaded.h"
 #include "utils/unreachable.h"
