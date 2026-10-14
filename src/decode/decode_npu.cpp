@@ -1,8 +1,8 @@
 #include "decode_npu.h"
 
+#include "config.h"
 #include "encoding.h"
 #include "pattern.h"
-#include "tile_npu/config.h"
 #include "tile_npu/state.h"
 
 #include <cstdint>

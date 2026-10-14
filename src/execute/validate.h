@@ -7,7 +7,7 @@
 // encoding). Hand-constructed IR — an embedder bug — fails here with
 // illegal_instruction. Executors below this layer only handle the dynamic
 // constraints (config validity, dtype, shape, effective lengths).
-#include "tile_npu/config.h"
+#include "config.h"
 #include "tile_npu/instruction.h"
 #include "tile_npu/state.h"
 #include "utils/overloaded.h"

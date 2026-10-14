@@ -2,7 +2,7 @@
 
 #include "config_check.h"
 #include "domain.h"
-#include "tile_npu/matrix_view.h"
+#include "matrix_view.h"
 
 #include <cstddef>
 #include <cstdint>

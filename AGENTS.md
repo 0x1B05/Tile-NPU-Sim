@@ -36,9 +36,9 @@ xmake project -k compile_commands      # 为 clangd 生成 compile_commands.json
 | `include/tile_npu/instruction.h` | 标量/NPU 语义 IR、操作元数据表、域配对与操作数类型 |
 | `include/tile_npu/decode.h` | `DecodeResult` 与译码接口 |
 | `include/tile_npu/simulator.h`、`src/simulator.cpp` | `Simulator::reset` / `step`、取指与步进状态处理 |
-| `include/tile_npu/config.h`、`src/config.cpp` | 配置字段编号映射、字段读写、值转换与写入校验 |
-| `include/tile_npu/matrix_view.h` | 固定大小矩阵寄存器的非拥有视图，只负责物理坐标映射 |
-| `include/tile_npu/descriptor_view.h` | 描述符地址计算、保留位检查及访存后基地址自增 |
+| `src/config.h`、`src/config.cpp` | 配置字段编号映射、字段读写、值转换与写入校验 |
+| `src/execute/matrix_view.h` | 固定大小矩阵寄存器的非拥有视图，只负责物理坐标映射 |
+| `src/execute/descriptor_view.h` | 描述符地址计算、保留位检查及访存后基地址自增 |
 | `include/tile_npu/platform/`、`src/platform/` | `AddressSpace` 接口、`Ram`、`SystemBus` 与 `SerialConsole` |
 | `src/decode/encoding.h`、`pattern.h` | 位段提取、格式解析、编译期 pattern 解析与按序匹配 |
 | `src/decode/decode*.cpp` | 顶层 q 分派，以及 RV64IM / NPU 译码表与 IR 构造 |

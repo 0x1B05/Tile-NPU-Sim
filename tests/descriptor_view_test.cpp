@@ -1,4 +1,4 @@
-#include "tile_npu/descriptor_view.h"
+#include "execute/descriptor_view.h"
 
 #include <cstdint>
 #include <limits>

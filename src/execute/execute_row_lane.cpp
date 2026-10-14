@@ -1,8 +1,8 @@
 #include "execute.h"
 
 #include "config_check.h"
+#include "matrix_view.h"
 #include "operand.h"
-#include "tile_npu/matrix_view.h"
 #include "utils/unreachable.h"
 
 #include <array>

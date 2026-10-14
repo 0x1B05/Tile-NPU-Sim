@@ -2,7 +2,7 @@
 
 #include "config_check.h"
 #include "ebin_op.h"
-#include "tile_npu/matrix_view.h"
+#include "matrix_view.h"
 #include "utils/unreachable.h"
 
 #include <cstddef>

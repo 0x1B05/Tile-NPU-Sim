@@ -1,4 +1,4 @@
-#include "tile_npu/matrix_view.h"
+#include "execute/matrix_view.h"
 
 #include <cstdint>
 #include <span>

@@ -1,4 +1,4 @@
-#include "tile_npu/config.h"
+#include "config.h"
 
 #include "utils/unreachable.h"
 

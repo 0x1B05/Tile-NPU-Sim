@@ -1,10 +1,10 @@
 #include "execute.h"
 
 #include "config_check.h"
+#include "descriptor_view.h"
 #include "domain.h"
+#include "matrix_view.h"
 #include "operand.h"
-#include "tile_npu/descriptor_view.h"
-#include "tile_npu/matrix_view.h"
 #include "utils/endian.h"
 #include "utils/unreachable.h"
 
