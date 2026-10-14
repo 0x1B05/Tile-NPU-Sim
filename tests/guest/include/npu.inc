@@ -220,11 +220,11 @@
     M_BLK 2, 0, \d5, 0
 .endm
 
-# INIT_MOVE fill (I format), mirroring NpuI in src/decode/encoding.h:
-#   [31:28] major4 = 2  [27:26] dom2  [25:23] funct3 = 000
+# INIT_FILL (I format), mirroring NpuI in src/decode/encoding.h:
+#   [31:28] major4 = 1  [27:26] dom2  [25:23] funct3 = 000
 #   [22:7] imm16  [6:2] D5  [1:0] q = 01
 .macro INIT_FILL dom2, d5, imm
-    .word ((2 << 28) | (\dom2 << 26) | ((\imm & 0xffff) << 7) | (\d5 << 2) | 1)
+    .word ((1 << 28) | (\dom2 << 26) | ((\imm & 0xffff) << 7) | (\d5 << 2) | 1)
 .endm
 
 # INIT_MOVE R2 forms, mirroring NpuR2 in src/decode/encoding.h:

@@ -65,7 +65,7 @@ TEST_CASE(init_decode_fill) {
   constexpr std::array cases{
       // Anchor word computed by hand from the encoding figure.
       Case{.name = "tfill t0, 1",
-           .word = 0x20000081u,
+           .word = 0x10000081u,
            .op = InitOp::fill,
            .domain = NpuDomain::tile,
            .reg = 0,
@@ -88,6 +88,20 @@ TEST_CASE(init_decode_fill) {
            .domain = NpuDomain::vec32,
            .reg = 2,
            .imm = -32736},
+      // imm16 in [0x8000, 0x801F] used to alias fillx; INIT_FILL owns every
+      // imm16 value, including BF16 -0.0 (0x8000).
+      Case{.name = "vfill v9, 0x8000",
+           .word = make_init_fill(NpuDomain::vec32, 9, 0x8000u),
+           .op = InitOp::fill,
+           .domain = NpuDomain::vec32,
+           .reg = 9,
+           .imm = -32768},
+      Case{.name = "tfill t9, 0x8005",
+           .word = make_init_fill(NpuDomain::tile, 9, 0x8005u),
+           .op = InitOp::fill,
+           .domain = NpuDomain::tile,
+           .reg = 9,
+           .imm = -32763},
   };
   check_cases(cases);
 }
@@ -130,13 +144,6 @@ TEST_CASE(init_decode_r2_forms) {
            .domain = NpuDomain::tile,
            .reg = 0,
            .src = 2},
-      // The shadowed fill range: imm16 in [0x8000, 0x801F] reads as fillx.
-      Case{.name = "fill imm16=0x8005 shadows to fillx",
-           .word = make_init_fill(NpuDomain::tile, 9, 0x8005u),
-           .op = InitOp::fillx,
-           .domain = NpuDomain::tile,
-           .reg = 9,
-           .src = 5},
   };
   check_cases(cases);
 }
@@ -161,8 +168,10 @@ TEST_CASE(init_decode_rejects_reserved) {
       ErrorCase{"tcopy t0, t16", make_init_r2(NpuDomain::tile, 2, 0, 16), DecodeError::illegal},
       ErrorCase{"ttranspose t0, t16", make_init_r2(NpuDomain::tile, 3, 0, 16),
                 DecodeError::illegal},
-      // I-form funct3 != 000 is reserved.
-      ErrorCase{"fill funct3 010", 0x21000001u, DecodeError::illegal},
+      // INIT_FILL funct3 != 000 and INIT_MOVE funct3 = 000 are reserved.
+      ErrorCase{"fill funct3 010", 0x11000001u, DecodeError::illegal},
+      ErrorCase{"INIT_MOVE funct3 000", make_init_r2(NpuDomain::tile, 0, 0, 0),
+                DecodeError::illegal},
   };
   check_errors(cases);
 }

@@ -62,7 +62,7 @@ TEST_CASE(npu_decode) {
       RejectCase{0x01c02080u, DecodeError::illegal, "reject unassigned E_BIN bit-operation code"},
       RejectCase{0x08002080u, DecodeError::illegal, "reject reserved Vec8 E_BIN domain"},
       RejectCase{0x60002080u, DecodeError::illegal, "reserved elementwise major"},
-      RejectCase{0x10002081u, DecodeError::illegal, "reserved data movement major"},
+      RejectCase{0x50002081u, DecodeError::illegal, "reserved data movement major"},
       RejectCase{0xa0002082u, DecodeError::illegal, "reserved cross-domain major"},
   };
   for (const auto &test : reject_cases) {

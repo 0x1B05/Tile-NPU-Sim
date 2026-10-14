@@ -331,7 +331,7 @@ template <MblkOp Op> DecodeResult decode_mblk_row(std::uint32_t word) {
                                       : MblkInstr{Op, reg, {}, index, 0}};
 }
 
-// INIT_MOVE fill (I): major4 = 0010, q = 01.
+// INIT_FILL (I): major4 = 0001, q = 01.
 // 31    28 27  26 25    23 22                             7 6        2 1   0
 // [major4] [dom2] [funct3] [            imm16             ] [   D5   ] [ q ]
 // dom2: 00 Tile, 01 Acc, 10 Vec8, 11 Vec32. funct3[25:23] = 000.
@@ -521,15 +521,15 @@ constexpr DecodeEntry NPU_TABLE[] = {
     {"0000 0?? 100 00000 ????? 00000 ????? 01", decode_mblk_row<MblkOp::row_load>},   // row load
     {"0000 0?? 101 00000 ????? 00000 ????? 01", decode_mblk_row<MblkOp::row_store>},  // row store
     {"0000 ??? ??? ????? ????? ????? ????? 01", illegal},                             // reserved M_BLK encodings
-    // INIT_MOVE R2 forms: sel3 = {dom2, 0}, funct3 = fillx/copy/ttranspose.
-    // fillx precedes fill: imm16 = 0x8000..0x801F matches both patterns,
-    // and the ISA assigns these encodings to fillx.
+    // INIT_FILL (I format): dom2 + funct3 = 000 + imm16; other funct3 values
+    // are reserved.
+    {"0001 ?? 000 ???? ???? ???? ???? ????? 01", decode_init_fill},                   // fill
+    {"0001 ??? ??? ????? ????? ????? ????? 01", illegal},                             // reserved INIT_FILL encodings
+    // INIT_MOVE (R2): sel3 = {dom2, 0}, funct3 = fillx/copy/ttranspose; 000 is
+    // reserved.
     {"0010 ??0 001 0000000000 ????? ????? 01", decode_init_move<InitOp::fillx>},       // fillx
     {"0010 ??0 010 0000000000 ????? ????? 01", decode_init_move<InitOp::copy>},        // copy
     {"0010 ??0 011 0000000000 ????? ????? 01", decode_init_move<InitOp::transpose>},   // ttranspose
-    // INIT_MOVE fill (I format): dom2 + funct3 = 000 + imm16; other funct3
-    // values in the I layout are reserved.
-    {"0010 ?? 000 ???? ???? ???? ???? ????? 01", decode_init_fill},                   // fill
     {"0010 ??? ??? ????? ????? ????? ????? 01", illegal},                             // reserved INIT_MOVE encodings
     // ROW_MOVE (R4): sel3 = {0, EW, IS}, funct3 = insert.row/extract.row.
     {"0011 0?? 000 00000 ????? ????? ????? 01", decode_row_move<RowOp::insert>},       // insert.row
