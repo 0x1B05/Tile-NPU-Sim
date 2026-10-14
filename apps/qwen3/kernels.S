@@ -31,12 +31,7 @@ nq_debug_qtile: .skip 8
     .text
     .globl nq_quant_act
 nq_quant_act:
-    SETIV   SEL_VC, CF_DTYPE, DT_F32, 0
-    SETIV   SEL_VC, CF_LEN, 32, 0
-    SETIV   SEL_VC, CF_DTYPE, DT_F32, 1
-    SETIV   SEL_VC, CF_LEN, 32, 1
-    SETIV   SEL_VC, CF_DTYPE, DT_F32, 2
-    SETIV   SEL_VC, CF_LEN, 32, 2
+    SHAPEV  3, DT_F32, 32, 0, 3
 
     # activation absmax over the padded panels (v0 max, v1 chunk)
     SETX    SEL_VM, 1, CF_BASE, 1, X_A0
@@ -62,22 +57,12 @@ nq_quant_act:
     VEXTRACT X_T2, 2, 0         # t2 = x_scale bits
 
     # quantize the panels into t2..t4 (32x32 i8)
-    SETIM   SEL_AC, CF_DTYPE, DT_F32, 0
-    SETIM   SEL_AC, CF_ROWS, 32, 0
-    SETIM   SEL_AC, CF_COLS, 32, 0
+    SHAPEM  1, DT_F32, 32, 32, 0
     SETX    SEL_AM, 0, CF_BASE, 0, X_A0
     SETIM   SEL_AM, CF_RSTRIDE, 128, 0
     SETIM   SEL_AM, CF_CSTRIDE, 4, 0
     SETIM   SEL_AM, CF_FLAGS, 1, 0        # inc along rows: += 32 * 128
-    SETIM   SEL_TC, CF_DTYPE, DT_I8, 2
-    SETIM   SEL_TC, CF_ROWS, 32, 2
-    SETIM   SEL_TC, CF_COLS, 32, 2
-    SETIM   SEL_TC, CF_DTYPE, DT_I8, 3
-    SETIM   SEL_TC, CF_ROWS, 32, 3
-    SETIM   SEL_TC, CF_COLS, 32, 3
-    SETIM   SEL_TC, CF_DTYPE, DT_I8, 4
-    SETIM   SEL_TC, CF_ROWS, 32, 4
-    SETIM   SEL_TC, CF_COLS, 32, 4
+    SHAPEM  0, DT_I8, 32, 32, 2, 3
     addi    t3, a1, 1023
     srli    t3, t3, 10          # panels
     li      t4, 0
@@ -136,26 +121,16 @@ nq_matvec_q:
     mv      a3, a2              # out
 
     # shared vector configs (len 32)
-    SETIV   SEL_VC, CF_DTYPE, DT_I32, 4
-    SETIV   SEL_VC, CF_LEN, 32, 4
-    SETIV   SEL_VC, CF_DTYPE, DT_I32, 5
-    SETIV   SEL_VC, CF_LEN, 32, 5
-    SETIV   SEL_VC, CF_DTYPE, DT_F32, 6
-    SETIV   SEL_VC, CF_LEN, 32, 6
-    SETIV   SEL_VC, CF_DTYPE, DT_F32, 8
-    SETIV   SEL_VC, CF_LEN, 32, 8
+    SHAPEV  3, DT_I32, 32, 4, 2
+    SHAPEV  3, DT_F32, 32, 6
+    SHAPEV  3, DT_F32, 32, 8
 
     # phase B configs: weight tile t1 (tm1 row_stride = k, inc along cols)
-    SETIM   SEL_TC, CF_DTYPE, DT_I8, 1
-    SETIM   SEL_TC, CF_ROWS, 32, 1
-    SETIM   SEL_TC, CF_COLS, 32, 1
+    SHAPEM  0, DT_I8, 32, 32, 1
     SETX    SEL_TM, 0, CF_RSTRIDE, 1, X_A5
     SETIM   SEL_TM, CF_CSTRIDE, 1, 1
     SETIM   SEL_TM, CF_FLAGS, 2, 1        # inc along cols: += 32 * 1
-    .irp R,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
-    SETIV   SEL_BC, CF_DTYPE, DT_I8, \R
-    SETIV   SEL_BC, CF_LEN, 32, \R
-    .endr
+    SHAPEV  2, DT_I8, 32, 0, 32
     la      t0, nq_accbuf
     SETX    SEL_VM, 1, CF_BASE, 4, X_T0
     SETIV   SEL_VM, CF_STRIDE, 4, 4
@@ -271,13 +246,8 @@ nq_matvec_q:
     .text
     .globl nq_quant_rows
 nq_quant_rows:
-    SETIV   SEL_VC, CF_DTYPE, DT_F32, 0
-    SETIV   SEL_VC, CF_LEN, 32, 0
-    SETIV   SEL_VC, CF_DTYPE, DT_F32, 1
-    SETIV   SEL_VC, CF_LEN, 32, 1
-    SETIM   SEL_AC, CF_DTYPE, DT_F32, 0
-    SETIM   SEL_AC, CF_ROWS, 32, 0
-    SETIM   SEL_AC, CF_COLS, 32, 0
+    SHAPEV  3, DT_F32, 32, 0, 2
+    SHAPEM  1, DT_F32, 32, 32, 0
     SETX    SEL_AM, 0, CF_BASE, 0, X_A0
     slli    t0, a1, 2
     SETX    SEL_AM, 0, CF_RSTRIDE, 0, X_T0
@@ -305,9 +275,7 @@ nq_quant_rows:
     VSTORE  0                   # xs scales out; v0 stays for pass 2
 
     # pass 2: quantize chunks to xq (t0, tm0 inc along cols: += 32 * 1)
-    SETIM   SEL_TC, CF_DTYPE, DT_I8, 0
-    SETIM   SEL_TC, CF_ROWS, 32, 0
-    SETIM   SEL_TC, CF_COLS, 32, 0
+    SHAPEM  0, DT_I8, 32, 32, 0
     SETX    SEL_AM, 0, CF_BASE, 0, X_A0   # rewind x
     SETX    SEL_TM, 0, CF_BASE, 0, X_A2
     SETX    SEL_TM, 0, CF_RSTRIDE, 0, X_A1
@@ -345,36 +313,24 @@ nq_matmul_q:
 
     mv      s6, a2              # xq base
 
-    SETIM   SEL_TC, CF_DTYPE, DT_I8, 0
-    SETIM   SEL_TC, CF_ROWS, 32, 0
-    SETIM   SEL_TC, CF_COLS, 32, 0
-    SETIM   SEL_TC, CF_DTYPE, DT_I8, 1
-    SETIM   SEL_TC, CF_ROWS, 32, 1
-    SETIM   SEL_TC, CF_COLS, 32, 1
+    SHAPEM  0, DT_I8, 32, 32, 0, 2
     SETX    SEL_TM, 0, CF_RSTRIDE, 0, X_A6
     SETIM   SEL_TM, CF_CSTRIDE, 1, 0
     SETIM   SEL_TM, CF_FLAGS, 2, 0      # inc along cols: += 32 * 1
     SETX    SEL_TM, 0, CF_RSTRIDE, 1, X_A6
     SETIM   SEL_TM, CF_CSTRIDE, 1, 1
     SETIM   SEL_TM, CF_FLAGS, 2, 1
-    SETIM   SEL_AC, CF_DTYPE, DT_I32, 0
-    SETIM   SEL_AC, CF_ROWS, 32, 0
-    SETIM   SEL_AC, CF_COLS, 32, 0
-    SETIM   SEL_AC, CF_DTYPE, DT_I32, 1
-    SETIM   SEL_AC, CF_ROWS, 32, 1
-    SETIM   SEL_AC, CF_COLS, 32, 1
+    SHAPEM  1, DT_I32, 32, 32, 0, 2
     SETX    SEL_AM, 0, CF_BASE, 1, X_A4
     slli    t0, a5, 2
     SETX    SEL_AM, 0, CF_RSTRIDE, 1, X_T0
     SETIM   SEL_AM, CF_CSTRIDE, 4, 1
     SETIM   SEL_AM, CF_FLAGS, 2, 1      # inc along cols: += 32 * 4
-    SETIV   SEL_VC, CF_DTYPE, DT_F32, 29
-    SETIV   SEL_VC, CF_LEN, 32, 29
+    SHAPEV  3, DT_F32, 32, 29
     SETX    SEL_VM, 1, CF_BASE, 29, X_A1
     SETIV   SEL_VM, CF_STRIDE, 4, 29
     SETIV   SEL_VM, CF_VFLAGS, 1, 29    # ws stream, one block per load
-    SETIV   SEL_VC, CF_DTYPE, DT_F32, 30
-    SETIV   SEL_VC, CF_LEN, 32, 30
+    SHAPEV  3, DT_F32, 32, 30
     SETX    SEL_VM, 1, CF_BASE, 30, X_A3
     SETIV   SEL_VM, CF_STRIDE, 4, 30
     SETIV   SEL_VM, CF_VFLAGS, 0, 30
@@ -426,10 +382,7 @@ nq_matmul_q:
 # ---------------------------------------------------------------------------
     .globl nq_rmsnorm
 nq_rmsnorm:
-    .irp R,0,1,2,3,4
-    SETIV   SEL_VC, CF_DTYPE, DT_F32, \R
-    SETIV   SEL_VC, CF_LEN, 32, \R
-    .endr
+    SHAPEV  3, DT_F32, 32, 0, 5
     SETX    SEL_VM, 1, CF_BASE, 1, X_A0
     SETIV   SEL_VM, CF_STRIDE, 4, 1
     SETIV   SEL_VM, CF_VFLAGS, 1, 1
@@ -565,10 +518,7 @@ nq_rope:
 # ---------------------------------------------------------------------------
     .globl nq_scores
 nq_scores:
-    .irp R,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20
-    SETIV   SEL_VC, CF_DTYPE, DT_F32, \R
-    SETIV   SEL_VC, CF_LEN, 32, \R
-    .endr
+    SHAPEV  3, DT_F32, 32, 0, 21
     srli    t6, a5, 5                     # chunks = hd / 32
     # q chunk descriptors vm8..vm11 (base = q + c*128, no inc)
     mv      t0, a0
@@ -629,10 +579,7 @@ nq_scores:
 # ---------------------------------------------------------------------------
     .globl nq_softmax_exp
 nq_softmax_exp:
-    .irp R,0,1,2,3,4
-    SETIV   SEL_VC, CF_DTYPE, DT_F32, \R
-    SETIV   SEL_VC, CF_LEN, 32, \R
-    .endr
+    SHAPEV  3, DT_F32, 32, 0, 5
     SETIV   SEL_VM, CF_STRIDE, 4, 1
     SETIV   SEL_VM, CF_VFLAGS, 1, 1
     SETIV   SEL_VM, CF_STRIDE, 4, 3
@@ -676,10 +623,7 @@ nq_softmax_exp:
 # ---------------------------------------------------------------------------
     .globl nq_pv
 nq_pv:
-    .irp R,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20
-    SETIV   SEL_VC, CF_DTYPE, DT_F32, \R
-    SETIV   SEL_VC, CF_LEN, 32, \R
-    .endr
+    SHAPEV  3, DT_F32, 32, 0, 21
     srli    t6, a5, 5                     # chunks
     SETIV   SEL_VM, CF_STRIDE, 4, 12
     SETIV   SEL_VM, CF_VFLAGS, 1, 12
@@ -745,10 +689,7 @@ nq_pv:
 # ---------------------------------------------------------------------------
     .globl nq_silu_mul
 nq_silu_mul:
-    .irp R,0,1,2
-    SETIV   SEL_VC, CF_DTYPE, DT_F32, \R
-    SETIV   SEL_VC, CF_LEN, 32, \R
-    .endr
+    SHAPEV  3, DT_F32, 32, 0, 3
     SETX    SEL_VM, 1, CF_BASE, 0, X_A0
     SETIV   SEL_VM, CF_STRIDE, 4, 0
     SETIV   SEL_VM, CF_VFLAGS, 1, 0
@@ -775,10 +716,7 @@ nq_silu_mul:
 # ---------------------------------------------------------------------------
     .globl nq_add
 nq_add:
-    .irp R,0,1,2
-    SETIV   SEL_VC, CF_DTYPE, DT_F32, \R
-    SETIV   SEL_VC, CF_LEN, 32, \R
-    .endr
+    SHAPEV  3, DT_F32, 32, 0, 3
     SETX    SEL_VM, 1, CF_BASE, 0, X_A0
     SETIV   SEL_VM, CF_STRIDE, 4, 0
     SETIV   SEL_VM, CF_VFLAGS, 1, 0
@@ -806,12 +744,8 @@ nq_add:
 # ---------------------------------------------------------------------------
     .globl nq_embed
 nq_embed:
-    SETIV   SEL_VC, CF_DTYPE, DT_F32, 0
-    SETIV   SEL_VC, CF_LEN, 32, 0
-    SETIV   SEL_VC, CF_DTYPE, DT_F32, 1
-    SETIV   SEL_VC, CF_LEN, 32, 1
-    SETIV   SEL_BC, CF_DTYPE, DT_I8, 0
-    SETIV   SEL_BC, CF_LEN, 32, 0
+    SHAPEV  3, DT_F32, 32, 0, 2
+    SHAPEV  2, DT_I8, 32, 0
     slli    t0, a2, 2
     add     t0, a1, t0
     lw      t1, 0(t0)
@@ -842,12 +776,8 @@ nq_argmax:
     addi    sp, sp, -16
     sd      s2, 0(sp)
     sd      s3, 8(sp)
-    SETIV   SEL_VC, CF_DTYPE, DT_F32, 0
-    SETIV   SEL_VC, CF_LEN, 32, 0
-    SETIV   SEL_VC, CF_DTYPE, DT_F32, 1
-    SETIV   SEL_VC, CF_LEN, 32, 1
-    SETIV   SEL_VC, CF_DTYPE, DT_F32, 2
-    SETIV   SEL_VC, CF_LEN, 2, 2
+    SHAPEV  3, DT_F32, 32, 0, 2
+    SHAPEV  3, DT_F32, 2, 2
     SETX    SEL_VM, 1, CF_BASE, 1, X_A0
     SETIV   SEL_VM, CF_STRIDE, 4, 1
     SETIV   SEL_VM, CF_VFLAGS, 1, 1

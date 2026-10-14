@@ -186,6 +186,23 @@
     CFG_SETI 6, \sel2, \field, \imm, \c5
 .endm
 
+# CFG_SHAPE (R4 layout, all fields immediate), major4 = 9, q = 10:
+#   [27:26] dom2  [25] SAT  [24:22] dtype3  [21:17] cols - 1
+#   [16:12] rows/len - 1  [11:7] count - 1  [6:2] first config reg
+# Writes every field of `count` consecutive TC/AC/BC/VC configs.
+.macro CFG_SHAPE dom2, sat, dtype, rows, cols, count, c5
+    .word ((9 << 28) | (\dom2 << 26) | (\sat << 25) | (\dtype << 22) | ((\cols - 1) << 17) | ((\rows - 1) << 12) | ((\count - 1) << 7) | (\c5 << 2) | 2)
+.endm
+
+# Matrix (TC/AC) and vector (BC/VC) shorthands; the matrix form keeps wrap.
+.macro SHAPEM dom2, dtype, rows, cols, c5, count=1
+    CFG_SHAPE \dom2, 0, \dtype, \rows, \cols, \count, \c5
+.endm
+
+.macro SHAPEV dom2, dtype, len, c5, count=1
+    CFG_SHAPE \dom2, 0, \dtype, \len, 1, \count, \c5
+.endm
+
 # cfg.setx: C[field] = x[xS]. MV = 0 matrix side, 1 vector side.
 .macro SETX sel2, mv, field, c5, xs
     CFG_REG \sel2, \mv, 0, \field, \xs, \c5
