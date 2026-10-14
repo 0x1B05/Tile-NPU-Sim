@@ -150,9 +150,9 @@ DecodeResult decode_er4(std::uint32_t word) {
 
 // E_MASK (R4): major4 = 0100, q = 00.
 // 31    28 27  26  25  24    22 21      17 16      12 11       7 6        2 1   0
-// [major4] [dom2] [FS] [funct3] [  arg5  ] [xBound5 ] [   S5   ] [   D5   ] [ q ]
+// [major4] [dom2] [FS] [funct3] [xBound5 ] [ fill5  ] [   S5   ] [   D5   ] [ q ]
 // dom2: 00 Tile, 01 Acc, 10 Vec8, 11 Vec32.
-// FS: 0 = fill5 code in arg5, 1 = Scalar xFill in arg5.
+// FS: 0 = fill5 code in [16:12], 1 = Scalar xFill in [16:12].
 // funct3: 000 tail, 001 tril, 010 triu; 011..111 reserved. tril/triu are matrix-only.
 // xBound5 names Scalar xBounds/xLen for tail, or xDelta for tril/triu.
 DecodeResult decode_emask(std::uint32_t word) {
@@ -160,7 +160,7 @@ DecodeResult decode_emask(std::uint32_t word) {
   const auto domain = sel3_domain(f.sel3);
   const bool fill_is_scalar = (f.sel3 & 1) != 0;
   const auto op = static_cast<MaskOp>(f.funct3);
-  if (!mask_legal(op, domain) || (!fill_is_scalar && f.arg > FILL5_MAX)) {
+  if (!mask_legal(op, domain) || (!fill_is_scalar && f.src2 > FILL5_MAX)) {
     return DecodeError::illegal;
   }
   const auto count = domain_register_count(domain);
@@ -168,8 +168,8 @@ DecodeResult decode_emask(std::uint32_t word) {
     return DecodeError::illegal;
   }
   const auto fill =
-      fill_is_scalar ? FillOperand{ScalarRegister{f.arg}} : FillOperand{Fill5Code{f.arg}};
-  return DecodedNpuInstr{MaskInstr{op, {domain, f.dest}, {domain, f.src1}, f.src2, fill}};
+      fill_is_scalar ? FillOperand{ScalarRegister{f.src2}} : FillOperand{Fill5Code{f.src2}};
+  return DecodedNpuInstr{MaskInstr{op, {domain, f.dest}, {domain, f.src1}, f.arg, fill}};
 }
 
 // CVT (R2): major4 = 0011, q = 10.
@@ -487,8 +487,8 @@ constexpr DecodeEntry NPU_TABLE[] = {
     // E_R4 (R4): sel3 = {dom2, 0}, arg5 is the fourth operand (mask/addend).
     {"0011 ??0 ??? ????? ????? ????? ????? 00", decode_er4},
     {"0011 ??? ??? ????? ????? ????? ????? 00", illegal},                               // reserved E_R4 encodings
-    // E_MASK (R4): sel3 = {dom2, FS}, arg5 = fill5 / xFill; one pattern, the
-    // handler rejects the reserved funct3/vector-tril/fill5 encodings.
+    // E_MASK (R4): sel3 = {dom2, FS}, [21:17] = xBound, [16:12] = fill5/xFill;
+    // one pattern, the handler rejects the reserved funct3/vector-tril/fill5 encodings.
     {"0100 ??? ??? ????? ????? ????? ????? 00", decode_emask},
     // All assigned elementwise majors decode above; the rest is reserved.
     {"???? ??? ???? ???? ????? ????? ????? 00", illegal},

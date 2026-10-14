@@ -89,9 +89,10 @@ template <std::size_t N> void check_errors(const std::array<ErrorCase, N> &cases
 TEST_CASE(emask_decode) {
   constexpr std::array cases{
       // Anchor word computed by hand from the encoding figure: the asm
-      // operand order is D, S, xBound, fill; arg5 carries the fill.
+      // operand order is D, S, xBound, fill; xBound sits in [21:17] and the
+      // fill in [16:12].
       Case{.name = "tmask.tail t0, t1, x2, +1",
-           .word = 0x40022080u,
+           .word = 0x40041080u,
            .op = MaskOp::tail,
            .domain = NpuDomain::tile,
            .dest = 0,
@@ -147,7 +148,7 @@ TEST_CASE(emask_decode_rejects_reserved) {
       // tril/triu are matrix-only.
       ErrorCase{"vmask.tril", make_emask(NpuDomain::vec32, 1, 0, 0, 0, 0), DecodeError::illegal},
       ErrorCase{"bmask.triu", make_emask(NpuDomain::vec8, 2, 0, 0, 0, 0), DecodeError::illegal},
-      // fill5 codes 9-31 are reserved (FS = 0 only; with FS = 1 arg5 names
+      // fill5 codes 9-31 are reserved (FS = 0 only; with FS = 1 [16:12] names
       // xFill and any 5-bit number is a valid Scalar register).
       ErrorCase{"fill5 9", make_emask(NpuDomain::tile, 0, 0, 0, 0, 9), DecodeError::illegal},
       ErrorCase{"fill5 31", make_emask(NpuDomain::acc, 0, 0, 0, 0, 31), DecodeError::illegal},
