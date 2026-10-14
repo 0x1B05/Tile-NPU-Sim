@@ -1,15 +1,13 @@
 #include "execute.h"
 
 #include "config_check.h"
-#include "tile_npu/matrix_view.h"
+#include "domain.h"
 #include "utils/unreachable.h"
 
-#include <array>
 #include <bit>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <utility>
 
 namespace tile_npu {
 namespace {
@@ -66,59 +64,27 @@ template <typename E> E apply_unary(EunOp op, DType dtype, E value) {
                                          : static_cast<std::uint32_t>(signed_value));
 }
 
-// Shared single-source loop: matrix domains run over the effective shape,
-// the vector domain over the effective length. An unsuccessful execution
-// leaves architectural state unchanged.
-template <typename Element, typename Config, std::size_t RegCount>
-ExecuteResult unary_matrix(const EunInstr &instr,
-                           std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
-                           const std::array<Config, RegCount> &configs) {
-  const auto &dst_config = configs[instr.dest.index];
-  const auto &src_config = configs[instr.src.index];
-  if (!valid_elementwise_config(dst_config) || !valid_elementwise_config(src_config) ||
-      !configs_match(dst_config, src_config) || !op_supports_dtype(instr.op, dst_config.dtype)) {
-    return config_error();
-  }
-
-  auto dst = matrix_view(regs[instr.dest.index]);
-  auto src = matrix_view(std::as_const(regs[instr.src.index]));
-  for (std::size_t row = 0; row < dst_config.rows; ++row) {
-    for (std::size_t col = 0; col < dst_config.cols; ++col) {
-      dst.at(row, col) = apply_unary(instr.op, dst_config.dtype, src.at(row, col));
-    }
-  }
-  return {.status = StepStatus::retired};
-}
-
-template <typename Element, typename Config, std::size_t RegCount>
-ExecuteResult unary_vector(const EunInstr &instr,
-                           std::array<std::array<Element, VECTOR_LANES>, RegCount> &regs,
-                           const std::array<Config, RegCount> &configs) {
-  const auto &dst_config = configs[instr.dest.index];
-  const auto &src_config = configs[instr.src.index];
-  if (!valid_elementwise_config(dst_config) || !valid_elementwise_config(src_config) ||
-      !configs_match(dst_config, src_config) || !op_supports_dtype(instr.op, dst_config.dtype)) {
-    return config_error();
-  }
-
-  auto &dst_reg = regs[instr.dest.index];
-  const auto &src_reg = regs[instr.src.index];
-  for (std::size_t lane = 0; lane < dst_config.len; ++lane) {
-    dst_reg[lane] = apply_unary(instr.op, dst_config.dtype, src_reg[lane]);
-  }
-  return {.status = StepStatus::retired};
-}
-
 } // namespace
 
+// Runs over the destination's effective region; an unsuccessful execution
+// leaves architectural state unchanged.
 ExecuteResult execute_eun(const EunInstr &instr, State &state) {
-  switch (instr.dest.domain) {
-  case NpuDomain::tile: return unary_matrix(instr, state.t, state.tc);
-  case NpuDomain::acc: return unary_matrix(instr, state.a, state.ac);
-  case NpuDomain::vec32: return unary_vector(instr, state.v, state.vc);
-  case NpuDomain::vec8: break; // E_UNARY has no vec8 encoding
-  }
-  unreachable("execute_eun on the vec8 domain");
+  return with_domain<NpuDomain::tile, NpuDomain::acc, NpuDomain::vec32>(
+      state, instr.dest.domain, [&](auto &regs, const auto &configs) {
+        const auto &dst_config = configs[instr.dest.index];
+        const auto &src_config = configs[instr.src.index];
+        if (!valid_elementwise_config(dst_config) || !valid_elementwise_config(src_config) ||
+            !configs_match(dst_config, src_config) ||
+            !op_supports_dtype(instr.op, dst_config.dtype)) {
+          return config_error();
+        }
+        auto &dst = regs[instr.dest.index];
+        const auto &src = regs[instr.src.index];
+        for_each_offset(dst_config, [&](std::size_t n) {
+          dst[n] = apply_unary(instr.op, dst_config.dtype, src[n]);
+        });
+        return ExecuteResult{.status = StepStatus::retired};
+      });
 }
 
 } // namespace tile_npu

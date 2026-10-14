@@ -46,6 +46,7 @@ xmake project -k compile_commands      # 为 clangd 生成 compile_commands.json
 | `src/execute/validate.h` | IR 的统一结构合法性检查 |
 | `src/execute/config_check.h` | dtype、shape、layout 等配置约束与配置匹配 |
 | `src/execute/execute_*.cpp` | 按指令族实现执行语义；`execute_cfg.cpp` 负责配置指令取值和执行结果转换 |
+| `src/execute/domain.h` | 数据域到寄存器堆/配置/描述符的绑定、域分派与有效区域遍历 |
 | `src/execute/ebin_op.h`、`operand.h`、`f32_util.h`、`rv64_util.h` | 执行域共享的元素运算、操作数读取和数值工具 |
 | `src/utils/` | 通用内部工具：小端转换、十六进制格式化、variant visitor 与 `unreachable` |
 | `src/main.cpp`、`src/monitor/` | CLI、镜像装载、`npu_exec` 步进循环和 sdb 命令 |

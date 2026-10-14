@@ -1,14 +1,14 @@
 #include "execute.h"
 
 #include "config_check.h"
-#include "tile_npu/matrix_view.h"
+#include "domain.h"
 #include "utils/unreachable.h"
 
 #include <bit>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <utility>
+#include <type_traits>
 
 namespace tile_npu {
 namespace {
@@ -24,8 +24,8 @@ template <typename E> constexpr DType mask_dtype_of() {
 // adds the fixed mask dtype on arg, fmadd requires f32 everywhere (arg is
 // the addend C and matches D fully). An unsuccessful execution leaves
 // architectural state unchanged.
-template <typename Element, typename Config, std::size_t RegCount>
-bool operands_valid(const Er4Instr &instr, const std::array<Config, RegCount> &configs) {
+template <typename Element, typename Configs>
+bool operands_valid(const Er4Instr &instr, const Configs &configs) {
   const auto &dst = configs[instr.dest.index];
   const auto &arg = configs[instr.arg.index];
   const auto &lhs = configs[instr.src1.index];
@@ -54,56 +54,26 @@ template <typename E> E apply_er4_op(Er4Op op, E arg, E lhs, E rhs) {
   unreachable("fmadd on an 8-bit domain");
 }
 
-template <typename Element, typename Config, std::size_t RegCount>
-ExecuteResult er4_matrix(const Er4Instr &instr,
-                         std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
-                         const std::array<Config, RegCount> &configs) {
-  if (!operands_valid<Element>(instr, configs)) {
-    return config_error();
-  }
-  const auto &dst_config = configs[instr.dest.index];
-  const auto view = [&](RegisterIndex index) { return matrix_view(std::as_const(regs[index])); };
-  auto dst = matrix_view(regs[instr.dest.index]);
-  const auto arg = view(instr.arg.index);
-  const auto lhs = view(instr.src1.index);
-  const auto rhs = view(instr.src2.index);
-  for (std::size_t row = 0; row < dst_config.rows; ++row) {
-    for (std::size_t col = 0; col < dst_config.cols; ++col) {
-      dst.at(row, col) =
-          apply_er4_op(instr.op, arg.at(row, col), lhs.at(row, col), rhs.at(row, col));
-    }
-  }
-  return {.status = StepStatus::retired};
-}
-
-template <typename Element, typename Config, std::size_t RegCount>
-ExecuteResult er4_vector(const Er4Instr &instr,
-                         std::array<std::array<Element, VECTOR_LANES>, RegCount> &regs,
-                         const std::array<Config, RegCount> &configs) {
-  if (!operands_valid<Element>(instr, configs)) {
-    return config_error();
-  }
-  const auto &dst_config = configs[instr.dest.index];
-  auto &dst_reg = regs[instr.dest.index];
-  const auto &arg_reg = regs[instr.arg.index];
-  const auto &lhs_reg = regs[instr.src1.index];
-  const auto &rhs_reg = regs[instr.src2.index];
-  for (std::size_t lane = 0; lane < dst_config.len; ++lane) {
-    dst_reg[lane] = apply_er4_op(instr.op, arg_reg[lane], lhs_reg[lane], rhs_reg[lane]);
-  }
-  return {.status = StepStatus::retired};
-}
-
 } // namespace
 
+// Runs over the destination's effective region; an unsuccessful execution
+// leaves architectural state unchanged.
 ExecuteResult execute_er4(const Er4Instr &instr, State &state) {
-  switch (instr.dest.domain) {
-  case NpuDomain::tile: return er4_matrix(instr, state.t, state.tc);
-  case NpuDomain::acc: return er4_matrix(instr, state.a, state.ac);
-  case NpuDomain::vec32: return er4_vector(instr, state.v, state.vc);
-  case NpuDomain::vec8: break; // E_R4 has no vec8 encoding
-  }
-  unreachable("execute_er4 on the vec8 domain");
+  return with_domain<NpuDomain::tile, NpuDomain::acc, NpuDomain::vec32>(
+      state, instr.dest.domain, [&](auto &regs, const auto &configs) {
+        using Element = typename std::remove_cvref_t<decltype(regs)>::value_type::value_type;
+        if (!operands_valid<Element>(instr, configs)) {
+          return config_error();
+        }
+        auto &dst = regs[instr.dest.index];
+        const auto &arg = regs[instr.arg.index];
+        const auto &lhs = regs[instr.src1.index];
+        const auto &rhs = regs[instr.src2.index];
+        for_each_offset(configs[instr.dest.index], [&](std::size_t n) {
+          dst[n] = apply_er4_op(instr.op, arg[n], lhs[n], rhs[n]);
+        });
+        return ExecuteResult{.status = StepStatus::retired};
+      });
 }
 
 } // namespace tile_npu

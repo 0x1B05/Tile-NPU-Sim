@@ -1,14 +1,11 @@
 #include "execute.h"
 
 #include "config_check.h"
+#include "domain.h"
 #include "tile_npu/matrix_view.h"
-#include "utils/unreachable.h"
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
-#include <span>
-#include <utility>
 
 namespace tile_npu {
 namespace {
@@ -29,64 +26,29 @@ Element fill_value(const InitInstr &instr, const State &state, DType dtype) {
   return static_cast<Element>(static_cast<std::uint64_t>(instr.imm));
 }
 
-// Matrix fill/fillx/copy over the destination's effective shape; physical
+// fill/fillx/copy over the destination's effective region; physical
 // positions outside it keep their values. A self copy is safe: each element
 // is read before it is written.
-template <typename Element, typename Config, std::size_t RegCount>
-ExecuteResult init_matrix(const InitInstr &instr, State &state,
-                          std::array<std::array<Element, MATRIX_ELEMENTS>, RegCount> &regs,
-                          const std::array<Config, RegCount> &configs) {
+template <typename Regs, typename Configs>
+ExecuteResult init_region(const InitInstr &instr, const State &state, Regs &regs,
+                          const Configs &configs) {
+  using Element = typename Regs::value_type::value_type;
   const auto &dst_config = configs[instr.reg.index];
   if (!valid_domain_config(dst_config)) return config_error();
-
-  auto dst = matrix_view(regs[instr.reg.index]);
-  if (instr.op == InitOp::copy) {
-    const auto &src_config = configs[instr.src];
-    if (!valid_domain_config(src_config) || !configs_match(dst_config, src_config)) {
-      return config_error();
-    }
-    auto src = matrix_view(std::as_const(regs[instr.src]));
-    for (std::size_t row = 0; row < dst_config.rows; ++row) {
-      for (std::size_t col = 0; col < dst_config.cols; ++col) {
-        dst.at(row, col) = src.at(row, col);
-      }
-    }
-    return {.status = StepStatus::retired};
-  }
-
-  const auto value = fill_value<Element>(instr, state, dst_config.dtype);
-  for (std::size_t row = 0; row < dst_config.rows; ++row) {
-    for (std::size_t col = 0; col < dst_config.cols; ++col) {
-      dst.at(row, col) = value;
-    }
-  }
-  return {.status = StepStatus::retired};
-}
-
-template <typename Element, typename Config, std::size_t RegCount>
-ExecuteResult init_vector(const InitInstr &instr, State &state,
-                          std::array<std::array<Element, VECTOR_LANES>, RegCount> &regs,
-                          const std::array<Config, RegCount> &configs) {
-  const auto &dst_config = configs[instr.reg.index];
-  if (!valid_domain_config(dst_config)) return config_error();
-  auto &dst_reg = regs[instr.reg.index];
+  auto &dst = regs[instr.reg.index];
 
   if (instr.op == InitOp::copy) {
     const auto &src_config = configs[instr.src];
     if (!valid_domain_config(src_config) || !configs_match(dst_config, src_config)) {
       return config_error();
     }
-    const auto &src_reg = regs[instr.src];
-    for (std::size_t lane = 0; lane < dst_config.len; ++lane) {
-      dst_reg[lane] = src_reg[lane];
-    }
+    const auto &src = regs[instr.src];
+    for_each_offset(dst_config, [&](std::size_t n) { dst[n] = src[n]; });
     return {.status = StepStatus::retired};
   }
 
   const auto value = fill_value<Element>(instr, state, dst_config.dtype);
-  for (std::size_t lane = 0; lane < dst_config.len; ++lane) {
-    dst_reg[lane] = value;
-  }
+  for_each_offset(dst_config, [&](std::size_t n) { dst[n] = value; });
   return {.status = StepStatus::retired};
 }
 
@@ -126,13 +88,9 @@ ExecuteResult execute_init(const InitInstr &instr, State &state) {
   if (instr.op == InitOp::transpose) {
     return transpose_tile(instr, state);
   }
-  switch (instr.reg.domain) {
-  case NpuDomain::tile: return init_matrix(instr, state, state.t, state.tc);
-  case NpuDomain::acc: return init_matrix(instr, state, state.a, state.ac);
-  case NpuDomain::vec8: return init_vector(instr, state, state.b, state.bc);
-  case NpuDomain::vec32: return init_vector(instr, state, state.v, state.vc);
-  }
-  unreachable("execute_init with an unknown domain");
+  return with_domain<NpuDomain::tile, NpuDomain::acc, NpuDomain::vec8, NpuDomain::vec32>(
+      state, instr.reg.domain,
+      [&](auto &regs, const auto &configs) { return init_region(instr, state, regs, configs); });
 }
 
 } // namespace tile_npu

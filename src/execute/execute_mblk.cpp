@@ -1,6 +1,7 @@
 #include "execute.h"
 
 #include "config_check.h"
+#include "domain.h"
 #include "operand.h"
 #include "tile_npu/descriptor_view.h"
 #include "tile_npu/matrix_view.h"
@@ -14,7 +15,6 @@
 #include <cstdint>
 #include <optional>
 #include <span>
-#include <tuple>
 #include <utility>
 
 namespace tile_npu {
@@ -124,23 +124,9 @@ std::int32_t gather_index(const Vec32 &reg, std::size_t lane) {
   return std::bit_cast<std::int32_t>(reg[lane]);
 }
 
-// Bind the data, read-only compute config, and memory descriptor of one register.
-template <NpuDomain Domain> auto register_state(State &state, RegisterIndex index) {
-  if constexpr (Domain == NpuDomain::tile) {
-    return std::tie(state.t[index], std::as_const(state.tc[index]), state.tm[index]);
-  } else if constexpr (Domain == NpuDomain::acc) {
-    return std::tie(state.a[index], std::as_const(state.ac[index]), state.am[index]);
-  } else if constexpr (Domain == NpuDomain::vec8) {
-    return std::tie(state.b[index], std::as_const(state.bc[index]), state.bm[index]);
-  } else if constexpr (Domain == NpuDomain::vec32) {
-    return std::tie(state.v[index], std::as_const(state.vc[index]), state.vm[index]);
-  }
-  unreachable("unknown NpuDomain value");
-}
-
 template <NpuDomain Domain> ExecuteResult block_access(const MblkInstr &instr, ExecContext &ctx) {
   static_assert(Domain == NpuDomain::tile || Domain == NpuDomain::acc);
-  auto [reg, config, descriptor] = register_state<Domain>(ctx.state, accessed_reg(instr).index);
+  auto [reg, config, descriptor] = bind_register<Domain>(ctx.state, accessed_reg(instr).index);
   if (!valid_domain_config(config)) {
     return config_error();
   }
@@ -178,7 +164,7 @@ template <NpuDomain Domain> ExecuteResult block_access(const MblkInstr &instr, E
 
 template <NpuDomain Domain> ExecuteResult row_access(const MblkInstr &instr, ExecContext &ctx) {
   static_assert(Domain == NpuDomain::tile || Domain == NpuDomain::acc);
-  auto [reg, config, descriptor] = register_state<Domain>(ctx.state, accessed_reg(instr).index);
+  auto [reg, config, descriptor] = bind_register<Domain>(ctx.state, accessed_reg(instr).index);
   if (!valid_domain_config(config)) {
     return config_error();
   }
@@ -320,7 +306,7 @@ ExecuteResult strided_vector_access(const MblkInstr &instr, ExecContext &ctx, Ve
 
 template <NpuDomain Domain> ExecuteResult vector_access(const MblkInstr &instr, ExecContext &ctx) {
   static_assert(Domain == NpuDomain::vec8 || Domain == NpuDomain::vec32);
-  auto [reg, config, descriptor] = register_state<Domain>(ctx.state, accessed_reg(instr).index);
+  auto [reg, config, descriptor] = bind_register<Domain>(ctx.state, accessed_reg(instr).index);
   if (!valid_domain_config(config)) {
     return config_error();
   }
