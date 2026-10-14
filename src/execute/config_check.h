@@ -44,6 +44,11 @@ template <DomainConfig Config> constexpr bool valid_domain_config(const Config &
   }
 }
 
+// A valid config holding the dtype an instruction fixes for that operand.
+template <DomainConfig Config> constexpr bool valid_config_of(const Config &config, DType dtype) {
+  return config.dtype == dtype && valid_domain_config(config);
+}
+
 // Elementwise executors additionally require a defined arith_mode, which only
 // the Tile config carries.
 template <DomainConfig Config> constexpr bool valid_elementwise_config(const Config &config) {

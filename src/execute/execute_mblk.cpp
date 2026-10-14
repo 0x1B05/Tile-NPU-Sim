@@ -116,9 +116,7 @@ auto vector_accessor() {
 }
 
 // The gather index vector must use a valid Vec32 configuration with i32 elements.
-bool valid_gather_index(const Vec32Config &config) {
-  return config.dtype == DType::i32 && valid_domain_config(config);
-}
+bool valid_gather_index(const Vec32Config &config) { return valid_config_of(config, DType::i32); }
 
 std::int32_t gather_index(const Vec32 &reg, std::size_t lane) {
   return std::bit_cast<std::int32_t>(reg[lane]);

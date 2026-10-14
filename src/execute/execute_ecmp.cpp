@@ -62,8 +62,8 @@ constexpr std::uint32_t mask_word(bool holds) { return holds ? 0xffffffffu : 0u;
 template <typename Configs> bool operands_valid(const CmpInstr &instr, const Configs &configs) {
   const auto &dst = configs[instr.dest.index];
   const auto &lhs = configs[instr.src1.index];
-  if (!valid_domain_config(dst) || dst.dtype != DType::u32 || !shapes_match(dst, lhs) ||
-      !valid_domain_config(lhs) || !op_supports_dtype(instr.op, lhs.dtype)) {
+  if (!valid_config_of(dst, DType::u32) || !shapes_match(dst, lhs) || !valid_domain_config(lhs) ||
+      !op_supports_dtype(instr.op, lhs.dtype)) {
     return false;
   }
   return std::visit(Overloaded{[&](NpuRegister rhs) {

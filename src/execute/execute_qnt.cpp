@@ -70,11 +70,9 @@ ExecuteResult tquant(const QntInstr &instr, State &state) {
   const auto &dst_config = state.tc[instr.dest.index];
   const auto &src_config = state.ac[instr.src.index];
   const auto &scale_config = state.vc[instr.scale];
-  if (!valid_domain_config(dst_config) || dst_config.dtype != DType::i8 ||
-      !valid_domain_config(src_config) || src_config.dtype != DType::f32 ||
-      !valid_domain_config(scale_config) || scale_config.dtype != DType::f32 ||
-      dst_config.rows != src_config.rows || dst_config.cols != src_config.cols ||
-      scale_config.len != src_config.rows) {
+  if (!valid_config_of(dst_config, DType::i8) || !valid_config_of(src_config, DType::f32) ||
+      !valid_config_of(scale_config, DType::f32) || dst_config.rows != src_config.rows ||
+      dst_config.cols != src_config.cols || scale_config.len != src_config.rows) {
     return config_error();
   }
   auto dst = matrix_view(state.t[instr.dest.index]);
@@ -101,11 +99,9 @@ ExecuteResult tdequant(const QntInstr &instr, State &state) {
   const auto &dst_config = state.ac[instr.dest.index];
   const auto &src_config = state.tc[instr.src.index];
   const auto &scale_config = state.vc[instr.scale];
-  if (!valid_domain_config(dst_config) || dst_config.dtype != DType::f32 ||
-      !valid_domain_config(src_config) || src_config.dtype != DType::i8 ||
-      !valid_domain_config(scale_config) || scale_config.dtype != DType::f32 ||
-      dst_config.rows != src_config.rows || dst_config.cols != src_config.cols ||
-      scale_config.len != src_config.rows) {
+  if (!valid_config_of(dst_config, DType::f32) || !valid_config_of(src_config, DType::i8) ||
+      !valid_config_of(scale_config, DType::f32) || dst_config.rows != src_config.rows ||
+      dst_config.cols != src_config.cols || scale_config.len != src_config.rows) {
     return config_error();
   }
   auto dst = matrix_view(state.a[instr.dest.index]);
@@ -127,10 +123,8 @@ ExecuteResult vquant(const QntInstr &instr, State &state) {
   const auto &dst_config = state.bc[instr.dest.index];
   const auto &src_config = state.vc[instr.src.index];
   const auto &scale_config = state.vc[instr.scale];
-  if (!valid_domain_config(dst_config) || dst_config.dtype != DType::i8 ||
-      !valid_domain_config(src_config) || src_config.dtype != DType::f32 ||
-      !valid_domain_config(scale_config) || scale_config.dtype != DType::f32 ||
-      dst_config.len != src_config.len) {
+  if (!valid_config_of(dst_config, DType::i8) || !valid_config_of(src_config, DType::f32) ||
+      !valid_config_of(scale_config, DType::f32) || dst_config.len != src_config.len) {
     return config_error();
   }
   const auto lane = scale_lane(instr, state, scale_config.len);
@@ -153,10 +147,8 @@ ExecuteResult bdequant(const QntInstr &instr, State &state) {
   const auto &dst_config = state.vc[instr.dest.index];
   const auto &src_config = state.bc[instr.src.index];
   const auto &scale_config = state.vc[instr.scale];
-  if (!valid_domain_config(dst_config) || dst_config.dtype != DType::f32 ||
-      !valid_domain_config(src_config) || src_config.dtype != DType::i8 ||
-      !valid_domain_config(scale_config) || scale_config.dtype != DType::f32 ||
-      dst_config.len != src_config.len) {
+  if (!valid_config_of(dst_config, DType::f32) || !valid_config_of(src_config, DType::i8) ||
+      !valid_config_of(scale_config, DType::f32) || dst_config.len != src_config.len) {
     return config_error();
   }
   const auto lane = scale_lane(instr, state, scale_config.len);

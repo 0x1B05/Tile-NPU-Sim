@@ -31,9 +31,8 @@ ExecuteResult mma(const MmaInstr &instr, State &state) {
   const auto &dst_config = state.ac[instr.dest.index];
   const auto &lhs_config = state.tc[instr.src_a.index];
   const auto &rhs_config = state.tc[instr.src_b.index];
-  if (!valid_domain_config(dst_config) || dst_config.dtype != DType::i32 ||
-      !valid_domain_config(lhs_config) || lhs_config.dtype != DType::i8 ||
-      !valid_domain_config(rhs_config) || rhs_config.dtype != DType::i8) {
+  if (!valid_config_of(dst_config, DType::i32) || !valid_config_of(lhs_config, DType::i8) ||
+      !valid_config_of(rhs_config, DType::i8)) {
     return config_error();
   }
   const bool nt = is_nt(instr.op);
@@ -67,9 +66,8 @@ ExecuteResult bdot(const MmaInstr &instr, State &state) {
   const auto &dst_config = state.vc[instr.dest.index];
   const auto &lhs_config = state.bc[instr.src_a.index];
   const auto &rhs_config = state.tc[instr.src_b.index];
-  if (!valid_domain_config(dst_config) || dst_config.dtype != DType::i32 ||
-      !valid_domain_config(lhs_config) || lhs_config.dtype != DType::i8 ||
-      !valid_domain_config(rhs_config) || rhs_config.dtype != DType::i8) {
+  if (!valid_config_of(dst_config, DType::i32) || !valid_config_of(lhs_config, DType::i8) ||
+      !valid_config_of(rhs_config, DType::i8)) {
     return config_error();
   }
   const bool nt = is_nt(instr.op);

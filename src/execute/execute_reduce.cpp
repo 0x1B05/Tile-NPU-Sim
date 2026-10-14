@@ -75,8 +75,7 @@ ExecuteResult areduce(const ReduceInstr &instr, State &state) {
   const auto &src_config = state.ac[instr.src.index];
   const auto &dst_config = state.vc[dst.index];
   const auto dst_dtype = instr.op == ReduceOp::argmax ? DType::i32 : DType::f32;
-  if (!valid_domain_config(src_config) || src_config.dtype != DType::f32 ||
-      !valid_domain_config(dst_config) || dst_config.dtype != dst_dtype ||
+  if (!valid_config_of(src_config, DType::f32) || !valid_config_of(dst_config, dst_dtype) ||
       dst_config.len != src_config.rows) {
     return config_error();
   }
@@ -105,7 +104,7 @@ ExecuteResult areduce(const ReduceInstr &instr, State &state) {
 // zeroed); argmax writes xIndex (i32, sign-extended) and xValue (f32 bits).
 ExecuteResult vreduce(const ReduceInstr &instr, State &state) {
   const auto &src_config = state.vc[instr.src.index];
-  if (!valid_domain_config(src_config) || src_config.dtype != DType::f32) {
+  if (!valid_config_of(src_config, DType::f32)) {
     return config_error();
   }
   const auto &src_reg = state.v[instr.src.index];
