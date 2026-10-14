@@ -197,8 +197,7 @@ nq_matvec_q:
     li      t5, \R
     bgeu    t5, t4, .Lmv_inner_done
     TLOAD   1
-    BDOT_NT 5, \R, 1
-    VADD    4, 4, 5
+    BDOT_NT_ACC 4, \R, 1
     .endr
 .Lmv_inner_done:
     VSTORE  4
