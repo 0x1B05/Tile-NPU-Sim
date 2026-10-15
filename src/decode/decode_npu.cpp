@@ -433,16 +433,18 @@ DecodeResult decode_cfg_seti(std::uint32_t word) {
 
 // CFG_REG (R4): major4 = 0111, q = 10.
 // 31    28 27  26  25  24    22 21      17 16       12 11       7 6        2 1   0
-// [major4] [sel2] [MV] [funct3] [ field5 ] [reserved5] [   S5   ] [   D5   ] [ q ]
+// [major4] [sel2] [MV] [funct3] [ field5 ] [   N5    ] [   S5   ] [   D5   ] [ q ]
 // sel2: 00 TC/BC, 01 AC/VC, 10 TM/BM, 11 AM/VM; MV: 0 = matrix, 1 = vector.
 // funct3: 000 setx (xS -> C), 001 copy (CS -> CD), 010 get (C -> xD).
+// N5 = count - 1 for the writes (setx/copy target D5..D5 + N5); get pins it
+// to zero.
 template <CfgOp Op> DecodeResult decode_cfg_reg(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto reg_type = cfg_reg_type(f.sel3 >> 1, (f.sel3 & 1) != 0);
   const auto count = config_register_count(reg_type);
   // Scalar operands (xS in setx, xD in get) always name a valid register;
   // config operands are bounded per register type.
-  if (Op != CfgOp::get && f.dest >= count) {
+  if (Op != CfgOp::get && f.dest + f.src2 >= count) {
     return DecodeError::illegal;
   }
   if (Op != CfgOp::setx && f.src1 >= count) {
@@ -454,7 +456,12 @@ template <CfgOp Op> DecodeResult decode_cfg_reg(std::uint32_t word) {
       return DecodeError::illegal;
     }
   }
-  return DecodedNpuInstr{CfgInstr{Op, reg_type, f.dest, f.src1, field, 0}};
+  return DecodedNpuInstr{CfgInstr{.op = Op,
+                                  .reg_type = reg_type,
+                                  .dest = f.dest,
+                                  .src = f.src1,
+                                  .field = field,
+                                  .count = static_cast<std::uint8_t>(f.src2 + 1)}};
 }
 
 // cfg.setw / cfg.getw (CFG_REG R4, funct3 = 011 / 100): whole-word access
@@ -579,8 +586,8 @@ constexpr DecodeEntry NPU_TABLE[] = {
     // CFG_REG (R4): funct3 000/001/010 = setx/copy/get; field5 high bits and
     // reserved5 must be 0; copy requires field5 = 0. The handlers check
     // setx/get field codes against the selected config register type.
-    {"0111 ??? 000 00??? 00000 ????? ????? 10", decode_cfg_reg<CfgOp::setx>},
-    {"0111 ??? 001 00000 00000 ????? ????? 10", decode_cfg_reg<CfgOp::copy>},
+    {"0111 ??? 000 00??? ????? ????? ????? 10", decode_cfg_reg<CfgOp::setx>},
+    {"0111 ??? 001 00000 ????? ????? ????? 10", decode_cfg_reg<CfgOp::copy>},
     {"0111 ??? 010 00??? 00000 ????? ????? 10", decode_cfg_reg<CfgOp::get>},
     // setw/getw (funct3 011/100): compute configs only (sel2 = 0x); setw
     // carries count - 1 in [16:12].

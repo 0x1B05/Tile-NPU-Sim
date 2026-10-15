@@ -362,8 +362,8 @@ enum class CfgOp : std::uint8_t { seti, setx, copy, get, setw, getw };
 
 // Operand reading per op:
 //   seti: dest = C,  field = field3 code, imm = sign-extended imm16
-//   setx: dest = C,  field = field3 code, src = xS
-//   copy: dest = CD, src = CS
+//   setx: dest = first C, field = field3 code, src = xS, count = configs
+//   copy: dest = first CD, src = CS, count = configs (broadcast)
 //   get:  dest = xD, src = C, field = field3 code
 //   setw: dest = first C, src = xS, count = number of configs
 //   getw: dest = xD, src = C

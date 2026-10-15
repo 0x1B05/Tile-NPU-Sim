@@ -166,7 +166,10 @@ inline bool valid_structure(const CfgInstr &instr) {
   }
   const bool word_op = instr.op == CfgOp::setw || instr.op == CfgOp::getw;
   if (word_op && !is_compute_config(instr.reg_type)) return false;
-  if (instr.op != CfgOp::setw && instr.count != 1) return false;
+  // Only the writes setx/copy/setw carry a register count (N5).
+  const bool counted =
+      instr.op == CfgOp::setx || instr.op == CfgOp::copy || instr.op == CfgOp::setw;
+  if (!counted && instr.count != 1) return false;
   if (instr.op == CfgOp::copy || word_op) {
     if (instr.field != 0) return false;
   } else if (!std::holds_alternative<ConfigField>(
@@ -174,15 +177,14 @@ inline bool valid_structure(const CfgInstr &instr) {
     return false;
   }
   const auto count = config_register_count(instr.reg_type);
+  const bool span_fits = instr.count >= 1 && std::size_t{instr.dest} + instr.count <= count;
   switch (instr.op) {
   case CfgOp::seti: return instr.dest < count;
-  case CfgOp::setx: return instr.dest < count && in_range(ScalarRegister{instr.src});
-  case CfgOp::copy: return instr.dest < count && instr.src < count;
+  case CfgOp::setx:
+  case CfgOp::setw: return span_fits && in_range(ScalarRegister{instr.src});
+  case CfgOp::copy: return span_fits && instr.src < count;
   case CfgOp::get:
   case CfgOp::getw: return in_range(ScalarRegister{instr.dest}) && instr.src < count;
-  case CfgOp::setw:
-    return instr.count >= 1 && std::size_t{instr.dest} + instr.count <= count &&
-           in_range(ScalarRegister{instr.src});
   }
   return false;
 }

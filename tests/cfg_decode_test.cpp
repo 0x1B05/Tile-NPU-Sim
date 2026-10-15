@@ -40,6 +40,7 @@ struct Case {
   std::uint8_t src;
   std::uint8_t field;
   std::int32_t imm;
+  std::uint8_t count = 1;
 };
 
 template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
@@ -56,6 +57,7 @@ template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
     check_eq(decoded->src, test.src, what + ": src");
     check_eq(decoded->field, test.field, what + ": field");
     check_eq(decoded->imm, test.imm, what + ": imm");
+    check_eq(decoded->count, test.count, what + ": count");
   }
 }
 
@@ -112,6 +114,11 @@ TEST_CASE(cfg_decode_reg) {
            1, 0},
       Case{"cfg.get x0, am11, base_addr", cfg_reg(3, 0, 2, 0, 11, 0), CfgOp::get, ConfigRegType::am,
            0, 11, 0, 0},
+      // N5 = count - 1 for the writes.
+      Case{"cfg.setx vm0, flags, x6, 3", cfg_reg(3, 1, 0, 2, 6, 0) | (2u << 12), CfgOp::setx,
+           ConfigRegType::vm, 0, 6, 2, 0, 3},
+      Case{"cfg.copy tm1, tm0, 15", cfg_reg(2, 0, 1, 0, 0, 1) | (14u << 12), CfgOp::copy,
+           ConfigRegType::tm, 1, 0, 0, 0, 15},
   };
   check_cases(cases);
 }
@@ -166,7 +173,11 @@ TEST_CASE(cfg_decode_rejects_reserved) {
       ErrorCase{"get field code 111 reserved", cfg_reg(0, 0, 2, 7, 0, 5), DecodeError::illegal},
       ErrorCase{"setx field5 high bits set", cfg_reg(0, 0, 0, 8, 4, 0), DecodeError::illegal},
       ErrorCase{"copy field5 nonzero", cfg_reg(0, 0, 1, 1, 3, 7), DecodeError::illegal},
-      ErrorCase{"reg reserved5 nonzero", cfg_reg(0, 0, 0, 1, 4, 0) | (1u << 12),
+      // N5 is a register count for setx/copy/setw and must be 0 for get.
+      ErrorCase{"get N5 nonzero", cfg_reg(0, 0, 2, 1, 0, 5) | (1u << 12), DecodeError::illegal},
+      ErrorCase{"setx tc15 + 2", cfg_reg(0, 0, 0, 1, 4, 15) | (1u << 12), DecodeError::illegal},
+      ErrorCase{"copy vc31 + 2", cfg_reg(1, 1, 1, 0, 0, 31) | (1u << 12), DecodeError::illegal},
+      ErrorCase{"copy am0 + 12", cfg_reg(3, 0, 1, 0, 0, 0) | (11u << 12) | (1u << 2),
                 DecodeError::illegal},
       ErrorCase{"funct3 = 101 reserved", cfg_reg(0, 0, 5, 0, 0, 0), DecodeError::illegal},
       ErrorCase{"funct3 = 111 reserved", cfg_reg(0, 0, 7, 0, 0, 0), DecodeError::illegal},

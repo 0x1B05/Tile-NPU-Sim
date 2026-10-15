@@ -293,3 +293,49 @@ TEST_CASE(cfg_getw_round_trips_setw) {
   check_eq(sim.state().bc[10].len, std::uint8_t{5}, "bc10 copies bc9 len");
   check_eq(sim.state().bc[10].dtype, DType::u8, "bc10 copies bc9 dtype");
 }
+
+TEST_CASE(cfg_setx_writes_config_span) {
+  Ram memory(CODE_BASE, 4);
+  Simulator sim(memory);
+  // cfg.setx vm1, stride_bytes, x5, 3
+  load_one(sim, memory, cfg_reg(3, 1, 0, FIELD_ROW_STRIDE, 5, 1) | (2u << 12));
+  sim.state().scalar.write_x(5, static_cast<std::uint64_t>(-8));
+  check_eq(sim.step().status, StepStatus::retired, "cfg.setx span retires");
+  for (int i = 1; i <= 3; ++i) {
+    check_eq(sim.state().bm[i].stride_bytes, std::int32_t{0}, "bm untouched");
+  }
+  check_eq(sim.state().vm[0].stride_bytes, std::int32_t{0}, "vm0 untouched");
+  check_eq(sim.state().vm[1].stride_bytes, std::int32_t{-8}, "vm1 stride");
+  check_eq(sim.state().vm[3].stride_bytes, std::int32_t{-8}, "vm3 stride");
+  check_eq(sim.state().vm[4].stride_bytes, std::int32_t{0}, "vm4 untouched");
+}
+
+TEST_CASE(cfg_setx_span_rejects_invalid_value) {
+  Ram memory(CODE_BASE, 4);
+  Simulator sim(memory);
+  // cfg.setx tc0, rows, x5, 4 with rows = 0: CFG_ERROR, nothing written.
+  load_one(sim, memory, cfg_reg(0, 0, 0, FIELD_ROWS, 5, 0) | (3u << 12));
+  for (int i = 0; i < 4; ++i)
+    sim.state().tc[i].rows = 9;
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "rows = 0 is CFG_ERROR");
+  for (int i = 0; i < 4; ++i) {
+    check_eq(sim.state().tc[i].rows, std::uint8_t{9}, "span unchanged");
+  }
+}
+
+TEST_CASE(cfg_copy_broadcasts_source) {
+  Ram memory(CODE_BASE, 4);
+  Simulator sim(memory);
+  // cfg.copy tm0, tm1, 3: the source tm1 lies inside the destination span
+  // tm0..tm2 and every destination gets its original value.
+  load_one(sim, memory, cfg_reg(2, 0, 1, 0, 1, 0) | (2u << 12));
+  sim.state().tm[1].base_addr = 0x4000;
+  sim.state().tm[1].row_stride_bytes = 64;
+  sim.state().tm[3].base_addr = 0x9000;
+  check_eq(sim.step().status, StepStatus::retired, "cfg.copy span retires");
+  for (int i = 0; i <= 2; ++i) {
+    check_eq(hex(sim.state().tm[i].base_addr), hex(0x4000u), "broadcast base_addr");
+    check_eq(sim.state().tm[i].row_stride_bytes, std::int32_t{64}, "broadcast row stride");
+  }
+  check_eq(hex(sim.state().tm[3].base_addr), hex(0x9000u), "tm3 untouched");
+}

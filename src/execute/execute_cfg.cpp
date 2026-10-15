@@ -3,20 +3,35 @@
 #include "config.h"
 #include "utils/unreachable.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <variant>
 
 namespace tile_npu {
 namespace {
 
-// An invalid field value (the ISA's CFG_ERROR) surfaces as invalid_configuration.
+// Writes one field value into instr.count consecutive configs. Every target
+// accepts the same values, so the first write decides: an invalid value (the
+// ISA's CFG_ERROR) surfaces as invalid_configuration with nothing written.
 ExecuteResult cfg_write(const CfgInstr &instr, State &state, std::uint64_t value) {
   const auto field = std::get<ConfigField>(config_field_from_code(instr.reg_type, instr.field));
-  switch (write_config_field(state, instr.reg_type, instr.dest, field, value)) {
-  case ConfigAccessStatus::success: return {.status = StepStatus::retired};
-  case ConfigAccessStatus::invalid_value: return config_error();
-  default: unreachable("validated config write has an invalid register or field");
+  for (std::uint8_t k = 0; k < instr.count; ++k) {
+    switch (write_config_field(state, instr.reg_type, instr.dest + k, field, value)) {
+    case ConfigAccessStatus::success: break;
+    case ConfigAccessStatus::invalid_value:
+      if (k == 0) return config_error();
+      unreachable("a field value accepted once is accepted for every register");
+    default: unreachable("validated config write has an invalid register or field");
+    }
   }
+  return {.status = StepStatus::retired};
+}
+
+// cfg.copy broadcasts the source, read once before any write, so a source
+// inside the destination span still copies its original value.
+template <typename Configs> void broadcast(Configs &configs, const CfgInstr &instr) {
+  const auto source = configs[instr.src];
+  std::fill_n(configs.begin() + instr.dest, instr.count, source);
 }
 
 } // namespace
@@ -34,14 +49,14 @@ ExecuteResult execute(const CfgInstr &instr, ExecContext &ctx) {
   }
   case CfgOp::copy: {
     switch (instr.reg_type) {
-    case ConfigRegType::tc: state.tc[instr.dest] = state.tc[instr.src]; break;
-    case ConfigRegType::ac: state.ac[instr.dest] = state.ac[instr.src]; break;
-    case ConfigRegType::bc: state.bc[instr.dest] = state.bc[instr.src]; break;
-    case ConfigRegType::vc: state.vc[instr.dest] = state.vc[instr.src]; break;
-    case ConfigRegType::tm: state.tm[instr.dest] = state.tm[instr.src]; break;
-    case ConfigRegType::am: state.am[instr.dest] = state.am[instr.src]; break;
-    case ConfigRegType::bm: state.bm[instr.dest] = state.bm[instr.src]; break;
-    case ConfigRegType::vm: state.vm[instr.dest] = state.vm[instr.src]; break;
+    case ConfigRegType::tc: broadcast(state.tc, instr); break;
+    case ConfigRegType::ac: broadcast(state.ac, instr); break;
+    case ConfigRegType::bc: broadcast(state.bc, instr); break;
+    case ConfigRegType::vc: broadcast(state.vc, instr); break;
+    case ConfigRegType::tm: broadcast(state.tm, instr); break;
+    case ConfigRegType::am: broadcast(state.am, instr); break;
+    case ConfigRegType::bm: broadcast(state.bm, instr); break;
+    case ConfigRegType::vm: broadcast(state.vm, instr); break;
     }
     return {.status = StepStatus::retired};
   }

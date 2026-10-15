@@ -448,7 +448,11 @@ nq_rope:
     SETX    SEL_VC, 1, CF_LEN, (0 + \R), X_T6
     .endr
     # stream descriptors (stride 4, inc): cos vm0/vm1, sin vm2/vm3,
-    # x1 vm4/vm5, x2 vm6/vm7; x2 starts half elements into x (hd*2 bytes)
+    # x1 vm4/vm5, x2 vm6/vm7; x2 starts half elements into x (hd*2 bytes).
+    # Broadcast stride/inc first: cfg.copy copies every field, base included.
+    SETIV   SEL_VM, CF_STRIDE, 4, 0
+    SETIV   SEL_VM, CF_VFLAGS, 1, 0
+    CFGCOPY SEL_VM, 1, 1, 0, 7          # vm1..vm7 = vm0 stride/inc
     SETX    SEL_VM, 1, CF_BASE, 0, X_A1
     addi    t0, a1, 128
     SETX    SEL_VM, 1, CF_BASE, 1, X_T0
@@ -463,10 +467,6 @@ nq_rope:
     SETX    SEL_VM, 1, CF_BASE, 6, X_T0
     addi    t0, t0, 128
     SETX    SEL_VM, 1, CF_BASE, 7, X_T0
-    .irp R,0,1,2,3,4,5,6,7
-    SETIV   SEL_VM, CF_STRIDE, 4, \R
-    SETIV   SEL_VM, CF_VFLAGS, 1, \R
-    .endr
     # store descriptors vm12..vm15: base = x + c*128, stride 4, no inc
     mv      t0, a0
     .irp R,0,1,2,3
@@ -706,15 +706,12 @@ nq_pv:
 nq_silu_mul:
     LI_CWV  t6, DT_F32, 32
     SETW    SEL_VC, 1, 0, X_T6, 3
-    SETX    SEL_VM, 1, CF_BASE, 0, X_A0
     SETIV   SEL_VM, CF_STRIDE, 4, 0
     SETIV   SEL_VM, CF_VFLAGS, 1, 0
+    CFGCOPY SEL_VM, 1, 1, 0, 2          # vm1, vm2 = vm0 stride/inc
+    SETX    SEL_VM, 1, CF_BASE, 0, X_A0
     SETX    SEL_VM, 1, CF_BASE, 1, X_A1
-    SETIV   SEL_VM, CF_STRIDE, 4, 1
-    SETIV   SEL_VM, CF_VFLAGS, 1, 1
     SETX    SEL_VM, 1, CF_BASE, 2, X_A2
-    SETIV   SEL_VM, CF_STRIDE, 4, 2
-    SETIV   SEL_VM, CF_VFLAGS, 1, 2
     srli    t6, a3, 5
 .Lsl_loop:
     VLOAD   0
@@ -734,15 +731,12 @@ nq_silu_mul:
 nq_add:
     LI_CWV  t6, DT_F32, 32
     SETW    SEL_VC, 1, 0, X_T6, 3
-    SETX    SEL_VM, 1, CF_BASE, 0, X_A0
     SETIV   SEL_VM, CF_STRIDE, 4, 0
     SETIV   SEL_VM, CF_VFLAGS, 1, 0
+    CFGCOPY SEL_VM, 1, 1, 0, 2          # vm1, vm2 = vm0 stride/inc
+    SETX    SEL_VM, 1, CF_BASE, 0, X_A0
     SETX    SEL_VM, 1, CF_BASE, 1, X_A1
-    SETIV   SEL_VM, CF_STRIDE, 4, 1
-    SETIV   SEL_VM, CF_VFLAGS, 1, 1
     SETX    SEL_VM, 1, CF_BASE, 2, X_A0
-    SETIV   SEL_VM, CF_STRIDE, 4, 2
-    SETIV   SEL_VM, CF_VFLAGS, 1, 2
     srli    t6, a2, 5
 .Lad_loop:
     VLOAD   0

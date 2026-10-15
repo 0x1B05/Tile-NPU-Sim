@@ -172,8 +172,9 @@
 #   [21:17] field5  [16:12] reserved(0)  [11:7] S5  [6:2] D5  [1:0] q = 10
 # funct3: 0 = setx (S5 = xS, D5 = C), 1 = copy (S5 = CS, D5 = CD),
 #         2 = get (S5 = C, D5 = xD)
-.macro CFG_REG sel2, mv, funct3, field5, s5, d5
-    .word ((7 << 28) | (\sel2 << 26) | (\mv << 25) | (\funct3 << 22) | (\field5 << 17) | (\s5 << 7) | (\d5 << 2) | 2)
+# N5 ([16:12]) is count - 1 for the writes setx/copy/setw; get/getw keep 1.
+.macro CFG_REG sel2, mv, funct3, field5, s5, d5, count=1
+    .word ((7 << 28) | (\sel2 << 26) | (\mv << 25) | (\funct3 << 22) | (\field5 << 17) | ((\count - 1) << 12) | (\s5 << 7) | (\d5 << 2) | 2)
 .endm
 
 # cfg.seti on the matrix side (major4 = 5).
@@ -190,7 +191,7 @@
 # word into n consecutive compute configs; count - 1 sits in [16:12].
 # cfg.getw xD, C (funct3 = 100) reads one config word into xD.
 .macro SETW sel2, mv, c5, xs, count=1
-    .word ((7 << 28) | (\sel2 << 26) | (\mv << 25) | (3 << 22) | ((\count - 1) << 12) | (\xs << 7) | (\c5 << 2) | 2)
+    CFG_REG \sel2, \mv, 3, 0, \xs, \c5, \count
 .endm
 
 .macro GETW sel2, mv, xd, c5
@@ -207,9 +208,15 @@
     li      \xd, ((\dtype << 8) | \len)
 .endm
 
-# cfg.setx: C[field] = x[xS]. MV = 0 matrix side, 1 vector side.
-.macro SETX sel2, mv, field, c5, xs
-    CFG_REG \sel2, \mv, 0, \field, \xs, \c5
+# cfg.setx: C[field] = x[xS] for count consecutive configs. MV = 0 matrix
+# side, 1 vector side.
+.macro SETX sel2, mv, field, c5, xs, count=1
+    CFG_REG \sel2, \mv, 0, \field, \xs, \c5, \count
+.endm
+
+# cfg.copy: broadcast config cs into count consecutive configs from cd.
+.macro CFGCOPY sel2, mv, cd, cs, count=1
+    CFG_REG \sel2, \mv, 1, 0, \cs, \cd, \count
 .endm
 
 .macro ASTORE d5
