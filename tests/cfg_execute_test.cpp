@@ -200,3 +200,96 @@ TEST_CASE(cfg_get_rejects_unsupported_field) {
   check_eq(hex(sim.state().scalar.read_x(5)), hex(0x1234u), "illegal get preserves xD");
   check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE), "illegal get keeps pc");
 }
+
+namespace {
+
+// cfg.setw C, xS, n: CFG_REG funct3 = 011, count - 1 in [16:12].
+constexpr std::uint32_t cfg_setw(std::uint32_t sel2, std::uint32_t mv, std::uint32_t c5,
+                                 std::uint32_t xs, std::uint32_t count) {
+  return cfg_reg(sel2, mv, 3, 0, xs, c5) | ((count - 1) << 12);
+}
+
+// cfg.getw xD, C: CFG_REG funct3 = 100.
+constexpr std::uint32_t cfg_getw(std::uint32_t sel2, std::uint32_t mv, std::uint32_t xd,
+                                 std::uint32_t c5) {
+  return cfg_reg(sel2, mv, 4, 0, c5, xd);
+}
+
+} // namespace
+
+TEST_CASE(cfg_setw_writes_config_span) {
+  Ram memory(CODE_BASE, 8);
+  Simulator sim(memory);
+  write_word(memory, CODE_BASE, cfg_setw(0, 0, 2, 5, 3));      // tc2..tc4 = x5
+  write_word(memory, CODE_BASE + 4, cfg_setw(1, 1, 0, 6, 32)); // vc0..vc31 = x6
+  sim.reset(CODE_BASE);
+  // TC: rows 8, cols 16, dtype u8, row-major, sat; the high half is ignored.
+  sim.state().scalar.write_x(5, 0xdead'beef'0081'1008ull);
+  sim.state().scalar.write_x(6, 0x0414); // VC: len 20, dtype f32
+  check_eq(sim.step().status, StepStatus::retired, "tile cfg.setw retires");
+  for (int i = 2; i <= 4; ++i) {
+    const auto &tc = sim.state().tc[i];
+    const auto what = "tc" + std::to_string(i);
+    check_eq(tc.dtype, DType::u8, what + " dtype");
+    check_eq(tc.rows, std::uint8_t{8}, what + " rows");
+    check_eq(tc.cols, std::uint8_t{16}, what + " cols");
+    check_eq(tc.arith_mode, tile_npu::ArithMode::sat, what + " arith mode");
+  }
+  check_eq(sim.state().tc[1].rows, std::uint8_t{0}, "tc1 untouched");
+  check_eq(sim.state().tc[5].rows, std::uint8_t{0}, "tc5 untouched");
+  check_eq(sim.step().status, StepStatus::retired, "vector cfg.setw retires");
+  check_eq(sim.state().vc[0].len, std::uint8_t{20}, "vc0 len");
+  check_eq(sim.state().vc[31].dtype, DType::f32, "vc31 dtype");
+}
+
+TEST_CASE(cfg_setw_rejects_invalid_word) {
+  struct Case {
+    const char *name;
+    std::uint32_t sel2;
+    std::uint64_t word;
+  };
+
+  const Case cases[] = {
+      {"tile f32 dtype", 0, 0x0004'2020},      {"zero rows", 0, 0x0000'2000},
+      {"cols above 32", 0, 0x0000'2120},       {"reserved layout", 0, 0x0010'2020},
+      {"reserved arith mode", 0, 0x0100'2020}, {"tile reserved bit 25", 0, 0x0200'2020},
+      {"acc arith mode bits", 1, 0x0082'2020},
+  };
+  for (const auto &test : cases) {
+    Ram memory(CODE_BASE, 4);
+    Simulator sim(memory);
+    load_one(sim, memory, cfg_setw(test.sel2, 0, 0, 5, 2));
+    sim.state().scalar.write_x(5, test.word);
+    check_eq(sim.step().status, StepStatus::invalid_configuration, test.name);
+    check_eq(sim.state().tc[0].rows, std::uint8_t{0}, std::string(test.name) + ": tc0 unchanged");
+    check_eq(sim.state().ac[1].rows, std::uint8_t{0}, std::string(test.name) + ": ac1 unchanged");
+    check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE), std::string(test.name) + ": pc stays");
+  }
+
+  Ram memory(CODE_BASE, 4);
+  Simulator sim(memory);
+  load_one(sim, memory, cfg_setw(0, 1, 0, 5, 1));
+  sim.state().scalar.write_x(5, 0x1020); // BC len 32 with a reserved bit 12
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "bc reserved bit 12");
+}
+
+TEST_CASE(cfg_getw_round_trips_setw) {
+  Ram memory(CODE_BASE, 16);
+  Simulator sim(memory);
+  write_word(memory, CODE_BASE, cfg_setw(1, 0, 3, 5, 1));       // ac3 = x5
+  write_word(memory, CODE_BASE + 4, cfg_getw(1, 0, 6, 3));      // x6 = ac3
+  write_word(memory, CODE_BASE + 8, cfg_getw(0, 1, 7, 9));      // x7 = bc9
+  write_word(memory, CODE_BASE + 12, cfg_setw(0, 1, 10, 7, 1)); // bc10 = x7
+  sim.reset(CODE_BASE);
+  sim.state().scalar.write_x(5, 0x0004'1f07); // AC: rows 7, cols 31, f32
+  sim.state().bc[9].dtype = DType::u8;
+  sim.state().bc[9].len = 5;
+  check_eq(sim.step().status, StepStatus::retired, "cfg.setw retires");
+  check_eq(sim.step().status, StepStatus::retired, "cfg.getw ac retires");
+  check_eq(hex(sim.state().scalar.read_x(6)), hex(0x0004'1f07u), "x6 = ac3 word");
+  check_eq(sim.step().status, StepStatus::retired, "cfg.getw bc retires");
+  check_eq(hex(sim.state().scalar.read_x(7)), hex(0x0105u), "x7 = bc9 word");
+  check_eq(sim.step().status, StepStatus::retired, "cfg.setw from a getw word retires");
+  check_eq(sim.state().bc[10].len, std::uint8_t{5}, "bc10 copies bc9 len");
+  check_eq(sim.state().bc[10].dtype, DType::u8, "bc10 copies bc9 dtype");
+}

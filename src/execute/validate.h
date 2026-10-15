@@ -161,10 +161,13 @@ inline bool valid_structure(const LaneInstr &instr) {
 }
 
 inline bool valid_structure(const CfgInstr &instr) {
-  if (instr.op > CfgOp::get || instr.reg_type > ConfigRegType::vm) {
+  if (instr.op > CfgOp::getw || instr.reg_type > ConfigRegType::vm) {
     return false;
   }
-  if (instr.op == CfgOp::copy) {
+  const bool word_op = instr.op == CfgOp::setw || instr.op == CfgOp::getw;
+  if (word_op && !is_compute_config(instr.reg_type)) return false;
+  if (instr.op != CfgOp::setw && instr.count != 1) return false;
+  if (instr.op == CfgOp::copy || word_op) {
     if (instr.field != 0) return false;
   } else if (!std::holds_alternative<ConfigField>(
                  config_field_from_code(instr.reg_type, instr.field))) {
@@ -175,21 +178,13 @@ inline bool valid_structure(const CfgInstr &instr) {
   case CfgOp::seti: return instr.dest < count;
   case CfgOp::setx: return instr.dest < count && in_range(ScalarRegister{instr.src});
   case CfgOp::copy: return instr.dest < count && instr.src < count;
-  case CfgOp::get: return in_range(ScalarRegister{instr.dest}) && instr.src < count;
+  case CfgOp::get:
+  case CfgOp::getw: return in_range(ScalarRegister{instr.dest}) && instr.src < count;
+  case CfgOp::setw:
+    return instr.count >= 1 && std::size_t{instr.dest} + instr.count <= count &&
+           in_range(ScalarRegister{instr.src});
   }
   return false;
-}
-
-// The sizes and count carry the encoding's 1..32 range; the dtype code is a
-// dynamic check (CFG_ERROR).
-inline bool valid_structure(const ShapeInstr &instr) {
-  const auto in_extent = [](std::uint8_t size) { return size >= 1 && size <= MATRIX_EXTENT; };
-  const bool vector = is_vector_domain(instr.domain);
-  return instr.count >= 1 &&
-         std::size_t{instr.first} + instr.count <= domain_register_count(instr.domain) &&
-         in_extent(instr.rows) && in_extent(instr.cols) && instr.arith_mode < ArithMode::count &&
-         (instr.arith_mode == ArithMode::wrap || instr.domain == NpuDomain::tile) &&
-         (!vector || instr.cols == 1);
 }
 
 inline bool valid_structure(const CvtInstr &instr) {

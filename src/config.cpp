@@ -2,6 +2,7 @@
 
 #include "utils/unreachable.h"
 
+#include <algorithm>
 #include <array>
 #include <concepts>
 #include <cstddef>
@@ -168,7 +169,108 @@ constexpr auto FIELD_BY_TYPE_AND_CODE = [] {
 }();
 // clang-format on
 
+// A compute config field's bit slot in the architectural config word.
+struct WordSlot {
+  unsigned lo;
+  unsigned width;
+
+  constexpr std::uint32_t mask() const { return ((std::uint32_t{1} << width) - 1) << lo; }
+};
+
+constexpr WordSlot word_slot(ConfigRegType reg_type, ConfigField field) {
+  const bool matrix = reg_type == ConfigRegType::tc || reg_type == ConfigRegType::ac;
+  switch (field) {
+  case ConfigField::rows:
+  case ConfigField::len: return {0, 8};
+  case ConfigField::cols: return {8, 8};
+  case ConfigField::dtype: return matrix ? WordSlot{16, 4} : WordSlot{8, 4};
+  case ConfigField::layout: return {20, 3};
+  case ConfigField::arith_mode: return {23, 2};
+  default: unreachable("not a compute config field");
+  }
+}
+
+template <typename Config>
+std::uint64_t read_compute_field(const Config &config, ConfigField field) {
+  if constexpr (requires { config.rows; }) {
+    return read_matrix_config(config, field);
+  } else {
+    return read_vector_config(config, field);
+  }
+}
+
+template <typename Config>
+ConfigAccessStatus write_compute_field(Config &config, ConfigField field, std::uint64_t raw) {
+  if constexpr (requires { config.rows; }) {
+    return write_matrix_config(config, field, raw);
+  } else {
+    return write_vector_config(config, field, raw);
+  }
+}
+
+// The fields a register type defines are the non-empty entries of its row.
+template <typename Fn> void for_each_field(ConfigRegType reg_type, Fn &&fn) {
+  for (const auto &field : FIELD_BY_TYPE_AND_CODE[static_cast<std::uint8_t>(reg_type)]) {
+    if (field) fn(*field, word_slot(reg_type, *field));
+  }
+}
+
+template <typename Config> std::uint32_t pack_word(const Config &config, ConfigRegType reg_type) {
+  std::uint32_t word = 0;
+  for_each_field(reg_type, [&](ConfigField field, WordSlot slot) {
+    word |= static_cast<std::uint32_t>(read_compute_field(config, field)) << slot.lo;
+  });
+  return word;
+}
+
+// Builds the whole config from the word first, so a rejected word writes no
+// register of the span.
+template <typename Configs>
+ConfigAccessStatus write_word_span(Configs &configs, ConfigRegType reg_type, std::uint8_t first,
+                                   std::uint8_t count, std::uint32_t word) {
+  if (count == 0 || std::size_t{first} + count > configs.size()) {
+    return ConfigAccessStatus::invalid_register;
+  }
+  typename Configs::value_type config{};
+  std::uint32_t defined = 0;
+  bool valid = true;
+  for_each_field(reg_type, [&](ConfigField field, WordSlot slot) {
+    defined |= slot.mask();
+    valid = valid && write_compute_field(config, field, (word & slot.mask()) >> slot.lo) ==
+                         ConfigAccessStatus::success;
+  });
+  if (!valid || (word & ~defined) != 0) {
+    return ConfigAccessStatus::invalid_value;
+  }
+  std::fill_n(configs.begin() + first, count, config);
+  return ConfigAccessStatus::success;
+}
+
 } // namespace
+
+std::uint32_t read_config_word(const State &state, ConfigRegType reg_type, std::uint8_t index) {
+  if (!is_compute_config(reg_type) || index >= config_register_count(reg_type)) {
+    unreachable("invalid compute config register type or index");
+  }
+  switch (reg_type) {
+  case ConfigRegType::tc: return pack_word(state.tc[index], reg_type);
+  case ConfigRegType::ac: return pack_word(state.ac[index], reg_type);
+  case ConfigRegType::bc: return pack_word(state.bc[index], reg_type);
+  case ConfigRegType::vc: return pack_word(state.vc[index], reg_type);
+  default: unreachable("descriptors have no config word");
+  }
+}
+
+ConfigAccessStatus write_config_word(State &state, ConfigRegType reg_type, std::uint8_t first,
+                                     std::uint8_t count, std::uint32_t word) {
+  switch (reg_type) {
+  case ConfigRegType::tc: return write_word_span(state.tc, reg_type, first, count, word);
+  case ConfigRegType::ac: return write_word_span(state.ac, reg_type, first, count, word);
+  case ConfigRegType::bc: return write_word_span(state.bc, reg_type, first, count, word);
+  case ConfigRegType::vc: return write_word_span(state.vc, reg_type, first, count, word);
+  default: return ConfigAccessStatus::unsupported_field;
+  }
+}
 
 std::uint64_t read_config_field(const State &state, ConfigRegType reg_type, std::uint8_t index,
                                 ConfigField field) {

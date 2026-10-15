@@ -457,23 +457,29 @@ template <CfgOp Op> DecodeResult decode_cfg_reg(std::uint32_t word) {
   return DecodedNpuInstr{CfgInstr{Op, reg_type, f.dest, f.src1, field, 0}};
 }
 
-// CFG_SHAPE (R4 layout, all fields immediate): major4 = 1001, q = 10.
-// 31    28 27  26  25  24    22 21      17 16      12 11       7 6        2 1   0
-// [major4] [dom2] [SAT] [dtype3] [ cols5  ] [ rows5  ] [   N5   ] [   C5   ] [ q ]
-// dom2: 00 TC, 01 AC, 10 BC, 11 VC. Sizes and the count are encoded minus one.
-// BC/VC reserve cols5/SAT, AC reserves SAT; C5 + N5 must name a register.
-DecodeResult decode_cfg_shape(std::uint32_t word) {
+// cfg.setw / cfg.getw (CFG_REG R4, funct3 = 011 / 100): whole-word access
+// to the compute configs (sel2 = 00/01, so TC/AC/BC/VC). setw writes xS
+// (S5) into D5..D5 + N5, N5 = [16:12] = count - 1; getw reads config S5 into
+// xD (D5). field5 is zero for both.
+template <CfgOp Op> DecodeResult decode_cfg_word(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
-  const auto domain = sel3_domain(f.sel3);
-  const bool sat = (f.sel3 & 1) != 0;
-  if ((sat && domain != NpuDomain::tile) || (is_vector_domain(domain) && f.arg != 0) ||
-      f.dest + f.src1 >= domain_register_count(domain)) {
-    return DecodeError::illegal;
+  const auto reg_type = cfg_reg_type(f.sel3 >> 1, (f.sel3 & 1) != 0);
+  const auto count = config_register_count(reg_type);
+  if constexpr (Op == CfgOp::setw) {
+    if (f.dest + f.src2 >= count) {
+      return DecodeError::illegal;
+    }
+    return DecodedNpuInstr{CfgInstr{.op = Op,
+                                    .reg_type = reg_type,
+                                    .dest = f.dest,
+                                    .src = f.src1,
+                                    .count = static_cast<std::uint8_t>(f.src2 + 1)}};
+  } else {
+    if (f.src1 >= count) {
+      return DecodeError::illegal;
+    }
+    return DecodedNpuInstr{CfgInstr{.op = Op, .reg_type = reg_type, .dest = f.dest, .src = f.src1}};
   }
-  return DecodedNpuInstr{ShapeInstr{domain, f.dest, static_cast<std::uint8_t>(f.src1 + 1), f.funct3,
-                                    static_cast<std::uint8_t>(f.src2 + 1),
-                                    static_cast<std::uint8_t>(f.arg + 1),
-                                    sat ? ArithMode::sat : ArithMode::wrap}};
 }
 
 // clang-format off
@@ -576,16 +582,16 @@ constexpr DecodeEntry NPU_TABLE[] = {
     {"0111 ??? 000 00??? 00000 ????? ????? 10", decode_cfg_reg<CfgOp::setx>},
     {"0111 ??? 001 00000 00000 ????? ????? 10", decode_cfg_reg<CfgOp::copy>},
     {"0111 ??? 010 00??? 00000 ????? ????? 10", decode_cfg_reg<CfgOp::get>},
+    // setw/getw (funct3 011/100): compute configs only (sel2 = 0x); setw
+    // carries count - 1 in [16:12].
+    {"0111 0?? 011 00000 ????? ????? ????? 10", decode_cfg_word<CfgOp::setw>},
+    {"0111 0?? 100 00000 00000 ????? ????? 10", decode_cfg_word<CfgOp::getw>},
     {"0111 ??? ??? ????? ????? ????? ????? 10", illegal},
 
     // SYS (Z format): one pattern pins reserved23 to 0; the handler rejects
     // the reserved funct3 codes 100-111.
     {"1000 ??? 00000000000000000000000 10", decode_sys},
     {"1000 ??? ????? ????? ????? ????? ??? 10", illegal},                           // reserved SYS encodings
-
-    // CFG_SHAPE (R4 layout): every field is an immediate; the handler rejects
-    // the reserved SAT/cols5 and out-of-range register spans.
-    {"1001 ??? ??? ????? ????? ????? ????? 10", decode_cfg_shape},
 
     {"???? ??? ???? ???? ????? ????? ????? 10", illegal},                           // reserved major encodings
 };

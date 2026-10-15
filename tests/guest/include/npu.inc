@@ -186,21 +186,25 @@
     CFG_SETI 6, \sel2, \field, \imm, \c5
 .endm
 
-# CFG_SHAPE (R4 layout, all fields immediate), major4 = 9, q = 10:
-#   [27:26] dom2  [25] SAT  [24:22] dtype3  [21:17] cols - 1
-#   [16:12] rows/len - 1  [11:7] count - 1  [6:2] first config reg
-# Writes every field of `count` consecutive TC/AC/BC/VC configs.
-.macro CFG_SHAPE dom2, sat, dtype, rows, cols, count, c5
-    .word ((9 << 28) | (\dom2 << 26) | (\sat << 25) | (\dtype << 22) | ((\cols - 1) << 17) | ((\rows - 1) << 12) | ((\count - 1) << 7) | (\c5 << 2) | 2)
+# cfg.setw C, xS, n (CFG_REG funct3 = 011): writes xS[31:0] as the config
+# word into n consecutive compute configs; count - 1 sits in [16:12].
+# cfg.getw xD, C (funct3 = 100) reads one config word into xD.
+.macro SETW sel2, mv, c5, xs, count=1
+    .word ((7 << 28) | (\sel2 << 26) | (\mv << 25) | (3 << 22) | ((\count - 1) << 12) | (\xs << 7) | (\c5 << 2) | 2)
 .endm
 
-# Matrix (TC/AC) and vector (BC/VC) shorthands; the matrix form keeps wrap.
-.macro SHAPEM dom2, dtype, rows, cols, c5, count=1
-    CFG_SHAPE \dom2, 0, \dtype, \rows, \cols, \count, \c5
+.macro GETW sel2, mv, xd, c5
+    CFG_REG \sel2, \mv, 4, 0, \c5, \xd
 .endm
 
-.macro SHAPEV dom2, dtype, len, c5, count=1
-    CFG_SHAPE \dom2, 0, \dtype, \len, 1, \count, \c5
+# Config words for cfg.setw (row-major, wrap): matrix rows[7:0] cols[15:8]
+# dtype[19:16]; vector len[7:0] dtype[11:8]. xd is an ABI register name.
+.macro LI_CWM xd, dtype, rows, cols
+    li      \xd, ((\dtype << 16) | (\cols << 8) | \rows)
+.endm
+
+.macro LI_CWV xd, dtype, len
+    li      \xd, ((\dtype << 8) | \len)
 .endm
 
 # cfg.setx: C[field] = x[xS]. MV = 0 matrix side, 1 vector side.

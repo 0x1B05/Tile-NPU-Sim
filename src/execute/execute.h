@@ -62,7 +62,6 @@ ExecuteResult execute(const MmaInstr &instr, State &state);
 
 // Configuration and system
 ExecuteResult execute(const CfgInstr &instr, ExecContext &ctx);
-ExecuteResult execute(const ShapeInstr &instr, State &state);
 ExecuteResult execute(const SysInstr &instr, State &state);
 
 // Dispatch entry points

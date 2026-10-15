@@ -358,15 +358,18 @@ struct SysInstr {
 // field access is independent of the instruction format that selected it.
 enum class ConfigRegType : std::uint8_t { tc, ac, bc, vc, tm, am, bm, vm };
 
-enum class CfgOp : std::uint8_t { seti, setx, copy, get };
+enum class CfgOp : std::uint8_t { seti, setx, copy, get, setw, getw };
 
 // Operand reading per op:
 //   seti: dest = C,  field = field3 code, imm = sign-extended imm16
 //   setx: dest = C,  field = field3 code, src = xS
 //   copy: dest = CD, src = CS
 //   get:  dest = xD, src = C, field = field3 code
-// `field` is a defined field code for reg_type; copy requires zero.
-// Invalid field values fail with CFG_ERROR at execution.
+//   setw: dest = first C, src = xS, count = number of configs
+//   getw: dest = xD, src = C
+// `field` is a defined field code for reg_type; copy/setw/getw require zero
+// and setw/getw only name compute configs (TC/AC/BC/VC). Invalid field
+// values fail with CFG_ERROR at execution.
 struct CfgInstr {
   CfgOp op = CfgOp::seti;
   ConfigRegType reg_type = ConfigRegType::tc;
@@ -374,21 +377,7 @@ struct CfgInstr {
   RegisterIndex src = 0;
   std::uint8_t field = 0;
   std::int32_t imm = 0;
-};
-
-// cfg.shape (CFG_SHAPE, R4 layout): writes every field of `count`
-// consecutive compute configs of one domain, starting at `first`. dtype is
-// the raw dtype code (an illegal code for the domain is CFG_ERROR at
-// execution); rows/cols/len are the decoded sizes, cols and arith_mode only
-// apply to TC/AC and TC respectively.
-struct ShapeInstr {
-  NpuDomain domain = NpuDomain::tile;
-  RegisterIndex first = 0;
   std::uint8_t count = 1;
-  std::uint8_t dtype = 0;
-  std::uint8_t rows = 1; // len for BC/VC
-  std::uint8_t cols = 1;
-  ArithMode arith_mode = ArithMode::wrap;
 };
 
 } // namespace tile_npu

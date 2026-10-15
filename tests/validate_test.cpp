@@ -59,7 +59,6 @@ using tile_npu::ReduceOp;
 using tile_npu::RowInstr;
 using tile_npu::RowOp;
 using tile_npu::ScalarRegister;
-using tile_npu::ShapeInstr;
 using tile_npu::State;
 using tile_npu::StepStatus;
 using tile_npu::SysInstr;
@@ -199,14 +198,23 @@ TEST_CASE(validate_rejects_cfg_reserved_fields) {
   }
 }
 
-TEST_CASE(validate_rejects_bad_shape) {
-  check_illegal(ShapeInstr{NpuDomain::tile, 0, 0, 0, 32, 32}, "zero count");
-  check_illegal(ShapeInstr{NpuDomain::tile, 15, 2, 0, 32, 32}, "span past t15");
-  check_illegal(ShapeInstr{NpuDomain::acc, 0, 13, 2, 32, 32}, "span past a11");
-  check_illegal(ShapeInstr{NpuDomain::tile, 0, 1, 0, 33, 32}, "rows above 32");
-  check_illegal(ShapeInstr{NpuDomain::tile, 0, 1, 0, 32, 0}, "zero cols");
-  check_illegal(ShapeInstr{NpuDomain::vec8, 0, 1, 0, 32, 2}, "vector cols");
-  check_illegal(ShapeInstr{NpuDomain::acc, 0, 1, 2, 32, 32, tile_npu::ArithMode::sat}, "acc sat");
+TEST_CASE(validate_rejects_bad_cfg_word) {
+  using tile_npu::CfgInstr;
+  using tile_npu::CfgOp;
+  using tile_npu::ConfigRegType;
+  check_illegal(CfgInstr{.op = CfgOp::setw, .reg_type = ConfigRegType::tm, .count = 1},
+                "setw on a descriptor");
+  check_illegal(CfgInstr{.op = CfgOp::getw, .reg_type = ConfigRegType::bm}, "getw on a descriptor");
+  check_illegal(CfgInstr{.op = CfgOp::setw, .reg_type = ConfigRegType::tc, .count = 0},
+                "setw zero count");
+  check_illegal(CfgInstr{.op = CfgOp::setw, .reg_type = ConfigRegType::tc, .dest = 15, .count = 2},
+                "setw span past tc15");
+  check_illegal(CfgInstr{.op = CfgOp::setw, .reg_type = ConfigRegType::ac, .count = 13},
+                "setw span past ac11");
+  check_illegal(CfgInstr{.op = CfgOp::setw, .reg_type = ConfigRegType::tc, .field = 1, .count = 1},
+                "setw field nonzero");
+  check_illegal(CfgInstr{.op = CfgOp::getw, .reg_type = ConfigRegType::tc, .count = 2},
+                "getw count other than one");
 }
 
 TEST_CASE(validate_rejects_bad_cvt) {

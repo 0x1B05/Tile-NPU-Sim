@@ -23,7 +23,8 @@ constexpr std::uint32_t cfg_i(std::uint32_t major4, std::uint32_t sel2, std::uin
          ((static_cast<std::uint32_t>(imm) & 0xffffu) << 7) | (c5 << 2) | 0x2u;
 }
 
-// R4 format (CFG_REG, major4 = 0111): sel2 MV funct3 field5 reserved5 S5 D5 q.
+// R4 format (CFG_REG, major4 = 0111): sel2 MV funct3 field5 N5 S5 D5 q; N5
+// ([16:12]) is cfg.setw's count - 1 and zero for every other op.
 constexpr std::uint32_t cfg_reg(std::uint32_t sel2, std::uint32_t mv, std::uint32_t funct3,
                                 std::uint32_t field5, std::uint32_t s5, std::uint32_t d5) {
   return (0x7u << 28) | (sel2 << 26) | (mv << 25) | (funct3 << 22) | (field5 << 17) | (s5 << 7) |
@@ -167,8 +168,16 @@ TEST_CASE(cfg_decode_rejects_reserved) {
       ErrorCase{"copy field5 nonzero", cfg_reg(0, 0, 1, 1, 3, 7), DecodeError::illegal},
       ErrorCase{"reg reserved5 nonzero", cfg_reg(0, 0, 0, 1, 4, 0) | (1u << 12),
                 DecodeError::illegal},
-      ErrorCase{"funct3 = 011 reserved", cfg_reg(0, 0, 3, 0, 0, 0), DecodeError::illegal},
+      ErrorCase{"funct3 = 101 reserved", cfg_reg(0, 0, 5, 0, 0, 0), DecodeError::illegal},
       ErrorCase{"funct3 = 111 reserved", cfg_reg(0, 0, 7, 0, 0, 0), DecodeError::illegal},
+      // setw/getw: compute configs only, field5 zero, span within the type.
+      ErrorCase{"setw on tm", cfg_reg(2, 0, 3, 0, 4, 0), DecodeError::illegal},
+      ErrorCase{"getw on vm", cfg_reg(3, 1, 4, 0, 0, 5), DecodeError::illegal},
+      ErrorCase{"setw field5 nonzero", cfg_reg(0, 0, 3, 1, 4, 0), DecodeError::illegal},
+      ErrorCase{"setw tc15 + 2", cfg_reg(0, 0, 3, 0, 4, 15) | (1u << 12), DecodeError::illegal},
+      ErrorCase{"setw ac0 + 12", cfg_reg(1, 0, 3, 0, 4, 0) | (12u << 12), DecodeError::illegal},
+      ErrorCase{"getw N5 nonzero", cfg_reg(0, 0, 4, 0, 0, 5) | (1u << 12), DecodeError::illegal},
+      ErrorCase{"getw tc16", cfg_reg(0, 0, 4, 0, 16, 5), DecodeError::illegal},
       ErrorCase{"setx tm16 out of range", cfg_reg(2, 0, 0, 0, 4, 16), DecodeError::illegal},
       ErrorCase{"copy tc16 dest out of range", cfg_reg(0, 0, 1, 0, 0, 16), DecodeError::illegal},
       ErrorCase{"copy tc16 src out of range", cfg_reg(0, 0, 1, 0, 16, 0), DecodeError::illegal},

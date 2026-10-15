@@ -1,11 +1,8 @@
 #include "execute.h"
 
 #include "config.h"
-#include "config_check.h"
 #include "utils/unreachable.h"
 
-#include <concepts>
-#include <cstddef>
 #include <cstdint>
 #include <variant>
 
@@ -22,47 +19,7 @@ ExecuteResult cfg_write(const CfgInstr &instr, State &state, std::uint64_t value
   }
 }
 
-// The compute config cfg.shape writes into every register of the span.
-template <DomainConfig Config> Config shape_config(const ShapeInstr &instr) {
-  Config config{};
-  config.dtype = static_cast<DType>(instr.dtype);
-  if constexpr (MatrixConfig<Config>) {
-    config.rows = instr.rows;
-    config.cols = instr.cols;
-    config.layout = Layout::row_major;
-  } else {
-    config.len = instr.rows;
-  }
-  if constexpr (std::same_as<Config, TileConfig>) {
-    config.arith_mode = instr.arith_mode;
-  }
-  return config;
-}
-
-// A dtype the domain cannot hold is CFG_ERROR for the whole span: no
-// register is written.
-template <typename Configs> ExecuteResult write_shape(const ShapeInstr &instr, Configs &configs) {
-  const auto config = shape_config<typename Configs::value_type>(instr);
-  if (!dtype_fits(config)) {
-    return config_error();
-  }
-  for (std::size_t k = 0; k < instr.count; ++k) {
-    configs[instr.first + k] = config;
-  }
-  return {.status = StepStatus::retired};
-}
-
 } // namespace
-
-ExecuteResult execute(const ShapeInstr &instr, State &state) {
-  switch (instr.domain) {
-  case NpuDomain::tile: return write_shape(instr, state.tc);
-  case NpuDomain::acc: return write_shape(instr, state.ac);
-  case NpuDomain::vec8: return write_shape(instr, state.bc);
-  case NpuDomain::vec32: return write_shape(instr, state.vc);
-  }
-  unreachable("cfg.shape with an unknown domain");
-}
 
 ExecuteResult execute(const CfgInstr &instr, ExecContext &ctx) {
   State &state = ctx.state;
@@ -93,6 +50,18 @@ ExecuteResult execute(const CfgInstr &instr, ExecContext &ctx) {
     state.scalar.write_x(instr.dest, read_config_field(state, instr.reg_type, instr.src, field));
     return {.status = StepStatus::retired};
   }
+  case CfgOp::setw: {
+    // An invalid field or a set reserved bit is CFG_ERROR for the whole span.
+    const auto word = static_cast<std::uint32_t>(state.scalar.read_x(instr.src));
+    switch (write_config_word(state, instr.reg_type, instr.dest, instr.count, word)) {
+    case ConfigAccessStatus::success: return {.status = StepStatus::retired};
+    case ConfigAccessStatus::invalid_value: return config_error();
+    default: unreachable("validated cfg.setw has an invalid register span");
+    }
+  }
+  case CfgOp::getw:
+    state.scalar.write_x(instr.dest, read_config_word(state, instr.reg_type, instr.src));
+    return {.status = StepStatus::retired};
   }
   unreachable("invalid config operation");
 }
