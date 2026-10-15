@@ -1,7 +1,6 @@
 #include "tile_npu/simulator.h"
 
 #include <array>
-#include <bit>
 #include <cfenv>
 #include <cstddef>
 #include <cstdint>

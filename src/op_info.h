@@ -14,8 +14,6 @@
 
 namespace tile_npu {
 
-// Architectural register count per data domain; decode and the structural
-// validation at the execute entry both bound register numbers with it.
 inline constexpr std::size_t domain_register_count(NpuDomain domain) {
   switch (domain) {
   case NpuDomain::tile: return TILE_REGISTERS;
@@ -30,19 +28,15 @@ inline constexpr bool is_vector_domain(NpuDomain domain) {
   return domain == NpuDomain::vec8 || domain == NpuDomain::vec32;
 }
 
-// The matrix/vector pairing used by row moves and broadcasts: Tile with Vec8,
-// Acc with Vec32.
-inline constexpr bool domains_paired(NpuDomain matrix, NpuDomain vector) {
+inline constexpr bool is_domains_paired(NpuDomain matrix, NpuDomain vector) {
   return (matrix == NpuDomain::tile && vector == NpuDomain::vec8) ||
          (matrix == NpuDomain::acc && vector == NpuDomain::vec32);
 }
 
-// Operation metadata for the E_BIN family, mirroring the ISA's funct4 table:
+// Operation metadata for the E_BIN family:
 // tile_allowed is false for mul/div (the tile domain has no 8-bit mul/div
 // encodings); integer_allowed is false for div (f32-only); f32_allowed is
-// false for the bitwise and shift operations (integer-only). Decode,
-// execution and tests share this table so a new operation is added in one
-// place.
+// false for the bitwise and shift operations (integer-only).
 struct EbinInfo {
   EbinOp op;
   bool tile_allowed;
@@ -50,7 +44,6 @@ struct EbinInfo {
   bool f32_allowed;
 };
 
-// Indexed by funct4 code; unassigned codes hold nullopt.
 inline constexpr std::array<std::optional<EbinInfo>, 16> EBIN_BY_FUNCT4 = [] {
   std::array<std::optional<EbinInfo>, 16> table{};
   // clang-format off
@@ -85,10 +78,8 @@ inline constexpr bool eun_legal(EunOp op, NpuDomain domain) {
          (domain != NpuDomain::tile || op == EunOp::bit_not);
 }
 
-// Condition metadata for the E_CMP family, mirroring the ISA's funct3 table:
+// Condition metadata for the E_CMP family:
 // ne/ge are integer-only and le/unord are f32-only; eq/lt accept both.
-// Decode, execution and tests share this table so a new condition is added
-// in one place.
 struct CmpInfo {
   CmpOp op;
   bool integer_allowed;
@@ -130,8 +121,7 @@ inline constexpr std::uint8_t FILL5_INT_MAX = 4;
 inline constexpr std::uint8_t FILL5_MAX = 8;
 
 // QNT pairs a quantized 8-bit domain with its f32 counterpart: Tile with Acc
-// (the matrix forms) and Vec8 with Vec32 (the vector forms). Decode and the
-// structural validation share the pairing so it is stated once.
+// (the matrix forms) and Vec8 with Vec32 (the vector forms).
 inline constexpr bool qnt_domain_is_quantized(NpuDomain domain) {
   return domain == NpuDomain::tile || domain == NpuDomain::vec8;
 }
@@ -157,10 +147,8 @@ inline constexpr bool qnt_dest_legal(QntOp op, NpuDomain dest) {
   return false;
 }
 
-// Operation metadata for the MMA_BDOT family, mirroring the ISA's funct3
-// table: each entry carries the operation and its destination/left-source
-// domains. Decode and the structural validation share this table so a new
-// operation is added in one place.
+// Operation metadata for the MMA_BDOT family:
+// each entry carries the operation and its destination/left-source domains.
 struct MmaInfo {
   MmaOp op;
   NpuDomain dest_domain;
@@ -171,10 +159,10 @@ struct MmaInfo {
 inline constexpr std::array<std::optional<MmaInfo>, 8> MMA_BY_FUNCT3 = [] {
   std::array<std::optional<MmaInfo>, 8> table{};
   // clang-format off
-  table[0b000] = MmaInfo{MmaOp::nn_zero, NpuDomain::acc  , NpuDomain::tile};
-  table[0b001] = MmaInfo{MmaOp::nn_acc , NpuDomain::acc  , NpuDomain::tile};
-  table[0b010] = MmaInfo{MmaOp::nt_zero, NpuDomain::acc  , NpuDomain::tile};
-  table[0b011] = MmaInfo{MmaOp::nt_acc , NpuDomain::acc  , NpuDomain::tile};
+  table[0b000] = MmaInfo{MmaOp::nn_zero    , NpuDomain::acc  , NpuDomain::tile};
+  table[0b001] = MmaInfo{MmaOp::nn_acc     , NpuDomain::acc  , NpuDomain::tile};
+  table[0b010] = MmaInfo{MmaOp::nt_zero    , NpuDomain::acc  , NpuDomain::tile};
+  table[0b011] = MmaInfo{MmaOp::nt_acc     , NpuDomain::acc  , NpuDomain::tile};
   table[0b100] = MmaInfo{MmaOp::nn_bdot    , NpuDomain::vec32, NpuDomain::vec8};
   table[0b101] = MmaInfo{MmaOp::nn_bdot_acc, NpuDomain::vec32, NpuDomain::vec8};
   table[0b110] = MmaInfo{MmaOp::nt_bdot    , NpuDomain::vec32, NpuDomain::vec8};

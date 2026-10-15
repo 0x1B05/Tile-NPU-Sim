@@ -99,6 +99,7 @@ xmake project -k compile_commands      # 为 clangd 生成 compile_commands.json
 ## 代码风格与 Git
 
 - `README.md` 与代码注释使用英文，本文件使用中文。注释说明设计原因、契约和必要的位段布局，避免复述显然的代码或历史变更。
+- 不在执行器中重复声明“执行失败不改变架构状态”等通用保证；需要注释时，说明具体的暂存、预检或提交顺序及其原因。
 - 沿用 `#pragma once`、`snake_case`、`enum class` 和 `constexpr`；常量用 `ALL_CAPS`。
 - 使用仓库 `.clang-format`，要求 clang-format >= 14。提交前只格式化本次修改的 C++ 文件，例如 `clang-format -i src/decode/decode_npu.cpp`；不对 Markdown、YAML 或汇编源码运行它。
 - `tests/riscv-tests-env/riscv_test.h` 的宏体是 GNU as 汇编，保留其 `/* clang-format off */` 保护。对齐的译码表、位段表和元数据表用 `// clang-format off/on` 保持排版。

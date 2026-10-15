@@ -1,9 +1,8 @@
 #include "tile_npu/simulator.h"
 
-#include <bit>
 #include <cmath>
-#include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 
 #include "support/emask_helpers.h"
 #include "support/execute_helpers.h"

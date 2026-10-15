@@ -13,7 +13,6 @@
 #include "utils/endian.h"
 
 #include <array>
-#include <bit>
 #include <cstddef>
 #include <cstdint>
 

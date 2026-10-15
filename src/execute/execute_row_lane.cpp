@@ -1,13 +1,14 @@
 #include "execute.h"
 
 #include "config_check.h"
+#include "domain.h"
 #include "matrix_view.h"
 #include "operand.h"
 #include "utils/unreachable.h"
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 #include <variant>
 
 namespace tile_npu {
@@ -15,13 +16,13 @@ namespace {
 
 // insert.row copies the source vector over one matrix row: the vector length
 // must equal the matrix column count and the row number must be in range.
-template <typename Element, typename MConfig, typename VConfig, std::size_t MCount,
-          std::size_t VCount>
-ExecuteResult row_insert(const RowInstr &instr, State &state,
-                         std::array<std::array<Element, MATRIX_ELEMENTS>, MCount> &matrix_regs,
-                         const std::array<std::array<Element, VECTOR_LANES>, VCount> &vector_regs,
-                         const std::array<MConfig, MCount> &matrix_configs,
-                         const std::array<VConfig, VCount> &vector_configs) {
+template <NpuDomain Domain> ExecuteResult row_insert(const RowInstr &instr, State &state) {
+  constexpr auto VECTOR_DOMAIN = Domain == NpuDomain::tile ? NpuDomain::vec8 : NpuDomain::vec32;
+  auto &matrix_regs = domain_regs<Domain>(state);
+  const auto &vector_regs = domain_regs<VECTOR_DOMAIN>(state);
+  const auto &matrix_configs = domain_configs<Domain>(state);
+  const auto &vector_configs = domain_configs<VECTOR_DOMAIN>(state);
+
   const auto &mconfig = matrix_configs[instr.matrix.index];
   const auto &vconfig = vector_configs[instr.vector.index];
   if (!valid_domain_config(mconfig) || !valid_domain_config(vconfig) ||
@@ -41,14 +42,13 @@ ExecuteResult row_insert(const RowInstr &instr, State &state,
 
 // extract.row copies one matrix row into the destination vector's effective
 // lanes; the other lanes keep their values.
-template <typename Element, typename MConfig, typename VConfig, std::size_t MCount,
-          std::size_t VCount>
-ExecuteResult
-row_extract(const RowInstr &instr, State &state,
-            const std::array<std::array<Element, MATRIX_ELEMENTS>, MCount> &matrix_regs,
-            std::array<std::array<Element, VECTOR_LANES>, VCount> &vector_regs,
-            const std::array<MConfig, MCount> &matrix_configs,
-            const std::array<VConfig, VCount> &vector_configs) {
+template <NpuDomain Domain> ExecuteResult row_extract(const RowInstr &instr, State &state) {
+  constexpr auto VECTOR_DOMAIN = Domain == NpuDomain::tile ? NpuDomain::vec8 : NpuDomain::vec32;
+  const auto &matrix_regs = domain_regs<Domain>(state);
+  auto &vector_regs = domain_regs<VECTOR_DOMAIN>(state);
+  const auto &matrix_configs = domain_configs<Domain>(state);
+  const auto &vector_configs = domain_configs<VECTOR_DOMAIN>(state);
+
   const auto &mconfig = matrix_configs[instr.matrix.index];
   const auto &vconfig = vector_configs[instr.vector.index];
   if (!valid_domain_config(mconfig) || !valid_domain_config(vconfig) ||
@@ -78,10 +78,10 @@ std::uint64_t extend_element(DType dtype, std::uint32_t raw) {
   }
 }
 
-template <typename Element, typename Config, std::size_t Count>
-ExecuteResult lane_move(const LaneInstr &instr, State &state,
-                        std::array<std::array<Element, VECTOR_LANES>, Count> &regs,
-                        const std::array<Config, Count> &configs) {
+template <NpuDomain Domain> ExecuteResult lane_move(const LaneInstr &instr, State &state) {
+  auto &regs = domain_regs<Domain>(state);
+  const auto &configs = domain_configs<Domain>(state);
+  using Element = typename std::remove_cvref_t<decltype(regs)>::value_type::value_type;
   const auto lane = resolve_index(instr.index, state);
 
   if (instr.op == LaneOp::extract) {
@@ -130,11 +130,11 @@ ExecuteResult execute(const RowInstr &instr, State &state) {
   const bool insert = instr.op == RowOp::insert;
   switch (instr.matrix.domain) {
   case NpuDomain::tile:
-    return insert ? row_insert(instr, state, state.t, state.b, state.tc, state.bc)
-                  : row_extract(instr, state, state.t, state.b, state.tc, state.bc);
+    return insert ? row_insert<NpuDomain::tile>(instr, state)
+                  : row_extract<NpuDomain::tile>(instr, state);
   case NpuDomain::acc:
-    return insert ? row_insert(instr, state, state.a, state.v, state.ac, state.vc)
-                  : row_extract(instr, state, state.a, state.v, state.ac, state.vc);
+    return insert ? row_insert<NpuDomain::acc>(instr, state)
+                  : row_extract<NpuDomain::acc>(instr, state);
   default: break; // ROW_MOVE has no vector-matrix encoding
   }
   unreachable("execute_row_move without a matrix operand");
@@ -145,8 +145,8 @@ ExecuteResult execute(const LaneInstr &instr, State &state) {
   const auto &vec = instr.op == LaneOp::extract ? std::get<NpuRegister>(instr.src)
                                                 : std::get<NpuRegister>(instr.dst);
   switch (vec.domain) {
-  case NpuDomain::vec8: return lane_move(instr, state, state.b, state.bc);
-  case NpuDomain::vec32: return lane_move(instr, state, state.v, state.vc);
+  case NpuDomain::vec8: return lane_move<NpuDomain::vec8>(instr, state);
+  case NpuDomain::vec32: return lane_move<NpuDomain::vec32>(instr, state);
   default: break; // LANE_MOVE has no matrix-domain encoding
   }
   unreachable("execute_lane_move without a vector operand");

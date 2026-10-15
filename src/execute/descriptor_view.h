@@ -33,7 +33,7 @@ public:
       return descriptor_->flags < static_cast<std::uint8_t>(MatrixIncMode::count) &&
              descriptor_->transform < static_cast<std::uint8_t>(DescriptorTransform::count);
     } else {
-      return (descriptor_->flags & ~VECTOR_INC_ENABLE_MASK) == 0;
+      return descriptor_->flags < static_cast<std::uint8_t>(VectorIncMode::count);
     }
   }
 

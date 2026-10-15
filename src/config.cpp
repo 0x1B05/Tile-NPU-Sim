@@ -3,6 +3,7 @@
 #include "utils/unreachable.h"
 
 #include <array>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -32,17 +33,19 @@ constexpr bool fits_i32(std::uint64_t raw) {
 }
 
 // The 8-bit domains (TC/BC) hold i8/u8, the 32-bit domains (AC/VC) i32/u32/f32.
-constexpr auto dtype_for(bool eight_bit) {
-  return [eight_bit](std::uint64_t raw) {
-    const auto dtype = static_cast<DType>(raw);
+template <typename Config> constexpr auto dtype_for() {
+  return [](std::uint64_t raw) {
     if (raw > static_cast<std::uint64_t>(DType::f32)) return false;
-    return eight_bit ? dtype == DType::i8 || dtype == DType::u8
-                     : dtype == DType::i32 || dtype == DType::u32 || dtype == DType::f32;
+    const auto dtype = static_cast<DType>(raw);
+    if constexpr (std::same_as<Config, TileConfig> || std::same_as<Config, Vec8Config>) {
+      return dtype == DType::i8 || dtype == DType::u8;
+    } else {
+      return dtype == DType::i32 || dtype == DType::u32 || dtype == DType::f32;
+    }
   };
 }
 
-// Stores raw into target when the field accepts it; a rejected write leaves
-// the target unchanged.
+// Stores raw into target when the field accepts it.
 template <typename T, typename Accept>
 ConfigAccessStatus store_if(T &target, std::uint64_t raw, Accept accept) {
   if (!accept(raw)) return ConfigAccessStatus::invalid_value;
@@ -54,12 +57,12 @@ constexpr std::uint64_t as_scalar(auto value) { return static_cast<std::uint64_t
 
 // clang-format off
 template <typename Config>
-ConfigAccessStatus write_matrix_config(Config &config, bool eight_bit, ConfigField field, std::uint64_t raw) {
+ConfigAccessStatus write_matrix_config(Config &config, ConfigField field, std::uint64_t raw) {
   switch (field) {
-  case ConfigField::dtype:  return store_if(config.dtype, raw, dtype_for(eight_bit));
+  case ConfigField::dtype:  return store_if(config.dtype, raw, dtype_for<Config>());
   case ConfigField::rows:   return store_if(config.rows, raw, extent(MATRIX_EXTENT));
   case ConfigField::cols:   return store_if(config.cols, raw, extent(MATRIX_EXTENT));
-  case ConfigField::layout: return store_if(config.layout, raw, below(1)); // row-major only
+  case ConfigField::layout: return store_if(config.layout, raw, below(as_scalar(Layout::count)));
   case ConfigField::arith_mode:
     if constexpr (requires { config.arith_mode; }) {
       return store_if(config.arith_mode, raw, below(static_cast<std::uint64_t>(ArithMode::count)));
@@ -71,9 +74,9 @@ ConfigAccessStatus write_matrix_config(Config &config, bool eight_bit, ConfigFie
 }
 
 template <typename Config>
-ConfigAccessStatus write_vector_config(Config &config, bool eight_bit, ConfigField field, std::uint64_t raw) {
+ConfigAccessStatus write_vector_config(Config &config, ConfigField field, std::uint64_t raw) {
   switch (field) {
-  case ConfigField::dtype: return store_if(config.dtype, raw, dtype_for(eight_bit));
+  case ConfigField::dtype: return store_if(config.dtype, raw, dtype_for<Config>());
   case ConfigField::len:   return store_if(config.len, raw, extent(VECTOR_LANES));
   default:                 return ConfigAccessStatus::unsupported_field;
   }
@@ -96,7 +99,8 @@ ConfigAccessStatus write_vector_descriptor(VectorDescriptor &desc, ConfigField f
   switch (field) {
   case ConfigField::base_addr:    return store_if(desc.base_addr, raw, any_value);
   case ConfigField::stride_bytes: return store_if(desc.stride_bytes, raw, fits_i32);
-  case ConfigField::flags:        return store_if(desc.flags, raw, below(VECTOR_INC_ENABLE_MASK + 1u));
+  case ConfigField::flags:
+    return store_if(desc.flags, raw, below(static_cast<std::uint64_t>(VectorIncMode::count)));
   default:                        return ConfigAccessStatus::unsupported_field;
   }
 }
@@ -106,7 +110,7 @@ template <typename Config> std::uint64_t read_matrix_config(const Config &config
   case ConfigField::dtype:  return as_scalar(config.dtype);
   case ConfigField::rows:   return config.rows;
   case ConfigField::cols:   return config.cols;
-  case ConfigField::layout: return config.layout;
+  case ConfigField::layout: return as_scalar(config.layout);
   case ConfigField::arith_mode:
     if constexpr (requires { config.arith_mode; }) return as_scalar(config.arith_mode);
     break;
@@ -144,9 +148,7 @@ std::uint64_t read_vector_descriptor(const VectorDescriptor &desc, ConfigField f
   }
 }
 
-// Field code to semantic field, indexed [ConfigRegType][field code]. Codes
-// are dense from 0 per register type; a nullopt hole is a code the type has
-// no field for, so a new field appends to its type's row.
+// Field code to semantic field, indexed [ConfigRegType][field code].
 constexpr auto FIELD_BY_TYPE_AND_CODE = [] {
   using enum ConfigField;
   using Row = std::array<std::optional<ConfigField>, 5>;
@@ -158,10 +160,8 @@ constexpr auto FIELD_BY_TYPE_AND_CODE = [] {
   row(ConfigRegType::ac) = {dtype,     rows, cols, layout};
   row(ConfigRegType::bc) = {dtype,     len};
   row(ConfigRegType::vc) = {dtype,     len};
-  row(ConfigRegType::tm) = {base_addr, row_stride_bytes, col_stride_bytes,
-                            transform, flags};
-  row(ConfigRegType::am) = {base_addr, row_stride_bytes, col_stride_bytes,
-                            transform, flags};
+  row(ConfigRegType::tm) = {base_addr, row_stride_bytes, col_stride_bytes, transform, flags};
+  row(ConfigRegType::am) = {base_addr, row_stride_bytes, col_stride_bytes, transform, flags};
   row(ConfigRegType::bm) = {base_addr, stride_bytes, flags};
   row(ConfigRegType::vm) = {base_addr, stride_bytes, flags};
   return table;
@@ -194,10 +194,10 @@ ConfigAccessStatus write_config_field(State &state, ConfigRegType reg_type, std:
   if (index >= config_register_count(reg_type)) return ConfigAccessStatus::invalid_register;
 
   switch (reg_type) {
-  case ConfigRegType::tc: return write_matrix_config(state.tc[index], true, field, value);
-  case ConfigRegType::ac: return write_matrix_config(state.ac[index], false, field, value);
-  case ConfigRegType::bc: return write_vector_config(state.bc[index], true, field, value);
-  case ConfigRegType::vc: return write_vector_config(state.vc[index], false, field, value);
+  case ConfigRegType::tc: return write_matrix_config(state.tc[index], field, value);
+  case ConfigRegType::ac: return write_matrix_config(state.ac[index], field, value);
+  case ConfigRegType::bc: return write_vector_config(state.bc[index], field, value);
+  case ConfigRegType::vc: return write_vector_config(state.vc[index], field, value);
   case ConfigRegType::tm: return write_matrix_descriptor(state.tm[index], field, value);
   case ConfigRegType::am: return write_matrix_descriptor(state.am[index], field, value);
   case ConfigRegType::bm: return write_vector_descriptor(state.bm[index], field, value);

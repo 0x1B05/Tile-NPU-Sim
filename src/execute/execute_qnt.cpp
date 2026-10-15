@@ -64,8 +64,7 @@ std::optional<std::uint32_t> scale_lane(const QntInstr &instr, const State &stat
 
 // tquant.rows[.scale].q8s32: per-row quantization of an f32 Acc into an i8
 // Tile of the same shape; the dynamic form also writes each row's scale
-// into vScale. An unsuccessful execution leaves architectural state
-// unchanged.
+// into vScale.
 ExecuteResult tquant(const QntInstr &instr, State &state) {
   const auto &dst_config = state.tc[instr.dest.index];
   const auto &src_config = state.ac[instr.src.index];

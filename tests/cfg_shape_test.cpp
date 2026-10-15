@@ -13,6 +13,7 @@ using tile_npu::ArithMode;
 using tile_npu::DecodedNpuInstr;
 using tile_npu::DecodeError;
 using tile_npu::DType;
+using tile_npu::Layout;
 using tile_npu::NpuDomain;
 using tile_npu::Ram;
 using tile_npu::ShapeInstr;
@@ -82,7 +83,7 @@ TEST_CASE(cfg_shape_writes_config_span) {
   write_word(memory, CODE_BASE, make_shape(NpuDomain::tile, true, DType::u8, 8, 16, 3, 2));
   write_word(memory, CODE_BASE + 4, make_shape(NpuDomain::vec32, false, DType::f32, 20, 1, 32, 0));
   sim.reset(CODE_BASE);
-  sim.state().tc[2].layout = 5; // overwritten with row-major
+  sim.state().tc[2].layout = static_cast<Layout>(5); // overwritten with row-major
   check_eq(sim.step().status, StepStatus::retired, "tile cfg.shape retires");
   for (int i = 2; i <= 4; ++i) {
     const auto &tc = sim.state().tc[i];
@@ -90,7 +91,7 @@ TEST_CASE(cfg_shape_writes_config_span) {
     check_eq(tc.dtype, DType::u8, what + " dtype");
     check_eq(tc.rows, std::uint8_t{8}, what + " rows");
     check_eq(tc.cols, std::uint8_t{16}, what + " cols");
-    check_eq(tc.layout, std::uint8_t{0}, what + " layout");
+    check_eq(tc.layout, Layout::row_major, what + " layout");
     check_eq(tc.arith_mode, ArithMode::sat, what + " arith mode");
   }
   check_eq(sim.state().tc[1].rows, std::uint8_t{0}, "tc1 untouched");

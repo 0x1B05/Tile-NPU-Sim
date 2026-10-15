@@ -2,6 +2,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <initializer_list>
+#include <string>
 
 #include "support/execute_helpers.h"
 #include "support/init_helpers.h"

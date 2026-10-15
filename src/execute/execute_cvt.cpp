@@ -30,7 +30,7 @@ template <NpuDomain Domain> ExecuteResult convert(const CvtInstr &instr, State &
   }
   auto &dst = regs[instr.dest.index];
   const auto &src = regs[instr.src.index];
-  for_each_offset(dst_config, [&](std::size_t n) { dst[n] = i32_to_f32_bits(src[n]); });
+  for_each_idx(dst_config, [&](std::size_t n) { dst[n] = i32_to_f32_bits(src[n]); });
   if constexpr (Domain == NpuDomain::acc) {
     state.ac[instr.dest.index].dtype = DType::f32;
   } else {
@@ -66,7 +66,6 @@ ExecuteResult execute(const CvtInstr &instr, State &state) {
   if (instr.op == CvtOp::widen) {
     return widen_tile_to_acc(instr, state);
   }
-  // An unsuccessful execution leaves architectural state unchanged.
   return instr.dest.domain == NpuDomain::acc ? convert<NpuDomain::acc>(instr, state)
                                              : convert<NpuDomain::vec32>(instr, state);
 }

@@ -1,7 +1,6 @@
 #include "tile_npu/simulator.h"
 
 #include <cstdint>
-#include <string>
 
 #include "support/execute_helpers.h"
 

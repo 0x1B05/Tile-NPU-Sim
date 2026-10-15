@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 
 #include "support/execute_helpers.h"
 #include "support/row_lane_helpers.h"

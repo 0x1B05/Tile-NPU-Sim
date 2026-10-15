@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <bit>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <type_traits>
 
@@ -27,55 +28,58 @@ inline bool ebin_op_supports_dtype(EbinOp op, DType dtype) {
   return dtype == DType::f32 ? info.f32_allowed : info.integer_allowed;
 }
 
-// One element of an E_BIN/E_BCAST operation on raw storage bits; the dtype
-// selects the numeric interpretation. 8-bit add/sub widen to int so sat mode
-// can clamp; everything else wraps to the element width. Shift amounts take
-// the low log2(width) bits of the right operand. f32 min/max follow IEEE 754
-// minNum/maxNum: NaN does not propagate.
-template <typename E> E apply_ebin_op(EbinOp op, DType dtype, ArithMode arith, E lhs, E rhs) {
-  if constexpr (sizeof(E) == sizeof(float)) {
-    if (dtype == DType::f32) {
-      const auto left = std::bit_cast<float>(lhs);
-      const auto right = std::bit_cast<float>(rhs);
-      float result = 0.0f;
-      switch (op) {
-      case EbinOp::add: result = left + right; break;
-      case EbinOp::sub: result = left - right; break;
-      case EbinOp::mul: result = left * right; break;
-      case EbinOp::div: result = left / right; break;
-      case EbinOp::min: result = std::fmin(left, right); break;
-      case EbinOp::max: result = std::fmax(left, right); break;
-      default: unreachable("f32 element with an integer-only E_BIN op");
-      }
-      return std::bit_cast<E>(result);
-    }
+// f32 min/max select the numeric operand when only one input is NaN.
+inline float apply_ebin_f32(EbinOp op, float lhs, float rhs) {
+  switch (op) {
+  case EbinOp::mul: return lhs * rhs;
+  case EbinOp::div: return lhs / rhs;
+  case EbinOp::add: return lhs + rhs;
+  case EbinOp::sub: return lhs - rhs;
+  case EbinOp::min: return std::fmin(lhs, rhs);
+  case EbinOp::max: return std::fmax(lhs, rhs);
+  default: unreachable("f32 element with an integer-only E_BIN op");
   }
+}
+
+template <typename E> E ebin_add_sub(EbinOp op, DType dtype, ArithMode arith, E lhs, E rhs) {
+  if constexpr (sizeof(E) == 1) {
+    using S = std::make_signed_t<E>;
+    const bool is_signed = dtype == DType::i8 || dtype == DType::i32;
+    const int left = is_signed ? static_cast<int>(static_cast<S>(lhs)) : int{lhs};
+    const int right = is_signed ? static_cast<int>(static_cast<S>(rhs)) : int{rhs};
+    int result = op == EbinOp::add ? left + right : left - right;
+    if (arith == ArithMode::sat) {
+      result = is_signed ? std::clamp(result, -128, 127) : std::clamp(result, 0, 255);
+    }
+    return static_cast<E>(result);
+  }
+  return static_cast<E>(op == EbinOp::add ? lhs + rhs : lhs - rhs);
+}
+
+template <typename E> E ebin_min_max(EbinOp op, DType dtype, E lhs, E rhs) {
+  using S = std::make_signed_t<E>;
+  const bool is_signed = dtype == DType::i8 || dtype == DType::i32;
+  if (is_signed) {
+    const auto left = static_cast<S>(lhs);
+    const auto right = static_cast<S>(rhs);
+    return static_cast<E>(op == EbinOp::min ? std::min(left, right) : std::max(left, right));
+  }
+  return op == EbinOp::min ? std::min(lhs, rhs) : std::max(lhs, rhs);
+}
+
+template <typename E> E apply_ebin_int(EbinOp op, DType dtype, ArithMode arith, E lhs, E rhs) {
   using S = std::make_signed_t<E>;
   constexpr E shamt_mask = static_cast<E>(std::numeric_limits<E>::digits - 1);
-  const bool is_signed = dtype == DType::i8 || dtype == DType::i32;
+
   switch (op) {
-  case EbinOp::add:
-  case EbinOp::sub: {
-    if constexpr (sizeof(E) == 1) {
-      const int left = is_signed ? static_cast<int>(static_cast<S>(lhs)) : int{lhs};
-      const int right = is_signed ? static_cast<int>(static_cast<S>(rhs)) : int{rhs};
-      int result = op == EbinOp::add ? left + right : left - right;
-      if (arith == ArithMode::sat) {
-        result = is_signed ? std::clamp(result, -128, 127) : std::clamp(result, 0, 255);
-      }
-      return static_cast<E>(result);
-    }
-    return static_cast<E>(op == EbinOp::add ? lhs + rhs : lhs - rhs);
-  }
   case EbinOp::mul: return static_cast<E>(lhs * rhs);
+
+  case EbinOp::add:
+  case EbinOp::sub: return ebin_add_sub(op, dtype, arith, lhs, rhs);
+
   case EbinOp::min:
-  case EbinOp::max:
-    if (is_signed) {
-      const auto left = static_cast<S>(lhs);
-      const auto right = static_cast<S>(rhs);
-      return static_cast<E>(op == EbinOp::min ? std::min(left, right) : std::max(left, right));
-    }
-    return op == EbinOp::min ? std::min(lhs, rhs) : std::max(lhs, rhs);
+  case EbinOp::max: return ebin_min_max(op, dtype, lhs, rhs);
+
   case EbinOp::bit_and: return static_cast<E>(lhs & rhs);
   case EbinOp::bit_or: return static_cast<E>(lhs | rhs);
   case EbinOp::bit_xor: return static_cast<E>(lhs ^ rhs);
@@ -84,6 +88,16 @@ template <typename E> E apply_ebin_op(EbinOp op, DType dtype, ArithMode arith, E
   case EbinOp::sra: return static_cast<E>(static_cast<S>(lhs) >> (rhs & shamt_mask));
   default: unreachable("integer element with the f32-only E_BIN div");
   }
+}
+
+template <typename E> E apply_ebin_op(EbinOp op, DType dtype, ArithMode arith, E lhs, E rhs) {
+  if constexpr (sizeof(E) == sizeof(float)) {
+    if (dtype == DType::f32) {
+      return std::bit_cast<E>(
+          apply_ebin_f32(op, std::bit_cast<float>(lhs), std::bit_cast<float>(rhs)));
+    }
+  }
+  return apply_ebin_int(op, dtype, arith, lhs, rhs);
 }
 
 } // namespace tile_npu

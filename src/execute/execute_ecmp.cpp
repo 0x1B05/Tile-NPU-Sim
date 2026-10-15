@@ -7,7 +7,6 @@
 #include "utils/overloaded.h"
 #include "utils/unreachable.h"
 
-#include <array>
 #include <bit>
 #include <cmath>
 #include <cstddef>
@@ -78,8 +77,7 @@ template <typename Configs> bool operands_valid(const CmpInstr &instr, const Con
 
 } // namespace
 
-// Runs over the destination's effective region; an unsuccessful execution
-// leaves architectural state unchanged.
+// Runs over the destination's effective region.
 ExecuteResult execute(const CmpInstr &instr, State &state) {
   return with_domain<NpuDomain::acc, NpuDomain::vec32>(
       state, instr.dest.domain, [&](auto &regs, const auto &configs) {
@@ -88,9 +86,10 @@ ExecuteResult execute(const CmpInstr &instr, State &state) {
         }
         const auto dtype = configs[instr.src1.index].dtype;
         auto &dst = regs[instr.dest.index];
+        const auto &dst_config = configs[instr.dest.index];
         const auto &lhs = regs[instr.src1.index];
         return with_src2(instr.src2, state, regs, [&](auto rhs) {
-          for_each_offset(configs[instr.dest.index], [&](std::size_t n) {
+          for_each_idx(dst_config, [&](std::size_t n) {
             dst[n] = mask_word(compare(instr.op, dtype, lhs[n], rhs(n)));
           });
           return ExecuteResult{.status = StepStatus::retired};

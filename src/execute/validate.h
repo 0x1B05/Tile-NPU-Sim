@@ -14,6 +14,7 @@
 #include "utils/overloaded.h"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <variant>
@@ -41,7 +42,7 @@ inline bool index_in_range(const IndexOperand &index) {
 }
 
 // The matrix forms reserve IS/index5: the encoding carries immediate 0.
-inline bool index_is_immediate_zero(const IndexOperand &index) {
+inline bool index_imm_zero(const IndexOperand &index) {
   return std::visit(Overloaded{[](ImmediateIndex imm) { return imm.value == 0; },
                                [](ScalarRegister) { return false; }},
                     index);
@@ -82,7 +83,7 @@ inline bool valid_structure(const CmpInstr &instr) {
 }
 
 inline bool valid_structure(const BcastInstr &instr) {
-  if (!domains_paired(instr.dest.domain, instr.vector.domain) ||
+  if (!is_domains_paired(instr.dest.domain, instr.vector.domain) ||
       !ebin_legal(instr.op, instr.dest.domain)) {
     return false;
   }
@@ -131,7 +132,7 @@ inline bool valid_structure(const InitInstr &instr) {
 
 inline bool valid_structure(const RowInstr &instr) {
   if (instr.op > RowOp::extract) return false;
-  return domains_paired(instr.matrix.domain, instr.vector.domain) && in_range(instr.matrix) &&
+  return is_domains_paired(instr.matrix.domain, instr.vector.domain) && in_range(instr.matrix) &&
          in_range(instr.vector) && index_in_range(instr.index);
 }
 
@@ -237,7 +238,7 @@ inline bool valid_structure(const QntInstr &instr) {
   // The matrix forms reserve IS/index5: the encoding carries immediate 0.
   return in_range(instr.dest) && in_range(instr.src) &&
          (is_vector_domain(instr.dest.domain) ? index_in_range(instr.index)
-                                              : index_is_immediate_zero(instr.index));
+                                              : index_imm_zero(instr.index));
 }
 
 inline bool valid_structure(const MmaInstr &instr) {

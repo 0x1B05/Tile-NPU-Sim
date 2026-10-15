@@ -3,9 +3,8 @@
 #include "op_info.h"
 
 #include <array>
-#include <bit>
-#include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <string>
 
 #include "support/ebin_helpers.h"

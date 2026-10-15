@@ -1,13 +1,10 @@
 #pragma once
 
-// Domain-generic access to the register files: binding a runtime NpuDomain to
-// its data/config arrays, and iterating over a config's effective region.
 #include "config_check.h"
 #include "execute.h"
 #include "utils/unreachable.h"
 
 #include <cstddef>
-#include <optional>
 #include <tuple>
 #include <utility>
 
@@ -49,32 +46,30 @@ template <NpuDomain Domain> auto &domain_descriptors(State &state) {
   }
 }
 
-// The data, read-only compute config, and memory descriptor of one register.
+// The data, compute config, and memory descriptor of one register.
 template <NpuDomain Domain> auto bind_register(State &state, RegisterIndex index) {
   return std::tie(domain_regs<Domain>(state)[index], domain_configs<Domain>(state)[index],
                   domain_descriptors<Domain>(state)[index]);
 }
 
-// Runs body(regs, configs) on the register file and config array of the
-// runtime domain. Only the listed domains instantiate the body; structural
-// validation guarantees the domain is one of them.
-template <NpuDomain... Allowed, typename Body>
-ExecuteResult with_domain(State &state, NpuDomain domain, Body &&body) {
-  std::optional<ExecuteResult> result;
-  ((domain == Allowed &&
-    (result.emplace(body(domain_regs<Allowed>(state), domain_configs<Allowed>(state))), true)) ||
-   ...);
-  if (!result) {
-    unreachable("domain rejected by structural validation");
+// Calls fn(regs, configs) on the register file and config array of the
+// runtime domain. Only the listed domains instantiate fn.
+template <NpuDomain First, NpuDomain... Rest, typename Fn>
+ExecuteResult with_domain(State &state, NpuDomain domain, Fn &&fn) {
+  if (domain == First) {
+    return fn(domain_regs<First>(state), domain_configs<First>(state));
   }
-  return *result;
+
+  if constexpr (sizeof...(Rest) > 0) {
+    return with_domain<Rest...>(state, domain, std::forward<Fn>(fn));
+  }
+
+  unreachable("domain rejected by structural validation");
 }
 
-// Calls fn(offset) for every storage offset in the config's effective
-// region: row * MATRIX_EXTENT + col for matrix configs, the lane for vector
-// configs. Same-shape operands share offsets, so elementwise bodies index
-// every register with the same offset.
-template <DomainConfig Config, typename Fn> void for_each_offset(const Config &config, Fn &&fn) {
+// Calls fn(idx) for every index in the config's effective region:
+// row * MATRIX_EXTENT + col for matrix configs, the lane for vector configs.
+template <DomainConfig Config, typename Fn> void for_each_idx(const Config &config, Fn &&fn) {
   if constexpr (MatrixConfig<Config>) {
     for (std::size_t row = 0; row < config.rows; ++row) {
       for (std::size_t col = 0; col < config.cols; ++col) {

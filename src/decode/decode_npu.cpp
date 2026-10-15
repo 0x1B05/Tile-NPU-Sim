@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <variant>
 
 namespace tile_npu {
 namespace {

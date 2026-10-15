@@ -27,8 +27,7 @@ Element fill_value(const InitInstr &instr, const State &state, DType dtype) {
 }
 
 // fill/fillx/copy over the destination's effective region; physical
-// positions outside it keep their values. A self copy is safe: each element
-// is read before it is written.
+// positions outside it keep their values.
 template <typename Regs, typename Configs>
 ExecuteResult init_region(const InitInstr &instr, const State &state, Regs &regs,
                           const Configs &configs) {
@@ -43,12 +42,12 @@ ExecuteResult init_region(const InitInstr &instr, const State &state, Regs &regs
       return config_error();
     }
     const auto &src = regs[instr.src];
-    for_each_offset(dst_config, [&](std::size_t n) { dst[n] = src[n]; });
+    for_each_idx(dst_config, [&](std::size_t n) { dst[n] = src[n]; });
     return {.status = StepStatus::retired};
   }
 
   const auto value = fill_value<Element>(instr, state, dst_config.dtype);
-  for_each_offset(dst_config, [&](std::size_t n) { dst[n] = value; });
+  for_each_idx(dst_config, [&](std::size_t n) { dst[n] = value; });
   return {.status = StepStatus::retired};
 }
 
@@ -59,7 +58,7 @@ ExecuteResult init_region(const InitInstr &instr, const State &state, Regs &regs
 ExecuteResult transpose_tile(const InitInstr &instr, State &state) {
   const auto &src_config = state.tc[instr.src];
   const auto &dst_config = state.tc[instr.reg.index];
-  if (!valid_domain_config(src_config) || dst_config.layout != 0 ||
+  if (!valid_domain_config(src_config) || dst_config.layout != Layout::row_major ||
       dst_config.dtype != src_config.dtype) {
     return config_error();
   }

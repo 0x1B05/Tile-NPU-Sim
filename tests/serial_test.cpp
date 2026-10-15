@@ -5,8 +5,10 @@
 #include "tile_npu/platform/serial.h"
 
 #include <cstddef>
+#include <span>
 #include <sstream>
 #include <string>
+#include <string_view>
 
 using tile_npu::Ram;
 using tile_npu::SerialConsole;

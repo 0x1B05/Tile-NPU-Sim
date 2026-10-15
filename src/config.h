@@ -52,7 +52,7 @@ std::uint64_t read_config_field(const State &state, ConfigRegType reg_type, std:
                                 ConfigField field);
 
 // Writes a cfg.seti/setx source value; a value outside the field's range
-// (the ISA's CFG_ERROR) reports invalid_value and leaves the state unchanged.
+// (the ISA's CFG_ERROR) reports invalid_value.
 ConfigAccessStatus write_config_field(State &state, ConfigRegType reg_type, std::uint8_t index,
                                       ConfigField field, std::uint64_t value);
 

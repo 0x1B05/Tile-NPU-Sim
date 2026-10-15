@@ -15,7 +15,6 @@
 #include <cstdint>
 #include <optional>
 #include <span>
-#include <utility>
 
 namespace tile_npu {
 namespace {
@@ -76,8 +75,7 @@ ExecuteResult load_elements(const AddressSpace &memory, Reg &reg,
 }
 
 // A store reads the source register in place; the whole range is probed
-// before the first write, so a faulting store leaves architectural state
-// unchanged.
+// before the first write to avoid partial stores.
 template <typename Reg, typename At>
 ExecuteResult store_elements(AddressSpace &memory, const Reg &reg,
                              std::span<const std::uint64_t> addrs, At at) {

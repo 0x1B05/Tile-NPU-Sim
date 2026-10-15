@@ -8,7 +8,6 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <optional>
 #include <variant>
 
 namespace tile_npu {

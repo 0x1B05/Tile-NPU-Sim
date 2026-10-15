@@ -66,8 +66,7 @@ template <typename E> E apply_unary(EunOp op, DType dtype, E value) {
 
 } // namespace
 
-// Runs over the destination's effective region; an unsuccessful execution
-// leaves architectural state unchanged.
+// Runs over the destination's effective region.
 ExecuteResult execute(const EunInstr &instr, State &state) {
   return with_domain<NpuDomain::tile, NpuDomain::acc, NpuDomain::vec32>(
       state, instr.dest.domain, [&](auto &regs, const auto &configs) {
@@ -80,7 +79,7 @@ ExecuteResult execute(const EunInstr &instr, State &state) {
         }
         auto &dst = regs[instr.dest.index];
         const auto &src = regs[instr.src.index];
-        for_each_offset(dst_config, [&](std::size_t n) {
+        for_each_idx(dst_config, [&](std::size_t n) {
           dst[n] = apply_unary(instr.op, dst_config.dtype, src[n]);
         });
         return ExecuteResult{.status = StepStatus::retired};

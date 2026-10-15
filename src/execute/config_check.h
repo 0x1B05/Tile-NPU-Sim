@@ -3,7 +3,6 @@
 #include "tile_npu/state.h"
 
 #include <concepts>
-#include <type_traits>
 
 namespace tile_npu {
 
@@ -38,7 +37,7 @@ template <DomainConfig Config> constexpr bool valid_domain_config(const Config &
   if (!dtype_fits(config)) return false;
   if constexpr (MatrixConfig<Config>) {
     return config.rows >= 1 && config.rows <= MATRIX_EXTENT && config.cols >= 1 &&
-           config.cols <= MATRIX_EXTENT && config.layout == 0;
+           config.cols <= MATRIX_EXTENT && config.layout == Layout::row_major;
   } else {
     return config.len >= 1 && config.len <= VECTOR_LANES;
   }

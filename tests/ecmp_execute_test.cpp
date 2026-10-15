@@ -1,8 +1,7 @@
 #include "tile_npu/simulator.h"
 
-#include <bit>
-#include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <limits>
 
 #include "support/ecmp_helpers.h"

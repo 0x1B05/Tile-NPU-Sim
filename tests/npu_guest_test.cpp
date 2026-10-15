@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
+#include <initializer_list>
 #include <iterator>
 #include <source_location>
 #include <string>
@@ -12,6 +13,7 @@
 
 #include "monitor/monitor.h"
 #include "support/execute_helpers.h"
+#include "utils/endian.h"
 
 namespace {
 constexpr std::uint64_t IMAGE_BASE = 0x80000000;

@@ -4,38 +4,32 @@
 #include "config_check.h"
 #include "utils/unreachable.h"
 
+#include <concepts>
+#include <cstddef>
 #include <cstdint>
 #include <variant>
 
 namespace tile_npu {
 namespace {
 
-ConfigField cfg_field(const CfgInstr &instr) {
-  const auto field = config_field_from_code(instr.reg_type, instr.field);
-  if (const auto *resolved = std::get_if<ConfigField>(&field)) {
-    return *resolved;
-  }
-  unreachable("validated config instruction has an undefined field");
-}
-
 // An invalid field value (the ISA's CFG_ERROR) surfaces as invalid_configuration.
 ExecuteResult cfg_write(const CfgInstr &instr, State &state, std::uint64_t value) {
-  switch (write_config_field(state, instr.reg_type, instr.dest, cfg_field(instr), value)) {
+  const auto field = std::get<ConfigField>(config_field_from_code(instr.reg_type, instr.field));
+  switch (write_config_field(state, instr.reg_type, instr.dest, field, value)) {
   case ConfigAccessStatus::success: return {.status = StepStatus::retired};
   case ConfigAccessStatus::invalid_value: return config_error();
   default: unreachable("validated config write has an invalid register or field");
   }
 }
 
-// The compute config cfg.shape writes into every register of the span; the
-// layout is always row-major.
+// The compute config cfg.shape writes into every register of the span.
 template <DomainConfig Config> Config shape_config(const ShapeInstr &instr) {
   Config config{};
   config.dtype = static_cast<DType>(instr.dtype);
   if constexpr (MatrixConfig<Config>) {
     config.rows = instr.rows;
     config.cols = instr.cols;
-    config.layout = 0;
+    config.layout = Layout::row_major;
   } else {
     config.len = instr.rows;
   }
@@ -95,8 +89,8 @@ ExecuteResult execute(const CfgInstr &instr, ExecContext &ctx) {
     return {.status = StepStatus::retired};
   }
   case CfgOp::get: {
-    state.scalar.write_x(instr.dest,
-                         read_config_field(state, instr.reg_type, instr.src, cfg_field(instr)));
+    const auto field = std::get<ConfigField>(config_field_from_code(instr.reg_type, instr.field));
+    state.scalar.write_x(instr.dest, read_config_field(state, instr.reg_type, instr.src, field));
     return {.status = StepStatus::retired};
   }
   }

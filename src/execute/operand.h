@@ -24,19 +24,19 @@ template <typename Element> Element scalar_operand(const State &state, ScalarReg
   return static_cast<Element>(state.scalar.read_x(reg.index));
 }
 
-// Resolves src2 into an element accessor by storage offset for the body: a
+// Resolves src2 into an element accessor by storage offset for fn: a
 // register source reads the same offset of the source register, a scalar
 // source broadcasts one value to every element.
-template <typename Regs, typename Body>
-ExecuteResult with_src2(const NpuOperand &src2, const State &state, const Regs &regs, Body body) {
+template <typename Regs, typename Fn>
+ExecuteResult with_src2(const NpuOperand &src2, const State &state, const Regs &regs, Fn fn) {
   using Element = typename Regs::value_type::value_type;
   return std::visit(Overloaded{[&](NpuRegister rhs) {
                                  const auto &reg = regs[rhs.index];
-                                 return body([&reg](std::size_t offset) { return reg[offset]; });
+                                 return fn([&reg](std::size_t offset) { return reg[offset]; });
                                },
                                [&](ScalarRegister reg) {
                                  const auto value = scalar_operand<Element>(state, reg);
-                                 return body([value](std::size_t) { return value; });
+                                 return fn([value](std::size_t) { return value; });
                                }},
                     src2);
 }

@@ -35,8 +35,6 @@ inline ExecuteResult access_fault(StepStatus status, std::uint64_t address) {
   return {.status = status, .fault_address = address};
 }
 
-// An unsuccessful execution leaves architectural state unchanged.
-
 // Scalar execution
 ExecuteResult execute_rv64i(const DecodedScalarInstr &instr, ExecContext &ctx);
 ExecuteResult execute_rv64m(const DecodedScalarInstr &instr, ScalarState &scalar);

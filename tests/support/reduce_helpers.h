@@ -1,7 +1,5 @@
 #pragma once
 
-#include "tile_npu/instruction.h"
-
 #include <cstdint>
 
 // Shared reduce instruction word builders for the reduce test files; the

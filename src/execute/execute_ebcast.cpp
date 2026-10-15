@@ -1,12 +1,12 @@
 #include "execute.h"
 
 #include "config_check.h"
+#include "domain.h"
 #include "ebin_op.h"
 #include "matrix_view.h"
 #include "utils/unreachable.h"
 
 #include <cstddef>
-#include <cstdint>
 #include <utility>
 
 namespace tile_npu {
@@ -14,15 +14,14 @@ namespace {
 
 // Shared matrix-times-broadcast-vector loop over the destination's effective
 // shape: byrow feeds S[row], bycol S[col]. The ISA fixes the vector's dtype
-// to the matrix dtype and its length to rows (byrow) or cols (bycol). An
-// unsuccessful execution leaves architectural state unchanged.
-template <typename Element, typename MatConfig, typename VecConfig, std::size_t MatCount,
-          std::size_t VecCount>
-ExecuteResult bcast(const BcastInstr &instr,
-                    std::array<std::array<Element, MATRIX_ELEMENTS>, MatCount> &matrix_regs,
-                    const std::array<MatConfig, MatCount> &matrix_configs,
-                    const std::array<std::array<Element, VECTOR_LANES>, VecCount> &vector_regs,
-                    const std::array<VecConfig, VecCount> &vector_configs) {
+// to the matrix dtype and its length to rows (byrow) or cols (bycol).
+template <NpuDomain Domain> ExecuteResult bcast(const BcastInstr &instr, State &state) {
+  constexpr auto VECTOR_DOMAIN = Domain == NpuDomain::tile ? NpuDomain::vec8 : NpuDomain::vec32;
+  auto &matrix_regs = domain_regs<Domain>(state);
+  const auto &matrix_configs = domain_configs<Domain>(state);
+  const auto &vector_regs = domain_regs<VECTOR_DOMAIN>(state);
+  const auto &vector_configs = domain_configs<VECTOR_DOMAIN>(state);
+
   const auto &dst_config = matrix_configs[instr.dest.index];
   const auto &src_config = matrix_configs[instr.src1.index];
   const auto &vec_config = vector_configs[instr.vector.index];
@@ -50,11 +49,10 @@ ExecuteResult bcast(const BcastInstr &instr,
 } // namespace
 
 ExecuteResult execute(const BcastInstr &instr, State &state) {
-  // The matrix/vector domain pairing is part of the structural validation.
   switch (instr.dest.domain) {
-  case NpuDomain::tile: return bcast(instr, state.t, state.tc, state.b, state.bc);
-  case NpuDomain::acc: return bcast(instr, state.a, state.ac, state.v, state.vc);
-  default: break; // E_BCAST has no vector-destination encoding
+  case NpuDomain::tile: return bcast<NpuDomain::tile>(instr, state);
+  case NpuDomain::acc: return bcast<NpuDomain::acc>(instr, state);
+  default: break;
   }
   unreachable("execute_ebcast without a matrix destination");
 }

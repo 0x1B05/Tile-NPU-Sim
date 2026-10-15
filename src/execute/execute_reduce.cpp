@@ -68,8 +68,7 @@ struct ArgmaxScan {
 };
 
 // areduce.rows.*: row-wise folds of an f32 Acc into a Vec32 whose length
-// equals the source row count (i32 destination for argmax). An unsuccessful
-// execution leaves architectural state unchanged.
+// equals the source row count (i32 destination for argmax).
 ExecuteResult areduce(const ReduceInstr &instr, State &state) {
   const auto &dst = std::get<NpuRegister>(instr.dest);
   const auto &src_config = state.ac[instr.src.index];

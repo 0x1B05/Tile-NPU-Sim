@@ -68,8 +68,7 @@ bool keeps(MaskOp op, std::uint64_t bound, std::size_t row, std::size_t col) {
 
 // Runs over the destination's effective region; positions failing the
 // condition take the fill value. Only tail exists on vectors, bounded by the
-// full 64-bit xLen. An unsuccessful execution leaves architectural state
-// unchanged.
+// full 64-bit xLen.
 ExecuteResult execute(const MaskInstr &instr, State &state) {
   return with_domain<NpuDomain::tile, NpuDomain::acc, NpuDomain::vec8, NpuDomain::vec32>(
       state, instr.dest.domain, [&](auto &regs, const auto &configs) {
@@ -86,7 +85,7 @@ ExecuteResult execute(const MaskInstr &instr, State &state) {
         const auto bound = state.scalar.read_x(instr.bound);
         auto &dst = regs[instr.dest.index];
         const auto &src = regs[instr.src.index];
-        for_each_offset(dst_config, [&](std::size_t n) {
+        for_each_idx(dst_config, [&](std::size_t n) {
           const bool keep = MatrixConfig<std::remove_cvref_t<decltype(dst_config)>>
                                 ? keeps(instr.op, bound, n / MATRIX_EXTENT, n % MATRIX_EXTENT)
                                 : n < bound;

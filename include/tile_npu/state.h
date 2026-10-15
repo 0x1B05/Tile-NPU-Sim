@@ -25,14 +25,14 @@ using Vec32 = std::array<std::uint32_t, VECTOR_LANES>;
 
 // The numeric values match the dtype codes in the ISA configuration registers.
 enum class DType : std::uint8_t { i8 = 0, u8 = 1, i32 = 2, u32 = 3, f32 = 4 };
-// `count` is a sentinel for range checks, not an architectural mode.
 enum class ArithMode : std::uint8_t { wrap = 0, sat = 1, count };
+enum class Layout : std::uint8_t { row_major = 0, count };
 
 struct TileConfig {
   DType dtype = DType::i8;
   std::uint8_t rows = 0;
   std::uint8_t cols = 0;
-  std::uint8_t layout = 0;
+  Layout layout = Layout::row_major;
   ArithMode arith_mode = ArithMode::wrap;
 };
 
@@ -40,7 +40,7 @@ struct AccConfig {
   DType dtype = DType::i32;
   std::uint8_t rows = 0;
   std::uint8_t cols = 0;
-  std::uint8_t layout = 0;
+  Layout layout = Layout::row_major;
 };
 
 struct Vec8Config {
@@ -69,6 +69,9 @@ struct VectorDescriptor {
 
 // The matrix inc_mode values (TM/AM flags[1:0] in the manual)
 enum class MatrixIncMode : std::uint8_t { off = 0, row = 1, col = 2, count };
+
+// The vector increment-enable values (BM/VM flags[0] in the manual).
+enum class VectorIncMode : std::uint8_t { off = 0, on = 1, count };
 
 // The TM/AM transform values: 0 = normal, 1 = transpose.
 enum class DescriptorTransform : std::uint8_t { normal = 0, transpose = 1, count };
