@@ -518,8 +518,8 @@
     QNT 0, 0, 0, \vscale, 0, \as, \d5
 .endm
 
-# tquant with an external per-row scale (QNT funct3 = 1).
-.macro TQUANTX d5, vscale, as
+# tquant.rows.scale.q8s32: asm operand order tD, aS, vScale.
+.macro TQUANTX d5, as, vscale
     QNT 0, 0, 1, \vscale, 0, \as, \d5
 .endm
 
@@ -528,7 +528,7 @@
     QNT 1, 0, 0, \vscale, 0, \s5, \d5
 .endm
 
-# vquant.q8s32: asm operand order bD, vScale, vS[lane].
+# vquant.q8s32: asm operand order bD, vScale[lane], vS.
 .macro VQUANT d5, vscale, s5, lane
     QNT 2, 0, 0, \vscale, \lane, \s5, \d5
 .endm

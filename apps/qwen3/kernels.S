@@ -71,13 +71,13 @@ nq_quant_act:
     beqz    t4, .Lqa_q0
     li      t5, 1
     beq     t4, t5, .Lqa_q1
-    TQUANTX 4, 2, 0
+    TQUANTX 4, 0, 2
     j       .Lqa_next
 .Lqa_q0:
-    TQUANTX 2, 2, 0
+    TQUANTX 2, 0, 2
     j       .Lqa_next
 .Lqa_q1:
-    TQUANTX 3, 2, 0
+    TQUANTX 3, 0, 2
 .Lqa_next:
     addi    t4, t4, 1
     bltu    t4, t3, .Lqa_quant
