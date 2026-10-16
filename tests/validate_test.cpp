@@ -212,19 +212,17 @@ TEST_CASE(validate_rejects_bad_cfg_word) {
   using tile_npu::CfgInstr;
   using tile_npu::CfgOp;
   using tile_npu::ConfigRegType;
-  check_illegal(CfgInstr{.op = CfgOp::setw, .reg_type = ConfigRegType::tm, .count = 1},
+  check_illegal(CfgInstr{.op = CfgOp::setw, .reg_type = ConfigRegType::tm, .n = 0},
                 "setw on a descriptor");
   check_illegal(CfgInstr{.op = CfgOp::getw, .reg_type = ConfigRegType::bm}, "getw on a descriptor");
-  check_illegal(CfgInstr{.op = CfgOp::setw, .reg_type = ConfigRegType::tc, .count = 0},
-                "setw zero count");
-  check_illegal(CfgInstr{.op = CfgOp::setw, .reg_type = ConfigRegType::tc, .dest = 15, .count = 2},
+  check_illegal(CfgInstr{.op = CfgOp::setw, .reg_type = ConfigRegType::tc, .dest = 15, .n = 1},
                 "setw span past tc15");
-  check_illegal(CfgInstr{.op = CfgOp::setw, .reg_type = ConfigRegType::ac, .count = 13},
+  check_illegal(CfgInstr{.op = CfgOp::setw, .reg_type = ConfigRegType::ac, .n = 12},
                 "setw span past ac11");
-  check_illegal(CfgInstr{.op = CfgOp::setw, .reg_type = ConfigRegType::tc, .field = 1, .count = 1},
+  check_illegal(CfgInstr{.op = CfgOp::setw, .reg_type = ConfigRegType::tc, .field = 1, .n = 0},
                 "setw field nonzero");
-  check_illegal(CfgInstr{.op = CfgOp::getw, .reg_type = ConfigRegType::tc, .count = 2},
-                "getw count other than one");
+  check_illegal(CfgInstr{.op = CfgOp::getw, .reg_type = ConfigRegType::tc, .n = 1},
+                "getw nonzero destination offset");
 }
 
 TEST_CASE(validate_rejects_bad_cvt) {

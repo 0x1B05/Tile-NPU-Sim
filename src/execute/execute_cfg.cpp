@@ -4,18 +4,19 @@
 #include "utils/common.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <variant>
 
 namespace tile_npu {
 namespace {
 
-// Writes one field value into instr.count consecutive configs. Every target
+// Writes one field value into configs from instr.dest through instr.dest + n. Every target
 // accepts the same values, so the first write decides: an invalid value (the
 // ISA's CFG_ERROR) surfaces as invalid_configuration with nothing written.
 ExecuteResult cfg_write(const CfgInstr &instr, State &state, std::uint64_t value) {
   const auto field = std::get<ConfigField>(config_field_from_code(instr.reg_type, instr.field));
-  for (std::uint8_t k = 0; k < instr.count; ++k) {
+  for (std::size_t k = 0; k <= instr.n; ++k) {
     switch (write_config_field(state, instr.reg_type, instr.dest + k, field, value)) {
     case ConfigAccessStatus::success: break;
     case ConfigAccessStatus::invalid_value:
@@ -31,7 +32,7 @@ ExecuteResult cfg_write(const CfgInstr &instr, State &state, std::uint64_t value
 // inside the destination span still copies its original value.
 template <typename Configs> void broadcast(Configs &configs, const CfgInstr &instr) {
   const auto source = configs[instr.src];
-  std::fill_n(configs.begin() + instr.dest, instr.count, source);
+  std::fill_n(configs.begin() + instr.dest, std::size_t{instr.n} + 1, source);
 }
 
 } // namespace
@@ -68,7 +69,7 @@ ExecuteResult execute(const CfgInstr &instr, ExecContext &ctx) {
   case CfgOp::setw: {
     // An invalid field or a set reserved bit is CFG_ERROR for the whole span.
     const auto word = static_cast<std::uint32_t>(state.scalar.read_x(instr.src));
-    switch (write_config_word(state, instr.reg_type, instr.dest, instr.count, word)) {
+    switch (write_config_word(state, instr.reg_type, instr.dest, instr.n, word)) {
     case ConfigAccessStatus::success: return {.status = StepStatus::retired};
     case ConfigAccessStatus::invalid_value: return config_error();
     default: unreachable("validated cfg.setw has an invalid register span");

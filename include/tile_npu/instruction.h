@@ -274,11 +274,11 @@ enum class CfgOp : std::uint8_t { seti, setx, copy, get, setw, getw };
 struct CfgInstr {
   CfgOp op = CfgOp::seti;
   ConfigRegType reg_type = ConfigRegType::tc;
-  RegisterIndex dest = 0; // Scalar for get/getw; first config otherwise.
+  RegisterIndex dest = 0; // Scalar for get/getw; destination config index otherwise.
   RegisterIndex src = 0;  // Scalar for setx/setw; config for copy/get/getw.
   std::uint8_t field = 0; // Field code for seti/setx/get.
   std::int32_t imm = 0;   // Sign-extended imm16 for seti.
-  std::uint8_t count = 1; // Destination config count for setx/copy/setw.
+  std::uint8_t n = 0;     // Zero-based last destination offset N5.
 };
 
 enum class SysOp : std::uint8_t {

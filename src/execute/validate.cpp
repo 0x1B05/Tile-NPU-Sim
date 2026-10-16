@@ -166,25 +166,25 @@ bool valid_structure(const CfgInstr &instr) {
   }
   const bool word_op = instr.op == CfgOp::setw || instr.op == CfgOp::getw;
   if (word_op && !is_compute_config(instr.reg_type)) return false;
-  // Only the writes setx/copy/setw carry a register count (N5).
-  const bool counted =
+  // Only the writes setx/copy/setw carry a destination span encoded by N5.
+  const bool has_destination_span =
       instr.op == CfgOp::setx || instr.op == CfgOp::copy || instr.op == CfgOp::setw;
-  if (!counted && instr.count != 1) return false;
+  if (!has_destination_span && instr.n != 0) return false;
   if (instr.op == CfgOp::copy || word_op) {
     if (instr.field != 0) return false;
   } else if (!std::holds_alternative<ConfigField>(
                  config_field_from_code(instr.reg_type, instr.field))) {
     return false;
   }
-  const auto count = config_register_count(instr.reg_type);
-  const bool span_fits = instr.count >= 1 && std::size_t{instr.dest} + instr.count <= count;
+  const auto register_count = config_register_count(instr.reg_type);
+  const bool span_fits = std::size_t{instr.dest} + instr.n < register_count;
   switch (instr.op) {
-  case CfgOp::seti: return instr.dest < count;
+  case CfgOp::seti: return instr.dest < register_count;
   case CfgOp::setx:
   case CfgOp::setw: return span_fits && in_range(ScalarRegister{instr.src});
-  case CfgOp::copy: return span_fits && instr.src < count;
+  case CfgOp::copy: return span_fits && instr.src < register_count;
   case CfgOp::get:
-  case CfgOp::getw: return in_range(ScalarRegister{instr.dest}) && instr.src < count;
+  case CfgOp::getw: return in_range(ScalarRegister{instr.dest}) && instr.src < register_count;
   }
   return false;
 }

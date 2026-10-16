@@ -232,12 +232,12 @@ template <typename Config> std::uint32_t pack_word(const Config &config, ConfigR
   return word;
 }
 
-// Builds the whole config from the word first, so a rejected word writes no
-// register of the span.
+// Builds the whole config from the word before writing, so a rejected word
+// writes no register of the destination span.
 template <typename Configs>
-ConfigAccessStatus write_word_span(Configs &configs, ConfigRegType reg_type, std::uint8_t first,
-                                   std::uint8_t count, std::uint32_t word) {
-  if (count == 0 || std::size_t{first} + count > configs.size()) {
+ConfigAccessStatus write_word_span(Configs &configs, ConfigRegType reg_type, RegisterIndex dest,
+                                   std::uint8_t last_offset, std::uint32_t word) {
+  if (std::size_t{dest} + last_offset >= configs.size()) {
     return ConfigAccessStatus::invalid_register;
   }
   typename Configs::value_type config{};
@@ -251,7 +251,7 @@ ConfigAccessStatus write_word_span(Configs &configs, ConfigRegType reg_type, std
   if (!valid || (word & ~defined) != 0) {
     return ConfigAccessStatus::invalid_value;
   }
-  std::fill_n(configs.begin() + first, count, config);
+  std::fill(configs.begin() + dest, configs.begin() + std::size_t{dest} + last_offset + 1, config);
   return ConfigAccessStatus::success;
 }
 
@@ -270,13 +270,13 @@ std::uint32_t read_config_word(const State &state, ConfigRegType reg_type, std::
   }
 }
 
-ConfigAccessStatus write_config_word(State &state, ConfigRegType reg_type, std::uint8_t first,
-                                     std::uint8_t count, std::uint32_t word) {
+ConfigAccessStatus write_config_word(State &state, ConfigRegType reg_type, RegisterIndex dest,
+                                     std::uint8_t last_offset, std::uint32_t word) {
   switch (reg_type) {
-  case ConfigRegType::tc: return write_word_span(state.tc, reg_type, first, count, word);
-  case ConfigRegType::ac: return write_word_span(state.ac, reg_type, first, count, word);
-  case ConfigRegType::bc: return write_word_span(state.bc, reg_type, first, count, word);
-  case ConfigRegType::vc: return write_word_span(state.vc, reg_type, first, count, word);
+  case ConfigRegType::tc: return write_word_span(state.tc, reg_type, dest, last_offset, word);
+  case ConfigRegType::ac: return write_word_span(state.ac, reg_type, dest, last_offset, word);
+  case ConfigRegType::bc: return write_word_span(state.bc, reg_type, dest, last_offset, word);
+  case ConfigRegType::vc: return write_word_span(state.vc, reg_type, dest, last_offset, word);
   default: return ConfigAccessStatus::unsupported_field;
   }
 }

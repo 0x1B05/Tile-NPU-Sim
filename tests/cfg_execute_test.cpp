@@ -203,10 +203,11 @@ TEST_CASE(cfg_get_rejects_unsupported_field) {
 
 namespace {
 
-// cfg.setw C, xS, n: CFG_REG funct3 = 011, count - 1 in [16:12].
+// cfg.setw C, xS, N: CFG_REG funct3 = 011, last destination offset N in
+// [16:12].
 constexpr std::uint32_t cfg_setw(std::uint32_t sel2, std::uint32_t mv, std::uint32_t c5,
-                                 std::uint32_t xs, std::uint32_t count) {
-  return cfg_reg(sel2, mv, 3, 0, xs, c5) | ((count - 1) << 12);
+                                 std::uint32_t xs, std::uint32_t n) {
+  return cfg_reg(sel2, mv, 3, 0, xs, c5) | (n << 12);
 }
 
 // cfg.getw xD, C: CFG_REG funct3 = 100.
@@ -220,8 +221,8 @@ constexpr std::uint32_t cfg_getw(std::uint32_t sel2, std::uint32_t mv, std::uint
 TEST_CASE(cfg_setw_writes_config_span) {
   Ram memory(CODE_BASE, 8);
   Simulator sim(memory);
-  write_word(memory, CODE_BASE, cfg_setw(0, 0, 2, 5, 3));      // tc2..tc4 = x5
-  write_word(memory, CODE_BASE + 4, cfg_setw(1, 1, 0, 6, 32)); // vc0..vc31 = x6
+  write_word(memory, CODE_BASE, cfg_setw(0, 0, 2, 5, 2));      // tc2..tc4 = x5
+  write_word(memory, CODE_BASE + 4, cfg_setw(1, 1, 0, 6, 31)); // vc0..vc31 = x6
   sim.reset(CODE_BASE);
   // TC: rows 8, cols 16, dtype u8, row-major, sat; the high half is ignored.
   sim.state().scalar.write_x(5, 0xdead'beef'0081'1008ull);
@@ -268,7 +269,7 @@ TEST_CASE(cfg_setw_rejects_invalid_word) {
 
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
-  load_one(sim, memory, cfg_setw(0, 1, 0, 5, 1));
+  load_one(sim, memory, cfg_setw(0, 1, 0, 5, 0));
   sim.state().scalar.write_x(5, 0x1020); // BC len 32 with a reserved bit 12
   check_eq(sim.step().status, StepStatus::invalid_configuration, "bc reserved bit 12");
 }
@@ -276,10 +277,10 @@ TEST_CASE(cfg_setw_rejects_invalid_word) {
 TEST_CASE(cfg_getw_round_trips_setw) {
   Ram memory(CODE_BASE, 16);
   Simulator sim(memory);
-  write_word(memory, CODE_BASE, cfg_setw(1, 0, 3, 5, 1));       // ac3 = x5
+  write_word(memory, CODE_BASE, cfg_setw(1, 0, 3, 5, 0));       // ac3 = x5
   write_word(memory, CODE_BASE + 4, cfg_getw(1, 0, 6, 3));      // x6 = ac3
   write_word(memory, CODE_BASE + 8, cfg_getw(0, 1, 7, 9));      // x7 = bc9
-  write_word(memory, CODE_BASE + 12, cfg_setw(0, 1, 10, 7, 1)); // bc10 = x7
+  write_word(memory, CODE_BASE + 12, cfg_setw(0, 1, 10, 7, 0)); // bc10 = x7
   sim.reset(CODE_BASE);
   sim.state().scalar.write_x(5, 0x0004'1f07); // AC: rows 7, cols 31, f32
   sim.state().bc[9].dtype = DType::u8;
@@ -297,7 +298,7 @@ TEST_CASE(cfg_getw_round_trips_setw) {
 TEST_CASE(cfg_setx_writes_config_span) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
-  // cfg.setx vm1, stride_bytes, x5, 3
+  // cfg.setx vm1, stride_bytes, x5, 2
   load_one(sim, memory, cfg_reg(3, 1, 0, FIELD_ROW_STRIDE, 5, 1) | (2u << 12));
   sim.state().scalar.write_x(5, static_cast<std::uint64_t>(-8));
   check_eq(sim.step().status, StepStatus::retired, "cfg.setx span retires");
@@ -313,7 +314,7 @@ TEST_CASE(cfg_setx_writes_config_span) {
 TEST_CASE(cfg_setx_span_rejects_invalid_value) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
-  // cfg.setx tc0, rows, x5, 4 with rows = 0: CFG_ERROR, nothing written.
+  // cfg.setx tc0, rows, x5, 3 with rows = 0: CFG_ERROR, nothing written.
   load_one(sim, memory, cfg_reg(0, 0, 0, FIELD_ROWS, 5, 0) | (3u << 12));
   for (int i = 0; i < 4; ++i)
     sim.state().tc[i].rows = 9;
@@ -326,7 +327,7 @@ TEST_CASE(cfg_setx_span_rejects_invalid_value) {
 TEST_CASE(cfg_copy_broadcasts_source) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
-  // cfg.copy tm0, tm1, 3: the source tm1 lies inside the destination span
+  // cfg.copy tm0, tm1, 2: the source tm1 lies inside the destination span
   // tm0..tm2 and every destination gets its original value.
   load_one(sim, memory, cfg_reg(2, 0, 1, 0, 1, 0) | (2u << 12));
   sim.state().tm[1].base_addr = 0x4000;

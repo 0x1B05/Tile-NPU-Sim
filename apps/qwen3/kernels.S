@@ -32,7 +32,7 @@ nq_debug_qtile: .skip 8
     .globl nq_quant_act
 nq_quant_act:
     LI_CWV  t6, DT_F32, 32
-    SETW    SEL_VC, 1, 0, X_T6, 3
+    SETW    SEL_VC, 1, 0, X_T6, 2
 
     # activation absmax over the padded panels (v0 max, v1 chunk)
     SETX    SEL_VM, 1, CF_BASE, 1, X_A0
@@ -65,7 +65,7 @@ nq_quant_act:
     SETIM   SEL_AM, CF_CSTRIDE, 4, 0
     SETIM   SEL_AM, CF_FLAGS, 1, 0        # inc along rows: += 32 * 128
     LI_CWM  t3, DT_I8, 32, 32
-    SETW    SEL_TC, 0, 2, X_T3, 3
+    SETW    SEL_TC, 0, 2, X_T3, 2
     addi    t3, a1, 1023
     srli    t3, t3, 10          # panels
     li      t4, 0
@@ -125,7 +125,7 @@ nq_matvec_q:
 
     # shared vector configs (len 32)
     LI_CWV  t0, DT_I32, 32
-    SETW    SEL_VC, 1, 4, X_T0, 2
+    SETW    SEL_VC, 1, 4, X_T0, 1
     LI_CWV  t0, DT_F32, 32
     SETW    SEL_VC, 1, 6, X_T0
     SETW    SEL_VC, 1, 8, X_T0
@@ -137,7 +137,7 @@ nq_matvec_q:
     SETIM   SEL_TM, CF_CSTRIDE, 1, 1
     SETIM   SEL_TM, CF_FLAGS, 2, 1        # inc along cols: += 32 * 1
     LI_CWV  t0, DT_I8, 32
-    SETW    SEL_BC, 1, 0, X_T0, 32
+    SETW    SEL_BC, 1, 0, X_T0, 31
     la      t0, nq_accbuf
     SETX    SEL_VM, 1, CF_BASE, 4, X_T0
     SETIV   SEL_VM, CF_STRIDE, 4, 4
@@ -253,7 +253,7 @@ nq_matvec_q:
     .globl nq_quant_rows
 nq_quant_rows:
     LI_CWV  t6, DT_F32, 32
-    SETW    SEL_VC, 1, 0, X_T6, 2
+    SETW    SEL_VC, 1, 0, X_T6, 1
     LI_CWM  t6, DT_F32, 32, 32
     SETW    SEL_AC, 0, 0, X_T6
     SETX    SEL_AM, 0, CF_BASE, 0, X_A0
@@ -325,7 +325,7 @@ nq_matmul_q:
     mv      s6, a2              # xq base
 
     LI_CWM  t0, DT_I8, 32, 32
-    SETW    SEL_TC, 0, 0, X_T0, 2
+    SETW    SEL_TC, 0, 0, X_T0, 1
     SETX    SEL_TM, 0, CF_RSTRIDE, 0, X_A6
     SETIM   SEL_TM, CF_CSTRIDE, 1, 0
     SETIM   SEL_TM, CF_FLAGS, 2, 0      # inc along cols: += 32 * 1
@@ -334,14 +334,14 @@ nq_matmul_q:
     SETIM   SEL_TM, CF_FLAGS, 2, 1
     SETIM   SEL_TM, CF_LAYOUT, 1, 1     # transform = transpose: t1 = W chunk^T
     LI_CWM  t0, DT_I32, 32, 32
-    SETW    SEL_AC, 0, 0, X_T0, 2
+    SETW    SEL_AC, 0, 0, X_T0, 1
     SETX    SEL_AM, 0, CF_BASE, 1, X_A4
     slli    t0, a5, 2
     SETX    SEL_AM, 0, CF_RSTRIDE, 1, X_T0
     SETIM   SEL_AM, CF_CSTRIDE, 4, 1
     SETIM   SEL_AM, CF_FLAGS, 2, 1      # inc along cols: += 32 * 4
     LI_CWV  s3, DT_F32, 32
-    SETW    SEL_VC, 1, 29, X_S3, 2    # vc29 (ws stream), vc30 (xs)
+    SETW    SEL_VC, 1, 29, X_S3, 1    # vc29 (ws stream), vc30 (xs)
     SETX    SEL_VM, 1, CF_BASE, 29, X_A1
     SETIV   SEL_VM, CF_STRIDE, 4, 29
     SETIV   SEL_VM, CF_VFLAGS, 1, 29    # ws stream, one block per load
@@ -400,7 +400,7 @@ nq_matmul_q:
     .globl nq_rmsnorm
 nq_rmsnorm:
     LI_CWV  t6, DT_F32, 32
-    SETW    SEL_VC, 1, 0, X_T6, 5
+    SETW    SEL_VC, 1, 0, X_T6, 4
     SETX    SEL_VM, 1, CF_BASE, 1, X_A0
     SETIV   SEL_VM, CF_STRIDE, 4, 1
     SETIV   SEL_VM, CF_VFLAGS, 1, 1
@@ -458,7 +458,7 @@ nq_rope:
     # Broadcast stride/inc first: cfg.copy copies every field, base included.
     SETIV   SEL_VM, CF_STRIDE, 4, 0
     SETIV   SEL_VM, CF_VFLAGS, 1, 0
-    CFGCOPY SEL_VM, 1, 1, 0, 7          # vm1..vm7 = vm0 stride/inc
+    CFGCOPY SEL_VM, 1, 1, 0, 6          # vm1..vm7 = vm0 stride/inc
     SETX    SEL_VM, 1, CF_BASE, 0, X_A1
     addi    t0, a1, 128
     SETX    SEL_VM, 1, CF_BASE, 1, X_T0
@@ -537,7 +537,7 @@ nq_rope:
     .globl nq_scores
 nq_scores:
     LI_CWV  t6, DT_F32, 32
-    SETW    SEL_VC, 1, 0, X_T6, 21
+    SETW    SEL_VC, 1, 0, X_T6, 20
     srli    t6, a5, 5                     # chunks = hd / 32
     # q chunk descriptors vm8..vm11 (base = q + c*128, no inc)
     mv      t0, a0
@@ -599,7 +599,7 @@ nq_scores:
     .globl nq_softmax_exp
 nq_softmax_exp:
     LI_CWV  t6, DT_F32, 32
-    SETW    SEL_VC, 1, 0, X_T6, 5
+    SETW    SEL_VC, 1, 0, X_T6, 4
     SETIV   SEL_VM, CF_STRIDE, 4, 1
     SETIV   SEL_VM, CF_VFLAGS, 1, 1
     SETIV   SEL_VM, CF_STRIDE, 4, 3
@@ -644,7 +644,7 @@ nq_softmax_exp:
     .globl nq_pv
 nq_pv:
     LI_CWV  t6, DT_F32, 32
-    SETW    SEL_VC, 1, 0, X_T6, 21
+    SETW    SEL_VC, 1, 0, X_T6, 20
     srli    t6, a5, 5                     # chunks
     SETIV   SEL_VM, CF_STRIDE, 4, 12
     SETIV   SEL_VM, CF_VFLAGS, 1, 12
@@ -711,10 +711,10 @@ nq_pv:
     .globl nq_silu_mul
 nq_silu_mul:
     LI_CWV  t6, DT_F32, 32
-    SETW    SEL_VC, 1, 0, X_T6, 3
+    SETW    SEL_VC, 1, 0, X_T6, 2
     SETIV   SEL_VM, CF_STRIDE, 4, 0
     SETIV   SEL_VM, CF_VFLAGS, 1, 0
-    CFGCOPY SEL_VM, 1, 1, 0, 2          # vm1, vm2 = vm0 stride/inc
+    CFGCOPY SEL_VM, 1, 1, 0, 1          # vm1, vm2 = vm0 stride/inc
     SETX    SEL_VM, 1, CF_BASE, 0, X_A0
     SETX    SEL_VM, 1, CF_BASE, 1, X_A1
     SETX    SEL_VM, 1, CF_BASE, 2, X_A2
@@ -736,10 +736,10 @@ nq_silu_mul:
     .globl nq_add
 nq_add:
     LI_CWV  t6, DT_F32, 32
-    SETW    SEL_VC, 1, 0, X_T6, 3
+    SETW    SEL_VC, 1, 0, X_T6, 2
     SETIV   SEL_VM, CF_STRIDE, 4, 0
     SETIV   SEL_VM, CF_VFLAGS, 1, 0
-    CFGCOPY SEL_VM, 1, 1, 0, 2          # vm1, vm2 = vm0 stride/inc
+    CFGCOPY SEL_VM, 1, 1, 0, 1          # vm1, vm2 = vm0 stride/inc
     SETX    SEL_VM, 1, CF_BASE, 0, X_A0
     SETX    SEL_VM, 1, CF_BASE, 1, X_A1
     SETX    SEL_VM, 1, CF_BASE, 2, X_A0
@@ -762,7 +762,7 @@ nq_add:
     .globl nq_embed
 nq_embed:
     LI_CWV  t0, DT_F32, 32
-    SETW    SEL_VC, 1, 0, X_T0, 2
+    SETW    SEL_VC, 1, 0, X_T0, 1
     LI_CWV  t0, DT_I8, 32
     SETW    SEL_BC, 1, 0, X_T0
     slli    t0, a2, 2
@@ -796,7 +796,7 @@ nq_argmax:
     sd      s2, 0(sp)
     sd      s3, 8(sp)
     LI_CWV  t6, DT_F32, 32
-    SETW    SEL_VC, 1, 0, X_T6, 2
+    SETW    SEL_VC, 1, 0, X_T6, 1
     LI_CWV  t6, DT_F32, 2
     SETW    SEL_VC, 1, 2, X_T6
     SETX    SEL_VM, 1, CF_BASE, 1, X_A0
