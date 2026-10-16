@@ -112,13 +112,20 @@ bool valid_structure(const MblkInstr &instr) {
   return in_range(reg) && index_in_range(instr.index);
 }
 
-bool valid_structure(const InitInstr &instr) {
-  if (instr.op > InitOp::transpose || !in_range(instr.reg)) return false;
+bool valid_structure(const FillInstr &instr) {
+  return in_range(instr.dest) &&
+         std::visit(Overloaded{[](FillImm16) { return true; },
+                               [](ScalarRegister reg) { return in_range(reg); }},
+                    instr.value);
+}
+
+bool valid_structure(const MoveInstr &instr) {
+  if (instr.dest.domain != instr.src.domain || !in_range(instr.dest) || !in_range(instr.src)) {
+    return false;
+  }
   switch (instr.op) {
-  case InitOp::fill: return true;
-  case InitOp::fillx: return in_range(ScalarRegister{instr.src});
-  case InitOp::copy: return instr.src < domain_register_count(instr.reg.domain);
-  case InitOp::transpose: return instr.reg.domain == NpuDomain::tile && instr.src < TILE_REGISTERS;
+  case MoveOp::copy: return true;
+  case MoveOp::transpose: return instr.dest.domain == NpuDomain::tile;
   }
   return false;
 }

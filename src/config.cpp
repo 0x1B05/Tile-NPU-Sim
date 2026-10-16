@@ -46,7 +46,6 @@ template <typename Config> constexpr auto dtype_for() {
   };
 }
 
-// Stores raw into target when the field accepts it.
 template <typename T, typename Accept>
 ConfigAccessStatus store_if(T &target, std::uint64_t raw, Accept accept) {
   if (!accept(raw)) return ConfigAccessStatus::invalid_value;

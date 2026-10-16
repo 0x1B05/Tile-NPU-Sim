@@ -1,6 +1,6 @@
 #include "npu.inc"
 
-# Self-checking INIT_MOVE image: programs configs and descriptors, then
+# Self-checking fill/move image: programs configs and descriptors, then
 # exercises fill/fillx/copy on the tile, acc and vec8 domains and ttranspose
 # (including in-place). Every stage stores results back to memory and checks
 # them with scalar loads; the transpose config update is read back with

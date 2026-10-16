@@ -162,8 +162,7 @@ struct NpuI {
   }
 };
 
-// R4 positional fields; each family gives them meaning (CFG_REG reads arg as
-// field5 and requires the src2 position to be 0, which the patterns pin).
+// R4 field meanings depend on the instruction family.
 struct NpuR4 {
   std::uint8_t major4;
   std::uint8_t sel3;

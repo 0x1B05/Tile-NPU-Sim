@@ -38,9 +38,9 @@ using tile_npu::EunOp;
 using tile_npu::exec_npu_instr;
 using tile_npu::ExecContext;
 using tile_npu::Fill5Code;
+using tile_npu::FillImm16;
+using tile_npu::FillInstr;
 using tile_npu::ImmediateIndex;
-using tile_npu::InitInstr;
-using tile_npu::InitOp;
 using tile_npu::LaneInstr;
 using tile_npu::LaneOp;
 using tile_npu::MaskInstr;
@@ -49,6 +49,8 @@ using tile_npu::MblkInstr;
 using tile_npu::MblkOp;
 using tile_npu::MmaInstr;
 using tile_npu::MmaOp;
+using tile_npu::MoveInstr;
+using tile_npu::MoveOp;
 using tile_npu::NpuDomain;
 using tile_npu::NpuRegister;
 using tile_npu::QntInstr;
@@ -139,11 +141,19 @@ TEST_CASE(validate_rejects_bad_mblk) {
   check_illegal(MblkInstr{static_cast<MblkOp>(5), T(0), {}, ImmediateIndex{}, 0}, "reserved op");
 }
 
-TEST_CASE(validate_rejects_bad_init) {
-  check_illegal(InitInstr{InitOp::transpose, A(0), 0, 0}, "transpose on acc");
-  check_illegal(InitInstr{InitOp::copy, T(0), 16, 0}, "copy src index 16");
-  check_illegal(InitInstr{InitOp::fillx, T(0), 32, 0}, "fillx xS index 32");
-  check_illegal(InitInstr{static_cast<InitOp>(4), T(0), 0, 0}, "reserved op");
+TEST_CASE(validate_rejects_bad_fill) {
+  check_illegal(FillInstr{T(16), FillImm16{1}}, "fill dest index 16");
+  check_illegal(FillInstr{{static_cast<NpuDomain>(4), 0}, FillImm16{1}}, "fill invalid domain");
+  check_illegal(FillInstr{T(0), ScalarRegister{32}}, "fillx xS index 32");
+}
+
+TEST_CASE(validate_rejects_bad_move) {
+  check_illegal(MoveInstr{MoveOp::transpose, A(0), A(1)}, "transpose on acc");
+  check_illegal(MoveInstr{MoveOp::copy, T(0), T(16)}, "copy src index 16");
+  check_illegal(MoveInstr{MoveOp::copy, T(16), T(0)}, "copy dest index 16");
+  check_illegal(MoveInstr{MoveOp::copy, T(0), A(0)}, "cross-domain copy");
+  check_illegal(MoveInstr{MoveOp::transpose, T(0), B(0)}, "cross-domain transpose");
+  check_illegal(MoveInstr{static_cast<MoveOp>(2), T(0), T(1)}, "reserved op");
 }
 
 TEST_CASE(validate_rejects_bad_row_move) {

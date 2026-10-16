@@ -15,7 +15,7 @@ namespace tile_npu {
 namespace {
 
 // insert.row copies the source vector over one matrix row: the vector length
-// must equal the matrix column count and the row number must be in range.
+// must equal the matrix column count.
 template <NpuDomain Domain> ExecuteResult row_insert(const RowInstr &instr, State &state) {
   constexpr auto VECTOR_DOMAIN = Domain == NpuDomain::tile ? NpuDomain::vec8 : NpuDomain::vec32;
   auto &matrix_regs = domain_regs<Domain>(state);
@@ -40,8 +40,7 @@ template <NpuDomain Domain> ExecuteResult row_insert(const RowInstr &instr, Stat
   return {.status = StepStatus::retired};
 }
 
-// extract.row copies one matrix row into the destination vector's effective
-// lanes; the other lanes keep their values.
+// extract.row copies one matrix row into the destination vector's effective lanes.
 template <NpuDomain Domain> ExecuteResult row_extract(const RowInstr &instr, State &state) {
   constexpr auto VECTOR_DOMAIN = Domain == NpuDomain::tile ? NpuDomain::vec8 : NpuDomain::vec32;
   const auto &matrix_regs = domain_regs<Domain>(state);

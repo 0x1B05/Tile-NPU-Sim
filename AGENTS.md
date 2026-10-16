@@ -33,7 +33,7 @@ xmake project -k compile_commands      # 为 clangd 生成 compile_commands.json
 | 路径 | 职责 |
 | ---- | ---- |
 | `include/tile_npu/state.h` | 寄存器堆、配置、描述符与物理尺寸常量 |
-| `include/tile_npu/instruction.h` | 标量/NPU 语义 IR 与操作数类型 |
+| `include/tile_npu/instruction.h` | 按功能组织的标量/NPU 语义 IR 与操作数类型，语义类型不要求与 major 一一对应 |
 | `src/op_info.h` | 译码与结构检查共享的操作元数据：寄存器数量、操作/数据域合法性与 funct 表 |
 | `include/tile_npu/decode.h` | `DecodeResult` 与译码接口 |
 | `include/tile_npu/simulator.h`、`src/simulator.cpp` | `Simulator::reset` / `step`、取指与步进状态词表 `StepStatus` |
@@ -44,12 +44,13 @@ xmake project -k compile_commands      # 为 clangd 生成 compile_commands.json
 | `src/decode/encoding.h`、`pattern.h` | 位段提取、格式解析、编译期 pattern 解析与按序匹配 |
 | `src/decode/decode*.cpp` | 顶层 q 分派，以及 RV64IM / NPU 译码表与 IR 构造 |
 | `src/execute/execute.h`、`execute.cpp` | 执行上下文、结果类型及标量/NPU 分派 |
-| `src/execute/validate.h` | IR 的统一结构合法性检查 |
+| `src/execute/validate.h`、`validate.cpp` | IR 的统一结构合法性检查，头文件仅声明 `valid_structure(const DecodedNpuInstr &)` |
 | `src/execute/config_check.h` | dtype、shape、layout 等配置约束与配置匹配 |
 | `src/execute/execute_*.cpp` | 按指令族实现执行语义；`execute_cfg.cpp` 负责配置指令取值和执行结果转换 |
+| `src/execute/execute_move.cpp` | `FillInstr` 执行立即数/Scalar 填充，`MoveInstr` 执行同域复制和 Tile 转置 |
 | `src/execute/domain.h` | 数据域到寄存器堆/配置/描述符的绑定、域分派与有效区域遍历 |
-| `src/execute/ebin_op.h`、`operand.h`、`f32_util.h`、`rv64_util.h` | 执行域共享的元素运算、操作数读取和数值工具 |
-| `src/utils/` | 通用内部工具：小端转换、十六进制格式化、variant visitor 与 `unreachable` |
+| `src/execute/elementwise_op.h`、`operand.h`、`f32_util.h`、`rv64_util.h` | 执行域共享的元素运算、操作数读取和数值工具 |
+| `src/utils/` | 通用内部工具：小端转换、variant visitor 与 `unreachable`；十六进制格式化位于 `src/monitor/format.h` |
 | `src/main.cpp`、`src/monitor/` | CLI、镜像装载、`npu_exec` 步进循环和 sdb 命令 |
 | `tests/` | host 测试框架、译码/执行测试及 guest 源码 |
 | `apps/qwen3/`、`scripts/qwen3/` | Qwen3 guest 与权重转换、分词、NumPy 参考及对齐检查工具 |
@@ -83,7 +84,7 @@ xmake project -k compile_commands      # 为 clangd 生成 compile_commands.json
 
 1. 在 `instruction.h` 添加带域与语义操作数的 IR，操作元数据与合法性规则放在 `src/op_info.h`；已有 `IndexOperand` / `FillOperand` 等 variant 可表达立即数与 Scalar 来源。避免用裸整数加 bool 维护二选一关系。
 2. 必要时补充 `encoding.h` 的格式解析，在译码表增加 pattern 与 handler。首条匹配生效，需检查编码重叠；保留编码和超出实际寄存器数量的编号报 `illegal`。
-3. 在 `validate.h` 补充结构检查，在 `execute.cpp` 接入分派，并在所属指令族实现语义。开发中尚未实现的执行显式返回 `execution_not_implemented`。
+3. 在 `validate.cpp` 补充结构检查，在 `execute.cpp` 接入分派，并在所属指令族实现语义。开发中尚未实现的执行显式返回 `execution_not_implemented`。
 4. 每个新增操作覆盖合法编码、保留/非法编码和边界值，包括立即数、寄存器号与有效 shape 边界。
 
 测试放置与运行约定：

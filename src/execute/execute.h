@@ -27,8 +27,6 @@ struct ExecContext {
   AddressSpace &memory;
 };
 
-// The shared failure constructors: a dynamic constraint violation reports
-// invalid_configuration, and a faulting access carries its address.
 inline ExecuteResult config_error() { return {.status = StepStatus::invalid_configuration}; }
 
 inline ExecuteResult access_fault(StepStatus status, std::uint64_t address) {
@@ -50,7 +48,8 @@ ExecuteResult execute(const MaskInstr &instr, State &state);
 
 // Memory access and movement
 ExecuteResult execute(const MblkInstr &instr, ExecContext &ctx);
-ExecuteResult execute(const InitInstr &instr, State &state);
+ExecuteResult execute(const FillInstr &instr, State &state);
+ExecuteResult execute(const MoveInstr &instr, State &state);
 ExecuteResult execute(const RowInstr &instr, State &state);
 ExecuteResult execute(const LaneInstr &instr, State &state);
 

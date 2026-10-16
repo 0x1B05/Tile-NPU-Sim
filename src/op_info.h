@@ -33,10 +33,6 @@ inline constexpr bool is_domains_paired(NpuDomain matrix, NpuDomain vector) {
          (matrix == NpuDomain::acc && vector == NpuDomain::vec32);
 }
 
-// Operation metadata for the E_BIN family:
-// tile_allowed is false for mul/div (the tile domain has no 8-bit mul/div
-// encodings); integer_allowed is false for div (f32-only); f32_allowed is
-// false for the bitwise and shift operations (integer-only).
 struct EbinInfo {
   EbinOp op;
   bool tile_allowed;
@@ -78,8 +74,6 @@ inline constexpr bool eun_legal(EunOp op, NpuDomain domain) {
          (domain != NpuDomain::tile || op == EunOp::bit_not);
 }
 
-// Condition metadata for the E_CMP family:
-// ne/ge are integer-only and le/unord are f32-only; eq/lt accept both.
 struct CmpInfo {
   CmpOp op;
   bool integer_allowed;
@@ -100,9 +94,6 @@ inline constexpr std::array<std::optional<CmpInfo>, 8> CMP_BY_FUNCT3 = [] {
   return table;
 }();
 
-// Operand reading per op:
-//   select: dest = D, arg = mask M (u8/u32 per domain), src1 = A, src2 = B
-//   fmadd:  dest = D, arg = addend C, src1 = A, src2 = B
 // Vec8 has no E_R4 form; fmadd excludes Tile.
 inline constexpr bool er4_legal(Er4Op op, NpuDomain domain) {
   return op <= Er4Op::fmadd && domain != NpuDomain::vec8 &&
