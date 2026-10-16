@@ -3,7 +3,7 @@
 #include "config_check.h"
 #include "f32_util.h"
 #include "matrix_view.h"
-#include "utils/unreachable.h"
+#include "utils/common.h"
 
 #include <bit>
 #include <cmath>

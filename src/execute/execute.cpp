@@ -50,17 +50,13 @@ ExecuteResult exec_scalar_instr(const DecodedScalarInstr &instr, ExecContext &ct
 }
 
 ExecuteResult exec_npu_instr(const DecodedNpuInstr &instr, ExecContext &ctx) {
-  // decode() guarantees structural legality; the visit re-checks it so
-  // hand-constructed IR fails at this single point.
+  // decode() guarantees structural legality; this check keeps hand-constructed
+  // IR from reaching a family executor.
   const FpEnvGuard fp_env;
-  return std::visit(
-      [&ctx](const auto &decoded) {
-        if (!valid_structure(decoded)) {
-          return ExecuteResult{.status = StepStatus::illegal_instruction};
-        }
-        return exec_npu_family(decoded, ctx);
-      },
-      instr);
+  if (!valid_structure(instr)) {
+    return {.status = StepStatus::illegal_instruction};
+  }
+  return std::visit([&ctx](const auto &decoded) { return exec_npu_family(decoded, ctx); }, instr);
 }
 
 } // namespace tile_npu

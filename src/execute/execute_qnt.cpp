@@ -4,7 +4,7 @@
 #include "f32_util.h"
 #include "matrix_view.h"
 #include "operand.h"
-#include "utils/unreachable.h"
+#include "utils/common.h"
 
 #include <bit>
 #include <cmath>

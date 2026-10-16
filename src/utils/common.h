@@ -7,6 +7,13 @@
 
 namespace tile_npu {
 
+// Composes several lambdas into one std::visit visitor.
+template <typename... Ts> struct Overloaded : Ts... {
+  using Ts::operator()...;
+};
+
+template <typename... Ts> Overloaded(Ts...) -> Overloaded<Ts...>;
+
 // Marks a path that ISA- or implementation-level invariants make impossible
 // (e.g. an operation already validated as legal for the dtype). The check
 // stays active in release builds: a violated invariant aborts with its

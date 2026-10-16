@@ -2,7 +2,7 @@
 
 #include "config_check.h"
 #include "domain.h"
-#include "utils/unreachable.h"
+#include "utils/common.h"
 
 #include <bit>
 #include <cmath>

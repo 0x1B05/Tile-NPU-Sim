@@ -3,7 +3,7 @@
 #include "config_check.h"
 #include "domain.h"
 #include "op_info.h"
-#include "utils/unreachable.h"
+#include "utils/common.h"
 
 #include <array>
 #include <cstddef>

@@ -1,9 +1,9 @@
 #include "sdb.h"
 
+#include "format.h"
 #include "monitor.h"
 #include "parse.h"
 #include "utils/endian.h"
-#include "utils/format.h"
 
 #include <algorithm>
 #include <array>

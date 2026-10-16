@@ -4,7 +4,7 @@
 #include "domain.h"
 #include "matrix_view.h"
 #include "operand.h"
-#include "utils/unreachable.h"
+#include "utils/common.h"
 
 #include <cstddef>
 #include <cstdint>

@@ -66,7 +66,7 @@ ExecuteResult execute(const SysInstr &instr, State &state);
 
 // Dispatch entry points
 ExecuteResult exec_scalar_instr(const DecodedScalarInstr &instr, ExecContext &ctx);
-// Validates the instruction's structure first (validate.h): IR that no
+// valid_structure checks the instruction's structure first: IR that no
 // encoding can produce fails with illegal_instruction before dispatch.
 ExecuteResult exec_npu_instr(const DecodedNpuInstr &instr, ExecContext &ctx);
 

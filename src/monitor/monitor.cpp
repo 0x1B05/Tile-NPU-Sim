@@ -2,7 +2,7 @@
 
 #include "parse.h"
 #include "sdb.h"
-#include "utils/format.h"
+#include "format.h"
 
 #include "tile_npu/platform/bus.h"
 #include "tile_npu/platform/ram.h"

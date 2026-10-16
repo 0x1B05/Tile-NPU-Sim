@@ -6,7 +6,7 @@
 #include "matrix_view.h"
 #include "operand.h"
 #include "utils/endian.h"
-#include "utils/unreachable.h"
+#include "utils/common.h"
 
 #include <algorithm>
 #include <array>

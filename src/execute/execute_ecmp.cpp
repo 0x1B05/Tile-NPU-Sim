@@ -4,8 +4,7 @@
 #include "domain.h"
 #include "op_info.h"
 #include "operand.h"
-#include "utils/overloaded.h"
-#include "utils/unreachable.h"
+#include "utils/common.h"
 
 #include <bit>
 #include <cmath>

@@ -1,4 +1,4 @@
-// Structural validation at the execute entry (src/execute/validate.h):
+// Structural validation at the execute entry:
 // hand-constructed IR that no encoding can produce must fail with
 // illegal_instruction before dispatch, and valid hand-constructed IR must
 // execute normally. decode() guarantees structural legality, so these cases
