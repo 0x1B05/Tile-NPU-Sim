@@ -169,23 +169,33 @@ constexpr auto FIELD_BY_TYPE_AND_CODE = [] {
 }();
 // clang-format on
 
-// A compute config field's bit slot in the architectural config word.
-struct WordSlot {
+// An inclusive bit range [hi:lo] of the 32-bit config word
+struct BitRange {
+  unsigned hi;
   unsigned lo;
-  unsigned width;
 
-  constexpr std::uint32_t mask() const { return ((std::uint32_t{1} << width) - 1) << lo; }
+  constexpr std::uint32_t mask() const {
+    return static_cast<std::uint32_t>(((std::uint64_t{1} << (hi - lo + 1)) - 1) << lo);
+  }
+
+  constexpr std::uint32_t extract(std::uint32_t word) const { return (word & mask()) >> lo; }
+
+  constexpr std::uint32_t place(std::uint64_t value) const {
+    return static_cast<std::uint32_t>(value << lo) & mask();
+  }
 };
 
-constexpr WordSlot word_slot(ConfigRegType reg_type, ConfigField field) {
+// Where each compute config field sits in the config word (the TC/AC and
+// BC/VC bit diagrams).
+constexpr BitRange config_word_bits(ConfigRegType reg_type, ConfigField field) {
   const bool matrix = reg_type == ConfigRegType::tc || reg_type == ConfigRegType::ac;
   switch (field) {
   case ConfigField::rows:
-  case ConfigField::len: return {0, 8};
-  case ConfigField::cols: return {8, 8};
-  case ConfigField::dtype: return matrix ? WordSlot{16, 4} : WordSlot{8, 4};
-  case ConfigField::layout: return {20, 3};
-  case ConfigField::arith_mode: return {23, 2};
+  case ConfigField::len: return {7, 0};
+  case ConfigField::cols: return {15, 8};
+  case ConfigField::dtype: return matrix ? BitRange{19, 16} : BitRange{11, 8};
+  case ConfigField::layout: return {22, 20};
+  case ConfigField::arith_mode: return {24, 23};
   default: unreachable("not a compute config field");
   }
 }
@@ -211,14 +221,14 @@ ConfigAccessStatus write_compute_field(Config &config, ConfigField field, std::u
 // The fields a register type defines are the non-empty entries of its row.
 template <typename Fn> void for_each_field(ConfigRegType reg_type, Fn &&fn) {
   for (const auto &field : FIELD_BY_TYPE_AND_CODE[static_cast<std::uint8_t>(reg_type)]) {
-    if (field) fn(*field, word_slot(reg_type, *field));
+    if (field) fn(*field, config_word_bits(reg_type, *field));
   }
 }
 
 template <typename Config> std::uint32_t pack_word(const Config &config, ConfigRegType reg_type) {
   std::uint32_t word = 0;
-  for_each_field(reg_type, [&](ConfigField field, WordSlot slot) {
-    word |= static_cast<std::uint32_t>(read_compute_field(config, field)) << slot.lo;
+  for_each_field(reg_type, [&](ConfigField field, BitRange bits) {
+    word |= bits.place(read_compute_field(config, field));
   });
   return word;
 }
@@ -234,10 +244,10 @@ ConfigAccessStatus write_word_span(Configs &configs, ConfigRegType reg_type, std
   typename Configs::value_type config{};
   std::uint32_t defined = 0;
   bool valid = true;
-  for_each_field(reg_type, [&](ConfigField field, WordSlot slot) {
-    defined |= slot.mask();
-    valid = valid && write_compute_field(config, field, (word & slot.mask()) >> slot.lo) ==
-                         ConfigAccessStatus::success;
+  for_each_field(reg_type, [&](ConfigField field, BitRange bits) {
+    defined |= bits.mask();
+    valid = valid &&
+            write_compute_field(config, field, bits.extract(word)) == ConfigAccessStatus::success;
   });
   if (!valid || (word & ~defined) != 0) {
     return ConfigAccessStatus::invalid_value;
