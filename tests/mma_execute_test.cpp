@@ -90,25 +90,6 @@ TEST_CASE(mma_nn_acc) {
   check_eq(hex(state.a[0][33]), hex(0xffffffaau), "D[1,1] = 4 + -90");
 }
 
-TEST_CASE(mma_nt_zero) {
-  Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
-  // {{1,2,3},{4,-5,6}} x {{7,8,9},{10,11,12}}^T = {{50, 68}, {42, 57}}.
-  load_one(sim, memory, make_mma(2, 0, 1, 2));
-  auto &state = sim.state();
-  acc_i32(state, 0, 2, 2);
-  tile_i8(state, 1, 2, 3);
-  tile_i8(state, 2, 2, 3);
-  poke_lhs(state, 1);
-  poke_rhs_nt(state, 2);
-
-  check_eq(sim.step().status, StepStatus::retired, "mma.nt.zero retires");
-  check_eq(state.a[0][0], std::uint32_t{50}, "D[0,0]");
-  check_eq(state.a[0][1], std::uint32_t{68}, "D[0,1]");
-  check_eq(state.a[0][32], std::uint32_t{42}, "D[1,0]");
-  check_eq(state.a[0][33], std::uint32_t{57}, "D[1,1]");
-}
-
 TEST_CASE(bdot_nn_nt) {
   Ram memory(CODE_BASE, 8);
   Simulator sim(memory);

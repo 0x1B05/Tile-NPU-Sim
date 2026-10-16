@@ -267,7 +267,7 @@ DecodeResult decode_qnt(std::uint32_t word) {
 // MMA_BDOT (R4): major4 = 0000, q = 10.
 // 31    28 27       25 24    22 21       17 16      12 11       7 6        2 1   0
 // [major4] [reserved3] [funct3] [reserved5] [   B5   ] [   A5   ] [   D5   ] [ q ]
-// funct3 = {mma/bdot, nn/nt, zero/acc}; every code is assigned.
+// funct3 = {mma/bdot, nn/nt, zero/acc}; nt is bdot-only, so 010/011 are reserved.
 DecodeResult decode_mma(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto &info = MMA_BY_FUNCT3[f.funct3];

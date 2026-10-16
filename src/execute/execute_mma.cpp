@@ -18,14 +18,14 @@ constexpr std::int32_t i8_product(std::uint8_t lhs, std::uint8_t rhs) {
          static_cast<std::int32_t>(std::bit_cast<std::int8_t>(rhs));
 }
 
-// The op codes are the funct3 values: bit1 selects nt, bit0 accumulate.
+// The op codes are the funct3 values: bit1 selects nt (bdot only), bit0
+// accumulate.
 constexpr bool is_nt(MmaOp op) { return (static_cast<std::uint8_t>(op) & 0b010) != 0; }
 
 constexpr bool is_accumulate(MmaOp op) { return (static_cast<std::uint8_t>(op) & 0b001) != 0; }
 
-// mma.{nn,nt}.{zero,acc}.i8.i32: D = A x B,
-// nt logically transposed B;
-// acc adds the i32 partial into the existing value.
+// mma.nn.{zero,acc}.i8.i32: D = A x B with B stored K x N; acc adds the
+// i32 partial into the existing value.
 ExecuteResult mma(const MmaInstr &instr, State &state) {
   const auto &dst_config = state.ac[instr.dest.index];
   const auto &lhs_config = state.tc[instr.src_a.index];
@@ -34,12 +34,10 @@ ExecuteResult mma(const MmaInstr &instr, State &state) {
       !valid_config_of(rhs_config, DType::i8)) {
     return config_error();
   }
-  const bool nt = is_nt(instr.op);
   const auto m_size = lhs_config.rows;
-  const auto n_size = nt ? rhs_config.rows : rhs_config.cols;
+  const auto n_size = rhs_config.cols;
   const auto k_size = lhs_config.cols;
-  if (dst_config.rows != m_size || dst_config.cols != n_size ||
-      (nt ? rhs_config.cols : rhs_config.rows) != k_size) {
+  if (dst_config.rows != m_size || dst_config.cols != n_size || rhs_config.rows != k_size) {
     return config_error();
   }
   auto dst = matrix_view(state.a[instr.dest.index]);
@@ -49,7 +47,7 @@ ExecuteResult mma(const MmaInstr &instr, State &state) {
     for (std::size_t j = 0; j < n_size; ++j) {
       std::int32_t partial = 0;
       for (std::size_t k = 0; k < k_size; ++k) {
-        partial += i8_product(lhs.at(i, k), nt ? rhs.at(j, k) : rhs.at(k, j));
+        partial += i8_product(lhs.at(i, k), rhs.at(k, j));
       }
       auto &cell = dst.at(i, j);
       cell = is_accumulate(instr.op) ? cell + std::bit_cast<std::uint32_t>(partial)

@@ -1,8 +1,9 @@
 #include "npu.inc"
 
 # Self-checking MMA_BDOT image: programs configs and descriptors, loads a
-# shared left Tile plus two right Tiles (nn and nt layouts) and a Vec8, then
-# runs mma.nn.zero, mma.nt.acc (accumulating onto the first result),
+# shared left Tile, a right Tile, the nt bytes both as is (for bdot.nt) and
+# through a transpose tload, and a Vec8, then runs mma.nn.zero, mma.nn.acc
+# on the transposed Tile (accumulating onto the first result),
 # bdot.nt and bdot.nt.acc (accumulating onto the bdot result). Results are stored back and compared word-wise. Ends with ebreak:
 # a0 = 0 pass, a0 = N identifies the failing check.
 #
@@ -29,6 +30,15 @@ _start:
     CFG_SETI  5, 0, 2, 3, 2
     CFG_SETI  5, 2, 1, 3, 2
     CFG_SETI  5, 2, 2, 1, 2
+    # tc3: i8, 3x2; tm3 views the same 2x3 bytes (row_stride = 3,
+    # col_stride = 1) with transform = transpose, so t3 holds the 3x2
+    # transpose.
+    CFG_SETI  5, 0, 0, 0, 3
+    CFG_SETI  5, 0, 1, 3, 3
+    CFG_SETI  5, 0, 2, 2, 3
+    CFG_SETI  5, 2, 1, 3, 3
+    CFG_SETI  5, 2, 2, 1, 3
+    CFG_SETI  5, 2, 3, 1, 3
     # ac2: dtype = i32 (2), 2x2; am2: row_stride = 8, col_stride = 4
     CFG_SETI  5, 1, 0, 2, 2
     CFG_SETI  5, 1, 1, 2, 2
@@ -55,6 +65,9 @@ _start:
     lla       x3, src_b_nt
     CFG_REG   2, 0, 0, 0, 3, 2
     TLOAD     2
+    lla       x3, src_b_nt
+    CFG_REG   2, 0, 0, 0, 3, 3
+    TLOAD     3                         # t3 = {{7,10},{8,11},{9,12}}
     lla       x3, src_v
     CFG_REG   2, 1, 0, 0, 3, 0
     BLOAD     0
@@ -77,9 +90,9 @@ _start:
     addi      x6, x6, -1
     bnez      x6, 1b
 
-    # Stage 2 - mma.nt.acc.i8.i32 a2, t0, t2 accumulates {{50,68},{42,57}}
-    # onto stage 1 -> {{72, 60}, {181, -33}}
-    MMA_NT_ACC 2, 0, 2
+    # Stage 2 - mma.nn.acc.i8.i32 a2, t0, t3 (t3 = t2 transposed) accumulates
+    # {{50,68},{42,57}} onto stage 1 -> {{72, 60}, {181, -33}}
+    MMA_NN_ACC 2, 0, 3
     lla       x3, dstbuf
     CFG_REG   3, 0, 0, 0, 3, 2
     ASTORE    2

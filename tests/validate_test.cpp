@@ -248,6 +248,7 @@ TEST_CASE(validate_rejects_bad_qnt) {
 
 TEST_CASE(validate_rejects_bad_mma) {
   check_illegal(MmaInstr{static_cast<MmaOp>(8), V(0), B(0), T(1)}, "op code past funct3");
+  check_illegal(MmaInstr{static_cast<MmaOp>(2), A(0), T(0), T(1)}, "reserved mma.nt code");
   check_illegal(MmaInstr{MmaOp::nn_bdot_acc, A(0), B(0), T(1)}, "bdot.acc with an acc dest");
   check_illegal(MmaInstr{MmaOp::nn_bdot, V(0), T(0), T(1)}, "bdot with a tile src_a");
   check_illegal(MmaInstr{MmaOp::nn_zero, A(12), T(0), T(1)}, "dest index 12");

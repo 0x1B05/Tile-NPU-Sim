@@ -84,22 +84,6 @@ TEST_CASE(mma_decode) {
            .lhs_domain = NpuDomain::tile,
            .src_a = 5,
            .src_b = 6},
-      Case{.name = "mma.nt.zero.i8.i32 a7, t8, t9",
-           .word = make_mma(2, 7, 8, 9),
-           .op = MmaOp::nt_zero,
-           .dest_domain = NpuDomain::acc,
-           .dest = 7,
-           .lhs_domain = NpuDomain::tile,
-           .src_a = 8,
-           .src_b = 9},
-      Case{.name = "mma.nt.acc.i8.i32 a10, t11, t12",
-           .word = make_mma(3, 10, 11, 12),
-           .op = MmaOp::nt_acc,
-           .dest_domain = NpuDomain::acc,
-           .dest = 10,
-           .lhs_domain = NpuDomain::tile,
-           .src_a = 11,
-           .src_b = 12},
       Case{.name = "bdot.nn.i8.i32 v13, b14, t15",
            .word = make_mma(4, 13, 14, 15),
            .op = MmaOp::nn_bdot,
@@ -139,6 +123,9 @@ TEST_CASE(mma_decode) {
 TEST_CASE(mma_decode_rejects_reserved) {
   constexpr std::array cases{
       ErrorCase{"bdot.acc tB16", make_mma(5, 0, 0, 16), DecodeError::illegal},
+      // mma has no nt form.
+      ErrorCase{"funct3 010", make_mma(2, 0, 0, 0), DecodeError::illegal},
+      ErrorCase{"funct3 011", make_mma(3, 0, 0, 0), DecodeError::illegal},
       // reserved3/reserved5 must be 0.
       ErrorCase{"reserved3", 0x02003106u, DecodeError::illegal},
       ErrorCase{"reserved5", 0x00023106u, DecodeError::illegal},

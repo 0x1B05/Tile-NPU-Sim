@@ -306,7 +306,9 @@ nq_quant_rows:
 # Batched sibling of nq_matvec_q: out[t,j] = xs[t] * w_scales[j] *
 # sum_c xq[t,c] * W[j,c] for t in [0,32), computing one 32-row token batch.
 # xq is [32, k] i8 row-major (nq_quant_rows output), xs its 32 row scales.
-# Per 32-column block of out: mma.nt accumulates the k/32 chunks in acc a0,
+# Per 32-column block of out: t1 holds the weight chunk transposed (tm1
+# transform = transpose, so t1 is [32 of k, 32 of n]) and mma.nn accumulates
+# the k/32 chunks in acc a0,
 # then acc -> f32, * ws (bycol), * xs (byrow), stored via am0 (auto-advances
 # one block per store). n % 32 == 0, 32 | k, k <= 3072.
 # ---------------------------------------------------------------------------
@@ -330,6 +332,7 @@ nq_matmul_q:
     SETX    SEL_TM, 0, CF_RSTRIDE, 1, X_A6
     SETIM   SEL_TM, CF_CSTRIDE, 1, 1
     SETIM   SEL_TM, CF_FLAGS, 2, 1
+    SETIM   SEL_TM, CF_LAYOUT, 1, 1     # transform = transpose: t1 = W chunk^T
     LI_CWM  t0, DT_I32, 32, 32
     SETW    SEL_AC, 0, 0, X_T0, 2
     SETX    SEL_AM, 0, CF_BASE, 1, X_A4
@@ -359,13 +362,13 @@ nq_matmul_q:
     SETX    SEL_TM, 0, CF_BASE, 0, X_S6
     TLOAD   0
     TLOAD   1
-    MMA_NT_ZERO 0, 0, 1
+    MMA_NN_ZERO 0, 0, 1
     li      s5, 1
 .Lmm_kloop:
     bgeu    s5, s4, .Lmm_epi
     TLOAD   0
     TLOAD   1
-    MMA_NT_ACC 0, 0, 1
+    MMA_NN_ACC 0, 0, 1
     addi    s5, s5, 1
     j       .Lmm_kloop
 .Lmm_epi:
@@ -378,6 +381,9 @@ nq_matmul_q:
     addi    s2, s2, 1
     bltu    s2, s3, .Lmm_nblock
 
+    # Restore tm1 to transform = normal: the other kernels reuse tm1 for
+    # plain weight loads and leave transform at its reset value.
+    SETIM   SEL_TM, CF_LAYOUT, 0, 1
     ld      s2, 0(sp)
     ld      s3, 8(sp)
     ld      s4, 16(sp)

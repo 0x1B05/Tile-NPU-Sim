@@ -553,7 +553,7 @@
 #   [31:28] major4 = 0000  [27:25] reserved3  [24:22] funct3
 #   [21:17] reserved5  [16:12] B5 (tB)  [11:7] A5 (tA/bA)  [6:2] D5 (aD/vD)
 #   [1:0] q = 10
-# funct3: 000 mma.nn.zero, 001 mma.nn.acc, 010 mma.nt.zero, 011 mma.nt.acc,
+# funct3: 000 mma.nn.zero, 001 mma.nn.acc, 010/011 reserved,
 #         100 bdot.nn, 101 bdot.nn.acc, 110 bdot.nt, 111 bdot.nt.acc.
 .macro MMA_BDOT funct3, d5, a5, b5
     .word ((\funct3 << 22) | (\b5 << 12) | (\a5 << 7) | (\d5 << 2) | 2)
@@ -563,12 +563,8 @@
     MMA_BDOT 0, \d5, \a5, \b5
 .endm
 
-.macro MMA_NT_ZERO d5, a5, b5
-    MMA_BDOT 2, \d5, \a5, \b5
-.endm
-
-.macro MMA_NT_ACC d5, a5, b5
-    MMA_BDOT 3, \d5, \a5, \b5
+.macro MMA_NN_ACC d5, a5, b5
+    MMA_BDOT 1, \d5, \a5, \b5
 .endm
 
 .macro BDOT_NT d5, a5, b5

@@ -155,14 +155,12 @@ struct MmaInfo {
   NpuDomain lhs_domain;
 };
 
-// Indexed by funct3 code; every code is assigned.
+// Indexed by funct3 code; 010/011 (the dropped mma.nt) are reserved.
 inline constexpr std::array<std::optional<MmaInfo>, 8> MMA_BY_FUNCT3 = [] {
   std::array<std::optional<MmaInfo>, 8> table{};
   // clang-format off
   table[0b000] = MmaInfo{MmaOp::nn_zero    , NpuDomain::acc  , NpuDomain::tile};
   table[0b001] = MmaInfo{MmaOp::nn_acc     , NpuDomain::acc  , NpuDomain::tile};
-  table[0b010] = MmaInfo{MmaOp::nt_zero    , NpuDomain::acc  , NpuDomain::tile};
-  table[0b011] = MmaInfo{MmaOp::nt_acc     , NpuDomain::acc  , NpuDomain::tile};
   table[0b100] = MmaInfo{MmaOp::nn_bdot    , NpuDomain::vec32, NpuDomain::vec8};
   table[0b101] = MmaInfo{MmaOp::nn_bdot_acc, NpuDomain::vec32, NpuDomain::vec8};
   table[0b110] = MmaInfo{MmaOp::nt_bdot    , NpuDomain::vec32, NpuDomain::vec8};
