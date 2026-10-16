@@ -1,7 +1,6 @@
 #include "config.h"
 
 #include <cstdint>
-#include <variant>
 
 #include "framework.h"
 
@@ -37,12 +36,12 @@ TEST_CASE(config_fields) {
   check_eq(state.tc[0].dtype, tile_npu::DType::u8, "rejected config write is non-mutating");
 
   const auto field = tile_npu::config_field_from_code(ConfigRegType::tm, 2);
-  const auto *field_value = std::get_if<ConfigField>(&field);
-  check(field_value != nullptr, "TM field code 2 maps to a field");
-  check_eq(*field_value, ConfigField::col_stride_bytes, "decode TM field code");
-  const auto invalid_field = tile_npu::config_field_from_code(ConfigRegType::ac, 4);
-  check(std::get_if<ConfigAccessStatus>(&invalid_field) != nullptr,
+  check(field.has_value(), "TM field code 2 maps to a field");
+  check_eq(*field, ConfigField::col_stride_bytes, "decode TM field code");
+  check(!tile_npu::config_field_from_code(ConfigRegType::ac, 4).has_value(),
         "reject unsupported AC field code");
+  check(!tile_npu::config_field_from_code(static_cast<ConfigRegType>(8), 0).has_value(),
+        "reject unknown config register type");
 
   check_eq(tile_npu::write_config_field(state, ConfigRegType::tm, 0, ConfigField::row_stride_bytes,
                                         UINT64_MAX),

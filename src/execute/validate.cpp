@@ -172,8 +172,7 @@ bool valid_structure(const CfgInstr &instr) {
   if (!has_destination_span && instr.n != 0) return false;
   if (instr.op == CfgOp::copy || word_op) {
     if (instr.field != 0) return false;
-  } else if (!std::holds_alternative<ConfigField>(
-                 config_field_from_code(instr.reg_type, instr.field))) {
+  } else if (!config_field_from_code(instr.reg_type, instr.field)) {
     return false;
   }
   const auto register_count = config_register_count(instr.reg_type);

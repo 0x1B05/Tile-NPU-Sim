@@ -9,17 +9,15 @@
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <type_traits>
 
 namespace tile_npu {
 namespace {
 
-// Field value predicates over the raw 64-bit source value (sign-extended
-// imm16 for cfg.seti, xS for cfg.setx).
 constexpr auto below(std::uint64_t limit) {
   return [limit](std::uint64_t raw) { return raw < limit; };
 }
 
-// Effective dimensions range from 1 to the physical extent.
 constexpr auto extent(std::uint64_t max) {
   return [max](std::uint64_t raw) { return raw >= 1 && raw <= max; };
 }
@@ -33,7 +31,8 @@ constexpr bool fits_i32(std::uint64_t raw) {
          value <= std::numeric_limits<std::int32_t>::max();
 }
 
-// The 8-bit domains (TC/BC) hold i8/u8, the 32-bit domains (AC/VC) i32/u32/f32.
+// 8-bit domains (TC/BC) => i8/u8,
+// 32-bit domains (AC/VC) => i32/u32/f32.
 template <typename Config> constexpr auto dtype_for() {
   return [](std::uint64_t raw) {
     if (raw > static_cast<std::uint64_t>(DType::f32)) return false;
@@ -168,7 +167,6 @@ constexpr auto FIELD_BY_TYPE_AND_CODE = [] {
 }();
 // clang-format on
 
-// An inclusive bit range [hi:lo] of the 32-bit config word
 struct BitRange {
   unsigned hi;
   unsigned lo;
@@ -224,7 +222,8 @@ template <typename Fn> void for_each_field(ConfigRegType reg_type, Fn &&fn) {
   }
 }
 
-template <typename Config> std::uint32_t pack_word(const Config &config, ConfigRegType reg_type) {
+template <typename Config>
+std::uint32_t encode_config_word(const Config &config, ConfigRegType reg_type) {
   std::uint32_t word = 0;
   for_each_field(reg_type, [&](ConfigField field, BitRange bits) {
     word |= bits.place(read_compute_field(config, field));
@@ -232,15 +231,10 @@ template <typename Config> std::uint32_t pack_word(const Config &config, ConfigR
   return word;
 }
 
-// Builds the whole config from the word before writing, so a rejected word
-// writes no register of the destination span.
-template <typename Configs>
-ConfigAccessStatus write_word_span(Configs &configs, ConfigRegType reg_type, RegisterIndex dest,
-                                   std::uint8_t last_offset, std::uint32_t word) {
-  if (std::size_t{dest} + last_offset >= configs.size()) {
-    return ConfigAccessStatus::invalid_register;
-  }
-  typename Configs::value_type config{};
+// Decodes and validates one raw config word without touching architectural state.
+template <typename Config>
+std::optional<Config> decode_config_word(ConfigRegType reg_type, std::uint32_t word) {
+  Config config{};
   std::uint32_t defined = 0;
   bool valid = true;
   for_each_field(reg_type, [&](ConfigField field, BitRange bits) {
@@ -249,9 +243,16 @@ ConfigAccessStatus write_word_span(Configs &configs, ConfigRegType reg_type, Reg
             write_compute_field(config, field, bits.extract(word)) == ConfigAccessStatus::success;
   });
   if (!valid || (word & ~defined) != 0) {
-    return ConfigAccessStatus::invalid_value;
+    return std::nullopt;
   }
-  std::fill(configs.begin() + dest, configs.begin() + std::size_t{dest} + last_offset + 1, config);
+  return config;
+}
+
+template <typename Configs>
+ConfigAccessStatus write_config_range(Configs &configs, ConfigRange range,
+                                      const typename Configs::value_type &config) {
+  if (range.last() >= configs.size()) return ConfigAccessStatus::invalid_register;
+  std::fill(configs.begin() + range.dest, configs.begin() + range.last() + 1, config);
   return ConfigAccessStatus::success;
 }
 
@@ -261,24 +262,20 @@ std::uint32_t read_config_word(const State &state, ConfigRegType reg_type, std::
   if (!is_compute_config(reg_type) || index >= config_register_count(reg_type)) {
     unreachable("invalid compute config register type or index");
   }
-  switch (reg_type) {
-  case ConfigRegType::tc: return pack_word(state.tc[index], reg_type);
-  case ConfigRegType::ac: return pack_word(state.ac[index], reg_type);
-  case ConfigRegType::bc: return pack_word(state.bc[index], reg_type);
-  case ConfigRegType::vc: return pack_word(state.vc[index], reg_type);
-  default: unreachable("descriptors have no config word");
-  }
+  return dispatch_compute_configs(state, reg_type, [&](const auto &configs) {
+    return encode_config_word(configs[index], reg_type);
+  });
 }
 
-ConfigAccessStatus write_config_word(State &state, ConfigRegType reg_type, RegisterIndex dest,
-                                     std::uint8_t last_offset, std::uint32_t word) {
-  switch (reg_type) {
-  case ConfigRegType::tc: return write_word_span(state.tc, reg_type, dest, last_offset, word);
-  case ConfigRegType::ac: return write_word_span(state.ac, reg_type, dest, last_offset, word);
-  case ConfigRegType::bc: return write_word_span(state.bc, reg_type, dest, last_offset, word);
-  case ConfigRegType::vc: return write_word_span(state.vc, reg_type, dest, last_offset, word);
-  default: return ConfigAccessStatus::unsupported_field;
-  }
+ConfigAccessStatus write_config_span(State &state, ConfigRegType reg_type, ConfigRange range,
+                                     std::uint32_t word) {
+  if (!is_compute_config(reg_type)) return ConfigAccessStatus::unsupported_field;
+  return dispatch_compute_configs(state, reg_type, [&](auto &configs) -> ConfigAccessStatus {
+    using Config = typename std::remove_cvref_t<decltype(configs)>::value_type;
+    const auto config = decode_config_word<Config>(reg_type, word);
+    if (!config) return ConfigAccessStatus::invalid_value;
+    return write_config_range(configs, range, *config);
+  });
 }
 
 std::uint64_t read_config_field(const State &state, ConfigRegType reg_type, std::uint8_t index,
@@ -317,17 +314,12 @@ ConfigAccessStatus write_config_field(State &state, ConfigRegType reg_type, std:
   return ConfigAccessStatus::unsupported_field;
 }
 
-std::variant<ConfigField, ConfigAccessStatus> config_field_from_code(ConfigRegType reg_type,
-                                                                     std::uint8_t field_code) {
+std::optional<ConfigField> config_field_from_code(ConfigRegType reg_type, std::uint8_t field_code) {
   const auto type = static_cast<std::uint8_t>(reg_type);
-  if (type >= FIELD_BY_TYPE_AND_CODE.size()) {
-    return ConfigAccessStatus::unsupported_field;
-  }
+  if (type >= FIELD_BY_TYPE_AND_CODE.size()) return std::nullopt;
   const auto &fields = FIELD_BY_TYPE_AND_CODE[type];
-  if (field_code >= fields.size() || !fields[field_code]) {
-    return ConfigAccessStatus::unsupported_field;
-  }
-  return *fields[field_code];
+  if (field_code >= fields.size()) return std::nullopt;
+  return fields[field_code];
 }
 
 } // namespace tile_npu

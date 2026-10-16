@@ -8,7 +8,6 @@
 
 #include <cstdint>
 #include <optional>
-#include <variant>
 
 namespace tile_npu {
 namespace {
@@ -433,8 +432,7 @@ constexpr std::uint8_t MAJOR4_CFG_VEC_SETI = 0b0110;
 DecodeResult decode_cfg_seti(std::uint32_t word) {
   const auto f = encoding::NpuI::from(word);
   const auto reg_type = cfg_reg_type(f.sel2, f.major4 == MAJOR4_CFG_VEC_SETI);
-  if (f.dest >= config_register_count(reg_type) ||
-      !std::holds_alternative<ConfigField>(config_field_from_code(reg_type, f.field3))) {
+  if (f.dest >= config_register_count(reg_type) || !config_field_from_code(reg_type, f.field3)) {
     return DecodeError::illegal;
   }
   return DecodedNpuInstr{CfgInstr{CfgOp::seti, reg_type, f.dest, 0, f.field3, f.imm}};
@@ -464,7 +462,7 @@ template <CfgOp Op> DecodeResult decode_cfg_reg(std::uint32_t word) {
   }
   const auto field = static_cast<std::uint8_t>(encoding::field<2, 0>(f.arg));
   if constexpr (Op != CfgOp::copy) {
-    if (!std::holds_alternative<ConfigField>(config_field_from_code(reg_type, field))) {
+    if (!config_field_from_code(reg_type, field)) {
       return DecodeError::illegal;
     }
   }
