@@ -1,6 +1,7 @@
 #include "decode_npu.h"
 
 #include "config.h"
+#include "domain.h"
 #include "encoding.h"
 #include "op_info.h"
 #include "pattern.h"

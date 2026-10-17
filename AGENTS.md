@@ -48,7 +48,7 @@ xmake project -k compile_commands      # 为 clangd 生成 compile_commands.json
 | `src/execute/config_check.h` | dtype、shape、layout 等配置约束与配置匹配 |
 | `src/execute/execute_*.cpp` | 按指令族实现执行语义；`execute_cfg.cpp` 负责配置指令取值和执行结果转换 |
 | `src/execute/execute_move.cpp` | `FillInstr` 执行立即数/Scalar 填充，`MoveInstr` 执行同域复制和 Tile 转置 |
-| `src/execute/domain.h` | 数据域到寄存器堆/配置/描述符的绑定、域分派与有效区域遍历 |
+| `src/domain.h` | 数据域工具、寄存器堆/配置/描述符绑定、域分派与有效区域遍历 |
 | `src/execute/elementwise_op.h`、`operand.h`、`f32_util.h`、`rv64_util.h` | 执行域共享的元素运算、操作数读取和数值工具 |
 | `src/utils/` | 通用内部工具：小端转换、variant visitor 与 `unreachable`；十六进制格式化位于 `src/monitor/format.h` |
 | `src/main.cpp`、`src/monitor/` | CLI、镜像装载、`npu_exec` 步进循环和 sdb 命令 |

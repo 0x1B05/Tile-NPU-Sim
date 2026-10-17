@@ -1,6 +1,7 @@
 #include "validate.h"
 
 #include "config.h"
+#include "domain.h"
 #include "op_info.h"
 #include "tile_npu/state.h"
 #include "utils/common.h"

@@ -1,37 +1,16 @@
 #pragma once
 
 // Encoding-derived operation metadata shared by decode and the structural
-// validation at the execute entry: per-domain register counts, op/domain
-// legality and the per-family funct tables. The IR itself lives in
-// tile_npu/instruction.h.
+// validation at the execute entry: op/domain legality and the per-family
+// funct tables.
+#include "domain.h"
 #include "tile_npu/instruction.h"
-#include "tile_npu/state.h"
 
 #include <array>
-#include <cstddef>
 #include <cstdint>
 #include <optional>
 
 namespace tile_npu {
-
-inline constexpr std::size_t domain_register_count(NpuDomain domain) {
-  switch (domain) {
-  case NpuDomain::tile: return TILE_REGISTERS;
-  case NpuDomain::acc: return ACC_REGISTERS;
-  case NpuDomain::vec8:
-  case NpuDomain::vec32: return VECTOR_REGISTERS;
-  }
-  return 0;
-}
-
-inline constexpr bool is_vector_domain(NpuDomain domain) {
-  return domain == NpuDomain::vec8 || domain == NpuDomain::vec32;
-}
-
-inline constexpr bool is_domains_paired(NpuDomain matrix, NpuDomain vector) {
-  return (matrix == NpuDomain::tile && vector == NpuDomain::vec8) ||
-         (matrix == NpuDomain::acc && vector == NpuDomain::vec32);
-}
 
 struct EbinInfo {
   EbinOp op;

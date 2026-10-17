@@ -4,6 +4,7 @@
 #include "tile_npu/state.h"
 #include "utils/common.h"
 
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -18,14 +19,35 @@ enum class ConfigAccessStatus : std::uint8_t {
   invalid_value,
 };
 
-// Inclusive range of same-type configs encoded by CFG's destination
-// register and zero-based N5 offset.
-struct ConfigRange {
-  RegisterIndex dest = 0;
-  std::uint8_t last_offset = 0;
+template <typename Config>
+concept MatrixConfig = std::same_as<Config, TileConfig> || std::same_as<Config, AccConfig>;
 
-  constexpr std::size_t last() const { return std::size_t{dest} + last_offset; }
-};
+template <typename Config>
+concept VectorConfig = std::same_as<Config, Vec8Config> || std::same_as<Config, Vec32Config>;
+
+template <typename Config>
+concept DomainConfig = MatrixConfig<Config> || VectorConfig<Config>;
+
+// Tile/Vec8 hold 8-bit elements, Acc/Vec32 hold 32-bit elements.
+template <DomainConfig Config>
+inline constexpr bool is_8bit_config_v =
+    std::same_as<Config, TileConfig> || std::same_as<Config, Vec8Config>;
+
+template <DomainConfig Config> constexpr bool dtype_fits(DType dtype) {
+  if constexpr (is_8bit_config_v<Config>) {
+    return dtype == DType::i8 || dtype == DType::u8;
+  } else {
+    return dtype == DType::i32 || dtype == DType::u32 || dtype == DType::f32;
+  }
+}
+
+constexpr std::uint64_t to_raw(auto value) { return static_cast<std::uint64_t>(value); }
+
+// Convert and validate the raw field encoding before storing the typed enum.
+template <DomainConfig Config> constexpr bool dtype_code_fits(std::uint64_t raw) {
+  if (raw > to_raw(DType::f32)) return false;
+  return dtype_fits<Config>(static_cast<DType>(raw));
+}
 
 inline constexpr std::size_t config_register_count(ConfigRegType reg_type) {
   switch (reg_type) {
@@ -72,6 +94,15 @@ decltype(auto) dispatch_compute_configs(StateLike &state, ConfigRegType reg_type
   default: unreachable("invalid config register type");
   }
 }
+
+// Inclusive range of same-type configs encoded by CFG's destination
+// register and zero-based N5 offset.
+struct ConfigRange {
+  RegisterIndex dest = 0;
+  std::uint8_t last_offset = 0;
+
+  constexpr std::size_t last() const { return std::size_t{dest} + last_offset; }
+};
 
 // The value cfg.get writes into xD.
 std::uint64_t read_config_field(const State &state, ConfigRegType reg_type, RegisterIndex index,

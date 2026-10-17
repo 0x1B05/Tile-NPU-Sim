@@ -1,40 +1,16 @@
 #pragma once
 
-#include "tile_npu/state.h"
+#include "config.h"
 
 #include <concepts>
 
 namespace tile_npu {
 
-// Matrix configs (TC/AC) carry an effective rows x cols shape and a layout;
-// vector configs (BC/VC) carry an effective lane count.
-template <typename Config>
-concept MatrixConfig = std::same_as<Config, TileConfig> || std::same_as<Config, AccConfig>;
-
-template <typename Config>
-concept VectorConfig = std::same_as<Config, Vec8Config> || std::same_as<Config, Vec32Config>;
-
-template <typename Config>
-concept DomainConfig = MatrixConfig<Config> || VectorConfig<Config>;
-
-// Tile/Vec8 hold 8-bit elements, Acc/Vec32 hold 32-bit elements.
-template <DomainConfig Config>
-inline constexpr bool is_8bit_config_v =
-    std::same_as<Config, TileConfig> || std::same_as<Config, Vec8Config>;
-
-template <DomainConfig Config> constexpr bool dtype_fits(const Config &config) {
-  if constexpr (is_8bit_config_v<Config>) {
-    return config.dtype == DType::i8 || config.dtype == DType::u8;
-  } else {
-    return config.dtype == DType::i32 || config.dtype == DType::u32 || config.dtype == DType::f32;
-  }
-}
-
 // Domain config validity shared by the non-elementwise executors: a dtype the
 // domain can hold, a non-empty effective shape within the physical extent,
 // and the row-major layout (matrix configs only).
 template <DomainConfig Config> constexpr bool valid_domain_config(const Config &config) {
-  if (!dtype_fits(config)) return false;
+  if (!dtype_fits<Config>(config.dtype)) return false;
   if constexpr (MatrixConfig<Config>) {
     return config.rows >= 1 && config.rows <= MATRIX_EXTENT && config.cols >= 1 &&
            config.cols <= MATRIX_EXTENT && config.layout == Layout::row_major;
