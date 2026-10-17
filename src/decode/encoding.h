@@ -1,5 +1,7 @@
 #pragma once
 
+#include "rv64_util.h"
+
 #include <cstdint>
 
 namespace tile_npu::encoding {
@@ -8,16 +10,6 @@ template <unsigned Hi, unsigned Lo> constexpr std::uint32_t field(std::uint32_t 
   static_assert(Lo <= Hi && Hi < 32);
   constexpr auto width = Hi - Lo + 1;
   return (word >> Lo) & static_cast<std::uint32_t>((std::uint64_t{1} << width) - 1);
-}
-
-constexpr std::int32_t sign_extend(std::uint32_t value, unsigned width) {
-  const auto mask = (std::uint64_t{1} << width) - 1;
-  const auto sign = std::uint64_t{1} << (width - 1);
-  auto extended = static_cast<std::int64_t>(value & mask);
-  if (static_cast<std::uint64_t>(extended) & sign) {
-    extended -= static_cast<std::int64_t>(std::uint64_t{1} << width);
-  }
-  return static_cast<std::int32_t>(extended);
 }
 
 // word[1:0] selects the instruction quadrant: 0b11 is the RV64IM scalar
@@ -51,7 +43,7 @@ struct RiscvI {
   static constexpr RiscvI from(std::uint32_t word) {
     return {static_cast<std::uint8_t>(field<11, 7>(word)),
             static_cast<std::uint8_t>(field<14, 12>(word)),
-            static_cast<std::uint8_t>(field<19, 15>(word)), sign_extend(field<31, 20>(word), 12)};
+            static_cast<std::uint8_t>(field<19, 15>(word)), sign_extend<12>(field<31, 20>(word))};
   }
 };
 
@@ -65,7 +57,7 @@ struct RiscvS {
     const auto imm = (field<31, 25>(word) << 5) | field<11, 7>(word);
     return {static_cast<std::uint8_t>(field<14, 12>(word)),
             static_cast<std::uint8_t>(field<19, 15>(word)),
-            static_cast<std::uint8_t>(field<24, 20>(word)), sign_extend(imm, 12)};
+            static_cast<std::uint8_t>(field<24, 20>(word)), sign_extend<12>(imm)};
   }
 };
 
@@ -84,7 +76,7 @@ struct RiscvB {
     // clang-format on
     return {static_cast<std::uint8_t>(field<14, 12>(word)),
             static_cast<std::uint8_t>(field<19, 15>(word)),
-            static_cast<std::uint8_t>(field<24, 20>(word)), sign_extend(imm, 13)};
+            static_cast<std::uint8_t>(field<24, 20>(word)), sign_extend<13>(imm)};
   }
 };
 
@@ -94,7 +86,7 @@ struct RiscvU {
 
   static constexpr RiscvU from(std::uint32_t word) {
     return {static_cast<std::uint8_t>(field<11, 7>(word)),
-            sign_extend(field<31, 12>(word) << 12, 32)};
+            sign_extend<32>(field<31, 12>(word) << 12)};
   }
 };
 
@@ -109,7 +101,7 @@ struct RiscvJ {
                      (field<20, 20>(word) << 11) |
                      (field<30, 21>(word) <<  1);
     // clang-format on
-    return {static_cast<std::uint8_t>(field<11, 7>(word)), sign_extend(imm, 21)};
+    return {static_cast<std::uint8_t>(field<11, 7>(word)), sign_extend<21>(imm)};
   }
 };
 
@@ -157,7 +149,7 @@ struct NpuI {
   static constexpr NpuI from(std::uint32_t word) {
     return {static_cast<std::uint8_t>(field<31, 28>(word)),
             static_cast<std::uint8_t>(field<27, 26>(word)),
-            static_cast<std::uint8_t>(field<25, 23>(word)), sign_extend(field<22, 7>(word), 16),
+            static_cast<std::uint8_t>(field<25, 23>(word)), sign_extend<16>(field<22, 7>(word)),
             static_cast<std::uint8_t>(field<6, 2>(word))};
   }
 };

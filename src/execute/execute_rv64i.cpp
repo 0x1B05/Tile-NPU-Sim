@@ -12,12 +12,6 @@
 namespace tile_npu {
 namespace {
 
-std::uint64_t sign_extend(std::uint64_t value, unsigned bits) {
-  const auto mask = (std::uint64_t{1} << bits) - 1;
-  const auto sign = std::uint64_t{1} << (bits - 1);
-  return ((value & mask) ^ sign) - sign;
-}
-
 // clang-format off
 std::size_t load_width(ScalarOp op) {
   switch (op) {
@@ -55,9 +49,9 @@ ExecuteResult execute_load(const DecodedScalarInstr &instr, ExecContext &ctx) {
   }
   std::uint64_t value = load_le<std::uint64_t>(std::span<const std::byte>(bytes.data(), width));
   switch (instr.op) {
-  case ScalarOp::lb: value = sign_extend(value, 8); break;
-  case ScalarOp::lh: value = sign_extend(value, 16); break;
-  case ScalarOp::lw: value = sign_extend(value, 32); break;
+  case ScalarOp::lb: value = sign_extend<8>(value); break;
+  case ScalarOp::lh: value = sign_extend<16>(value); break;
+  case ScalarOp::lw: value = sign_extend<32>(value); break;
   default: break;
   }
   scalar.write_x(instr.regs.dest, value);

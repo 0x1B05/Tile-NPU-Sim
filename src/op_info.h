@@ -13,7 +13,6 @@
 namespace tile_npu {
 
 struct EbinInfo {
-  EbinOp op;
   bool tile_allowed;
   bool integer_allowed;
   bool f32_allowed;
@@ -22,18 +21,19 @@ struct EbinInfo {
 inline constexpr std::array<std::optional<EbinInfo>, 16> EBIN_BY_FUNCT4 = [] {
   std::array<std::optional<EbinInfo>, 16> table{};
   // clang-format off
-  table[0b0000] = EbinInfo{EbinOp::add    , true , true , true};
-  table[0b0001] = EbinInfo{EbinOp::sub    , true , true , true};
-  table[0b0010] = EbinInfo{EbinOp::mul    , false, true , true};
-  table[0b0011] = EbinInfo{EbinOp::div    , false, false, true};
-  table[0b0100] = EbinInfo{EbinOp::min    , true , true , true};
-  table[0b0101] = EbinInfo{EbinOp::max    , true , true , true};
-  table[0b1000] = EbinInfo{EbinOp::bit_and, true , true , false};
-  table[0b1001] = EbinInfo{EbinOp::bit_or , true , true , false};
-  table[0b1010] = EbinInfo{EbinOp::bit_xor, true , true , false};
-  table[0b1011] = EbinInfo{EbinOp::shl    , true , true , false};
-  table[0b1100] = EbinInfo{EbinOp::shr    , true , true , false};
-  table[0b1101] = EbinInfo{EbinOp::sra    , true , true , false};
+  //                       tile   int    f32
+  table[0b0000] = EbinInfo{true , true , true }; // add
+  table[0b0001] = EbinInfo{true , true , true }; // sub
+  table[0b0010] = EbinInfo{false, true , true }; // mul
+  table[0b0011] = EbinInfo{false, false, true }; // div
+  table[0b0100] = EbinInfo{true , true , true }; // min
+  table[0b0101] = EbinInfo{true , true , true }; // max
+  table[0b1000] = EbinInfo{true , true , false}; // bit_and
+  table[0b1001] = EbinInfo{true , true , false}; // bit_or
+  table[0b1010] = EbinInfo{true , true , false}; // bit_xor
+  table[0b1011] = EbinInfo{true , true , false}; // shl
+  table[0b1100] = EbinInfo{true , true , false}; // shr
+  table[0b1101] = EbinInfo{true , true , false}; // sra
   // clang-format on
   return table;
 }();
@@ -54,7 +54,6 @@ inline constexpr bool eun_legal(EunOp op, NpuDomain domain) {
 }
 
 struct CmpInfo {
-  CmpOp op;
   bool integer_allowed;
   bool f32_allowed;
 };
@@ -63,12 +62,13 @@ struct CmpInfo {
 inline constexpr std::array<std::optional<CmpInfo>, 8> CMP_BY_FUNCT3 = [] {
   std::array<std::optional<CmpInfo>, 8> table{};
   // clang-format off
-  table[0b000] = CmpInfo{CmpOp::eq   , true , true };
-  table[0b001] = CmpInfo{CmpOp::ne   , true , false};
-  table[0b010] = CmpInfo{CmpOp::lt   , true , true };
-  table[0b011] = CmpInfo{CmpOp::ge   , true , false};
-  table[0b100] = CmpInfo{CmpOp::le   , false, true };
-  table[0b101] = CmpInfo{CmpOp::unord, false, true };
+  //                     int    f32
+  table[0b000] = CmpInfo{true , true }; // eq
+  table[0b001] = CmpInfo{true , false}; // ne
+  table[0b010] = CmpInfo{true , true }; // lt
+  table[0b011] = CmpInfo{true , false}; // ge
+  table[0b100] = CmpInfo{false, true }; // le
+  table[0b101] = CmpInfo{false, true }; // unord
   // clang-format on
   return table;
 }();
@@ -117,10 +117,8 @@ inline constexpr bool qnt_dest_legal(QntOp op, NpuDomain dest) {
   return false;
 }
 
-// Operation metadata for the MMA_BDOT family:
-// each entry carries the operation and its destination/left-source domains.
+// Destination and left-source domains for each MMA_BDOT operation.
 struct MmaInfo {
-  MmaOp op;
   NpuDomain dest_domain;
   NpuDomain lhs_domain;
 };
@@ -129,12 +127,13 @@ struct MmaInfo {
 inline constexpr std::array<std::optional<MmaInfo>, 8> MMA_BY_FUNCT3 = [] {
   std::array<std::optional<MmaInfo>, 8> table{};
   // clang-format off
-  table[0b000] = MmaInfo{MmaOp::nn_zero    , NpuDomain::acc  , NpuDomain::tile};
-  table[0b001] = MmaInfo{MmaOp::nn_acc     , NpuDomain::acc  , NpuDomain::tile};
-  table[0b100] = MmaInfo{MmaOp::nn_bdot    , NpuDomain::vec32, NpuDomain::vec8};
-  table[0b101] = MmaInfo{MmaOp::nn_bdot_acc, NpuDomain::vec32, NpuDomain::vec8};
-  table[0b110] = MmaInfo{MmaOp::nt_bdot    , NpuDomain::vec32, NpuDomain::vec8};
-  table[0b111] = MmaInfo{MmaOp::nt_bdot_acc, NpuDomain::vec32, NpuDomain::vec8};
+  //                     dest              lhs
+  table[0b000] = MmaInfo{NpuDomain::acc  , NpuDomain::tile}; // nn_zero
+  table[0b001] = MmaInfo{NpuDomain::acc  , NpuDomain::tile}; // nn_acc
+  table[0b100] = MmaInfo{NpuDomain::vec32, NpuDomain::vec8}; // nn_bdot
+  table[0b101] = MmaInfo{NpuDomain::vec32, NpuDomain::vec8}; // nn_bdot_acc
+  table[0b110] = MmaInfo{NpuDomain::vec32, NpuDomain::vec8}; // nt_bdot
+  table[0b111] = MmaInfo{NpuDomain::vec32, NpuDomain::vec8}; // nt_bdot_acc
   // clang-format on
   return table;
 }();

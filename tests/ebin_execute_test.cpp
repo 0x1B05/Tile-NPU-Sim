@@ -3,6 +3,7 @@
 #include "op_info.h"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <initializer_list>
 #include <string>
@@ -430,9 +431,10 @@ TEST_CASE(ebin_legality_matrix) {
       Combo{NpuDomain::vec32, DType::u32}, Combo{NpuDomain::vec32, DType::f32},
   };
   for (const auto &[domain, dtype] : combos) {
-    for (const auto &entry : tile_npu::EBIN_BY_FUNCT4) {
+    for (std::size_t funct4 = 0; funct4 < tile_npu::EBIN_BY_FUNCT4.size(); ++funct4) {
+      const auto &entry = tile_npu::EBIN_BY_FUNCT4[funct4];
       if (!entry) continue;
-      const auto op = entry->op;
+      const auto op = static_cast<EbinOp>(funct4);
       if (domain == NpuDomain::tile && !entry->tile_allowed) {
         continue; // reserved at decode time
       }
