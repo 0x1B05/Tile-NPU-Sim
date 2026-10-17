@@ -11,9 +11,8 @@ namespace tile_npu {
 namespace {
 
 ConfigField field_of(const CfgInstr &instr) {
-  const auto field = config_field_from_code(instr.reg_type, instr.field);
-  if (!field) unreachable("validated cfg instruction has an invalid field");
-  return *field;
+  if (!instr.field) unreachable("validated cfg instruction has no field");
+  return *instr.field;
 }
 
 // Writes one field value into configs from instr.dest through instr.dest + n.

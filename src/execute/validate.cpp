@@ -171,8 +171,8 @@ bool valid_structure(const CfgInstr &instr) {
       instr.op == CfgOp::setx || instr.op == CfgOp::copy || instr.op == CfgOp::setw;
   if (!has_destination_span && instr.n != 0) return false;
   if (instr.op == CfgOp::copy || word_op) {
-    if (instr.field != 0) return false;
-  } else if (!config_field_from_code(instr.reg_type, instr.field)) {
+    if (instr.field) return false;
+  } else if (!instr.field || !config_field_defined(instr.reg_type, *instr.field)) {
     return false;
   }
   const auto register_count = config_register_count(instr.reg_type);

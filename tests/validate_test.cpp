@@ -15,6 +15,7 @@
 #include <array>
 #include <cstdint>
 #include <initializer_list>
+#include <optional>
 #include <string>
 
 namespace {
@@ -24,6 +25,7 @@ using tile_npu::CfgInstr;
 using tile_npu::CfgOp;
 using tile_npu::CmpInstr;
 using tile_npu::CmpOp;
+using tile_npu::ConfigField;
 using tile_npu::ConfigRegType;
 using tile_npu::CvtInstr;
 using tile_npu::CvtOp;
@@ -174,36 +176,40 @@ TEST_CASE(validate_rejects_bad_lane_move) {
 }
 
 TEST_CASE(validate_rejects_bad_cfg) {
-  check_illegal(CfgInstr{CfgOp::seti, ConfigRegType::tc, 0, 0, 7, 0}, "field code 7");
-  check_illegal(CfgInstr{CfgOp::seti, static_cast<ConfigRegType>(8), 0, 0, 0, 0},
+  check_illegal(CfgInstr{CfgOp::seti, ConfigRegType::tc, 0, 0, std::nullopt, 0},
+                "missing decoded field");
+  check_illegal(CfgInstr{CfgOp::seti, static_cast<ConfigRegType>(8), 0, 0, std::nullopt, 0},
                 "reserved register type");
-  check_illegal(CfgInstr{CfgOp::seti, ConfigRegType::tc, 16, 0, 1, 0}, "seti dest index 16");
-  check_illegal(CfgInstr{CfgOp::get, ConfigRegType::tc, 32, 0, 1, 0}, "get xD index 32");
-  check_illegal(CfgInstr{CfgOp::get, ConfigRegType::ac, 0, 12, 0, 0}, "get ac12 out of range");
-  check_illegal(CfgInstr{CfgOp::copy, ConfigRegType::tc, 0, 16, 0, 0}, "copy src index 16");
-  check_illegal(CfgInstr{CfgOp::copy, ConfigRegType::tc, 0, 1, 1, 0}, "copy field must be zero");
+  check_illegal(CfgInstr{CfgOp::seti, ConfigRegType::tc, 16, 0, ConfigField::rows, 0},
+                "seti dest index 16");
+  check_illegal(CfgInstr{CfgOp::get, ConfigRegType::tc, 32, 0, ConfigField::rows, 0},
+                "get xD index 32");
+  check_illegal(CfgInstr{CfgOp::get, ConfigRegType::ac, 0, 12, ConfigField::dtype, 0},
+                "get ac12 out of range");
+  check_illegal(CfgInstr{CfgOp::copy, ConfigRegType::tc, 0, 16, std::nullopt, 0},
+                "copy src index 16");
+  check_illegal(CfgInstr{CfgOp::copy, ConfigRegType::tc, 0, 1, ConfigField::rows, 0},
+                "copy field must be empty");
+  check_illegal(CfgInstr{CfgOp::seti, ConfigRegType::tc, 0, 0, ConfigField::base_addr, 0},
+                "tile config cannot use descriptor field");
 }
 
-TEST_CASE(validate_rejects_cfg_reserved_fields) {
+TEST_CASE(validate_rejects_cfg_without_decoded_fields) {
   struct RegisterCase {
     ConfigRegType type;
-    std::uint8_t fields;
   };
 
   constexpr std::array registers{
-      RegisterCase{ConfigRegType::tc, 5}, RegisterCase{ConfigRegType::ac, 4},
-      RegisterCase{ConfigRegType::bc, 2}, RegisterCase{ConfigRegType::vc, 2},
-      RegisterCase{ConfigRegType::tm, 5}, RegisterCase{ConfigRegType::am, 5},
-      RegisterCase{ConfigRegType::bm, 3}, RegisterCase{ConfigRegType::vm, 3},
+      RegisterCase{ConfigRegType::tc}, RegisterCase{ConfigRegType::ac},
+      RegisterCase{ConfigRegType::bc}, RegisterCase{ConfigRegType::vc},
+      RegisterCase{ConfigRegType::tm}, RegisterCase{ConfigRegType::am},
+      RegisterCase{ConfigRegType::bm}, RegisterCase{ConfigRegType::vm},
   };
   for (const auto &reg : registers) {
-    for (std::uint8_t field = reg.fields; field < 8; ++field) {
-      for (const auto op : {CfgOp::seti, CfgOp::setx, CfgOp::get}) {
-        const std::string what = "cfg op " + std::to_string(static_cast<unsigned>(op)) + " type " +
-                                 std::to_string(static_cast<unsigned>(reg.type)) + " field " +
-                                 std::to_string(field);
-        check_illegal(CfgInstr{op, reg.type, 0, 0, field, 0}, what.c_str());
-      }
+    for (const auto op : {CfgOp::seti, CfgOp::setx, CfgOp::get}) {
+      const std::string what = "cfg op " + std::to_string(static_cast<unsigned>(op)) + " type " +
+                               std::to_string(static_cast<unsigned>(reg.type)) + " without field";
+      check_illegal(CfgInstr{op, reg.type, 0, 0, std::nullopt, 0}, what.c_str());
     }
   }
 }
@@ -219,8 +225,10 @@ TEST_CASE(validate_rejects_bad_cfg_word) {
                 "setw span past tc15");
   check_illegal(CfgInstr{.op = CfgOp::setw, .reg_type = ConfigRegType::ac, .n = 12},
                 "setw span past ac11");
-  check_illegal(CfgInstr{.op = CfgOp::setw, .reg_type = ConfigRegType::tc, .field = 1, .n = 0},
-                "setw field nonzero");
+  check_illegal(
+      CfgInstr{
+          .op = CfgOp::setw, .reg_type = ConfigRegType::tc, .field = ConfigField::rows, .n = 0},
+      "setw field must be empty");
   check_illegal(CfgInstr{.op = CfgOp::getw, .reg_type = ConfigRegType::tc, .n = 1},
                 "getw nonzero destination offset");
 }
@@ -284,7 +292,7 @@ TEST_CASE(validate_accepts_legal_hand_built_ebin) {
 
 TEST_CASE(validate_accepts_legal_hand_built_cfg) {
   Env env;
-  const CfgInstr instr{CfgOp::seti, ConfigRegType::tc, 0, 0, 1, 4}; // rows = 4
+  const CfgInstr instr{CfgOp::seti, ConfigRegType::tc, 0, 0, ConfigField::rows, 4}; // rows = 4
   const auto result = exec_npu_instr(DecodedNpuInstr{instr}, env.ctx);
   check_eq(result.status, StepStatus::retired, "hand-built cfg.seti retires");
   check_eq(env.state.tc[0].rows, 4, "rows written");

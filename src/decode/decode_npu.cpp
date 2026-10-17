@@ -432,10 +432,11 @@ constexpr std::uint8_t MAJOR4_CFG_VEC_SETI = 0b0110;
 DecodeResult decode_cfg_seti(std::uint32_t word) {
   const auto f = encoding::NpuI::from(word);
   const auto reg_type = cfg_reg_type(f.sel2, f.major4 == MAJOR4_CFG_VEC_SETI);
-  if (f.dest >= config_register_count(reg_type) || !config_field_from_code(reg_type, f.field3)) {
+  const auto field = decode_config_field(reg_type, f.field3);
+  if (f.dest >= config_register_count(reg_type) || !field) {
     return DecodeError::illegal;
   }
-  return DecodedNpuInstr{CfgInstr{CfgOp::seti, reg_type, f.dest, 0, f.field3, f.imm}};
+  return DecodedNpuInstr{CfgInstr{CfgOp::seti, reg_type, f.dest, 0, *field, f.imm}};
 }
 
 // CFG_REG (R4): major4 = 0111, q = 10.
@@ -460,9 +461,11 @@ template <CfgOp Op> DecodeResult decode_cfg_reg(std::uint32_t word) {
   if (Op != CfgOp::setx && f.src1 >= register_count) {
     return DecodeError::illegal;
   }
-  const auto field = static_cast<std::uint8_t>(encoding::field<2, 0>(f.arg));
+  const auto field_code = static_cast<std::uint8_t>(encoding::field<2, 0>(f.arg));
+  std::optional<ConfigField> field;
   if constexpr (Op != CfgOp::copy) {
-    if (!config_field_from_code(reg_type, field)) {
+    field = decode_config_field(reg_type, field_code);
+    if (!field) {
       return DecodeError::illegal;
     }
   }

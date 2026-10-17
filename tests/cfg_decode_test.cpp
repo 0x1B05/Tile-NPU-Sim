@@ -1,8 +1,12 @@
 #include "tile_npu/decode.h"
 
+#include "config.h"
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
+#include <span>
 #include <string>
 #include <variant>
 
@@ -12,6 +16,7 @@ namespace {
 
 using tile_npu::CfgInstr;
 using tile_npu::CfgOp;
+using tile_npu::ConfigField;
 using tile_npu::ConfigRegType;
 using tile_npu::DecodedNpuInstr;
 using tile_npu::DecodeError;
@@ -38,7 +43,7 @@ struct Case {
   ConfigRegType reg_type;
   std::uint8_t dest;
   std::uint8_t src;
-  std::uint8_t field;
+  std::optional<ConfigField> field;
   std::int32_t imm;
   std::uint8_t n = 0;
 };
@@ -82,20 +87,22 @@ template <std::size_t N> void check_errors(const std::array<ErrorCase, N> &cases
 TEST_CASE(cfg_decode_seti) {
   constexpr std::array cases{
       // Anchor word computed by hand from the encoding figure.
-      Case{"cfg.seti tc0, rows, 32", 0x50801002u, CfgOp::seti, ConfigRegType::tc, 0, 0, 1, 32},
-      Case{"seti ac cols", cfg_i(0x5, 1, 2, 16, 3), CfgOp::seti, ConfigRegType::ac, 3, 0, 2, 16},
-      Case{"seti negative imm", cfg_i(0x5, 2, 1, -4, 0), CfgOp::seti, ConfigRegType::tm, 0, 0, 1,
-           -4},
-      Case{"seti imm min", cfg_i(0x5, 0, 1, -32768, 0), CfgOp::seti, ConfigRegType::tc, 0, 0, 1,
-           -32768},
-      Case{"seti imm max", cfg_i(0x5, 0, 1, 32767, 0), CfgOp::seti, ConfigRegType::tc, 0, 0, 1,
-           32767},
+      Case{"cfg.seti tc0, rows, 32", 0x50801002u, CfgOp::seti, ConfigRegType::tc, 0, 0,
+           ConfigField::rows, 32},
+      Case{"seti ac cols", cfg_i(0x5, 1, 2, 16, 3), CfgOp::seti, ConfigRegType::ac, 3, 0,
+           ConfigField::cols, 16},
+      Case{"seti negative imm", cfg_i(0x5, 2, 1, -4, 0), CfgOp::seti, ConfigRegType::tm, 0, 0,
+           ConfigField::row_stride_bytes, -4},
+      Case{"seti imm min", cfg_i(0x5, 0, 1, -32768, 0), CfgOp::seti, ConfigRegType::tc, 0, 0,
+           ConfigField::rows, -32768},
+      Case{"seti imm max", cfg_i(0x5, 0, 1, 32767, 0), CfgOp::seti, ConfigRegType::tc, 0, 0,
+           ConfigField::rows, 32767},
       Case{"seti vm31 flags (vector side)", cfg_i(0x6, 3, 2, 1, 31), CfgOp::seti, ConfigRegType::vm,
-           31, 0, 2, 1},
+           31, 0, ConfigField::flags, 1},
       Case{"seti tc15 (last tile)", cfg_i(0x5, 0, 0, 1, 15), CfgOp::seti, ConfigRegType::tc, 15, 0,
-           0, 1},
+           ConfigField::dtype, 1},
       Case{"seti ac11 (last acc)", cfg_i(0x5, 1, 0, 1, 11), CfgOp::seti, ConfigRegType::ac, 11, 0,
-           0, 1},
+           ConfigField::dtype, 1},
   };
   check_cases(cases);
 }
@@ -103,22 +110,26 @@ TEST_CASE(cfg_decode_seti) {
 TEST_CASE(cfg_decode_reg) {
   constexpr std::array cases{
       Case{"cfg.setx tm2, row_stride_bytes, x4", cfg_reg(2, 0, 0, 1, 4, 2), CfgOp::setx,
-           ConfigRegType::tm, 2, 4, 1, 0},
+           ConfigRegType::tm, 2, 4, ConfigField::row_stride_bytes, 0},
       Case{"cfg.setx vc0, len, x31", cfg_reg(1, 1, 0, 1, 31, 0), CfgOp::setx, ConfigRegType::vc, 0,
-           31, 1, 0},
-      Case{"cfg.copy tc7, tc3", cfg_reg(0, 0, 1, 0, 3, 7), CfgOp::copy, ConfigRegType::tc, 7, 3, 0,
-           0},
+           31, ConfigField::len, 0},
+      Case{"cfg.copy tc7, tc3", cfg_reg(0, 0, 1, 0, 3, 7), CfgOp::copy, ConfigRegType::tc, 7, 3,
+           std::nullopt, 0},
       Case{"cfg.copy bm5, bm2 (vector side)", cfg_reg(2, 1, 1, 0, 2, 5), CfgOp::copy,
-           ConfigRegType::bm, 5, 2, 0, 0},
+           ConfigRegType::bm, 5, 2, std::nullopt, 0},
       Case{"cfg.get x5, tc0, rows", cfg_reg(0, 0, 2, 1, 0, 5), CfgOp::get, ConfigRegType::tc, 5, 0,
-           1, 0},
+           ConfigField::rows, 0},
       Case{"cfg.get x0, am11, base_addr", cfg_reg(3, 0, 2, 0, 11, 0), CfgOp::get, ConfigRegType::am,
-           0, 11, 0, 0},
+           0, 11, ConfigField::base_addr, 0},
       // N5 is the last destination offset for the writes.
       Case{"cfg.setx vm0, flags, x6, N=2", cfg_reg(3, 1, 0, 2, 6, 0) | (2u << 12), CfgOp::setx,
-           ConfigRegType::vm, 0, 6, 2, 0, 2},
+           ConfigRegType::vm, 0, 6, ConfigField::flags, 0, 2},
       Case{"cfg.copy tm1, tm0, N=14", cfg_reg(2, 0, 1, 0, 0, 1) | (14u << 12), CfgOp::copy,
-           ConfigRegType::tm, 1, 0, 0, 0, 14},
+           ConfigRegType::tm, 1, 0, std::nullopt, 0, 14},
+      Case{"cfg.setw tc2, x4, N=2", cfg_reg(0, 0, 3, 0, 4, 2) | (2u << 12), CfgOp::setw,
+           ConfigRegType::tc, 2, 4, std::nullopt, 0, 2},
+      Case{"cfg.getw x5, vc0", cfg_reg(1, 1, 4, 0, 0, 5), CfgOp::getw, ConfigRegType::vc, 5, 0,
+           std::nullopt, 0},
   };
   check_cases(cases);
 }
@@ -129,32 +140,51 @@ TEST_CASE(cfg_decode_field_codes_by_register_type) {
     ConfigRegType type;
     std::uint32_t sel2;
     std::uint32_t mv;
-    std::uint32_t fields;
+    std::span<const ConfigField> fields;
   };
 
-  constexpr std::array registers{
-      RegisterCase{"tc", ConfigRegType::tc, 0, 0, 5},
-      RegisterCase{"ac", ConfigRegType::ac, 1, 0, 4},
-      RegisterCase{"bc", ConfigRegType::bc, 0, 1, 2},
-      RegisterCase{"vc", ConfigRegType::vc, 1, 1, 2},
-      RegisterCase{"tm", ConfigRegType::tm, 2, 0, 5},
-      RegisterCase{"am", ConfigRegType::am, 3, 0, 5},
-      RegisterCase{"bm", ConfigRegType::bm, 2, 1, 3},
-      RegisterCase{"vm", ConfigRegType::vm, 3, 1, 3},
+  constexpr std::array tc_fields{ConfigField::dtype, ConfigField::rows, ConfigField::cols,
+                                 ConfigField::layout, ConfigField::arith_mode};
+  constexpr std::array ac_fields{ConfigField::dtype, ConfigField::rows, ConfigField::cols,
+                                 ConfigField::layout};
+  constexpr std::array bc_fields{ConfigField::dtype, ConfigField::len};
+  constexpr std::array tm_fields{ConfigField::base_addr, ConfigField::row_stride_bytes,
+                                 ConfigField::col_stride_bytes, ConfigField::transform,
+                                 ConfigField::flags};
+  constexpr std::array bm_fields{ConfigField::base_addr, ConfigField::stride_bytes,
+                                 ConfigField::flags};
+  const std::array registers{
+      RegisterCase{"tc", ConfigRegType::tc, 0, 0, tc_fields},
+      RegisterCase{"ac", ConfigRegType::ac, 1, 0, ac_fields},
+      RegisterCase{"bc", ConfigRegType::bc, 0, 1, bc_fields},
+      RegisterCase{"vc", ConfigRegType::vc, 1, 1, bc_fields},
+      RegisterCase{"tm", ConfigRegType::tm, 2, 0, tm_fields},
+      RegisterCase{"am", ConfigRegType::am, 3, 0, tm_fields},
+      RegisterCase{"bm", ConfigRegType::bm, 2, 1, bm_fields},
+      RegisterCase{"vm", ConfigRegType::vm, 3, 1, bm_fields},
   };
   for (const auto &reg : registers) {
     for (std::uint8_t field = 0; field < 8; ++field) {
-      const std::array cases{
-          Case{reg.name, cfg_i(0x5 + reg.mv, reg.sel2, field, 32, 0), CfgOp::seti, reg.type, 0, 0,
-               field, 32},
-          Case{reg.name, cfg_reg(reg.sel2, reg.mv, 0, field, 4, 0), CfgOp::setx, reg.type, 0, 4,
-               field, 0},
-          Case{reg.name, cfg_reg(reg.sel2, reg.mv, 2, field, 0, 5), CfgOp::get, reg.type, 5, 0,
-               field, 0},
-      };
-      if (field < reg.fields) {
+      if (field < reg.fields.size()) {
+        const auto expected = reg.fields[field];
+        const std::array cases{
+            Case{reg.name, cfg_i(0x5 + reg.mv, reg.sel2, field, 32, 0), CfgOp::seti, reg.type, 0, 0,
+                 expected, 32},
+            Case{reg.name, cfg_reg(reg.sel2, reg.mv, 0, field, 4, 0), CfgOp::setx, reg.type, 0, 4,
+                 expected, 0},
+            Case{reg.name, cfg_reg(reg.sel2, reg.mv, 2, field, 0, 5), CfgOp::get, reg.type, 5, 0,
+                 expected, 0},
+        };
         check_cases(cases);
       } else {
+        const std::array cases{
+            Case{reg.name, cfg_i(0x5 + reg.mv, reg.sel2, field, 32, 0), CfgOp::seti, reg.type, 0, 0,
+                 std::nullopt, 32},
+            Case{reg.name, cfg_reg(reg.sel2, reg.mv, 0, field, 4, 0), CfgOp::setx, reg.type, 0, 4,
+                 std::nullopt, 0},
+            Case{reg.name, cfg_reg(reg.sel2, reg.mv, 2, field, 0, 5), CfgOp::get, reg.type, 5, 0,
+                 std::nullopt, 0},
+        };
         for (const auto &test : cases) {
           check_errors(std::array{ErrorCase{test.name, test.word, DecodeError::illegal}});
         }

@@ -314,12 +314,21 @@ ConfigAccessStatus write_config_field(State &state, ConfigRegType reg_type, std:
   return ConfigAccessStatus::unsupported_field;
 }
 
-std::optional<ConfigField> config_field_from_code(ConfigRegType reg_type, std::uint8_t field_code) {
+std::optional<ConfigField> decode_config_field(ConfigRegType reg_type, std::uint8_t field_code) {
   const auto type = static_cast<std::uint8_t>(reg_type);
   if (type >= FIELD_BY_TYPE_AND_CODE.size()) return std::nullopt;
   const auto &fields = FIELD_BY_TYPE_AND_CODE[type];
   if (field_code >= fields.size()) return std::nullopt;
   return fields[field_code];
+}
+
+bool config_field_defined(ConfigRegType reg_type, ConfigField field) {
+  const auto type = static_cast<std::uint8_t>(reg_type);
+  if (type >= FIELD_BY_TYPE_AND_CODE.size()) return false;
+  for (const auto candidate : FIELD_BY_TYPE_AND_CODE[type]) {
+    if (candidate && *candidate == field) return true;
+  }
+  return false;
 }
 
 } // namespace tile_npu

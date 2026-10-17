@@ -35,12 +35,12 @@ TEST_CASE(config_fields) {
            ConfigAccessStatus::invalid_value, "reject out-of-range dtype code");
   check_eq(state.tc[0].dtype, tile_npu::DType::u8, "rejected config write is non-mutating");
 
-  const auto field = tile_npu::config_field_from_code(ConfigRegType::tm, 2);
+  const auto field = tile_npu::decode_config_field(ConfigRegType::tm, 2);
   check(field.has_value(), "TM field code 2 maps to a field");
   check_eq(*field, ConfigField::col_stride_bytes, "decode TM field code");
-  check(!tile_npu::config_field_from_code(ConfigRegType::ac, 4).has_value(),
+  check(!tile_npu::decode_config_field(ConfigRegType::ac, 4).has_value(),
         "reject unsupported AC field code");
-  check(!tile_npu::config_field_from_code(static_cast<ConfigRegType>(8), 0).has_value(),
+  check(!tile_npu::decode_config_field(static_cast<ConfigRegType>(8), 0).has_value(),
         "reject unknown config register type");
 
   check_eq(tile_npu::write_config_field(state, ConfigRegType::tm, 0, ConfigField::row_stride_bytes,

@@ -25,16 +25,6 @@ inline constexpr std::size_t config_register_count(ConfigRegType reg_type) {
   return 0;
 }
 
-// clang-format off
-enum class ConfigField : std::uint8_t {
-  dtype, rows, cols, layout, arith_mode,                  // matrix configs
-  len,                                                    // vector configs
-  base_addr, row_stride_bytes, col_stride_bytes, transform,
-  flags,                                                  // matrix descriptors
-  stride_bytes,                                           // vector descriptors
-};
-// clang-format on
-
 enum class ConfigAccessStatus : std::uint8_t {
   success,
   invalid_register,
@@ -98,7 +88,10 @@ std::uint32_t read_config_word(const State &state, ConfigRegType reg_type, std::
 ConfigAccessStatus write_config_span(State &state, ConfigRegType reg_type, ConfigRange range,
                                      std::uint32_t word);
 
-// Resolve a decoded field code; nullopt when reg_type does not define it.
-std::optional<ConfigField> config_field_from_code(ConfigRegType reg_type, std::uint8_t field_code);
+// Resolve a raw ISA field code; nullopt when reg_type does not define it.
+std::optional<ConfigField> decode_config_field(ConfigRegType reg_type, std::uint8_t field_code);
+
+// Check that a decoded field belongs to the selected configuration type.
+bool config_field_defined(ConfigRegType reg_type, ConfigField field);
 
 } // namespace tile_npu
