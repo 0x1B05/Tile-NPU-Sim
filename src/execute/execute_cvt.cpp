@@ -21,7 +21,7 @@ constexpr std::uint32_t i32_to_f32_bits(std::uint32_t bits) {
 // effective region; on success the destination dtype becomes f32.
 template <NpuDomain Domain> ExecuteResult convert(const CvtInstr &instr, State &state) {
   auto &regs = domain_regs<Domain>(state);
-  const auto &configs = domain_configs<Domain>(state);
+  auto &configs = domain_configs<Domain>(state);
   const auto &dst_config = configs[instr.dest.index];
   const auto &src_config = configs[instr.src.index];
   if (!valid_domain_config(dst_config) || !valid_domain_config(src_config) ||
@@ -31,11 +31,7 @@ template <NpuDomain Domain> ExecuteResult convert(const CvtInstr &instr, State &
   auto &dst = regs[instr.dest.index];
   const auto &src = regs[instr.src.index];
   for_each_idx(dst_config, [&](std::size_t n) { dst[n] = i32_to_f32_bits(src[n]); });
-  if constexpr (Domain == NpuDomain::acc) {
-    state.ac[instr.dest.index].dtype = DType::f32;
-  } else {
-    state.vc[instr.dest.index].dtype = DType::f32;
-  }
+  configs[instr.dest.index].dtype = DType::f32;
   return {.status = StepStatus::retired};
 }
 

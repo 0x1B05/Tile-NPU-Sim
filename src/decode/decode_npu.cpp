@@ -45,7 +45,7 @@ std::optional<NpuOperand> decode_bx_src2(std::uint8_t sel3, std::uint8_t src2, N
 // [major4] [dom2] [BX] [funct4] [reserved4] [   B5   ] [   A5   ] [   D5   ] [ q ]
 // dom2: 00 Tile, 01 Acc, 11 Vec32; 10 reserved.
 // BX: 0 = same-domain B5, 1 = Scalar xS in B5.
-// funct4 = {G, op3}, decoded by EBIN_BY_FUNCT4; Tile mul/div are reserved.
+// funct4 = {G, op3}, checked by EBIN_BY_FUNCT4; Tile mul/div are reserved.
 DecodeResult decode_ebin(std::uint32_t word) {
   const auto f = encoding::NpuR3::from(word);
   const auto domain = sel3_domain(f.sel3);
@@ -90,10 +90,10 @@ DecodeResult decode_eun(std::uint32_t word) {
 DecodeResult decode_ecmp(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domain = sel3_domain(f.sel3);
-  const auto &info = CMP_BY_FUNCT3[f.funct3];
-  if (!info) {
+  if (!CMP_BY_FUNCT3[f.funct3]) {
     return DecodeError::illegal;
   }
+  const auto op = static_cast<CmpOp>(f.funct3);
   const auto count = domain_register_count(domain);
   if (f.src1 >= count || f.dest >= count) {
     return DecodeError::illegal;
@@ -102,7 +102,7 @@ DecodeResult decode_ecmp(std::uint32_t word) {
   if (!src2) {
     return DecodeError::illegal;
   }
-  return DecodedNpuInstr{CmpInstr{info->op, {domain, f.dest}, {domain, f.src1}, *src2}};
+  return DecodedNpuInstr{CmpInstr{op, {domain, f.dest}, {domain, f.src1}, *src2}};
 }
 
 // E_BCAST (R3): major4 = 0101, q = 00.
@@ -274,15 +274,14 @@ DecodeResult decode_mma(std::uint32_t word) {
   if (!info) {
     return DecodeError::illegal;
   }
+  const auto op = static_cast<MmaOp>(f.funct3);
   // src2 is always tile
   if (f.dest >= domain_register_count(info->dest_domain) ||
       f.src1 >= domain_register_count(info->lhs_domain) || f.src2 >= TILE_REGISTERS) {
     return DecodeError::illegal;
   }
-  return DecodedNpuInstr{MmaInstr{info->op,
-                                  {info->dest_domain, f.dest},
-                                  {info->lhs_domain, f.src1},
-                                  {NpuDomain::tile, f.src2}}};
+  return DecodedNpuInstr{MmaInstr{
+      op, {info->dest_domain, f.dest}, {info->lhs_domain, f.src1}, {NpuDomain::tile, f.src2}}};
 }
 
 // SYS (Z): major4 = 1000, q = 10.

@@ -48,7 +48,7 @@ template <NpuDomain Domain> auto &domain_regs(State &state) {
   }
 }
 
-template <NpuDomain Domain> const auto &domain_configs(const State &state) {
+template <NpuDomain Domain, typename StateLike> auto &domain_configs(StateLike &state) {
   if constexpr (Domain == NpuDomain::tile) {
     return state.tc;
   } else if constexpr (Domain == NpuDomain::acc) {
