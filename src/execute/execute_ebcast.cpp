@@ -16,7 +16,7 @@ namespace {
 // shape: byrow feeds S[row], bycol S[col]. The ISA fixes the vector's dtype
 // to the matrix dtype and its length to rows (byrow) or cols (bycol).
 template <NpuDomain Domain> ExecuteResult bcast(const BcastInstr &instr, State &state) {
-  constexpr auto VECTOR_DOMAIN = Domain == NpuDomain::tile ? NpuDomain::vec8 : NpuDomain::vec32;
+  constexpr auto VECTOR_DOMAIN = paired_vector_domain(Domain);
   auto &matrix_regs = domain_regs<Domain>(state);
   const auto &matrix_configs = domain_configs<Domain>(state);
   const auto &vector_regs = domain_regs<VECTOR_DOMAIN>(state);

@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <array>
-#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -34,18 +33,10 @@ constexpr bool fits_i32(std::uint64_t raw) {
 
 constexpr std::uint64_t to_raw(auto value) { return static_cast<std::uint64_t>(value); }
 
-// 8-bit domains (TC/BC) => i8/u8,
-// 32-bit domains (AC/VC) => i32/u32/f32.
-template <typename Config> constexpr auto dtype_for() {
-  return [](std::uint64_t raw) {
-    if (raw > to_raw(DType::f32)) return false;
-    const auto dtype = static_cast<DType>(raw);
-    if constexpr (std::same_as<Config, TileConfig> || std::same_as<Config, Vec8Config>) {
-      return dtype == DType::i8 || dtype == DType::u8;
-    } else {
-      return dtype == DType::i32 || dtype == DType::u32 || dtype == DType::f32;
-    }
-  };
+// Convert and validate the raw field encoding before storing the typed enum.
+template <DomainConfig Config> constexpr bool dtype_code_fits(std::uint64_t raw) {
+  if (raw > to_raw(DType::f32)) return false;
+  return dtype_fits<Config>(static_cast<DType>(raw));
 }
 
 template <typename T, typename Accept>
@@ -54,12 +45,6 @@ ConfigAccessStatus store_if(T &target, std::uint64_t raw, Accept accept) {
   target = static_cast<T>(raw);
   return ConfigAccessStatus::success;
 }
-
-template <typename T>
-concept MatrixConfig = std::same_as<T, TileConfig> || std::same_as<T, AccConfig>;
-
-template <typename T>
-concept VectorConfig = std::same_as<T, Vec8Config> || std::same_as<T, Vec32Config>;
 
 // clang-format off
 template <MatrixConfig Config>
@@ -80,7 +65,7 @@ std::uint64_t read_field(const Config &config, ConfigField field) {
 template <MatrixConfig Config>
 ConfigAccessStatus write_field(Config &config, ConfigField field, std::uint64_t raw) {
   switch (field) {
-  case ConfigField::dtype:  return store_if(config.dtype, raw, dtype_for<Config>());
+  case ConfigField::dtype:  return store_if(config.dtype, raw, dtype_code_fits<Config>);
   case ConfigField::rows:   return store_if(config.rows, raw, extent(MATRIX_EXTENT));
   case ConfigField::cols:   return store_if(config.cols, raw, extent(MATRIX_EXTENT));
   case ConfigField::layout: return store_if(config.layout, raw, below(to_raw(Layout::count)));
@@ -106,7 +91,7 @@ std::uint64_t read_field(const Config &config, ConfigField field) {
 template <VectorConfig Config>
 ConfigAccessStatus write_field(Config &config, ConfigField field, std::uint64_t raw) {
   switch (field) {
-  case ConfigField::dtype: return store_if(config.dtype, raw, dtype_for<Config>());
+  case ConfigField::dtype: return store_if(config.dtype, raw, dtype_code_fits<Config>);
   case ConfigField::len:   return store_if(config.len, raw, extent(VECTOR_LANES));
   default:                 return ConfigAccessStatus::unsupported_field;
   }

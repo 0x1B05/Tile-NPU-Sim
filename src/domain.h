@@ -1,7 +1,6 @@
 #pragma once
 
-#include "config_check.h"
-#include "execute.h"
+#include "config.h"
 #include "utils/common.h"
 
 #include <cstddef>
@@ -9,6 +8,33 @@
 #include <utility>
 
 namespace tile_npu {
+
+inline constexpr std::size_t domain_register_count(NpuDomain domain) {
+  switch (domain) {
+  case NpuDomain::tile: return TILE_REGISTERS;
+  case NpuDomain::acc: return ACC_REGISTERS;
+  case NpuDomain::vec8:
+  case NpuDomain::vec32: return VECTOR_REGISTERS;
+  }
+  return 0;
+}
+
+inline constexpr bool is_vector_domain(NpuDomain domain) {
+  return domain == NpuDomain::vec8 || domain == NpuDomain::vec32;
+}
+
+inline constexpr NpuDomain paired_vector_domain(NpuDomain matrix) {
+  switch (matrix) {
+  case NpuDomain::tile: return NpuDomain::vec8;
+  case NpuDomain::acc: return NpuDomain::vec32;
+  default: return NpuDomain::vec8;
+  }
+}
+
+inline constexpr bool is_domains_paired(NpuDomain matrix, NpuDomain vector) {
+  return (matrix == NpuDomain::tile || matrix == NpuDomain::acc) &&
+         paired_vector_domain(matrix) == vector;
+}
 
 template <NpuDomain Domain> auto &domain_regs(State &state) {
   if constexpr (Domain == NpuDomain::tile) {
@@ -55,9 +81,9 @@ template <NpuDomain Domain> auto bind_register(State &state, RegisterIndex index
 // Calls fn(regs, configs) on the register file and config array of the
 // runtime domain. Only the listed domains instantiate fn.
 template <NpuDomain First, NpuDomain... Rest, typename Fn>
-ExecuteResult with_domain(State &state, NpuDomain domain, Fn &&fn) {
+decltype(auto) with_domain(State &state, NpuDomain domain, Fn &&fn) {
   if (domain == First) {
-    return fn(domain_regs<First>(state), domain_configs<First>(state));
+    return std::forward<Fn>(fn)(domain_regs<First>(state), domain_configs<First>(state));
   }
 
   if constexpr (sizeof...(Rest) > 0) {

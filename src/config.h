@@ -4,12 +4,36 @@
 #include "tile_npu/state.h"
 #include "utils/common.h"
 
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <utility>
 
 namespace tile_npu {
+
+// Compute and vector config types grouped by the shape they describe.
+template <typename Config>
+concept MatrixConfig = std::same_as<Config, TileConfig> || std::same_as<Config, AccConfig>;
+
+template <typename Config>
+concept VectorConfig = std::same_as<Config, Vec8Config> || std::same_as<Config, Vec32Config>;
+
+template <typename Config>
+concept DomainConfig = MatrixConfig<Config> || VectorConfig<Config>;
+
+// Tile/Vec8 hold 8-bit elements, Acc/Vec32 hold 32-bit elements.
+template <DomainConfig Config>
+inline constexpr bool is_8bit_config_v =
+    std::same_as<Config, TileConfig> || std::same_as<Config, Vec8Config>;
+
+template <DomainConfig Config> constexpr bool dtype_fits(DType dtype) {
+  if constexpr (is_8bit_config_v<Config>) {
+    return dtype == DType::i8 || dtype == DType::u8;
+  } else {
+    return dtype == DType::i32 || dtype == DType::u32 || dtype == DType::f32;
+  }
+}
 
 enum class ConfigAccessStatus : std::uint8_t {
   success,
