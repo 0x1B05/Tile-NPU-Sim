@@ -72,13 +72,14 @@ ExecuteResult execute(const CfgInstr &instr, ExecContext &ctx) {
   case CfgOp::setw: {
     // An invalid field or a set reserved bit is CFG_ERROR for the whole span.
     const auto word = static_cast<std::uint32_t>(state.scalar.read_x(instr.src));
-    return cfg_write_result(write_config_span(state, instr.reg_type, dest_range(instr), word));
+    return cfg_write_result(
+        write_compute_config_span(state, instr.reg_type, dest_range(instr), word));
   }
   case CfgOp::getw:
-    state.scalar.write_x(instr.dest, read_config_word(state, instr.reg_type, instr.src));
+    state.scalar.write_x(instr.dest, read_compute_config(state, instr.reg_type, instr.src));
     return {.status = StepStatus::retired};
+  default: unreachable("invalid config operation");
   }
-  unreachable("invalid config operation");
 }
 
 } // namespace tile_npu

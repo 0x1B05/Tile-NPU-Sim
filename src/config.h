@@ -21,8 +21,8 @@ inline constexpr std::size_t config_register_count(ConfigRegType reg_type) {
   case ConfigRegType::vc:
   case ConfigRegType::bm:
   case ConfigRegType::vm: return VECTOR_REGISTERS;
+  default: return 0;
   }
-  return 0;
 }
 
 enum class ConfigAccessStatus : std::uint8_t {
@@ -33,8 +33,8 @@ enum class ConfigAccessStatus : std::uint8_t {
 };
 
 // Call fn with the configuration sequence selected by reg_type.
-template <typename Fn>
-decltype(auto) dispatch_configs(State &state, ConfigRegType reg_type, Fn &&fn) {
+template <typename StateLike, typename Fn>
+decltype(auto) dispatch_configs(StateLike &state, ConfigRegType reg_type, Fn &&fn) {
   switch (reg_type) {
   case ConfigRegType::tc: return std::forward<Fn>(fn)(state.tc);
   case ConfigRegType::ac: return std::forward<Fn>(fn)(state.ac);
@@ -61,11 +61,11 @@ decltype(auto) dispatch_compute_configs(StateLike &state, ConfigRegType reg_type
 }
 
 // The value cfg.get writes into xD.
-std::uint64_t read_config_field(const State &state, ConfigRegType reg_type, std::uint8_t index,
+std::uint64_t read_config_field(const State &state, ConfigRegType reg_type, RegisterIndex index,
                                 ConfigField field);
 
 // Writes a cfg.seti/setx source value
-ConfigAccessStatus write_config_field(State &state, ConfigRegType reg_type, std::uint8_t index,
+ConfigAccessStatus write_config_field(State &state, ConfigRegType reg_type, RegisterIndex index,
                                       ConfigField field, std::uint64_t value);
 
 inline constexpr bool is_compute_config(ConfigRegType reg_type) {
@@ -81,12 +81,12 @@ struct ConfigRange {
   constexpr std::size_t last() const { return std::size_t{dest} + last_offset; }
 };
 
-// cfg.getw: read one compute config word.
-std::uint32_t read_config_word(const State &state, ConfigRegType reg_type, std::uint8_t index);
+// cfg.getw: read one compute config.
+std::uint32_t read_compute_config(const State &state, ConfigRegType reg_type, RegisterIndex index);
 
-// cfg.setw: Decode one config word and write it atomically into the destination range.
-ConfigAccessStatus write_config_span(State &state, ConfigRegType reg_type, ConfigRange range,
-                                     std::uint32_t word);
+// cfg.setw: Decode one compute config and write it atomically into the destination range.
+ConfigAccessStatus write_compute_config_span(State &state, ConfigRegType reg_type,
+                                             ConfigRange range, std::uint32_t word);
 
 // Resolve a raw ISA field code; nullopt when reg_type does not define it.
 std::optional<ConfigField> decode_config_field(ConfigRegType reg_type, std::uint8_t field_code);
