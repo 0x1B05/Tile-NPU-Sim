@@ -161,7 +161,7 @@ bool valid_structure(const LaneInstr &instr) {
 }
 
 bool valid_structure(const CfgInstr &instr) {
-  if (instr.op > CfgOp::getw || instr.reg_type > ConfigRegType::vm) {
+  if (instr.op > CfgOp::getw || instr.reg_type >= ConfigRegType::count) {
     return false;
   }
   const bool word_op = instr.op == CfgOp::setw || instr.op == CfgOp::getw;

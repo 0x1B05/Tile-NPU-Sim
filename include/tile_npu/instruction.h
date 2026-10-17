@@ -268,7 +268,7 @@ struct QntInstr {
   IndexOperand index = ImmediateIndex{}; // Scale lane for vector forms only.
 };
 
-enum class ConfigRegType : std::uint8_t { tc, ac, bc, vc, tm, am, bm, vm };
+enum class ConfigRegType : std::uint8_t { tc, ac, bc, vc, tm, am, bm, vm, count };
 
 // clang-format off
 enum class ConfigField : std::uint8_t {

@@ -44,8 +44,8 @@ decltype(auto) dispatch_configs(State &state, ConfigRegType reg_type, Fn &&fn) {
   case ConfigRegType::am: return std::forward<Fn>(fn)(state.am);
   case ConfigRegType::bm: return std::forward<Fn>(fn)(state.bm);
   case ConfigRegType::vm: return std::forward<Fn>(fn)(state.vm);
+  default: unreachable("invalid config register type");
   }
-  unreachable("invalid config register type");
 }
 
 // Call fn with the compute configuration sequence selected by reg_type.

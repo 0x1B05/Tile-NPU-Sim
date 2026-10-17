@@ -10,9 +10,21 @@
 namespace tile_npu {
 namespace {
 
+ConfigRange dest_range(const CfgInstr &instr) {
+  return {.dest = instr.dest, .last_offset = instr.n};
+}
+
 ConfigField field_of(const CfgInstr &instr) {
   if (!instr.field) unreachable("validated cfg instruction has no field");
   return *instr.field;
+}
+
+ExecuteResult cfg_write_result(ConfigAccessStatus status) {
+  switch (status) {
+  case ConfigAccessStatus::success: return {.status = StepStatus::retired};
+  case ConfigAccessStatus::invalid_value: return config_error();
+  default: unreachable("validated cfg write has an invalid register or field");
+  }
 }
 
 // Writes one field value into configs from instr.dest through instr.dest + n.
@@ -21,12 +33,7 @@ ExecuteResult cfg_write(const CfgInstr &instr, State &state, std::uint64_t value
   const auto field = field_of(instr);
   for (std::size_t k = 0; k <= instr.n; ++k) {
     const auto status = write_config_field(state, instr.reg_type, instr.dest + k, field, value);
-    switch (status) {
-    case ConfigAccessStatus::success: break;
-    case ConfigAccessStatus::invalid_value:
-      if (k == 0) return config_error();
-    default: unreachable("validated config write has an invalid register or field");
-    }
+    if (status != ConfigAccessStatus::success) return cfg_write_result(status);
   }
   return {.status = StepStatus::retired};
 }
@@ -52,9 +59,9 @@ ExecuteResult execute(const CfgInstr &instr, ExecContext &ctx) {
     return cfg_write(instr, state, value);
   }
   case CfgOp::copy: {
-    const ConfigRange range{.dest = instr.dest, .last_offset = instr.n};
-    dispatch_configs(state, instr.reg_type,
-                     [&](auto &configs) { copy_config_range(configs, range, instr.src); });
+    dispatch_configs(state, instr.reg_type, [&](auto &configs) {
+      copy_config_range(configs, dest_range(instr), instr.src);
+    });
     return {.status = StepStatus::retired};
   }
   case CfgOp::get: {
@@ -65,12 +72,7 @@ ExecuteResult execute(const CfgInstr &instr, ExecContext &ctx) {
   case CfgOp::setw: {
     // An invalid field or a set reserved bit is CFG_ERROR for the whole span.
     const auto word = static_cast<std::uint32_t>(state.scalar.read_x(instr.src));
-    const ConfigRange range{.dest = instr.dest, .last_offset = instr.n};
-    switch (write_config_span(state, instr.reg_type, range, word)) {
-    case ConfigAccessStatus::success: return {.status = StepStatus::retired};
-    case ConfigAccessStatus::invalid_value: return config_error();
-    default: unreachable("validated cfg.setw has an invalid register span");
-    }
+    return cfg_write_result(write_config_span(state, instr.reg_type, dest_range(instr), word));
   }
   case CfgOp::getw:
     state.scalar.write_x(instr.dest, read_config_word(state, instr.reg_type, instr.src));

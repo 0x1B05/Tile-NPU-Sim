@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <span>
 #include <type_traits>
 
 namespace tile_npu {
@@ -147,25 +148,31 @@ std::uint64_t read_vector_descriptor(const VectorDescriptor &desc, ConfigField f
   }
 }
 
-// Field code to semantic field, indexed [ConfigRegType][field code].
-constexpr auto FIELD_BY_TYPE_AND_CODE = [] {
-  using enum ConfigField;
-  using Row = std::array<std::optional<ConfigField>, 5>;
-  std::array<Row, static_cast<std::size_t>(ConfigRegType::vm) + 1> table{};
-  auto row = [&](ConfigRegType type) -> Row & {
-    return table[static_cast<std::uint8_t>(type)];
-  };
-  row(ConfigRegType::tc) = {dtype,     rows, cols, layout, arith_mode};
-  row(ConfigRegType::ac) = {dtype,     rows, cols, layout};
-  row(ConfigRegType::bc) = {dtype,     len};
-  row(ConfigRegType::vc) = {dtype,     len};
-  row(ConfigRegType::tm) = {base_addr, row_stride_bytes, col_stride_bytes, transform, flags};
-  row(ConfigRegType::am) = {base_addr, row_stride_bytes, col_stride_bytes, transform, flags};
-  row(ConfigRegType::bm) = {base_addr, stride_bytes, flags};
-  row(ConfigRegType::vm) = {base_addr, stride_bytes, flags};
-  return table;
-}();
+// Field codes index each register type's field list.
+// clang-format off
+constexpr ConfigField TC_FIELDS[] = { ConfigField::dtype, ConfigField::rows, ConfigField::cols, ConfigField::layout, ConfigField::arith_mode};
+constexpr ConfigField AC_FIELDS[] = { ConfigField::dtype, ConfigField::rows, ConfigField::cols, ConfigField::layout};
+constexpr ConfigField BC_FIELDS[] = { ConfigField::dtype, ConfigField::len};
+constexpr ConfigField VC_FIELDS[] = { ConfigField::dtype, ConfigField::len};
+constexpr ConfigField TM_FIELDS[] = { ConfigField::base_addr, ConfigField::row_stride_bytes, ConfigField::col_stride_bytes, ConfigField::transform, ConfigField::flags};
+constexpr ConfigField AM_FIELDS[] = { ConfigField::base_addr, ConfigField::row_stride_bytes, ConfigField::col_stride_bytes, ConfigField::transform, ConfigField::flags};
+constexpr ConfigField BM_FIELDS[] = { ConfigField::base_addr, ConfigField::stride_bytes, ConfigField::flags};
+constexpr ConfigField VM_FIELDS[] = { ConfigField::base_addr, ConfigField::stride_bytes, ConfigField::flags};
+
+// Indexed by ConfigRegType in enum order.
+constexpr std::array<std::span<const ConfigField>,
+                     static_cast<std::size_t>(ConfigRegType::count)>
+    FIELDS_BY_TYPE = {{
+        TC_FIELDS, AC_FIELDS, BC_FIELDS, VC_FIELDS,
+        TM_FIELDS, AM_FIELDS, BM_FIELDS, VM_FIELDS,
+    }};
 // clang-format on
+
+constexpr std::span<const ConfigField> fields_for(ConfigRegType reg_type) {
+  const auto index = static_cast<std::size_t>(reg_type);
+  if (index >= FIELDS_BY_TYPE.size()) return {};
+  return FIELDS_BY_TYPE[index];
+}
 
 struct BitRange {
   unsigned hi;
@@ -215,10 +222,10 @@ ConfigAccessStatus write_compute_field(Config &config, ConfigField field, std::u
   }
 }
 
-// The fields a register type defines are the non-empty entries of its row.
+// The fields a register type defines, in field-code order.
 template <typename Fn> void for_each_field(ConfigRegType reg_type, Fn &&fn) {
-  for (const auto &field : FIELD_BY_TYPE_AND_CODE[static_cast<std::uint8_t>(reg_type)]) {
-    if (field) fn(*field, config_word_bits(reg_type, *field));
+  for (const auto field : fields_for(reg_type)) {
+    fn(field, config_word_bits(reg_type, field));
   }
 }
 
@@ -293,8 +300,8 @@ std::uint64_t read_config_field(const State &state, ConfigRegType reg_type, std:
   case ConfigRegType::am: return read_matrix_descriptor(state.am[index], field);
   case ConfigRegType::bm: return read_vector_descriptor(state.bm[index], field);
   case ConfigRegType::vm: return read_vector_descriptor(state.vm[index], field);
+  default: unreachable("invalid config register type");
   }
-  unreachable("invalid config register type");
 }
 
 ConfigAccessStatus write_config_field(State &state, ConfigRegType reg_type, std::uint8_t index,
@@ -310,25 +317,19 @@ ConfigAccessStatus write_config_field(State &state, ConfigRegType reg_type, std:
   case ConfigRegType::am: return write_matrix_descriptor(state.am[index], field, value);
   case ConfigRegType::bm: return write_vector_descriptor(state.bm[index], field, value);
   case ConfigRegType::vm: return write_vector_descriptor(state.vm[index], field, value);
+  default: unreachable("invalid config register type");
   }
-  return ConfigAccessStatus::unsupported_field;
 }
 
 std::optional<ConfigField> decode_config_field(ConfigRegType reg_type, std::uint8_t field_code) {
-  const auto type = static_cast<std::uint8_t>(reg_type);
-  if (type >= FIELD_BY_TYPE_AND_CODE.size()) return std::nullopt;
-  const auto &fields = FIELD_BY_TYPE_AND_CODE[type];
+  const auto fields = fields_for(reg_type);
   if (field_code >= fields.size()) return std::nullopt;
   return fields[field_code];
 }
 
 bool config_field_defined(ConfigRegType reg_type, ConfigField field) {
-  const auto type = static_cast<std::uint8_t>(reg_type);
-  if (type >= FIELD_BY_TYPE_AND_CODE.size()) return false;
-  for (const auto candidate : FIELD_BY_TYPE_AND_CODE[type]) {
-    if (candidate && *candidate == field) return true;
-  }
-  return false;
+  const auto fields = fields_for(reg_type);
+  return std::find(fields.begin(), fields.end(), field) != fields.end();
 }
 
 } // namespace tile_npu
