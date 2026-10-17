@@ -21,6 +21,19 @@ namespace {
 // and the dynamic-scale denominator are one magnitude.
 constexpr std::int8_t Q8_MAX_MAGNITUDE = 127;
 
+bool valid_matrix_quant_configs(const TileConfig &quantized, const AccConfig &floating,
+                                const Vec32Config &scale) {
+  return valid_config_of(quantized, DType::i8) && valid_config_of(floating, DType::f32) &&
+         valid_config_of(scale, DType::f32) && quantized.rows == floating.rows &&
+         quantized.cols == floating.cols && scale.len == floating.rows;
+}
+
+bool valid_vector_quant_configs(const Vec8Config &quantized, const Vec32Config &floating,
+                                const Vec32Config &scale) {
+  return valid_config_of(quantized, DType::i8) && valid_config_of(floating, DType::f32) &&
+         valid_config_of(scale, DType::f32) && quantized.len == floating.len;
+}
+
 // q8s32 element rule: round-to-nearest-even of value / scale, saturated to
 // [-127, 127]; a NaN quotient (0/0, inf/inf, NaN input) yields 0. An
 // infinite quotient saturates like any large value.
@@ -69,9 +82,7 @@ ExecuteResult tquant(const QntInstr &instr, State &state) {
   const auto &dst_config = state.tc[instr.dest.index];
   const auto &src_config = state.ac[instr.src.index];
   const auto &scale_config = state.vc[instr.scale];
-  if (!valid_config_of(dst_config, DType::i8) || !valid_config_of(src_config, DType::f32) ||
-      !valid_config_of(scale_config, DType::f32) || dst_config.rows != src_config.rows ||
-      dst_config.cols != src_config.cols || scale_config.len != src_config.rows) {
+  if (!valid_matrix_quant_configs(dst_config, src_config, scale_config)) {
     return config_error();
   }
   auto dst = matrix_view(state.t[instr.dest.index]);
@@ -98,9 +109,7 @@ ExecuteResult tdequant(const QntInstr &instr, State &state) {
   const auto &dst_config = state.ac[instr.dest.index];
   const auto &src_config = state.tc[instr.src.index];
   const auto &scale_config = state.vc[instr.scale];
-  if (!valid_config_of(dst_config, DType::f32) || !valid_config_of(src_config, DType::i8) ||
-      !valid_config_of(scale_config, DType::f32) || dst_config.rows != src_config.rows ||
-      dst_config.cols != src_config.cols || scale_config.len != src_config.rows) {
+  if (!valid_matrix_quant_configs(src_config, dst_config, scale_config)) {
     return config_error();
   }
   auto dst = matrix_view(state.a[instr.dest.index]);
@@ -122,8 +131,7 @@ ExecuteResult vquant(const QntInstr &instr, State &state) {
   const auto &dst_config = state.bc[instr.dest.index];
   const auto &src_config = state.vc[instr.src.index];
   const auto &scale_config = state.vc[instr.scale];
-  if (!valid_config_of(dst_config, DType::i8) || !valid_config_of(src_config, DType::f32) ||
-      !valid_config_of(scale_config, DType::f32) || dst_config.len != src_config.len) {
+  if (!valid_vector_quant_configs(dst_config, src_config, scale_config)) {
     return config_error();
   }
   const auto lane = scale_lane(instr, state, scale_config.len);
@@ -146,8 +154,7 @@ ExecuteResult bdequant(const QntInstr &instr, State &state) {
   const auto &dst_config = state.vc[instr.dest.index];
   const auto &src_config = state.bc[instr.src.index];
   const auto &scale_config = state.vc[instr.scale];
-  if (!valid_config_of(dst_config, DType::f32) || !valid_config_of(src_config, DType::i8) ||
-      !valid_config_of(scale_config, DType::f32) || dst_config.len != src_config.len) {
+  if (!valid_vector_quant_configs(src_config, dst_config, scale_config)) {
     return config_error();
   }
   const auto lane = scale_lane(instr, state, scale_config.len);
