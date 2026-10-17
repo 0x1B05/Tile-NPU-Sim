@@ -3,8 +3,6 @@
 #include "config.h"
 #include "utils/common.h"
 
-#include <algorithm>
-#include <cstddef>
 #include <cstdint>
 
 namespace tile_npu {
@@ -27,22 +25,9 @@ ExecuteResult cfg_write_result(ConfigAccessStatus status) {
   }
 }
 
-// Writes one field value into configs from instr.dest through instr.dest + n.
-// An invalid value (CFG_ERROR) surfaces as invalid_configuration with nothing written.
 ExecuteResult cfg_write(const CfgInstr &instr, State &state, std::uint64_t value) {
-  const auto field = field_of(instr);
-  for (std::size_t k = 0; k <= instr.n; ++k) {
-    const auto status = write_config_field(state, instr.reg_type, instr.dest + k, field, value);
-    if (status != ConfigAccessStatus::success) return cfg_write_result(status);
-  }
-  return {.status = StepStatus::retired};
-}
-
-template <typename Configs>
-void copy_config_range(Configs &configs, ConfigRange range, RegisterIndex source) {
-  // Snapshot the source before writing so overlapping copies use its original value.
-  const auto value = configs[source];
-  std::fill(configs.begin() + range.dest, configs.begin() + range.last() + 1, value);
+  return cfg_write_result(
+      write_config_field_range(state, instr.reg_type, dest_range(instr), field_of(instr), value));
 }
 
 } // namespace
@@ -59,10 +44,7 @@ ExecuteResult execute(const CfgInstr &instr, ExecContext &ctx) {
     return cfg_write(instr, state, value);
   }
   case CfgOp::copy: {
-    dispatch_configs(state, instr.reg_type, [&](auto &configs) {
-      copy_config_range(configs, dest_range(instr), instr.src);
-    });
-    return {.status = StepStatus::retired};
+    return cfg_write_result(copy_config_range(state, instr.reg_type, dest_range(instr), instr.src));
   }
   case CfgOp::get: {
     const auto field = field_of(instr);
@@ -73,7 +55,7 @@ ExecuteResult execute(const CfgInstr &instr, ExecContext &ctx) {
     // An invalid field or a set reserved bit is CFG_ERROR for the whole span.
     const auto word = static_cast<std::uint32_t>(state.scalar.read_x(instr.src));
     return cfg_write_result(
-        write_compute_config_span(state, instr.reg_type, dest_range(instr), word));
+        write_compute_config_range(state, instr.reg_type, dest_range(instr), word));
   }
   case CfgOp::getw:
     state.scalar.write_x(instr.dest, read_compute_config(state, instr.reg_type, instr.src));

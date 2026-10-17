@@ -16,22 +16,24 @@ TEST_CASE(config_fields) {
   using tile_npu::ConfigRegType;
   tile_npu::State state{};
 
-  check_eq(tile_npu::write_config_field(state, ConfigRegType::tc, 0, ConfigField::rows, 7),
+  check_eq(tile_npu::write_config_field_range(state, ConfigRegType::tc, {.dest = 0},
+                                              ConfigField::rows, 7),
            ConfigAccessStatus::success, "write TC rows");
   check_eq(tile_npu::read_config_field(state, ConfigRegType::tc, 0, ConfigField::rows),
            std::uint64_t{7}, "read TC rows");
 
-  check_eq(tile_npu::write_config_field(state, ConfigRegType::tc, 0, ConfigField::dtype,
-                                        code(tile_npu::DType::u8)),
+  check_eq(tile_npu::write_config_field_range(state, ConfigRegType::tc, {.dest = 0},
+                                              ConfigField::dtype, code(tile_npu::DType::u8)),
            ConfigAccessStatus::success, "write TC dtype");
   check_eq(state.tc[0].dtype, tile_npu::DType::u8, "TC dtype holds the written enum");
   check_eq(tile_npu::read_config_field(state, ConfigRegType::tc, 0, ConfigField::dtype),
            code(tile_npu::DType::u8), "read TC dtype as its numeric code");
 
-  check_eq(tile_npu::write_config_field(state, ConfigRegType::tc, 0, ConfigField::dtype,
-                                        code(tile_npu::DType::f32)),
+  check_eq(tile_npu::write_config_field_range(state, ConfigRegType::tc, {.dest = 0},
+                                              ConfigField::dtype, code(tile_npu::DType::f32)),
            ConfigAccessStatus::invalid_value, "reject dtype from the wrong domain");
-  check_eq(tile_npu::write_config_field(state, ConfigRegType::tc, 0, ConfigField::dtype, 0x100),
+  check_eq(tile_npu::write_config_field_range(state, ConfigRegType::tc, {.dest = 0},
+                                              ConfigField::dtype, 0x100),
            ConfigAccessStatus::invalid_value, "reject out-of-range dtype code");
   check_eq(state.tc[0].dtype, tile_npu::DType::u8, "rejected config write is non-mutating");
 
@@ -43,19 +45,21 @@ TEST_CASE(config_fields) {
   check(!tile_npu::decode_config_field(static_cast<ConfigRegType>(8), 0).has_value(),
         "reject unknown config register type");
 
-  check_eq(tile_npu::write_config_field(state, ConfigRegType::tm, 0, ConfigField::row_stride_bytes,
-                                        UINT64_MAX),
+  check_eq(tile_npu::write_config_field_range(state, ConfigRegType::tm, {.dest = 0},
+                                              ConfigField::row_stride_bytes, UINT64_MAX),
            ConfigAccessStatus::success, "write negative stride");
   check_eq(
       hex(tile_npu::read_config_field(state, ConfigRegType::tm, 0, ConfigField::row_stride_bytes)),
       hex(UINT64_MAX), "preserve signed field bits for cfg.get");
-  check_eq(tile_npu::write_config_field(state, ConfigRegType::tm, 0, ConfigField::row_stride_bytes,
-                                        0x80000000u),
+  check_eq(tile_npu::write_config_field_range(state, ConfigRegType::tm, {.dest = 0},
+                                              ConfigField::row_stride_bytes, 0x80000000u),
            ConfigAccessStatus::invalid_value, "reject stride outside i32");
 
-  check_eq(tile_npu::write_config_field(state, ConfigRegType::tc, 0, ConfigField::rows, 0),
+  check_eq(tile_npu::write_config_field_range(state, ConfigRegType::tc, {.dest = 0},
+                                              ConfigField::rows, 0),
            ConfigAccessStatus::invalid_value, "reject zero TC rows");
   check_eq(state.tc[0].rows, std::uint8_t{7}, "rejected shape write is non-mutating");
-  check_eq(tile_npu::write_config_field(state, ConfigRegType::vc, 0, ConfigField::len, 0),
+  check_eq(tile_npu::write_config_field_range(state, ConfigRegType::vc, {.dest = 0},
+                                              ConfigField::len, 0),
            ConfigAccessStatus::invalid_value, "reject zero VC len");
 }

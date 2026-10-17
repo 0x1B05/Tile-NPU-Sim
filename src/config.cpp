@@ -248,34 +248,35 @@ std::optional<Config> decode_compute_config(ConfigRegType reg_type, std::uint32_
 }
 
 template <typename Configs>
-ConfigAccessStatus write_config_range(Configs &configs, ConfigRange range,
-                                      const typename Configs::value_type &config) {
+ConfigAccessStatus fill_config_range(Configs &configs, ConfigRange range,
+                                     const typename Configs::value_type &config) {
   if (range.last() >= configs.size()) return ConfigAccessStatus::invalid_register;
   std::fill(configs.begin() + range.dest, configs.begin() + range.last() + 1, config);
   return ConfigAccessStatus::success;
 }
 
-} // namespace
+template <typename Configs>
+ConfigAccessStatus write_field_range(Configs &configs, ConfigRange range, ConfigField field,
+                                     std::uint64_t value) {
+  if (range.last() >= configs.size()) return ConfigAccessStatus::invalid_register;
 
-std::uint32_t read_compute_config(const State &state, ConfigRegType reg_type, RegisterIndex index) {
-  if (!is_compute_config(reg_type) || index >= config_register_count(reg_type)) {
-    unreachable("invalid compute config register type or index");
+  auto staged = configs;
+  for (std::size_t index = range.dest; index <= range.last(); ++index) {
+    const auto status = write_field(staged[index], field, value);
+    if (status != ConfigAccessStatus::success) return status;
   }
-  return dispatch_compute_configs(state, reg_type, [&](const auto &configs) {
-    return encode_compute_config(configs[index], reg_type);
-  });
+  configs = staged;
+  return ConfigAccessStatus::success;
 }
 
-ConfigAccessStatus write_compute_config_span(State &state, ConfigRegType reg_type,
-                                             ConfigRange range, std::uint32_t word) {
-  if (!is_compute_config(reg_type)) unreachable("invalid compute config register type");
-  return dispatch_compute_configs(state, reg_type, [&](auto &configs) -> ConfigAccessStatus {
-    using Config = typename std::remove_cvref_t<decltype(configs)>::value_type;
-    const auto config = decode_compute_config<Config>(reg_type, word);
-    if (!config) return ConfigAccessStatus::invalid_value;
-    return write_config_range(configs, range, *config);
-  });
+template <typename Configs>
+ConfigAccessStatus copy_config_values(Configs &configs, ConfigRange range, RegisterIndex source) {
+  if (source >= configs.size()) return ConfigAccessStatus::invalid_register;
+  const auto value = configs[source];
+  return fill_config_range(configs, range, value);
 }
+
+} // namespace
 
 std::uint64_t read_config_field(const State &state, ConfigRegType reg_type, RegisterIndex index,
                                 ConfigField field) {
@@ -286,11 +287,37 @@ std::uint64_t read_config_field(const State &state, ConfigRegType reg_type, Regi
                           [&](const auto &configs) { return read_field(configs[index], field); });
 }
 
-ConfigAccessStatus write_config_field(State &state, ConfigRegType reg_type, RegisterIndex index,
-                                      ConfigField field, std::uint64_t value) {
-  if (index >= config_register_count(reg_type)) return ConfigAccessStatus::invalid_register;
-  return dispatch_configs(state, reg_type,
-                          [&](auto &configs) { return write_field(configs[index], field, value); });
+ConfigAccessStatus write_config_field_range(State &state, ConfigRegType reg_type, ConfigRange range,
+                                            ConfigField field, std::uint64_t value) {
+  return dispatch_configs(state, reg_type, [&](auto &configs) {
+    return write_field_range(configs, range, field, value);
+  });
+}
+
+std::uint32_t read_compute_config(const State &state, ConfigRegType reg_type, RegisterIndex index) {
+  if (!is_compute_config(reg_type) || index >= config_register_count(reg_type)) {
+    unreachable("invalid compute config register type or index");
+  }
+  return dispatch_compute_configs(state, reg_type, [&](const auto &configs) {
+    return encode_compute_config(configs[index], reg_type);
+  });
+}
+
+ConfigAccessStatus write_compute_config_range(State &state, ConfigRegType reg_type,
+                                              ConfigRange range, std::uint32_t word) {
+  if (!is_compute_config(reg_type)) unreachable("invalid compute config register type");
+  return dispatch_compute_configs(state, reg_type, [&](auto &configs) -> ConfigAccessStatus {
+    using Config = typename std::remove_cvref_t<decltype(configs)>::value_type;
+    const auto config = decode_compute_config<Config>(reg_type, word);
+    if (!config) return ConfigAccessStatus::invalid_value;
+    return fill_config_range(configs, range, *config);
+  });
+}
+
+ConfigAccessStatus copy_config_range(State &state, ConfigRegType reg_type, ConfigRange range,
+                                     RegisterIndex source) {
+  return dispatch_configs(
+      state, reg_type, [&](auto &configs) { return copy_config_values(configs, range, source); });
 }
 
 std::optional<ConfigField> decode_config_field(ConfigRegType reg_type, std::uint8_t field_code) {

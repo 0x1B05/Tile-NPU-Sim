@@ -11,6 +11,22 @@
 
 namespace tile_npu {
 
+enum class ConfigAccessStatus : std::uint8_t {
+  success,
+  invalid_register,
+  unsupported_field,
+  invalid_value,
+};
+
+// Inclusive range of same-type configs encoded by CFG's destination
+// register and zero-based N5 offset.
+struct ConfigRange {
+  RegisterIndex dest = 0;
+  std::uint8_t last_offset = 0;
+
+  constexpr std::size_t last() const { return std::size_t{dest} + last_offset; }
+};
+
 inline constexpr std::size_t config_register_count(ConfigRegType reg_type) {
   switch (reg_type) {
   case ConfigRegType::tc:
@@ -25,12 +41,9 @@ inline constexpr std::size_t config_register_count(ConfigRegType reg_type) {
   }
 }
 
-enum class ConfigAccessStatus : std::uint8_t {
-  success,
-  invalid_register,
-  unsupported_field,
-  invalid_value,
-};
+inline constexpr bool is_compute_config(ConfigRegType reg_type) {
+  return reg_type <= ConfigRegType::vc;
+}
 
 // Call fn with the configuration sequence selected by reg_type.
 template <typename StateLike, typename Fn>
@@ -64,29 +77,20 @@ decltype(auto) dispatch_compute_configs(StateLike &state, ConfigRegType reg_type
 std::uint64_t read_config_field(const State &state, ConfigRegType reg_type, RegisterIndex index,
                                 ConfigField field);
 
-// Writes a cfg.seti/setx source value
-ConfigAccessStatus write_config_field(State &state, ConfigRegType reg_type, RegisterIndex index,
-                                      ConfigField field, std::uint64_t value);
-
-inline constexpr bool is_compute_config(ConfigRegType reg_type) {
-  return reg_type <= ConfigRegType::vc;
-}
-
-// Inclusive range of same-type compute configs encoded by CFG's destination
-// register and zero-based N5 offset.
-struct ConfigRange {
-  RegisterIndex dest = 0;
-  std::uint8_t last_offset = 0;
-
-  constexpr std::size_t last() const { return std::size_t{dest} + last_offset; }
-};
+// Write one field across the inclusive destination range.
+ConfigAccessStatus write_config_field_range(State &state, ConfigRegType reg_type, ConfigRange range,
+                                            ConfigField field, std::uint64_t value);
 
 // cfg.getw: read one compute config.
 std::uint32_t read_compute_config(const State &state, ConfigRegType reg_type, RegisterIndex index);
 
 // cfg.setw: Decode one compute config and write it atomically into the destination range.
-ConfigAccessStatus write_compute_config_span(State &state, ConfigRegType reg_type,
-                                             ConfigRange range, std::uint32_t word);
+ConfigAccessStatus write_compute_config_range(State &state, ConfigRegType reg_type,
+                                              ConfigRange range, std::uint32_t word);
+
+// Copy one complete config across the inclusive destination range.
+ConfigAccessStatus copy_config_range(State &state, ConfigRegType reg_type, ConfigRange range,
+                                     RegisterIndex source);
 
 // Resolve a raw ISA field code; nullopt when reg_type does not define it.
 std::optional<ConfigField> decode_config_field(ConfigRegType reg_type, std::uint8_t field_code);
