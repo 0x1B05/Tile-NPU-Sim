@@ -24,6 +24,7 @@ xmake project -k compile_commands      # 为 clangd 生成 compile_commands.json
 
 - 修改后运行 `xmake test`。默认的 `sim_tests/core` 运行全部 host 用例 (含 NPU guest driver)，`sim_run/guest/*` 运行标量自校验程序；xmake 测试项数量不等于指令用例数量。
 - 构建选项在 `xmake.lua`，使用 `xmake f --xxx=y/n`；编译器缓存位于仓库内 `.cache/ccache`。
+- 宿主构建启用 `set_warnings("all", "error")`，所有已启用的警告都按错误处理。
 - guest 镜像需要 RISC-V 交叉工具链，默认前缀 `riscv64-linux-gnu-`，可用 `xmake f --riscv_cross=<prefix>` 覆盖；构建 `sim_run` 本身不需要交叉工具链。
 - 可选官方套件：先运行 `scripts/fetch_riscv_tests.sh`，再启用 `--rvtests=y`。可选 tiny Qwen3 回归：启用 `--qwen3test=y`，需要 Python 3 和 NumPy；缺少依赖时会警告并跳过该回归。两项均要求 `--monitor=y`。
 - 过滤运行 guest 测试前，先构建对应镜像目标 (`guest_images` 或 `riscv_tests`)，或运行一次完整的 `xmake test`；镜像依赖挂在 `sim_tests` 上。
@@ -103,6 +104,7 @@ xmake project -k compile_commands      # 为 clangd 生成 compile_commands.json
 - `README.md` 与代码注释使用英文，本文件使用中文。注释说明设计原因、契约和必要的位段布局，避免复述显然的代码或历史变更。
 - 不在执行器中重复声明“执行失败不改变架构状态”等通用保证；需要注释时，说明具体的暂存、预检或提交顺序及其原因。
 - 沿用 `#pragma once`、`snake_case`、`enum class` 和 `constexpr`；常量用 `ALL_CAPS`。
+- 操作码合法性用元数据表或显式枚举分支判断。校验和执行分派的 `switch` 显式写出 `default`，分别拒绝非法输入或报告已验证输入违反不变式；数据域查询保留约定的无效值返回。新增枚举时同步检查所有相关分支，带 `default` 的分支不能依赖普通 `-Wswitch` 提醒遗漏。
 - 使用仓库 `.clang-format`，要求 clang-format >= 14。提交前只格式化本次修改的 C++ 文件，例如 `clang-format -i src/decode/decode_npu.cpp`；不对 Markdown、YAML 或汇编源码运行它。
 - `tests/riscv-tests-env/riscv_test.h` 的宏体是 GNU as 汇编，保留其 `/* clang-format off */` 保护。对齐的译码表、位段表和元数据表用 `// clang-format off/on` 保持排版。
 - 指令位段通过 `encoding::field<Hi,Lo>` 与格式解析器提取，避免重复魔数位移。译码位图按 Rivet 的具体字段命名 (如 `dom2`、`IS`、`BX`)，与实际位段对齐。

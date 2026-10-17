@@ -15,8 +15,8 @@ inline constexpr std::size_t domain_register_count(NpuDomain domain) {
   case NpuDomain::acc: return ACC_REGISTERS;
   case NpuDomain::vec8:
   case NpuDomain::vec32: return VECTOR_REGISTERS;
+  default: return 0;
   }
-  return 0;
 }
 
 inline constexpr bool is_vector_domain(NpuDomain domain) {

@@ -99,18 +99,18 @@ bool valid_structure(const MaskInstr &instr) {
 }
 
 bool valid_structure(const MblkInstr &instr) {
-  if (instr.op > MblkOp::row_store) return false;
   const auto &reg = accessed_reg(instr);
-  const bool row_form = instr.op == MblkOp::row_load || instr.op == MblkOp::row_store;
-  if (row_form && reg.domain != NpuDomain::tile && reg.domain != NpuDomain::acc) {
+  if (!in_range(reg) || !index_in_range(instr.index)) {
     return false;
   }
-  if (instr.op == MblkOp::gather) {
-    if (reg.domain == NpuDomain::acc || instr.gather_src >= VECTOR_REGISTERS) {
-      return false;
-    }
+  switch (instr.op) {
+  case MblkOp::load:
+  case MblkOp::store: return true;
+  case MblkOp::row_load:
+  case MblkOp::row_store: return reg.domain == NpuDomain::tile || reg.domain == NpuDomain::acc;
+  case MblkOp::gather: return reg.domain != NpuDomain::acc && instr.gather_src < VECTOR_REGISTERS;
+  default: return false;
   }
-  return in_range(reg) && index_in_range(instr.index);
 }
 
 bool valid_structure(const FillInstr &instr) {
@@ -127,18 +127,21 @@ bool valid_structure(const MoveInstr &instr) {
   switch (instr.op) {
   case MoveOp::copy: return true;
   case MoveOp::transpose: return instr.dest.domain == NpuDomain::tile;
+  default: return false;
   }
-  return false;
 }
 
 bool valid_structure(const RowInstr &instr) {
-  if (instr.op > RowOp::extract) return false;
-  return is_domains_paired(instr.matrix.domain, instr.vector.domain) && in_range(instr.matrix) &&
-         in_range(instr.vector) && index_in_range(instr.index);
+  switch (instr.op) {
+  case RowOp::insert:
+  case RowOp::extract:
+    return is_domains_paired(instr.matrix.domain, instr.vector.domain) && in_range(instr.matrix) &&
+           in_range(instr.vector) && index_in_range(instr.index);
+  default: return false;
+  }
 }
 
 bool valid_structure(const LaneInstr &instr) {
-  if (instr.op > LaneOp::broadcast) return false;
   const auto vector_operand = [](const NpuOperand &operand) {
     const auto *reg = std::get_if<NpuRegister>(&operand);
     return reg != nullptr && is_vector_domain(reg->domain) && in_range(*reg);
@@ -157,12 +160,12 @@ bool valid_structure(const LaneInstr &instr) {
     const auto *src = std::get_if<NpuRegister>(&instr.src);
     return vector_operand(instr.dst) && vector_operand(instr.src) && dst->domain == src->domain;
   }
+  default: return false;
   }
-  return false;
 }
 
 bool valid_structure(const CfgInstr &instr) {
-  if (instr.op > CfgOp::getw || instr.reg_type >= ConfigRegType::count) {
+  if (instr.reg_type >= ConfigRegType::count) {
     return false;
   }
   const bool word_op = instr.op == CfgOp::setw || instr.op == CfgOp::getw;
@@ -185,20 +188,20 @@ bool valid_structure(const CfgInstr &instr) {
   case CfgOp::copy: return span_fits && instr.src < register_count;
   case CfgOp::get:
   case CfgOp::getw: return in_range(ScalarRegister{instr.dest}) && instr.src < register_count;
+  default: return false;
   }
-  return false;
 }
 
 bool valid_structure(const CvtInstr &instr) {
-  if (instr.op > CvtOp::widen) return false;
-  if (instr.op == CvtOp::widen) {
-    return instr.dest.domain == NpuDomain::acc && in_range(instr.dest) &&
-           instr.src.domain == NpuDomain::tile && in_range(instr.src);
+  if (!in_range(instr.dest) || !in_range(instr.src)) return false;
+  switch (instr.op) {
+  case CvtOp::cvt:
+    return (instr.dest.domain == NpuDomain::acc || instr.dest.domain == NpuDomain::vec32) &&
+           instr.src.domain == instr.dest.domain;
+  case CvtOp::widen:
+    return instr.dest.domain == NpuDomain::acc && instr.src.domain == NpuDomain::tile;
+  default: return false;
   }
-  const bool cvt_domain =
-      instr.dest.domain == NpuDomain::acc || instr.dest.domain == NpuDomain::vec32;
-  return cvt_domain && instr.src.domain == instr.dest.domain && in_range(instr.dest) &&
-         in_range(instr.src);
 }
 
 bool valid_structure(const ReduceInstr &instr) {
@@ -225,7 +228,7 @@ bool valid_structure(const ReduceInstr &instr) {
 }
 
 bool valid_structure(const QntInstr &instr) {
-  if (instr.op > QntOp::quant_ext_scale || instr.scale >= VECTOR_REGISTERS) {
+  if (instr.scale >= VECTOR_REGISTERS) {
     return false;
   }
   if (!qnt_dest_legal(instr.op, instr.dest.domain) ||

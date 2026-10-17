@@ -49,8 +49,16 @@ inline constexpr bool ebin_legal(EbinOp op, NpuDomain domain) {
 
 // Vec8 has no E_UNARY form; Tile only has `not`.
 inline constexpr bool eun_legal(EunOp op, NpuDomain domain) {
-  return op <= EunOp::silu && domain != NpuDomain::vec8 &&
-         (domain != NpuDomain::tile || op == EunOp::bit_not);
+  switch (op) {
+  case EunOp::bit_not: return domain != NpuDomain::vec8;
+  case EunOp::abs:
+  case EunOp::neg:
+  case EunOp::exp2:
+  case EunOp::rcp:
+  case EunOp::rsqrt:
+  case EunOp::silu: return domain == NpuDomain::acc || domain == NpuDomain::vec32;
+  default: return false;
+  }
 }
 
 struct CmpInfo {
@@ -75,13 +83,21 @@ inline constexpr std::array<std::optional<CmpInfo>, 8> CMP_BY_FUNCT3 = [] {
 
 // Vec8 has no E_R4 form; fmadd excludes Tile.
 inline constexpr bool er4_legal(Er4Op op, NpuDomain domain) {
-  return op <= Er4Op::fmadd && domain != NpuDomain::vec8 &&
-         (op != Er4Op::fmadd || domain != NpuDomain::tile);
+  switch (op) {
+  case Er4Op::select: return domain != NpuDomain::vec8;
+  case Er4Op::fmadd: return domain == NpuDomain::acc || domain == NpuDomain::vec32;
+  default: return false;
+  }
 }
 
 // tril/triu are matrix-only.
 inline constexpr bool mask_legal(MaskOp op, NpuDomain domain) {
-  return op <= MaskOp::triu && (op == MaskOp::tail || !is_vector_domain(domain));
+  switch (op) {
+  case MaskOp::tail: return true;
+  case MaskOp::tril:
+  case MaskOp::triu: return !is_vector_domain(domain);
+  default: return false;
+  }
 }
 
 // The fill5 immediate table: codes 0-4 are the integer values 0/+1/-1/+2/-2,
@@ -102,8 +118,8 @@ inline constexpr NpuDomain qnt_paired_domain(NpuDomain domain) {
   case NpuDomain::acc: return NpuDomain::tile;
   case NpuDomain::vec8: return NpuDomain::vec32;
   case NpuDomain::vec32: return NpuDomain::vec8;
+  default: return NpuDomain::tile;
   }
-  return NpuDomain::tile;
 }
 
 // The destination domains an op can write: quant writes the quantized
@@ -113,8 +129,8 @@ inline constexpr bool qnt_dest_legal(QntOp op, NpuDomain dest) {
   case QntOp::quant: return qnt_domain_is_quantized(dest);
   case QntOp::dequant: return !qnt_domain_is_quantized(dest);
   case QntOp::quant_ext_scale: return dest == NpuDomain::tile;
+  default: return false;
   }
-  return false;
 }
 
 // Destination and left-source domains for each MMA_BDOT operation.

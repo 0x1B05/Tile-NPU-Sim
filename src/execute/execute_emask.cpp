@@ -60,8 +60,8 @@ bool keeps(MaskOp op, std::uint64_t bound, std::size_t row, std::size_t col) {
     return row < static_cast<std::uint32_t>(bound) && col < static_cast<std::uint32_t>(bound >> 32);
   case MaskOp::tril: return signed_diff <= delta;
   case MaskOp::triu: return signed_diff >= delta;
+  default: unreachable("invalid E_MASK op");
   }
-  unreachable("invalid E_MASK op");
 }
 
 } // namespace
