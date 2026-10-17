@@ -175,8 +175,8 @@ ExecuteResult execute(const QntInstr &instr, State &state) {
   case QntOp::quant_ext_scale: return tquant(instr, state);
   case QntOp::dequant:
     return instr.dest.domain == NpuDomain::acc ? tdequant(instr, state) : bdequant(instr, state);
+  default: unreachable("execute_qnt with an unknown op");
   }
-  unreachable("execute_qnt with an unknown op");
 }
 
 } // namespace tile_npu

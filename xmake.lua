@@ -1,5 +1,6 @@
 set_project("tile-npu-sim")
 set_languages("c++20")
+set_warnings("all", "error")
 -- The ISA fixes the rounding of each operation, so the host build forbids
 -- implicit FP contraction (e.g. sumsq's mul+add must stay two roundings).
 -- The fmadd instruction keeps its single rounding via explicit std::fma.

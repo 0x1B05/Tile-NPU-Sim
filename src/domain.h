@@ -15,12 +15,16 @@ inline constexpr std::size_t domain_register_count(NpuDomain domain) {
   case NpuDomain::acc: return ACC_REGISTERS;
   case NpuDomain::vec8:
   case NpuDomain::vec32: return VECTOR_REGISTERS;
+  default: return 0;
   }
-  return 0;
 }
 
 inline constexpr bool is_vector_domain(NpuDomain domain) {
   return domain == NpuDomain::vec8 || domain == NpuDomain::vec32;
+}
+
+inline constexpr bool is_matrix_domain(NpuDomain domain) {
+  return domain == NpuDomain::tile || domain == NpuDomain::acc;
 }
 
 inline constexpr NpuDomain paired_vector_domain(NpuDomain matrix) {
@@ -32,8 +36,7 @@ inline constexpr NpuDomain paired_vector_domain(NpuDomain matrix) {
 }
 
 inline constexpr bool is_domains_paired(NpuDomain matrix, NpuDomain vector) {
-  return (matrix == NpuDomain::tile || matrix == NpuDomain::acc) &&
-         paired_vector_domain(matrix) == vector;
+  return is_matrix_domain(matrix) && paired_vector_domain(matrix) == vector;
 }
 
 template <NpuDomain Domain> auto &domain_regs(State &state) {

@@ -15,6 +15,7 @@
 #include <array>
 #include <cstdint>
 #include <initializer_list>
+#include <limits>
 #include <optional>
 #include <string>
 
@@ -78,6 +79,14 @@ template <typename Instr> void check_illegal(const Instr &instr, const char *wha
   Env env;
   const auto result = exec_npu_instr(DecodedNpuInstr{instr}, env.ctx);
   check_eq(result.status, StepStatus::illegal_instruction, what);
+}
+
+template <typename Instr> void check_unassigned_ops(Instr instr, std::uint8_t first_unassigned) {
+  for (const auto code : {first_unassigned, std::numeric_limits<std::uint8_t>::max()}) {
+    instr.op = static_cast<decltype(instr.op)>(code);
+    const auto what = "unassigned op " + std::to_string(code);
+    check_illegal(instr, what.c_str());
+  }
 }
 
 constexpr NpuRegister T(std::uint8_t i) { return {NpuDomain::tile, i}; }
@@ -165,6 +174,7 @@ TEST_CASE(validate_rejects_bad_row_move) {
 }
 
 TEST_CASE(validate_rejects_bad_lane_move) {
+  check_unassigned_ops(LaneInstr{LaneOp::extract, ScalarRegister{0}, B(1), ImmediateIndex{0}}, 3);
   check_illegal(LaneInstr{LaneOp::extract, B(0), B(1), ImmediateIndex{0}},
                 "extract with a vector dst");
   check_illegal(LaneInstr{LaneOp::broadcast, B(0), V(1), ImmediateIndex{0}},
@@ -176,6 +186,7 @@ TEST_CASE(validate_rejects_bad_lane_move) {
 }
 
 TEST_CASE(validate_rejects_bad_cfg) {
+  check_unassigned_ops(CfgInstr{CfgOp::seti, ConfigRegType::tc, 0, 0, ConfigField::rows, 4}, 6);
   check_illegal(CfgInstr{CfgOp::seti, ConfigRegType::tc, 0, 0, std::nullopt, 0},
                 "missing decoded field");
   check_illegal(CfgInstr{CfgOp::seti, static_cast<ConfigRegType>(8), 0, 0, std::nullopt, 0},
@@ -251,6 +262,7 @@ TEST_CASE(validate_rejects_bad_reduce) {
 }
 
 TEST_CASE(validate_rejects_bad_qnt) {
+  check_unassigned_ops(QntInstr{QntOp::quant, T(0), A(0), 0, ImmediateIndex{0}}, 3);
   check_illegal(QntInstr{QntOp::quant, T(0), A(0), 0, ScalarRegister{0}},
                 "matrix form with a scalar index");
   check_illegal(QntInstr{QntOp::quant_ext_scale, A(0), T(0), 0, ImmediateIndex{0}},

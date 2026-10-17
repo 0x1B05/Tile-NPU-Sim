@@ -5,8 +5,8 @@
 #include "domain.h"
 #include "matrix_view.h"
 #include "operand.h"
-#include "utils/endian.h"
 #include "utils/common.h"
+#include "utils/endian.h"
 
 #include <algorithm>
 #include <array>
@@ -330,21 +330,21 @@ ExecuteResult execute(const MblkInstr &instr, ExecContext &ctx) {
     case MblkOp::row_load:
     case MblkOp::row_store: return row_access<NpuDomain::tile>(instr, ctx);
     case MblkOp::gather: return gather_tile_access(instr, ctx);
+    default: unreachable("M_BLK op/domain combination rejected by validation");
     }
-    break;
   case NpuDomain::acc:
     switch (instr.op) {
     case MblkOp::load:
     case MblkOp::store: return block_access<NpuDomain::acc>(instr, ctx);
     case MblkOp::row_load:
     case MblkOp::row_store: return row_access<NpuDomain::acc>(instr, ctx);
-    case MblkOp::gather: break; // gather has no Acc-domain encoding
+    case MblkOp::gather: // gather has no Acc-domain encoding
+    default: unreachable("M_BLK op/domain combination rejected by validation");
     }
-    break;
   case NpuDomain::vec8: return vector_access<NpuDomain::vec8>(instr, ctx);
   case NpuDomain::vec32: return vector_access<NpuDomain::vec32>(instr, ctx);
+  default: unreachable("M_BLK op/domain combination rejected by validation");
   }
-  unreachable("M_BLK op/domain combination rejected by validation");
 }
 
 } // namespace tile_npu
