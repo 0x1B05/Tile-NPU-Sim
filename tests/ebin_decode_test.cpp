@@ -7,12 +7,11 @@
 #include <variant>
 
 #include "framework.h"
+#include "support/decode_helpers.h"
 #include "support/ebin_helpers.h"
 
 namespace {
 
-using tile_npu::DecodedNpuInstr;
-using tile_npu::DecodeError;
 using tile_npu::EbinInstr;
 using tile_npu::EbinOp;
 using tile_npu::NpuDomain;
@@ -33,42 +32,23 @@ struct Case {
 template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
-    const auto *npu = std::get_if<DecodedNpuInstr>(&result);
     const std::string what = std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
-    check(npu != nullptr, what);
-    const auto *decoded = std::get_if<EbinInstr>(npu);
-    check(decoded != nullptr, what);
-    check_eq(decoded->op, test.op, what + ": op");
-    check_eq(decoded->dest.domain, test.domain, what + ": dest domain");
-    check_eq(decoded->src1.domain, test.domain, what + ": src1 domain");
-    check_eq(decoded->dest.index, test.dest, what + ": dest");
-    check_eq(decoded->src1.index, test.src1, what + ": src1");
+    const auto &decoded = expect_npu<EbinInstr>(result, what);
+    check_eq(decoded.op, test.op, what + ": op");
+    check_eq(decoded.dest.domain, test.domain, what + ": dest domain");
+    check_eq(decoded.src1.domain, test.domain, what + ": src1 domain");
+    check_eq(decoded.dest.index, test.dest, what + ": dest");
+    check_eq(decoded.src1.index, test.src1, what + ": src1");
     if (test.src2_scalar) {
-      const auto *scalar = std::get_if<ScalarRegister>(&decoded->src2);
+      const auto *scalar = std::get_if<ScalarRegister>(&decoded.src2);
       check(scalar != nullptr, what + ": src2 is scalar");
       check_eq(scalar->index, test.src2, what + ": src2");
     } else {
-      const auto *reg = std::get_if<NpuRegister>(&decoded->src2);
+      const auto *reg = std::get_if<NpuRegister>(&decoded.src2);
       check(reg != nullptr, what + ": src2 is a register");
       check_eq(reg->domain, test.domain, what + ": src2 domain");
       check_eq(reg->index, test.src2, what + ": src2");
     }
-  }
-}
-
-struct ErrorCase {
-  const char *name;
-  std::uint32_t word;
-  DecodeError error;
-};
-
-template <std::size_t N> void check_errors(const std::array<ErrorCase, N> &cases) {
-  for (const auto &test : cases) {
-    const auto result = tile_npu::decode(test.word);
-    const auto *error = std::get_if<DecodeError>(&result);
-    const std::string what = std::string(test.name) + " (" + to_hex(test.word) + ")";
-    check(error != nullptr, what + " decodes");
-    check_eq(*error, test.error, what + ": error kind");
   }
 }
 
@@ -107,39 +87,34 @@ TEST_CASE(ebin_decode) {
 
 TEST_CASE(ebin_decode_rejects_reserved) {
   const std::array cases{
-      ErrorCase{"tile mul has no 8-bit form",
-                make_ebin(EbinOp::mul, NpuDomain::tile, false, 0, 1, 2), DecodeError::illegal},
-      ErrorCase{"tile div has no 8-bit form",
-                make_ebin(EbinOp::div, NpuDomain::tile, false, 0, 1, 2), DecodeError::illegal},
-      ErrorCase{"tile mulx is reserved as well",
-                make_ebin(EbinOp::mul, NpuDomain::tile, true, 0, 1, 2), DecodeError::illegal},
+      DecodeCase{"tile mul has no 8-bit form",
+                 make_ebin(EbinOp::mul, NpuDomain::tile, false, 0, 1, 2)},
+      DecodeCase{"tile div has no 8-bit form",
+                 make_ebin(EbinOp::div, NpuDomain::tile, false, 0, 1, 2)},
+      DecodeCase{"tile mulx is reserved as well",
+                 make_ebin(EbinOp::mul, NpuDomain::tile, true, 0, 1, 2)},
       // funct4 values 6/7/14/15 are unassigned; the enum has no name for
       // them, so the raw code is cast in explicitly.
-      ErrorCase{"funct4 = 0110 unassigned",
-                make_ebin(static_cast<EbinOp>(6), NpuDomain::tile, false, 0, 1, 2),
-                DecodeError::illegal},
-      ErrorCase{"funct4 = 0111 unassigned",
-                make_ebin(static_cast<EbinOp>(7), NpuDomain::tile, false, 0, 1, 2),
-                DecodeError::illegal},
-      ErrorCase{"funct4 = 1110 unassigned",
-                make_ebin(static_cast<EbinOp>(14), NpuDomain::vec32, false, 0, 1, 2),
-                DecodeError::illegal},
-      ErrorCase{"funct4 = 1111 unassigned",
-                make_ebin(static_cast<EbinOp>(15), NpuDomain::vec32, false, 0, 1, 2),
-                DecodeError::illegal},
-      ErrorCase{"vec8 has no E_BIN encoding",
-                make_ebin(EbinOp::add, NpuDomain::vec8, false, 0, 1, 2), DecodeError::illegal},
-      ErrorCase{"acc dest 12 out of range", make_ebin(EbinOp::add, NpuDomain::acc, false, 12, 1, 2),
-                DecodeError::illegal},
-      ErrorCase{"acc src1 12 out of range", make_ebin(EbinOp::add, NpuDomain::acc, false, 0, 12, 2),
-                DecodeError::illegal},
-      ErrorCase{"acc src2 12 out of range", make_ebin(EbinOp::add, NpuDomain::acc, false, 0, 1, 12),
-                DecodeError::illegal},
-      ErrorCase{"tile dest 16 out of range",
-                make_ebin(EbinOp::add, NpuDomain::tile, false, 16, 1, 2), DecodeError::illegal},
-      ErrorCase{"nonzero E_BIN reserved4",
-                make_ebin(EbinOp::add, NpuDomain::tile, false, 0, 1, 2) | (1u << 17),
-                DecodeError::illegal},
+      DecodeCase{"funct4 = 0110 unassigned",
+                 make_ebin(static_cast<EbinOp>(6), NpuDomain::tile, false, 0, 1, 2)},
+      DecodeCase{"funct4 = 0111 unassigned",
+                 make_ebin(static_cast<EbinOp>(7), NpuDomain::tile, false, 0, 1, 2)},
+      DecodeCase{"funct4 = 1110 unassigned",
+                 make_ebin(static_cast<EbinOp>(14), NpuDomain::vec32, false, 0, 1, 2)},
+      DecodeCase{"funct4 = 1111 unassigned",
+                 make_ebin(static_cast<EbinOp>(15), NpuDomain::vec32, false, 0, 1, 2)},
+      DecodeCase{"vec8 has no E_BIN encoding",
+                 make_ebin(EbinOp::add, NpuDomain::vec8, false, 0, 1, 2)},
+      DecodeCase{"acc dest 12 out of range",
+                 make_ebin(EbinOp::add, NpuDomain::acc, false, 12, 1, 2)},
+      DecodeCase{"acc src1 12 out of range",
+                 make_ebin(EbinOp::add, NpuDomain::acc, false, 0, 12, 2)},
+      DecodeCase{"acc src2 12 out of range",
+                 make_ebin(EbinOp::add, NpuDomain::acc, false, 0, 1, 12)},
+      DecodeCase{"tile dest 16 out of range",
+                 make_ebin(EbinOp::add, NpuDomain::tile, false, 16, 1, 2)},
+      DecodeCase{"nonzero E_BIN reserved4",
+                 make_ebin(EbinOp::add, NpuDomain::tile, false, 0, 1, 2) | (1u << 17)},
   };
-  check_errors(cases);
+  expect_illegal(cases);
 }

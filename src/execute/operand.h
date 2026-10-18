@@ -9,8 +9,7 @@
 
 namespace tile_npu {
 
-// Resolves an IndexOperand: the immediate value, or the named Scalar
-// register's value.
+// Resolves an IndexOperand: imm or the named Scalar reg's value.
 inline std::uint64_t resolve_index(const IndexOperand &index, const State &state) {
   return std::visit(
       Overloaded{[](ImmediateIndex imm) { return static_cast<std::uint64_t>(imm.value); },
@@ -18,8 +17,6 @@ inline std::uint64_t resolve_index(const IndexOperand &index, const State &state
       index);
 }
 
-// decode_scalar(xS) keeps the low element-width bits of xS, interpreted per
-// the destination's bound config dtype.
 template <typename Element> Element scalar_operand(const State &state, ScalarRegister reg) {
   return static_cast<Element>(state.scalar.read_x(reg.index));
 }

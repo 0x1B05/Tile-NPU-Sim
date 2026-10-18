@@ -7,14 +7,13 @@
 #include <variant>
 
 #include "framework.h"
+#include "support/decode_helpers.h"
 #include "support/ecmp_helpers.h"
 
 namespace {
 
 using tile_npu::CmpInstr;
 using tile_npu::CmpOp;
-using tile_npu::DecodedNpuInstr;
-using tile_npu::DecodeError;
 using tile_npu::NpuDomain;
 using tile_npu::NpuRegister;
 using tile_npu::ScalarRegister;
@@ -33,42 +32,23 @@ struct Case {
 template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
-    const auto *npu = std::get_if<DecodedNpuInstr>(&result);
     const std::string what = std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
-    check(npu != nullptr, what);
-    const auto *decoded = std::get_if<CmpInstr>(npu);
-    check(decoded != nullptr, what);
-    check_eq(decoded->op, test.op, what + ": op");
-    check_eq(decoded->dest.domain, test.domain, what + ": mask domain");
-    check_eq(decoded->dest.index, test.mask, what + ": mask");
-    check_eq(decoded->src1.domain, test.domain, what + ": src1 domain");
-    check_eq(decoded->src1.index, test.src1, what + ": src1");
+    const auto &decoded = expect_npu<CmpInstr>(result, what);
+    check_eq(decoded.op, test.op, what + ": op");
+    check_eq(decoded.dest.domain, test.domain, what + ": mask domain");
+    check_eq(decoded.dest.index, test.mask, what + ": mask");
+    check_eq(decoded.src1.domain, test.domain, what + ": src1 domain");
+    check_eq(decoded.src1.index, test.src1, what + ": src1");
     if (test.scalar_src2) {
-      const auto *scalar = std::get_if<ScalarRegister>(&decoded->src2);
+      const auto *scalar = std::get_if<ScalarRegister>(&decoded.src2);
       check(scalar != nullptr, what + ": src2 is scalar");
       check_eq(scalar->index, test.src2, what + ": src2");
     } else {
-      const auto *reg = std::get_if<NpuRegister>(&decoded->src2);
+      const auto *reg = std::get_if<NpuRegister>(&decoded.src2);
       check(reg != nullptr, what + ": src2 is a register");
       check_eq(reg->domain, test.domain, what + ": src2 domain");
       check_eq(reg->index, test.src2, what + ": src2");
     }
-  }
-}
-
-struct ErrorCase {
-  const char *name;
-  std::uint32_t word;
-  DecodeError error;
-};
-
-template <std::size_t N> void check_errors(const std::array<ErrorCase, N> &cases) {
-  for (const auto &test : cases) {
-    const auto result = tile_npu::decode(test.word);
-    const auto *error = std::get_if<DecodeError>(&result);
-    const std::string what = std::string(test.name) + " (" + to_hex(test.word) + ")";
-    check(error != nullptr, what + " decodes");
-    check_eq(*error, test.error, what + ": error kind");
   }
 }
 
@@ -157,21 +137,17 @@ TEST_CASE(ecmp_decode) {
 TEST_CASE(ecmp_decode_rejects_reserved) {
   constexpr std::array cases{
       // Comparisons only exist on Acc/Vec32: dom2 = 00/10 is reserved.
-      ErrorCase{"tile domain", make_ecmp(NpuDomain::tile, false, 0, 0, 0, 0), DecodeError::illegal},
-      ErrorCase{"vec8 domain", make_ecmp(NpuDomain::vec8, false, 0, 0, 0, 0), DecodeError::illegal},
+      DecodeCase{"tile domain", make_ecmp(NpuDomain::tile, false, 0, 0, 0, 0)},
+      DecodeCase{"vec8 domain", make_ecmp(NpuDomain::vec8, false, 0, 0, 0, 0)},
       // funct3 = 110/111 is reserved.
-      ErrorCase{"funct3 110", make_ecmp(NpuDomain::acc, false, 6, 0, 0, 0), DecodeError::illegal},
-      ErrorCase{"funct3 111", make_ecmp(NpuDomain::vec32, false, 7, 0, 0, 0), DecodeError::illegal},
+      DecodeCase{"funct3 110", make_ecmp(NpuDomain::acc, false, 6, 0, 0, 0)},
+      DecodeCase{"funct3 111", make_ecmp(NpuDomain::vec32, false, 7, 0, 0, 0)},
       // reserved5 must be 0.
-      ErrorCase{"reserved5", make_ecmp(NpuDomain::acc, false, 0, 0, 0, 0) | (1u << 17),
-                DecodeError::illegal},
+      DecodeCase{"reserved5", make_ecmp(NpuDomain::acc, false, 0, 0, 0, 0) | (1u << 17)},
       // Acc register numbers are bounded at 12; Vec32 takes all 32.
-      ErrorCase{"acmp a12 mask", make_ecmp(NpuDomain::acc, false, 0, 12, 0, 0),
-                DecodeError::illegal},
-      ErrorCase{"acmp a12 src1", make_ecmp(NpuDomain::acc, false, 0, 0, 12, 0),
-                DecodeError::illegal},
-      ErrorCase{"acmp a12 src2", make_ecmp(NpuDomain::acc, false, 0, 0, 0, 12),
-                DecodeError::illegal},
+      DecodeCase{"acmp a12 mask", make_ecmp(NpuDomain::acc, false, 0, 12, 0, 0)},
+      DecodeCase{"acmp a12 src1", make_ecmp(NpuDomain::acc, false, 0, 0, 12, 0)},
+      DecodeCase{"acmp a12 src2", make_ecmp(NpuDomain::acc, false, 0, 0, 0, 12)},
   };
-  check_errors(cases);
+  expect_illegal(cases);
 }

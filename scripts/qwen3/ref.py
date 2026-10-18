@@ -9,19 +9,26 @@ Usage: ref.py build/qwen3/tiny_ref.npz [n_tokens]
 """
 
 import sys
+from dataclasses import dataclass
 
 import numpy as np
 
+if __package__:
+    from .quant import quantize_rows
+else:
+    from quant import quantize_rows
 
-def quantize_rows(w):
-    absmax = np.abs(w).max(axis=1)
-    scale = np.where(absmax > 0, absmax / 127.0, 1.0).astype("<f4")
-    q = np.rint(w / scale[:, None]).clip(-127, 127).astype(np.int8)
-    return q, scale
+
+@dataclass(frozen=True)
+class MatvecResult:
+    """Matvec output plus the intermediate values used by alignment probes."""
+
+    value: np.ndarray
+    activation_q: np.ndarray
+    accumulator: np.ndarray
 
 
 def matvec_ref(w_f32, x):
-    global LAST_XQ, LAST_ACC
     q, s = quantize_rows(w_f32)
     # activation quantization in f32, mirroring the guest kernel:
     # xs = absmax * fl32(1/127), q = RNE(x / xs) saturated to [-127, 127]
@@ -29,10 +36,9 @@ def matvec_ref(w_f32, x):
     inv127 = np.array([0x3C010204], dtype=np.uint32).view(np.float32)[0]
     xs = absmax * inv127
     xq = np.rint((x / xs).astype(np.float32)).clip(-127, 127).astype(np.int64)
-    LAST_XQ = xq
     acc = q.astype(np.int64) @ xq
-    LAST_ACC = acc
-    return acc.astype(np.float32) * s * xs
+    value = acc.astype(np.float32) * s * xs
+    return MatvecResult(value, xq, acc)
 
 
 def rmsnorm(x, gamma, eps):
@@ -84,16 +90,18 @@ class Ref:
             h = rmsnorm(x, self.layer(L, "inln"), self.eps)
             if L == 0:
                 probe("ln0", h)
-            q = matvec_ref(self.layer(L, "qw"), h)
+            q_result = matvec_ref(self.layer(L, "qw"), h)
+            q = q_result.value
             if L == 0 and probeme:
-                packed = LAST_XQ.astype("<i1").tobytes()
+                packed = q_result.activation_q.astype("<i1").tobytes()
                 words = np.frombuffer(packed, "<u4")
                 print("qx0 " + " ".join(f"{w:08x}" for w in words))
-                accw = np.frombuffer(LAST_ACC.astype("<i4").tobytes(), "<u4")
+                accw = np.frombuffer(
+                    q_result.accumulator.astype("<i4").tobytes(), "<u4")
                 print("ac0 " + " ".join(f"{w:08x}" for w in accw[:8]))
                 probe("q0", q)
-            k = matvec_ref(self.layer(L, "kw"), h)
-            v = matvec_ref(self.layer(L, "vw"), h)
+            k = matvec_ref(self.layer(L, "kw"), h).value
+            v = matvec_ref(self.layer(L, "vw"), h).value
             for hh in range(self.n_q):
                 q[hh * self.hd:(hh + 1) * self.hd] = rmsnorm(
                     q[hh * self.hd:(hh + 1) * self.hd],
@@ -142,12 +150,14 @@ class Ref:
             if L == 0:
                 probe("attn0", attn)
                 probe("attn1", attn[self.hd:])
-            o = matvec_ref(self.layer(L, "ow"), attn)
+            o_result = matvec_ref(self.layer(L, "ow"), attn)
+            o = o_result.value
             if L == 0 and probeme:
-                packed = LAST_XQ.astype("<i1").tobytes()
+                packed = o_result.activation_q.astype("<i1").tobytes()
                 words = np.frombuffer(packed, "<u4")
                 print("qxa " + " ".join(f"{w:08x}" for w in words))
-                accw = np.frombuffer(LAST_ACC.astype("<i4").tobytes(), "<u4")
+                accw = np.frombuffer(
+                    o_result.accumulator.astype("<i4").tobytes(), "<u4")
                 print("aca " + " ".join(f"{w:08x}" for w in accw[:8]))
                 probe("o0", o)
             x = x + o
@@ -156,8 +166,8 @@ class Ref:
             h = rmsnorm(x, self.layer(L, "ptln"), self.eps)
             if L == 0:
                 probe("ln1", h)
-            gate = matvec_ref(self.layer(L, "gw"), h)
-            up = matvec_ref(self.layer(L, "uw"), h)
+            gate = matvec_ref(self.layer(L, "gw"), h).value
+            up = matvec_ref(self.layer(L, "uw"), h).value
             if L == 0:
                 probe("g0", gate)
                 probe("u0", up)
@@ -165,7 +175,7 @@ class Ref:
                    ).astype(np.float32) * up
             if L == 0:
                 probe("m0", act)
-            d = matvec_ref(self.layer(L, "dw"), act)
+            d = matvec_ref(self.layer(L, "dw"), act).value
             if L == 0:
                 probe("d0", d)
             x = x + d
@@ -175,7 +185,7 @@ class Ref:
             return 0, None
         h = rmsnorm(x, self.fin, self.eps)
         probe("lnf", h)
-        logits = matvec_ref(self.embed, h)
+        logits = matvec_ref(self.embed, h).value
         return int(np.argmax(logits)), logits
 
 

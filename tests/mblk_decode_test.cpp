@@ -4,17 +4,15 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
-#include <variant>
 
 #include "framework.h"
+#include "support/decode_helpers.h"
 #include "support/index_helpers.h"
 #include "support/mblk_helpers.h"
 
 namespace {
 
 using tile_npu::accessed_reg;
-using tile_npu::DecodedNpuInstr;
-using tile_npu::DecodeError;
 using tile_npu::MblkInstr;
 using tile_npu::MblkOp;
 using tile_npu::NpuDomain;
@@ -33,33 +31,14 @@ struct Case {
 template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
-    const auto *npu = std::get_if<DecodedNpuInstr>(&result);
     const std::string what = std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
-    check(npu != nullptr, what);
-    const auto *decoded = std::get_if<MblkInstr>(npu);
-    check(decoded != nullptr, what);
-    check_eq(decoded->op, test.op, what + ": op");
-    const auto &reg = accessed_reg(*decoded);
+    const auto &decoded = expect_npu<MblkInstr>(result, what);
+    check_eq(decoded.op, test.op, what + ": op");
+    const auto &reg = accessed_reg(decoded);
     check_eq(reg.domain, test.domain, what + ": domain");
     check_eq(reg.index, test.reg, what + ": reg");
-    check_index(decoded->index, test.index, test.index_is_scalar, what);
-    check_eq(decoded->gather_src, test.gather_src, what + ": gather_src");
-  }
-}
-
-struct ErrorCase {
-  const char *name;
-  std::uint32_t word;
-  DecodeError error;
-};
-
-template <std::size_t N> void check_errors(const std::array<ErrorCase, N> &cases) {
-  for (const auto &test : cases) {
-    const auto result = tile_npu::decode(test.word);
-    const auto *error = std::get_if<DecodeError>(&result);
-    const std::string what = std::string(test.name) + " (" + to_hex(test.word) + ")";
-    check(error != nullptr, what + " decodes");
-    check_eq(*error, test.error, what + ": error kind");
+    check_index(decoded.index, test.index, test.index_is_scalar, what);
+    check_eq(decoded.gather_src, test.gather_src, what + ": gather_src");
   }
 }
 
@@ -166,27 +145,27 @@ TEST_CASE(mblk_decode_row_forms) {
 TEST_CASE(mblk_decode_rejects_reserved) {
   constexpr std::array cases{
       // funct3 = 011 / 11x are reserved.
-      ErrorCase{"funct3 011", block(NpuDomain::tile, 3, 0), DecodeError::illegal},
-      ErrorCase{"funct3 110", make_mrow(false, false, 6, 0, 0), DecodeError::illegal},
-      ErrorCase{"funct3 111", make_mrow(false, false, 7, 0, 0), DecodeError::illegal},
+      DecodeCase{"funct3 011", block(NpuDomain::tile, 3, 0)},
+      DecodeCase{"funct3 110", make_mrow(false, false, 6, 0, 0)},
+      DecodeCase{"funct3 111", make_mrow(false, false, 7, 0, 0)},
       // Gather has no Acc form.
-      ErrorCase{"aload.gather", block(NpuDomain::acc, 2, 0, 1), DecodeError::illegal},
+      DecodeCase{"aload.gather", block(NpuDomain::acc, 2, 0, 1)},
       // Block forms require S5 = 0 and reserved10 = 0.
-      ErrorCase{"block load with S5", 0x00000101u, DecodeError::illegal},
-      ErrorCase{"block load reserved10", 0x00008001u, DecodeError::illegal},
+      DecodeCase{"block load with S5", 0x00000101u},
+      DecodeCase{"block load reserved10", 0x00008001u},
       // R2 forms require sel3 bit 0 = 0.
-      ErrorCase{"block load sel3 bit0", 0x02000001u, DecodeError::illegal},
+      DecodeCase{"block load sel3 bit0", 0x02000001u},
       // Register numbers are bounded per domain.
-      ErrorCase{"tload t16", block(NpuDomain::tile, 0, 16), DecodeError::illegal},
-      ErrorCase{"aload a12", block(NpuDomain::acc, 0, 12), DecodeError::illegal},
-      ErrorCase{"tload.row t16[0]", make_mrow(false, false, 4, 0, 16), DecodeError::illegal},
-      ErrorCase{"aload.row a12[0]", make_mrow(true, false, 4, 0, 12), DecodeError::illegal},
+      DecodeCase{"tload t16", block(NpuDomain::tile, 0, 16)},
+      DecodeCase{"aload a12", block(NpuDomain::acc, 0, 12)},
+      DecodeCase{"tload.row t16[0]", make_mrow(false, false, 4, 0, 16)},
+      DecodeCase{"aload.row a12[0]", make_mrow(true, false, 4, 0, 12)},
       // MR reserved fields must be 0.
-      ErrorCase{"row load reserved5[21:17]", 0x01020001u, DecodeError::illegal},
-      ErrorCase{"row load reserved5[11:7]", 0x01000081u, DecodeError::illegal},
-      ErrorCase{"row load bit27", 0x09000001u, DecodeError::illegal},
+      DecodeCase{"row load reserved5[21:17]", 0x01020001u},
+      DecodeCase{"row load reserved5[11:7]", 0x01000081u},
+      DecodeCase{"row load bit27", 0x09000001u},
       // Unassigned data-movement majors are reserved.
-      ErrorCase{"major4 0101", 0x50000001u, DecodeError::illegal},
+      DecodeCase{"major4 0101", 0x50000001u},
   };
-  check_errors(cases);
+  expect_illegal(cases);
 }

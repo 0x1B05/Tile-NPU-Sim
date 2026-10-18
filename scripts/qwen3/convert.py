@@ -23,6 +23,11 @@ import sys
 
 import numpy as np
 
+if __package__:
+    from .quant import quantize_rows
+else:
+    from quant import quantize_rows
+
 MAGIC = b"Q3B1"
 
 
@@ -53,17 +58,6 @@ class SafeTensors:
         if info["dtype"] != "BF16":
             raise ValueError(f"{name}: unexpected dtype {info['dtype']}")
         return bf16_to_f32(raw).reshape(info["shape"])
-
-
-# ---- quantization -------------------------------------------------------
-
-
-def quantize_rows(w):
-    """Per output row symmetric int8; returns (q i8 [out,in], s f32 [out])."""
-    absmax = np.abs(w).max(axis=1)
-    scale = np.where(absmax > 0, absmax / 127.0, 1.0).astype("<f4")
-    q = np.rint(w / scale[:, None]).clip(-127, 127).astype(np.int8)
-    return q, scale
 
 
 def quant_error(w, q, s):

@@ -7,13 +7,12 @@
 #include <variant>
 
 #include "framework.h"
+#include "support/decode_helpers.h"
 #include "support/index_helpers.h"
 #include "support/row_lane_helpers.h"
 
 namespace {
 
-using tile_npu::DecodedNpuInstr;
-using tile_npu::DecodeError;
 using tile_npu::LaneInstr;
 using tile_npu::LaneOp;
 using tile_npu::NpuDomain;
@@ -37,17 +36,14 @@ struct RowCase {
 template <std::size_t N> void check_row_cases(const std::array<RowCase, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
-    const auto *npu = std::get_if<DecodedNpuInstr>(&result);
     const std::string what = std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
-    check(npu != nullptr, what);
-    const auto *decoded = std::get_if<RowInstr>(npu);
-    check(decoded != nullptr, what);
-    check_eq(decoded->op, test.op, what + ": op");
-    check_eq(decoded->matrix.domain, test.matrix_domain, what + ": matrix domain");
-    check_eq(decoded->matrix.index, test.matrix, what + ": matrix");
-    check_eq(decoded->vector.domain, test.vector_domain, what + ": vector domain");
-    check_eq(decoded->vector.index, test.vector, what + ": vector");
-    check_index(decoded->index, test.index, test.index_is_scalar, what);
+    const auto &decoded = expect_npu<RowInstr>(result, what);
+    check_eq(decoded.op, test.op, what + ": op");
+    check_eq(decoded.matrix.domain, test.matrix_domain, what + ": matrix domain");
+    check_eq(decoded.matrix.index, test.matrix, what + ": matrix");
+    check_eq(decoded.vector.domain, test.vector_domain, what + ": vector domain");
+    check_eq(decoded.vector.index, test.vector, what + ": vector");
+    check_index(decoded.index, test.index, test.index_is_scalar, what);
   }
 }
 
@@ -66,53 +62,34 @@ struct LaneCase {
 template <std::size_t N> void check_lane_cases(const std::array<LaneCase, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
-    const auto *npu = std::get_if<DecodedNpuInstr>(&result);
     const std::string what = std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
-    check(npu != nullptr, what);
-    const auto *decoded = std::get_if<LaneInstr>(npu);
-    check(decoded != nullptr, what);
-    check_eq(decoded->op, test.op, what + ": op");
-    check_index(decoded->index, test.index, test.index_is_scalar, what);
+    const auto &decoded = expect_npu<LaneInstr>(result, what);
+    check_eq(decoded.op, test.op, what + ": op");
+    check_index(decoded.index, test.index, test.index_is_scalar, what);
     if (test.dst_is_scalar) {
-      const auto *dst = std::get_if<ScalarRegister>(&decoded->dst);
+      const auto *dst = std::get_if<ScalarRegister>(&decoded.dst);
       check(dst != nullptr, what + ": dst is scalar");
       check_eq(dst->index, test.dst, what + ": dst");
-      const auto *src = std::get_if<NpuRegister>(&decoded->src);
+      const auto *src = std::get_if<NpuRegister>(&decoded.src);
       check(src != nullptr, what + ": src is vector");
       check_eq(src->domain, test.vector_domain, what + ": vector domain");
       check_eq(src->index, test.src, what + ": src");
     } else {
-      const auto *dst = std::get_if<NpuRegister>(&decoded->dst);
+      const auto *dst = std::get_if<NpuRegister>(&decoded.dst);
       check(dst != nullptr, what + ": dst is vector");
       check_eq(dst->domain, test.vector_domain, what + ": vector domain");
       check_eq(dst->index, test.dst, what + ": dst");
       if (test.op == LaneOp::insert) {
-        const auto *src = std::get_if<ScalarRegister>(&decoded->src);
+        const auto *src = std::get_if<ScalarRegister>(&decoded.src);
         check(src != nullptr, what + ": src is scalar");
         check_eq(src->index, test.src, what + ": src");
       } else {
-        const auto *src = std::get_if<NpuRegister>(&decoded->src);
+        const auto *src = std::get_if<NpuRegister>(&decoded.src);
         check(src != nullptr, what + ": src is vector");
         check_eq(src->domain, test.vector_domain, what + ": vector domain");
         check_eq(src->index, test.src, what + ": src");
       }
     }
-  }
-}
-
-struct ErrorCase {
-  const char *name;
-  std::uint32_t word;
-  DecodeError error;
-};
-
-template <std::size_t N> void check_errors(const std::array<ErrorCase, N> &cases) {
-  for (const auto &test : cases) {
-    const auto result = tile_npu::decode(test.word);
-    const auto *error = std::get_if<DecodeError>(&result);
-    const std::string what = std::string(test.name) + " (" + to_hex(test.word) + ")";
-    check(error != nullptr, what + " decodes");
-    check_eq(*error, test.error, what + ": error kind");
   }
 }
 
@@ -209,18 +186,14 @@ TEST_CASE(lane_move_decode) {
 TEST_CASE(row_lane_decode_rejects_reserved) {
   constexpr std::array cases{
       // sel3 bit 27 and reserved5 must be 0.
-      ErrorCase{"row sel3 bit27", make_row_move(false, false, 0, 0, 0, 0) | (1u << 27),
-                DecodeError::illegal},
-      ErrorCase{"lane reserved5", make_lane_move(true, false, 0, 0, 0, 0) | (1u << 17),
-                DecodeError::illegal},
+      DecodeCase{"row sel3 bit27", make_row_move(false, false, 0, 0, 0, 0) | (1u << 27)},
+      DecodeCase{"lane reserved5", make_lane_move(true, false, 0, 0, 0, 0) | (1u << 17)},
       // ROW_MOVE has only funct3 000/001; LANE_MOVE stops at 010.
-      ErrorCase{"row funct3 010", make_row_move(false, false, 2, 0, 0, 0), DecodeError::illegal},
-      ErrorCase{"lane funct3 011", make_lane_move(false, false, 3, 0, 0, 0), DecodeError::illegal},
+      DecodeCase{"row funct3 010", make_row_move(false, false, 2, 0, 0, 0)},
+      DecodeCase{"lane funct3 011", make_lane_move(false, false, 3, 0, 0, 0)},
       // Matrix register numbers are bounded per domain.
-      ErrorCase{"tinsert.row t16[0], b0", make_row_move(false, false, 0, 0, 0, 16),
-                DecodeError::illegal},
-      ErrorCase{"aextract.row v0, a12[0]", make_row_move(true, false, 1, 0, 12, 0),
-                DecodeError::illegal},
+      DecodeCase{"tinsert.row t16[0], b0", make_row_move(false, false, 0, 0, 0, 16)},
+      DecodeCase{"aextract.row v0, a12[0]", make_row_move(true, false, 1, 0, 12, 0)},
   };
-  check_errors(cases);
+  expect_illegal(cases);
 }

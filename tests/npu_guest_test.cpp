@@ -11,6 +11,7 @@
 #include <string_view>
 #include <vector>
 
+#include "monitor/format.h"
 #include "monitor/monitor.h"
 #include "support/execute_helpers.h"
 #include "utils/endian.h"
@@ -31,26 +32,6 @@ void load_image(tile_npu::Ram &memory, std::string_view name) {
 
 constexpr std::size_t tile_index(std::size_t row, std::size_t col) {
   return row * tile_npu::MATRIX_EXTENT + col;
-}
-
-std::string_view status_name(tile_npu::StepStatus status) {
-  switch (status) {
-  case tile_npu::StepStatus::retired: return "retired";
-  case tile_npu::StepStatus::execution_not_implemented: return "execution_not_implemented";
-  case tile_npu::StepStatus::illegal_instruction: return "illegal_instruction";
-  case tile_npu::StepStatus::invalid_configuration: return "invalid_configuration";
-  case tile_npu::StepStatus::fetch_fault: return "fetch_fault";
-  case tile_npu::StepStatus::instruction_address_misaligned:
-    return "instruction_address_misaligned";
-  case tile_npu::StepStatus::load_address_misaligned: return "load_address_misaligned";
-  case tile_npu::StepStatus::store_address_misaligned: return "store_address_misaligned";
-  case tile_npu::StepStatus::load_fault: return "load_fault";
-  case tile_npu::StepStatus::store_fault: return "store_fault";
-  case tile_npu::StepStatus::environment_call: return "environment_call";
-  case tile_npu::StepStatus::breakpoint: return "breakpoint";
-  case tile_npu::StepStatus::kernel_end: return "kernel_end";
-  }
-  return "unknown";
 }
 
 // Steps until the guest stops on its own (any non-retired status), so a
@@ -87,7 +68,7 @@ void check_guest_image(std::string_view name, std::uint64_t memory_size,
   sim.reset(IMAGE_BASE);
   const auto result = run_until_stop(sim, memory);
   check(result.status == stop, std::string(name) + " image stops (status=" +
-                                   std::string(status_name(result.status)) + ")");
+                                   std::string(tile_npu::status_name(result.status)) + ")");
   check_eq(hex(sim.state().scalar.read_x(tile_npu::monitor::EXIT_CODE_REG)), hex(0x0u),
            std::string(name) + " image reports success via a0");
 }
@@ -215,7 +196,7 @@ TEST_CASE(npu_guest_ebin) {
   const auto result = run_until_stop(sim, memory);
   check(result.status == tile_npu::StepStatus::breakpoint,
         std::string("ebin image reaches ebreak (status=") +
-            std::string(status_name(result.status)) + ")");
+            std::string(tile_npu::status_name(result.status)) + ")");
   check_eq(hex(state.scalar.read_x(tile_npu::monitor::EXIT_CODE_REG)), hex(0x0u),
            "ebin image reports success via a0");
 

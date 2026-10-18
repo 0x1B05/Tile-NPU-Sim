@@ -4,16 +4,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
-#include <variant>
 
 #include "framework.h"
+#include "support/decode_helpers.h"
 #include "support/index_helpers.h"
 #include "support/qnt_helpers.h"
 
 namespace {
 
-using tile_npu::DecodedNpuInstr;
-using tile_npu::DecodeError;
 using tile_npu::NpuDomain;
 using tile_npu::QntInstr;
 using tile_npu::QntOp;
@@ -34,34 +32,15 @@ struct Case {
 template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
-    const auto *npu = std::get_if<DecodedNpuInstr>(&result);
     const std::string what = std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
-    check(npu != nullptr, what);
-    const auto *decoded = std::get_if<QntInstr>(npu);
-    check(decoded != nullptr, what);
-    check_eq(decoded->op, test.op, what + ": op");
-    check_eq(decoded->dest.domain, test.dest_domain, what + ": dest domain");
-    check_eq(decoded->dest.index, test.dest, what + ": dest");
-    check_eq(decoded->src.domain, test.src_domain, what + ": src domain");
-    check_eq(decoded->src.index, test.src, what + ": src");
-    check_eq(decoded->scale, test.scale, what + ": scale");
-    check_index(decoded->index, test.index, test.index_is_scalar, what);
-  }
-}
-
-struct ErrorCase {
-  const char *name;
-  std::uint32_t word;
-  DecodeError error;
-};
-
-template <std::size_t N> void check_errors(const std::array<ErrorCase, N> &cases) {
-  for (const auto &test : cases) {
-    const auto result = tile_npu::decode(test.word);
-    const auto *error = std::get_if<DecodeError>(&result);
-    const std::string what = std::string(test.name) + " (" + to_hex(test.word) + ")";
-    check(error != nullptr, what + " decodes");
-    check_eq(*error, test.error, what + ": error kind");
+    const auto &decoded = expect_npu<QntInstr>(result, what);
+    check_eq(decoded.op, test.op, what + ": op");
+    check_eq(decoded.dest.domain, test.dest_domain, what + ": dest domain");
+    check_eq(decoded.dest.index, test.dest, what + ": dest");
+    check_eq(decoded.src.domain, test.src_domain, what + ": src domain");
+    check_eq(decoded.src.index, test.src, what + ": src");
+    check_eq(decoded.scale, test.scale, what + ": scale");
+    check_index(decoded.index, test.index, test.index_is_scalar, what);
   }
 }
 
@@ -128,16 +107,16 @@ TEST_CASE(qnt_decode) {
 TEST_CASE(qnt_decode_rejects_reserved) {
   constexpr std::array cases{
       // funct3 >= 010 is reserved; the external-scale form is Tile-dst only.
-      ErrorCase{"funct3 010", make_qnt(NpuDomain::tile, 2, 0, 0, 0), DecodeError::illegal},
-      ErrorCase{"funct3 111", make_qnt(NpuDomain::vec32, 7, 0, 0, 0), DecodeError::illegal},
-      ErrorCase{"adequant.scale", make_qnt(NpuDomain::acc, 1, 0, 0, 0), DecodeError::illegal},
+      DecodeCase{"funct3 010", make_qnt(NpuDomain::tile, 2, 0, 0, 0)},
+      DecodeCase{"funct3 111", make_qnt(NpuDomain::vec32, 7, 0, 0, 0)},
+      DecodeCase{"adequant.scale", make_qnt(NpuDomain::acc, 1, 0, 0, 0)},
       // The matrix forms reserve IS and index5.
-      ErrorCase{"tquant IS", make_qnt(NpuDomain::tile, 0, 0, 0, 0, 0, true), DecodeError::illegal},
-      ErrorCase{"tdequant index5", make_qnt(NpuDomain::acc, 0, 0, 0, 0, 1), DecodeError::illegal},
+      DecodeCase{"tquant IS", make_qnt(NpuDomain::tile, 0, 0, 0, 0, 0, true)},
+      DecodeCase{"tdequant index5", make_qnt(NpuDomain::acc, 0, 0, 0, 0, 1)},
       // Register numbers are bounded per domain.
-      ErrorCase{"tquant t16", make_qnt(NpuDomain::tile, 0, 16, 0, 0), DecodeError::illegal},
-      ErrorCase{"tquant a12", make_qnt(NpuDomain::tile, 0, 0, 12, 0), DecodeError::illegal},
-      ErrorCase{"tdequant t16", make_qnt(NpuDomain::acc, 0, 0, 16, 0), DecodeError::illegal},
+      DecodeCase{"tquant t16", make_qnt(NpuDomain::tile, 0, 16, 0, 0)},
+      DecodeCase{"tquant a12", make_qnt(NpuDomain::tile, 0, 0, 12, 0)},
+      DecodeCase{"tdequant t16", make_qnt(NpuDomain::acc, 0, 0, 16, 0)},
   };
-  check_errors(cases);
+  expect_illegal(cases);
 }

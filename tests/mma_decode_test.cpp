@@ -4,15 +4,13 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
-#include <variant>
 
 #include "framework.h"
+#include "support/decode_helpers.h"
 #include "support/mma_helpers.h"
 
 namespace {
 
-using tile_npu::DecodedNpuInstr;
-using tile_npu::DecodeError;
 using tile_npu::MmaInstr;
 using tile_npu::MmaOp;
 using tile_npu::NpuDomain;
@@ -31,34 +29,15 @@ struct Case {
 template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
-    const auto *npu = std::get_if<DecodedNpuInstr>(&result);
     const std::string what = std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
-    check(npu != nullptr, what);
-    const auto *decoded = std::get_if<MmaInstr>(npu);
-    check(decoded != nullptr, what);
-    check_eq(decoded->op, test.op, what + ": op");
-    check_eq(decoded->dest.domain, test.dest_domain, what + ": dest domain");
-    check_eq(decoded->dest.index, test.dest, what + ": dest");
-    check_eq(decoded->src_a.domain, test.lhs_domain, what + ": lhs domain");
-    check_eq(decoded->src_a.index, test.src_a, what + ": src_a");
-    check_eq(decoded->src_b.domain, NpuDomain::tile, what + ": rhs domain");
-    check_eq(decoded->src_b.index, test.src_b, what + ": src_b");
-  }
-}
-
-struct ErrorCase {
-  const char *name;
-  std::uint32_t word;
-  DecodeError error;
-};
-
-template <std::size_t N> void check_errors(const std::array<ErrorCase, N> &cases) {
-  for (const auto &test : cases) {
-    const auto result = tile_npu::decode(test.word);
-    const auto *error = std::get_if<DecodeError>(&result);
-    const std::string what = std::string(test.name) + " (" + to_hex(test.word) + ")";
-    check(error != nullptr, what + " decodes");
-    check_eq(*error, test.error, what + ": error kind");
+    const auto &decoded = expect_npu<MmaInstr>(result, what);
+    check_eq(decoded.op, test.op, what + ": op");
+    check_eq(decoded.dest.domain, test.dest_domain, what + ": dest domain");
+    check_eq(decoded.dest.index, test.dest, what + ": dest");
+    check_eq(decoded.src_a.domain, test.lhs_domain, what + ": lhs domain");
+    check_eq(decoded.src_a.index, test.src_a, what + ": src_a");
+    check_eq(decoded.src_b.domain, NpuDomain::tile, what + ": rhs domain");
+    check_eq(decoded.src_b.index, test.src_b, what + ": src_b");
   }
 }
 
@@ -122,18 +101,18 @@ TEST_CASE(mma_decode) {
 
 TEST_CASE(mma_decode_rejects_reserved) {
   constexpr std::array cases{
-      ErrorCase{"bdot.acc tB16", make_mma(5, 0, 0, 16), DecodeError::illegal},
+      DecodeCase{"bdot.acc tB16", make_mma(5, 0, 0, 16)},
       // mma has no nt form.
-      ErrorCase{"funct3 010", make_mma(2, 0, 0, 0), DecodeError::illegal},
-      ErrorCase{"funct3 011", make_mma(3, 0, 0, 0), DecodeError::illegal},
+      DecodeCase{"funct3 010", make_mma(2, 0, 0, 0)},
+      DecodeCase{"funct3 011", make_mma(3, 0, 0, 0)},
       // reserved3/reserved5 must be 0.
-      ErrorCase{"reserved3", 0x02003106u, DecodeError::illegal},
-      ErrorCase{"reserved5", 0x00023106u, DecodeError::illegal},
+      DecodeCase{"reserved3", 0x02003106u},
+      DecodeCase{"reserved5", 0x00023106u},
       // Register numbers are bounded per domain (the vector domains fill
       // their 5-bit field, so no out-of-range encoding exists for them).
-      ErrorCase{"mma a12", make_mma(0, 12, 0, 0), DecodeError::illegal},
-      ErrorCase{"mma tA16", make_mma(0, 0, 16, 0), DecodeError::illegal},
-      ErrorCase{"mma tB16", make_mma(0, 0, 0, 16), DecodeError::illegal},
+      DecodeCase{"mma a12", make_mma(0, 12, 0, 0)},
+      DecodeCase{"mma tA16", make_mma(0, 0, 16, 0)},
+      DecodeCase{"mma tB16", make_mma(0, 0, 0, 16)},
   };
-  check_errors(cases);
+  expect_illegal(cases);
 }

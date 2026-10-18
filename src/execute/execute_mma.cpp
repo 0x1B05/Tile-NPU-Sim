@@ -11,15 +11,11 @@
 namespace tile_npu {
 namespace {
 
-// Sign-extended i8 product. The reduction length is bounded by the physical
-// extent, so i32 partial sums cannot overflow.
 constexpr std::int32_t i8_product(std::uint8_t lhs, std::uint8_t rhs) {
   return static_cast<std::int32_t>(std::bit_cast<std::int8_t>(lhs)) *
          static_cast<std::int32_t>(std::bit_cast<std::int8_t>(rhs));
 }
 
-// The op codes are the funct3 values: bit1 selects nt (bdot only), bit0
-// accumulate.
 constexpr bool is_nt(MmaOp op) { return (static_cast<std::uint8_t>(op) & 0b010) != 0; }
 
 constexpr bool is_accumulate(MmaOp op) { return (static_cast<std::uint8_t>(op) & 0b001) != 0; }

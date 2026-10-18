@@ -8,12 +8,11 @@
 #include <variant>
 
 #include "framework.h"
+#include "support/decode_helpers.h"
 #include "support/emask_helpers.h"
 
 namespace {
 
-using tile_npu::DecodedNpuInstr;
-using tile_npu::DecodeError;
 using tile_npu::MaskInstr;
 using tile_npu::MaskOp;
 using tile_npu::NpuDomain;
@@ -53,34 +52,15 @@ void check_fill(const tile_npu::FillOperand &fill, std::uint8_t expected, bool i
 template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
-    const auto *npu = std::get_if<DecodedNpuInstr>(&result);
     const std::string what = std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
-    check(npu != nullptr, what);
-    const auto *decoded = std::get_if<MaskInstr>(npu);
-    check(decoded != nullptr, what);
-    check_eq(decoded->op, test.op, what + ": op");
-    check_eq(decoded->dest.domain, test.domain, what + ": dest domain");
-    check_eq(decoded->dest.index, test.dest, what + ": dest");
-    check_eq(decoded->src.domain, test.domain, what + ": src domain");
-    check_eq(decoded->src.index, test.src, what + ": src");
-    check_eq(decoded->bound, test.bound, what + ": bound");
-    check_fill(decoded->fill, test.fill, test.fill_is_scalar, what);
-  }
-}
-
-struct ErrorCase {
-  const char *name;
-  std::uint32_t word;
-  DecodeError error;
-};
-
-template <std::size_t N> void check_errors(const std::array<ErrorCase, N> &cases) {
-  for (const auto &test : cases) {
-    const auto result = tile_npu::decode(test.word);
-    const auto *error = std::get_if<DecodeError>(&result);
-    const std::string what = std::string(test.name) + " (" + to_hex(test.word) + ")";
-    check(error != nullptr, what + " decodes");
-    check_eq(*error, test.error, what + ": error kind");
+    const auto &decoded = expect_npu<MaskInstr>(result, what);
+    check_eq(decoded.op, test.op, what + ": op");
+    check_eq(decoded.dest.domain, test.domain, what + ": dest domain");
+    check_eq(decoded.dest.index, test.dest, what + ": dest");
+    check_eq(decoded.src.domain, test.domain, what + ": src domain");
+    check_eq(decoded.src.index, test.src, what + ": src");
+    check_eq(decoded.bound, test.bound, what + ": bound");
+    check_fill(decoded.fill, test.fill, test.fill_is_scalar, what);
   }
 }
 
@@ -143,20 +123,18 @@ TEST_CASE(emask_decode) {
 TEST_CASE(emask_decode_rejects_reserved) {
   constexpr std::array cases{
       // funct3 >= 011 is reserved.
-      ErrorCase{"funct3 011", make_emask(NpuDomain::acc, 3, 0, 0, 0, 0), DecodeError::illegal},
-      ErrorCase{"funct3 111", make_emask(NpuDomain::tile, 7, 0, 0, 0, 0), DecodeError::illegal},
+      DecodeCase{"funct3 011", make_emask(NpuDomain::acc, 3, 0, 0, 0, 0)},
+      DecodeCase{"funct3 111", make_emask(NpuDomain::tile, 7, 0, 0, 0, 0)},
       // tril/triu are matrix-only.
-      ErrorCase{"vmask.tril", make_emask(NpuDomain::vec32, 1, 0, 0, 0, 0), DecodeError::illegal},
-      ErrorCase{"bmask.triu", make_emask(NpuDomain::vec8, 2, 0, 0, 0, 0), DecodeError::illegal},
+      DecodeCase{"vmask.tril", make_emask(NpuDomain::vec32, 1, 0, 0, 0, 0)},
+      DecodeCase{"bmask.triu", make_emask(NpuDomain::vec8, 2, 0, 0, 0, 0)},
       // fill5 codes 9-31 are reserved (FS = 0 only; with FS = 1 [16:12] names
       // xFill and any 5-bit number is a valid Scalar register).
-      ErrorCase{"fill5 9", make_emask(NpuDomain::tile, 0, 0, 0, 0, 9), DecodeError::illegal},
-      ErrorCase{"fill5 31", make_emask(NpuDomain::acc, 0, 0, 0, 0, 31), DecodeError::illegal},
+      DecodeCase{"fill5 9", make_emask(NpuDomain::tile, 0, 0, 0, 0, 9)},
+      DecodeCase{"fill5 31", make_emask(NpuDomain::acc, 0, 0, 0, 0, 31)},
       // Register numbers are bounded per domain.
-      ErrorCase{"tmask.tail t16", make_emask(NpuDomain::tile, 0, 16, 0, 0, 0),
-                DecodeError::illegal},
-      ErrorCase{"amask.tail a12 src", make_emask(NpuDomain::acc, 0, 0, 12, 0, 0),
-                DecodeError::illegal},
+      DecodeCase{"tmask.tail t16", make_emask(NpuDomain::tile, 0, 16, 0, 0, 0)},
+      DecodeCase{"amask.tail a12 src", make_emask(NpuDomain::acc, 0, 0, 12, 0, 0)},
   };
-  check_errors(cases);
+  expect_illegal(cases);
 }

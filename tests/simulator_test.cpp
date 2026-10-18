@@ -1,75 +1,10 @@
-#include "tile_npu/decode.h"
 #include "tile_npu/simulator.h"
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <optional>
-#include <string>
-#include <string_view>
-#include <variant>
 
 #include "support/execute_helpers.h"
-
-namespace {
-std::optional<tile_npu::DecodeError> decode_error(std::uint32_t word) {
-  const auto result = tile_npu::decode(word);
-  const auto *error = std::get_if<tile_npu::DecodeError>(&result);
-  return error ? std::optional{*error} : std::nullopt;
-}
-
-} // namespace
-
-TEST_CASE(npu_decode) {
-  const auto tadd = tile_npu::decode(0x00002080u); // tadd t0, t1, t2
-  const auto *tadd_npu = std::get_if<tile_npu::DecodedNpuInstr>(&tadd);
-  check(tadd_npu != nullptr, "decode Tile tadd");
-  const auto *tadd_instr = std::get_if<tile_npu::EbinInstr>(tadd_npu);
-  check(tadd_instr != nullptr, "tadd is an EbinInstr");
-  check_eq(tadd_instr->op, tile_npu::EbinOp::add, "tadd op");
-  check_eq(tadd_instr->dest.domain, tile_npu::NpuDomain::tile, "tadd dest domain");
-  check_eq(tadd_instr->dest.index, std::uint8_t{0}, "tadd dest index");
-  check_eq(tadd_instr->src1.index, std::uint8_t{1}, "tadd src1 index");
-  check_eq(std::get<tile_npu::NpuRegister>(tadd_instr->src2).index, std::uint8_t{2},
-           "tadd src2 index");
-
-  const auto add = tile_npu::decode(0x002081b3u); // add x3, x1, x2
-  const auto *add_instr = std::get_if<tile_npu::DecodedScalarInstr>(&add);
-  check(add_instr != nullptr, "decode RV64I add");
-  check_eq(add_instr->op, tile_npu::ScalarOp::add, "add op");
-  check_eq(add_instr->regs.dest, std::uint8_t{3}, "add rd");
-  check_eq(add_instr->regs.src1, std::uint8_t{1}, "add rs1");
-  check_eq(add_instr->regs.src2, std::uint8_t{2}, "add rs2");
-  const auto sub = tile_npu::decode(0x402081b3u);
-  const auto *sub_instr = std::get_if<tile_npu::DecodedScalarInstr>(&sub);
-  check(sub_instr != nullptr, "decode RV64I sub");
-  check_eq(sub_instr->op, tile_npu::ScalarOp::sub, "decode RV64I sub separately from add");
-
-  using tile_npu::DecodeError;
-
-  struct RejectCase {
-    std::uint32_t word;
-    DecodeError error;
-    std::string_view name;
-  };
-
-  constexpr std::array reject_cases{
-      RejectCase{0x00022080u, DecodeError::illegal, "reject nonzero E_BIN reserved bits"},
-      RejectCase{0x00002800u, DecodeError::illegal, "reject Tile source A register number 16"},
-      RejectCase{0x00010080u, DecodeError::illegal, "reject Tile source B register number 16"},
-      RejectCase{0x000020c0u, DecodeError::illegal, "reject Tile destination register number 16"},
-      RejectCase{0x00c02080u, DecodeError::illegal, "reject unassigned E_BIN operation"},
-      RejectCase{0x01c02080u, DecodeError::illegal, "reject unassigned E_BIN bit-operation code"},
-      RejectCase{0x08002080u, DecodeError::illegal, "reject reserved Vec8 E_BIN domain"},
-      RejectCase{0x60002080u, DecodeError::illegal, "reserved elementwise major"},
-      RejectCase{0x50002081u, DecodeError::illegal, "reserved data movement major"},
-      RejectCase{0xa0002082u, DecodeError::illegal, "reserved cross-domain major"},
-  };
-  for (const auto &test : reject_cases) {
-    check_eq(decode_error(test.word), std::optional{test.error},
-             std::string(test.name) + " (" + to_hex(test.word) + ")");
-  }
-}
 
 TEST_CASE(state) {
   tile_npu::State state{};
@@ -122,24 +57,6 @@ TEST_CASE(memory_and_step) {
   check_eq(hex(sim.state().scalar.pc), hex(0x1008), "failed fetch leaves PC unchanged");
   sim.reset(0x1002);
   check_eq(hex(sim.state().scalar.read_x(1)), hex(0), "reset clears simulator state");
-}
-
-TEST_CASE(add_execution) {
-  tile_npu::Ram memory(0x2000, 8);
-  write_word(memory, 0x2000, 0x002081b3u); // add x3, x1, x2
-  write_word(memory, 0x2004, 0x00208033u); // add x0, x1, x2
-
-  tile_npu::Simulator sim(memory);
-  sim.reset(0x2000);
-  sim.state().scalar.write_x(1, UINT64_MAX);
-  sim.state().scalar.write_x(2, 2);
-  check_eq(sim.step().status, tile_npu::StepStatus::retired, "add retires");
-  // UINT64_MAX + 2 wraps to 1.
-  check_eq(hex(sim.state().scalar.read_x(3)), hex(1), "RV64I add wraps at 64 bits");
-  check_eq(hex(sim.state().scalar.pc), hex(0x2004), "add advances pc");
-  check_eq(sim.step().status, tile_npu::StepStatus::retired, "add to x0 retires");
-  check_eq(hex(sim.state().scalar.read_x(0)), hex(0), "add to x0 is discarded");
-  check_eq(hex(sim.state().scalar.pc), hex(0x2008), "add to x0 advances pc");
 }
 
 TEST_CASE(empty_tadd) {

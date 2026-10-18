@@ -98,22 +98,26 @@ template <NpuDomain Domain> ExecuteResult lane_move(const LaneInstr &instr, Stat
   return {.status = StepStatus::retired};
 }
 
+template <RowOp Op> ExecuteResult dispatch_row_copy(const RowInstr &instr, State &state) {
+  switch (instr.matrix.domain) {
+  case NpuDomain::tile: return row_copy<NpuDomain::tile, Op>(instr, state);
+  case NpuDomain::acc: return row_copy<NpuDomain::acc, Op>(instr, state);
+  default: break; // ROW_MOVE has no vector-matrix encoding
+  }
+  unreachable("execute_row_move without a matrix operand");
+}
+
 } // namespace
 
 // The Tile <-> Vec8 and Acc <-> Vec32 pairings are part of the structural
 // validation at execute_npu.
 ExecuteResult execute(const RowInstr &instr, State &state) {
-  const bool insert = instr.op == RowOp::insert;
-  switch (instr.matrix.domain) {
-  case NpuDomain::tile:
-    return insert ? row_copy<NpuDomain::tile, RowOp::insert>(instr, state)
-                  : row_copy<NpuDomain::tile, RowOp::extract>(instr, state);
-  case NpuDomain::acc:
-    return insert ? row_copy<NpuDomain::acc, RowOp::insert>(instr, state)
-                  : row_copy<NpuDomain::acc, RowOp::extract>(instr, state);
-  default: break; // ROW_MOVE has no vector-matrix encoding
+  switch (instr.op) {
+  case RowOp::insert: return dispatch_row_copy<RowOp::insert>(instr, state);
+  case RowOp::extract: return dispatch_row_copy<RowOp::extract>(instr, state);
+  default: break;
   }
-  unreachable("execute_row_move without a matrix operand");
+  unreachable("execute_row_move with an unknown operation");
 }
 
 // The dispatched register file is the vector operand's domain.

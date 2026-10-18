@@ -32,9 +32,6 @@ constexpr std::uint32_t FIELD_LEN = 1;
 constexpr std::uint32_t FIELD_BASE_ADDR = 0;
 constexpr std::uint32_t FIELD_ROW_STRIDE = 1;
 
-// Loads one instruction and resets the simulator. reset() clears the
-// architectural state, so test fixtures poke state only after this returns.
-
 } // namespace
 
 TEST_CASE(cfg_seti_writes_field) {

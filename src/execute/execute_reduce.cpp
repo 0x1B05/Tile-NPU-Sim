@@ -98,9 +98,9 @@ ExecuteResult areduce(const ReduceInstr &instr, State &state) {
   return {.status = StepStatus::retired};
 }
 
-// vreduce.*: folds an f32 Vec32 into a Scalar destination. sum/max/min/
-// sumsq write the f32 bit pattern into the low 32 bits of xD (high bits
-// zeroed); argmax writes xIndex (i32, sign-extended) and xValue (f32 bits).
+// vreduce.*: folds an f32 Vec32 into a Scalar destination.
+// sum/max/min/sumsq write the f32 bit pattern into the low 32 bits of xD (high bits zeroed);
+// argmax writes xIndex (i32, sign-extended) and xValue (f32 bits).
 ExecuteResult vreduce(const ReduceInstr &instr, State &state) {
   const auto &src_config = state.vc[instr.src.index];
   if (!valid_config_of(src_config, DType::f32)) {
@@ -133,10 +133,7 @@ ExecuteResult vreduce(const ReduceInstr &instr, State &state) {
 } // namespace
 
 ExecuteResult execute(const ReduceInstr &instr, State &state) {
-  if (instr.src.domain == NpuDomain::acc) {
-    return areduce(instr, state);
-  }
-  return vreduce(instr, state);
+  return (instr.src.domain == NpuDomain::acc) ? areduce(instr, state) : vreduce(instr, state);
 }
 
 } // namespace tile_npu

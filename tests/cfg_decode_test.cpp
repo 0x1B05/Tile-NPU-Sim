@@ -8,9 +8,9 @@
 #include <optional>
 #include <span>
 #include <string>
-#include <variant>
 
 #include "framework.h"
+#include "support/decode_helpers.h"
 
 namespace {
 
@@ -18,8 +18,6 @@ using tile_npu::CfgInstr;
 using tile_npu::CfgOp;
 using tile_npu::ConfigField;
 using tile_npu::ConfigRegType;
-using tile_npu::DecodedNpuInstr;
-using tile_npu::DecodeError;
 
 // I format (cfg.seti): major4 sel2 field3 imm16 C5 q=10.
 constexpr std::uint32_t cfg_i(std::uint32_t major4, std::uint32_t sel2, std::uint32_t field3,
@@ -51,34 +49,15 @@ struct Case {
 template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
-    const auto *npu = std::get_if<DecodedNpuInstr>(&result);
     const std::string what = std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
-    check(npu != nullptr, what);
-    const auto *decoded = std::get_if<CfgInstr>(npu);
-    check(decoded != nullptr, what);
-    check_eq(decoded->op, test.op, what + ": op");
-    check_eq(decoded->reg_type, test.reg_type, what + ": reg_type");
-    check_eq(decoded->dest, test.dest, what + ": dest");
-    check_eq(decoded->src, test.src, what + ": src");
-    check_eq(decoded->field, test.field, what + ": field");
-    check_eq(decoded->imm, test.imm, what + ": imm");
-    check_eq(decoded->n, test.n, what + ": N5");
-  }
-}
-
-struct ErrorCase {
-  const char *name;
-  std::uint32_t word;
-  DecodeError error;
-};
-
-template <std::size_t N> void check_errors(const std::array<ErrorCase, N> &cases) {
-  for (const auto &test : cases) {
-    const auto result = tile_npu::decode(test.word);
-    const auto *error = std::get_if<DecodeError>(&result);
-    const std::string what = std::string(test.name) + " (" + to_hex(test.word) + ")";
-    check(error != nullptr, what + " decodes");
-    check_eq(*error, test.error, what + ": error kind");
+    const auto &decoded = expect_npu<CfgInstr>(result, what);
+    check_eq(decoded.op, test.op, what + ": op");
+    check_eq(decoded.reg_type, test.reg_type, what + ": reg_type");
+    check_eq(decoded.dest, test.dest, what + ": dest");
+    check_eq(decoded.src, test.src, what + ": src");
+    check_eq(decoded.field, test.field, what + ": field");
+    check_eq(decoded.imm, test.imm, what + ": imm");
+    check_eq(decoded.n, test.n, what + ": N5");
   }
 }
 
@@ -186,7 +165,7 @@ TEST_CASE(cfg_decode_field_codes_by_register_type) {
                  std::nullopt, 0},
         };
         for (const auto &test : cases) {
-          check_errors(std::array{ErrorCase{test.name, test.word, DecodeError::illegal}});
+          expect_illegal(std::array{DecodeCase{test.name, test.word}});
         }
       }
     }
@@ -195,36 +174,32 @@ TEST_CASE(cfg_decode_field_codes_by_register_type) {
 
 TEST_CASE(cfg_decode_rejects_reserved) {
   const std::array cases{
-      ErrorCase{"seti field3 = 111 reserved", cfg_i(0x5, 0, 7, 0, 0), DecodeError::illegal},
-      ErrorCase{"seti tc16 out of range", cfg_i(0x5, 0, 0, 0, 16), DecodeError::illegal},
-      ErrorCase{"seti ac12 out of range", cfg_i(0x5, 1, 0, 0, 12), DecodeError::illegal},
-      ErrorCase{"seti am12 out of range", cfg_i(0x5, 3, 0, 0, 12), DecodeError::illegal},
-      ErrorCase{"setx field code 111 reserved", cfg_reg(0, 0, 0, 7, 4, 0), DecodeError::illegal},
-      ErrorCase{"get field code 111 reserved", cfg_reg(0, 0, 2, 7, 0, 5), DecodeError::illegal},
-      ErrorCase{"setx field5 high bits set", cfg_reg(0, 0, 0, 8, 4, 0), DecodeError::illegal},
-      ErrorCase{"copy field5 nonzero", cfg_reg(0, 0, 1, 1, 3, 7), DecodeError::illegal},
+      DecodeCase{"seti tc16 out of range", cfg_i(0x5, 0, 0, 0, 16)},
+      DecodeCase{"seti ac12 out of range", cfg_i(0x5, 1, 0, 0, 12)},
+      DecodeCase{"seti am12 out of range", cfg_i(0x5, 3, 0, 0, 12)},
+      DecodeCase{"setx field5 high bits set", cfg_reg(0, 0, 0, 8, 4, 0)},
+      DecodeCase{"copy field5 nonzero", cfg_reg(0, 0, 1, 1, 3, 7)},
       // N5 is a destination offset for writes and must be 0 for reads.
-      ErrorCase{"get N5 nonzero", cfg_reg(0, 0, 2, 0, 0, 5) | (1u << 12), DecodeError::illegal},
-      ErrorCase{"setx tc15 + 2", cfg_reg(0, 0, 0, 1, 4, 15) | (1u << 12), DecodeError::illegal},
-      ErrorCase{"copy vc31 + 2", cfg_reg(1, 1, 1, 0, 0, 31) | (1u << 12), DecodeError::illegal},
-      ErrorCase{"copy am0 + 12", cfg_reg(3, 0, 1, 0, 0, 0) | (11u << 12) | (1u << 2),
-                DecodeError::illegal},
-      ErrorCase{"funct3 = 101 reserved", cfg_reg(0, 0, 5, 0, 0, 0), DecodeError::illegal},
-      ErrorCase{"funct3 = 111 reserved", cfg_reg(0, 0, 7, 0, 0, 0), DecodeError::illegal},
+      DecodeCase{"get N5 nonzero", cfg_reg(0, 0, 2, 0, 0, 5) | (1u << 12)},
+      DecodeCase{"setx tc15 + 2", cfg_reg(0, 0, 0, 1, 4, 15) | (1u << 12)},
+      DecodeCase{"copy vc31 + 2", cfg_reg(1, 1, 1, 0, 0, 31) | (1u << 12)},
+      DecodeCase{"copy am0 + 12", cfg_reg(3, 0, 1, 0, 0, 0) | (11u << 12) | (1u << 2)},
+      DecodeCase{"funct3 = 101 reserved", cfg_reg(0, 0, 5, 0, 0, 0)},
+      DecodeCase{"funct3 = 111 reserved", cfg_reg(0, 0, 7, 0, 0, 0)},
       // setw/getw: compute configs only, field5 zero, span within the type.
-      ErrorCase{"setw on tm", cfg_reg(2, 0, 3, 0, 4, 0), DecodeError::illegal},
-      ErrorCase{"getw on vm", cfg_reg(3, 1, 4, 0, 0, 5), DecodeError::illegal},
-      ErrorCase{"setw field5 nonzero", cfg_reg(0, 0, 3, 1, 4, 0), DecodeError::illegal},
-      ErrorCase{"setw tc15 + 2", cfg_reg(0, 0, 3, 0, 4, 15) | (1u << 12), DecodeError::illegal},
-      ErrorCase{"setw ac0 + 12", cfg_reg(1, 0, 3, 0, 4, 0) | (12u << 12), DecodeError::illegal},
-      ErrorCase{"getw N5 nonzero", cfg_reg(0, 0, 4, 0, 0, 5) | (1u << 12), DecodeError::illegal},
-      ErrorCase{"getw tc16", cfg_reg(0, 0, 4, 0, 16, 5), DecodeError::illegal},
-      ErrorCase{"setx tm16 out of range", cfg_reg(2, 0, 0, 0, 4, 16), DecodeError::illegal},
-      ErrorCase{"copy tc16 dest out of range", cfg_reg(0, 0, 1, 0, 0, 16), DecodeError::illegal},
-      ErrorCase{"copy tc16 src out of range", cfg_reg(0, 0, 1, 0, 16, 0), DecodeError::illegal},
-      ErrorCase{"get ac12 out of range", cfg_reg(1, 0, 2, 0, 12, 5), DecodeError::illegal},
+      DecodeCase{"setw on tm", cfg_reg(2, 0, 3, 0, 4, 0)},
+      DecodeCase{"getw on vm", cfg_reg(3, 1, 4, 0, 0, 5)},
+      DecodeCase{"setw field5 nonzero", cfg_reg(0, 0, 3, 1, 4, 0)},
+      DecodeCase{"setw tc15 + 2", cfg_reg(0, 0, 3, 0, 4, 15) | (1u << 12)},
+      DecodeCase{"setw ac0 + 12", cfg_reg(1, 0, 3, 0, 4, 0) | (12u << 12)},
+      DecodeCase{"getw N5 nonzero", cfg_reg(0, 0, 4, 0, 0, 5) | (1u << 12)},
+      DecodeCase{"getw tc16", cfg_reg(0, 0, 4, 0, 16, 5)},
+      DecodeCase{"setx tm16 out of range", cfg_reg(2, 0, 0, 0, 4, 16)},
+      DecodeCase{"copy tc16 dest out of range", cfg_reg(0, 0, 1, 0, 0, 16)},
+      DecodeCase{"copy tc16 src out of range", cfg_reg(0, 0, 1, 0, 16, 0)},
+      DecodeCase{"get ac12 out of range", cfg_reg(1, 0, 2, 0, 12, 5)},
       // Reserved major4 encodings report illegal.
-      ErrorCase{"reserved major4 1010", (0xau << 28) | 0x2u, DecodeError::illegal},
+      DecodeCase{"reserved major4 1010", (0xau << 28) | 0x2u},
   };
-  check_errors(cases);
+  expect_illegal(cases);
 }

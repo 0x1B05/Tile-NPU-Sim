@@ -134,28 +134,6 @@ bool cmd_help(Simulator &, AddressSpace &, std::string_view) {
   return true;
 }
 
-std::string_view status_name(StepStatus status) {
-  using enum StepStatus;
-  // clang-format off
-  switch (status) {
-  case retired:                        return "retired";
-  case execution_not_implemented:      return "execution_not_implemented";
-  case illegal_instruction:            return "illegal_instruction";
-  case invalid_configuration:          return "invalid_configuration";
-  case fetch_fault:                    return "fetch_fault";
-  case instruction_address_misaligned: return "instruction_address_misaligned";
-  case load_address_misaligned:        return "load_address_misaligned";
-  case store_address_misaligned:       return "store_address_misaligned";
-  case load_fault:                     return "load_fault";
-  case store_fault:                    return "store_fault";
-  case environment_call:               return "environment_call";
-  case breakpoint:                     return "breakpoint";
-  case kernel_end:                     return "kernel_end";
-  }
-  // clang-format on
-  return "unknown";
-}
-
 } // namespace
 
 std::string halt_message(const StepResult &result) {

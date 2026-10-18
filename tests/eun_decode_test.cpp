@@ -4,15 +4,13 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
-#include <variant>
 
 #include "framework.h"
+#include "support/decode_helpers.h"
 #include "support/eun_helpers.h"
 
 namespace {
 
-using tile_npu::DecodedNpuInstr;
-using tile_npu::DecodeError;
 using tile_npu::EunInstr;
 using tile_npu::EunOp;
 using tile_npu::NpuDomain;
@@ -29,32 +27,13 @@ struct Case {
 template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
-    const auto *npu = std::get_if<DecodedNpuInstr>(&result);
     const std::string what = std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
-    check(npu != nullptr, what);
-    const auto *decoded = std::get_if<EunInstr>(npu);
-    check(decoded != nullptr, what);
-    check_eq(decoded->op, test.op, what + ": op");
-    check_eq(decoded->dest.domain, test.domain, what + ": domain");
-    check_eq(decoded->dest.index, test.dest, what + ": dest");
-    check_eq(decoded->src.domain, test.domain, what + ": src domain");
-    check_eq(decoded->src.index, test.src, what + ": src");
-  }
-}
-
-struct ErrorCase {
-  const char *name;
-  std::uint32_t word;
-  DecodeError error;
-};
-
-template <std::size_t N> void check_errors(const std::array<ErrorCase, N> &cases) {
-  for (const auto &test : cases) {
-    const auto result = tile_npu::decode(test.word);
-    const auto *error = std::get_if<DecodeError>(&result);
-    const std::string what = std::string(test.name) + " (" + to_hex(test.word) + ")";
-    check(error != nullptr, what + " decodes");
-    check_eq(*error, test.error, what + ": error kind");
+    const auto &decoded = expect_npu<EunInstr>(result, what);
+    check_eq(decoded.op, test.op, what + ": op");
+    check_eq(decoded.dest.domain, test.domain, what + ": domain");
+    check_eq(decoded.dest.index, test.dest, what + ": dest");
+    check_eq(decoded.src.domain, test.domain, what + ": src domain");
+    check_eq(decoded.src.index, test.src, what + ": src");
   }
 }
 
@@ -119,18 +98,16 @@ TEST_CASE(eun_decode_rejects_reserved) {
   constexpr std::array cases{
       // Vec8 has no E_UNARY; on Tile only `not` exists; funct3 = 111 is
       // reserved.
-      ErrorCase{"bnot", make_eun(NpuDomain::vec8, 0, 0, 0), DecodeError::illegal},
-      ErrorCase{"tabs", make_eun(NpuDomain::tile, 1, 0, 0), DecodeError::illegal},
-      ErrorCase{"texp2", make_eun(NpuDomain::tile, 3, 0, 0), DecodeError::illegal},
-      ErrorCase{"funct3 111", make_eun(NpuDomain::acc, 7, 0, 0), DecodeError::illegal},
+      DecodeCase{"bnot", make_eun(NpuDomain::vec8, 0, 0, 0)},
+      DecodeCase{"tabs", make_eun(NpuDomain::tile, 1, 0, 0)},
+      DecodeCase{"texp2", make_eun(NpuDomain::tile, 3, 0, 0)},
+      DecodeCase{"funct3 111", make_eun(NpuDomain::acc, 7, 0, 0)},
       // sel3 bit 0 and reserved10 must be 0.
-      ErrorCase{"sel3 bit0", make_eun(NpuDomain::vec32, 0, 0, 0) | (1u << 25),
-                DecodeError::illegal},
-      ErrorCase{"reserved10", make_eun(NpuDomain::vec32, 0, 0, 0) | (1u << 12),
-                DecodeError::illegal},
+      DecodeCase{"sel3 bit0", make_eun(NpuDomain::vec32, 0, 0, 0) | (1u << 25)},
+      DecodeCase{"reserved10", make_eun(NpuDomain::vec32, 0, 0, 0) | (1u << 12)},
       // Register numbers are bounded per domain.
-      ErrorCase{"tnot t16", make_eun(NpuDomain::tile, 0, 16, 0), DecodeError::illegal},
-      ErrorCase{"aneg a12", make_eun(NpuDomain::acc, 2, 0, 12), DecodeError::illegal},
+      DecodeCase{"tnot t16", make_eun(NpuDomain::tile, 0, 16, 0)},
+      DecodeCase{"aneg a12", make_eun(NpuDomain::acc, 2, 0, 12)},
   };
-  check_errors(cases);
+  expect_illegal(cases);
 }

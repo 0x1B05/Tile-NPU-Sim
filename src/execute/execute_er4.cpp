@@ -23,7 +23,7 @@ template <typename E> constexpr DType mask_dtype_of() {
 // adds the fixed mask dtype on arg, fmadd requires f32 everywhere (arg is
 // the addend C and matches D fully).
 template <typename Element, typename Configs>
-bool operands_valid(const Er4Instr &instr, const Configs &configs) {
+bool valid_operands(const Er4Instr &instr, const Configs &configs) {
   const auto &dst = configs[instr.dest.index];
   const auto &arg = configs[instr.arg.index];
   const auto &lhs = configs[instr.src1.index];
@@ -59,7 +59,7 @@ ExecuteResult execute(const Er4Instr &instr, State &state) {
   return with_domain<NpuDomain::tile, NpuDomain::acc, NpuDomain::vec32>(
       state, instr.dest.domain, [&](auto &regs, const auto &configs) {
         using Element = typename std::remove_cvref_t<decltype(regs)>::value_type::value_type;
-        if (!operands_valid<Element>(instr, configs)) {
+        if (!valid_operands<Element>(instr, configs)) {
           return config_error();
         }
         auto &dst = regs[instr.dest.index];
