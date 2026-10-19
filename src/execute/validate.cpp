@@ -204,27 +204,19 @@ bool valid_structure(const CvtInstr &instr) {
   }
 }
 
-bool valid_structure(const ReduceInstr &instr) {
-  if (instr.op > ReduceOp::absmax) return false;
-  return std::visit(Overloaded{// areduce.rows.*: Vec32 destination, Acc source.
-                               [&](NpuRegister dst) {
-                                 return dst.domain == NpuDomain::vec32 && in_range(dst) &&
-                                        instr.src.domain == NpuDomain::acc && in_range(instr.src);
-                               },
-                               // vreduce.*: Scalar destination, Vec32 source; absmax is
-                               // AREDUCE-only.
-                               [&](ScalarRegister x_dst) {
-                                 if (instr.op == ReduceOp::absmax || !in_range(x_dst) ||
-                                     instr.src.domain != NpuDomain::vec32 || !in_range(instr.src)) {
-                                   return false;
-                                 }
-                                 if (instr.op == ReduceOp::argmax) {
-                                   const auto *x_value = std::get_if<ScalarRegister>(&instr.dest2);
-                                   return x_value != nullptr && in_range(*x_value);
-                                 }
-                                 return true;
-                               }},
-                    instr.dest);
+bool valid_structure(const AreduceInstr &instr) {
+  return instr.op <= ReduceOp::absmax && instr.dest.domain == NpuDomain::vec32 &&
+         in_range(instr.dest) && instr.src.domain == NpuDomain::acc && in_range(instr.src);
+}
+
+bool valid_structure(const VreduceInstr &instr) {
+  return instr.op <= ReduceOp::sumsq && in_range(instr.dest) &&
+         instr.src.domain == NpuDomain::vec32 && in_range(instr.src);
+}
+
+bool valid_structure(const VreduceArgmaxInstr &instr) {
+  return in_range(instr.index_dest) && in_range(instr.value_dest) &&
+         instr.src.domain == NpuDomain::vec32 && in_range(instr.src);
 }
 
 bool valid_structure(const QntInstr &instr) {

@@ -21,6 +21,7 @@
 
 namespace {
 
+using tile_npu::AreduceInstr;
 using tile_npu::BcastInstr;
 using tile_npu::CfgInstr;
 using tile_npu::CfgOp;
@@ -59,7 +60,6 @@ using tile_npu::NpuRegister;
 using tile_npu::QntInstr;
 using tile_npu::QntOp;
 using tile_npu::Ram;
-using tile_npu::ReduceInstr;
 using tile_npu::ReduceOp;
 using tile_npu::RowInstr;
 using tile_npu::RowOp;
@@ -68,6 +68,8 @@ using tile_npu::State;
 using tile_npu::StepStatus;
 using tile_npu::SysInstr;
 using tile_npu::SysOp;
+using tile_npu::VreduceArgmaxInstr;
+using tile_npu::VreduceInstr;
 
 struct Env {
   Ram memory{CODE_BASE, 0x100};
@@ -253,13 +255,14 @@ TEST_CASE(validate_rejects_bad_cvt) {
 }
 
 TEST_CASE(validate_rejects_bad_reduce) {
-  check_illegal(ReduceInstr{static_cast<ReduceOp>(6), ScalarRegister{0}, {}, V(0)}, "reserved op");
-  check_illegal(ReduceInstr{ReduceOp::sum, V(0), {}, V(1)}, "vector dest with a vec32 src");
-  check_illegal(ReduceInstr{ReduceOp::argmax, ScalarRegister{0}, V(0), V(1)},
-                "argmax dest2 not a scalar");
-  check_illegal(ReduceInstr{ReduceOp::sum, ScalarRegister{32}, {}, V(0)}, "vreduce xD index 32");
-  check_illegal(ReduceInstr{ReduceOp::absmax, ScalarRegister{0}, {}, V(0)},
-                "vreduce has no absmax encoding");
+  check_illegal(AreduceInstr{static_cast<ReduceOp>(6), V(0), A(0)}, "reserved areduce op");
+  check_illegal(AreduceInstr{ReduceOp::sum, V(0), V(1)}, "areduce source domain");
+  check_illegal(VreduceInstr{static_cast<ReduceOp>(4), ScalarRegister{0}, V(1)},
+                "vreduce argmax op");
+  check_illegal(VreduceInstr{ReduceOp::sum, ScalarRegister{32}, V(0)}, "vreduce xD index 32");
+  check_illegal(VreduceInstr{ReduceOp::absmax, ScalarRegister{0}, V(0)}, "vreduce absmax op");
+  check_illegal(VreduceArgmaxInstr{ScalarRegister{0}, ScalarRegister{32}, V(0)},
+                "vreduce.argmax xValue index 32");
 }
 
 TEST_CASE(validate_rejects_bad_qnt) {

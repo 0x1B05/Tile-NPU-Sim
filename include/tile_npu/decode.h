@@ -14,9 +14,10 @@ struct DecodedScalarInstr {
   std::int32_t imm = 0;
 };
 
-using DecodedNpuInstr = std::variant<MblkInstr, FillInstr, MoveInstr, RowInstr, LaneInstr, MmaInstr,
-                                     EbinInstr, EunInstr, CmpInstr, BcastInstr, Er4Instr, MaskInstr,
-                                     ReduceInstr, CvtInstr, QntInstr, CfgInstr, SysInstr>;
+using DecodedNpuInstr =
+    std::variant<MblkInstr, FillInstr, MoveInstr, RowInstr, LaneInstr, MmaInstr, EbinInstr,
+                 EunInstr, CmpInstr, BcastInstr, Er4Instr, MaskInstr, AreduceInstr, VreduceInstr,
+                 VreduceArgmaxInstr, CvtInstr, QntInstr, CfgInstr, SysInstr>;
 
 // Every undecodable word is illegal: encodings the ISA reserves, and (on the
 // scalar side) encodings of extensions this hart does not implement, which

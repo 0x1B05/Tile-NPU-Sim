@@ -11,7 +11,6 @@
 #include <cstdint>
 #include <limits>
 #include <utility>
-#include <variant>
 
 namespace tile_npu {
 namespace {
@@ -69,8 +68,8 @@ struct ArgmaxScan {
 
 // areduce.rows.*: row-wise folds of an f32 Acc into a Vec32 whose length
 // equals the source row count (i32 destination for argmax).
-ExecuteResult areduce(const ReduceInstr &instr, State &state) {
-  const auto &dst = std::get<NpuRegister>(instr.dest);
+ExecuteResult areduce(const AreduceInstr &instr, State &state) {
+  const auto &dst = instr.dest;
   const auto &src_config = state.ac[instr.src.index];
   const auto &dst_config = state.vc[dst.index];
   const auto dst_dtype = instr.op == ReduceOp::argmax ? DType::i32 : DType::f32;
@@ -98,42 +97,47 @@ ExecuteResult areduce(const ReduceInstr &instr, State &state) {
   return {.status = StepStatus::retired};
 }
 
-// vreduce.*: folds an f32 Vec32 into a Scalar destination.
-// sum/max/min/sumsq write the f32 bit pattern into the low 32 bits of xD (high bits zeroed);
-// argmax writes xIndex (i32, sign-extended) and xValue (f32 bits).
-ExecuteResult vreduce(const ReduceInstr &instr, State &state) {
+// vreduce.*: folds an f32 Vec32 into a Scalar destination. The f32 bit pattern
+// is written into the low 32 bits of xD; the high bits are zeroed.
+ExecuteResult vreduce(const VreduceInstr &instr, State &state) {
   const auto &src_config = state.vc[instr.src.index];
   if (!valid_config_of(src_config, DType::f32)) {
     return config_error();
   }
   const auto &src_reg = state.v[instr.src.index];
-
-  if (instr.op == ReduceOp::argmax) {
-    const auto &x_index = std::get<ScalarRegister>(instr.dest);
-    const auto &x_value = std::get<ScalarRegister>(instr.dest2);
-    ArgmaxScan scan{0, std::bit_cast<float>(src_reg[0])};
-    for (std::size_t lane = 1; lane < src_config.len; ++lane) {
-      scan.feed(static_cast<std::uint32_t>(lane), std::bit_cast<float>(src_reg[lane]));
-    }
-    state.scalar.write_x(x_index.index, static_cast<std::uint64_t>(static_cast<std::int64_t>(
-                                            static_cast<std::int32_t>(scan.best_index))));
-    state.scalar.write_x(x_value.index, static_cast<std::uint64_t>(f32_bits(scan.best_value)));
-    return {.status = StepStatus::retired};
-  }
-
-  const auto &x_dst = std::get<ScalarRegister>(instr.dest);
   float acc = fold_identity(instr.op);
   for (std::size_t lane = 0; lane < src_config.len; ++lane) {
     acc = fold_step(instr.op, acc, std::bit_cast<float>(src_reg[lane]));
   }
-  state.scalar.write_x(x_dst.index, static_cast<std::uint64_t>(f32_bits(acc)));
+  state.scalar.write_x(instr.dest.index, static_cast<std::uint64_t>(f32_bits(acc)));
+  return {.status = StepStatus::retired};
+}
+
+ExecuteResult vreduce_argmax(const VreduceArgmaxInstr &instr, State &state) {
+  const auto &src_config = state.vc[instr.src.index];
+  if (!valid_config_of(src_config, DType::f32)) {
+    return config_error();
+  }
+  const auto &src_reg = state.v[instr.src.index];
+  ArgmaxScan scan{0, std::bit_cast<float>(src_reg[0])};
+  for (std::size_t lane = 1; lane < src_config.len; ++lane) {
+    scan.feed(static_cast<std::uint32_t>(lane), std::bit_cast<float>(src_reg[lane]));
+  }
+  state.scalar.write_x(instr.index_dest.index, static_cast<std::uint64_t>(static_cast<std::int64_t>(
+                                                   static_cast<std::int32_t>(scan.best_index))));
+  state.scalar.write_x(instr.value_dest.index,
+                       static_cast<std::uint64_t>(f32_bits(scan.best_value)));
   return {.status = StepStatus::retired};
 }
 
 } // namespace
 
-ExecuteResult execute(const ReduceInstr &instr, State &state) {
-  return (instr.src.domain == NpuDomain::acc) ? areduce(instr, state) : vreduce(instr, state);
+ExecuteResult execute(const AreduceInstr &instr, State &state) { return areduce(instr, state); }
+
+ExecuteResult execute(const VreduceInstr &instr, State &state) { return vreduce(instr, state); }
+
+ExecuteResult execute(const VreduceArgmaxInstr &instr, State &state) {
+  return vreduce_argmax(instr, state);
 }
 
 } // namespace tile_npu

@@ -230,15 +230,22 @@ enum class ReduceOp : std::uint8_t {
   absmax = 0b101,
 };
 
-// Operand reading:
-//   areduce.rows.*: dest = vD (Vec32), src = aS (Acc); dest2 unused
-//   vreduce.*:      dest = xD (Scalar), src = vS (Vec32); dest2 unused
-//   vreduce.argmax: dest = xIndex (Scalar), dest2 = xValue (Scalar), src = vS
-struct ReduceInstr {
+struct AreduceInstr {
   ReduceOp op = ReduceOp::sum;
-  NpuOperand dest{};
-  NpuOperand dest2{};
-  NpuRegister src{};
+  NpuRegister dest{}; // Vec32
+  NpuRegister src{};  // Acc
+};
+
+struct VreduceInstr {
+  ReduceOp op = ReduceOp::sum;
+  ScalarRegister dest{};
+  NpuRegister src{}; // Vec32
+};
+
+struct VreduceArgmaxInstr {
+  ScalarRegister index_dest{};
+  ScalarRegister value_dest{};
+  NpuRegister src{}; // Vec32
 };
 
 enum class CvtOp : std::uint8_t { cvt = 0b000, widen = 0b001 };

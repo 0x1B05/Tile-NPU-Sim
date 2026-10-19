@@ -198,10 +198,11 @@ DecodeResult decode_areduce(std::uint32_t word) {
   if (f.funct3 > 0b101 || f.src2 >= ACC_REGISTERS) {
     return DecodeError::illegal;
   }
-  return DecodedNpuInstr{ReduceInstr{static_cast<ReduceOp>(f.funct3),
-                                     NpuOperand{NpuRegister{NpuDomain::vec32, f.dest}},
-                                     {},
-                                     {NpuDomain::acc, f.src2}}};
+  return DecodedNpuInstr{AreduceInstr{
+      .op = static_cast<ReduceOp>(f.funct3),
+      .dest = {.domain = NpuDomain::vec32, .index = f.dest},
+      .src = {.domain = NpuDomain::acc, .index = f.src2},
+  }};
 }
 
 // VREDUCE sum/max/min/sumsq (R2): major4 = 0010, q = 10.
@@ -211,10 +212,11 @@ DecodeResult decode_areduce(std::uint32_t word) {
 // funct3 = 100 uses the argmax layout below; 101..111 are reserved.
 DecodeResult decode_vreduce(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
-  return DecodedNpuInstr{ReduceInstr{static_cast<ReduceOp>(f.funct3),
-                                     NpuOperand{ScalarRegister{f.dest}},
-                                     {},
-                                     {NpuDomain::vec32, f.src2}}};
+  return DecodedNpuInstr{VreduceInstr{
+      .op = static_cast<ReduceOp>(f.funct3),
+      .dest = {.index = f.dest},
+      .src = {.domain = NpuDomain::vec32, .index = f.src2},
+  }};
 }
 
 // VREDUCE argmax (R4): major4 = 0010, q = 10.
@@ -223,10 +225,11 @@ DecodeResult decode_vreduce(std::uint32_t word) {
 // funct3 = 100. S5 is Vec32; D5/xVal5 are the Scalar xIndex/xValue destinations.
 DecodeResult decode_vreduce_argmax(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
-  return DecodedNpuInstr{ReduceInstr{ReduceOp::argmax,
-                                     NpuOperand{ScalarRegister{f.dest}},
-                                     NpuOperand{ScalarRegister{f.src2}},
-                                     {NpuDomain::vec32, f.src1}}};
+  return DecodedNpuInstr{VreduceArgmaxInstr{
+      .index_dest = {.index = f.dest},
+      .value_dest = {.index = f.src2},
+      .src = {.domain = NpuDomain::vec32, .index = f.src1},
+  }};
 }
 
 // index5 with the IS bit: an immediate index, or the named Scalar register.
