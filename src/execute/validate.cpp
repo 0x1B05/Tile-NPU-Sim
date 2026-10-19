@@ -156,32 +156,47 @@ bool valid_structure(const LaneBroadcastInstr &instr) {
          in_range(instr.dest) && in_range(instr.src) && index_in_range(instr.index);
 }
 
-bool valid_structure(const CfgInstr &instr) {
-  if (instr.reg_type >= ConfigRegType::count) {
-    return false;
-  }
-  const bool word_op = instr.op == CfgOp::setw || instr.op == CfgOp::getw;
-  if (word_op && !is_compute_config(instr.reg_type)) return false;
-  // Only the writes setx/copy/setw carry a destination span encoded by N5.
-  const bool has_destination_span =
-      instr.op == CfgOp::setx || instr.op == CfgOp::copy || instr.op == CfgOp::setw;
-  if (!has_destination_span && instr.n != 0) return false;
-  if (instr.op == CfgOp::copy || word_op) {
-    if (instr.field) return false;
-  } else if (!instr.field || !config_field_defined(instr.reg_type, *instr.field)) {
-    return false;
-  }
-  const auto register_count = config_register_count(instr.reg_type);
-  const bool span_fits = std::size_t{instr.dest} + instr.n < register_count;
-  switch (instr.op) {
-  case CfgOp::seti: return instr.dest < register_count;
-  case CfgOp::setx:
-  case CfgOp::setw: return span_fits && in_range(ScalarRegister{instr.src});
-  case CfgOp::copy: return span_fits && instr.src < register_count;
-  case CfgOp::get:
-  case CfgOp::getw: return in_range(ScalarRegister{instr.dest}) && instr.src < register_count;
-  default: return false;
-  }
+bool valid_config_type(ConfigRegType reg_type) {
+  return static_cast<std::uint8_t>(reg_type) < static_cast<std::uint8_t>(ConfigRegType::count);
+}
+
+bool valid_config_index(ConfigRegType reg_type, RegisterIndex index) {
+  return valid_config_type(reg_type) && index < config_register_count(reg_type);
+}
+
+bool valid_config_range(ConfigRegType reg_type, RegisterIndex dest, std::uint8_t n) {
+  return valid_config_type(reg_type) && std::size_t{dest} + n < config_register_count(reg_type);
+}
+
+bool valid_structure(const CfgSetiInstr &instr) {
+  return valid_config_index(instr.reg_type, instr.dest) &&
+         config_field_defined(instr.reg_type, instr.field);
+}
+
+bool valid_structure(const CfgSetxInstr &instr) {
+  return valid_config_range(instr.reg_type, instr.dest, instr.n) &&
+         in_range(ScalarRegister{instr.src}) && config_field_defined(instr.reg_type, instr.field);
+}
+
+bool valid_structure(const CfgCopyInstr &instr) {
+  return valid_config_range(instr.reg_type, instr.dest, instr.n) &&
+         valid_config_index(instr.reg_type, instr.src);
+}
+
+bool valid_structure(const CfgGetInstr &instr) {
+  return in_range(ScalarRegister{instr.dest}) && valid_config_index(instr.reg_type, instr.src) &&
+         config_field_defined(instr.reg_type, instr.field);
+}
+
+bool valid_structure(const CfgSetwInstr &instr) {
+  return is_compute_config(instr.reg_type) &&
+         valid_config_range(instr.reg_type, instr.dest, instr.n) &&
+         in_range(ScalarRegister{instr.src});
+}
+
+bool valid_structure(const CfgGetwInstr &instr) {
+  return is_compute_config(instr.reg_type) && in_range(ScalarRegister{instr.dest}) &&
+         valid_config_index(instr.reg_type, instr.src);
 }
 
 bool valid_structure(const CvtInstr &instr) {

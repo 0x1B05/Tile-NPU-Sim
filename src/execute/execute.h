@@ -64,7 +64,12 @@ ExecuteResult execute(const QntInstr &instr, State &state);
 ExecuteResult execute(const MmaInstr &instr, State &state);
 
 // Configuration and system
-ExecuteResult execute(const CfgInstr &instr, ExecContext &ctx);
+ExecuteResult execute(const CfgSetiInstr &instr, ExecContext &ctx);
+ExecuteResult execute(const CfgSetxInstr &instr, ExecContext &ctx);
+ExecuteResult execute(const CfgCopyInstr &instr, ExecContext &ctx);
+ExecuteResult execute(const CfgGetInstr &instr, ExecContext &ctx);
+ExecuteResult execute(const CfgSetwInstr &instr, ExecContext &ctx);
+ExecuteResult execute(const CfgGetwInstr &instr, ExecContext &ctx);
 ExecuteResult execute(const SysInstr &instr, State &state);
 
 // Dispatch entry points

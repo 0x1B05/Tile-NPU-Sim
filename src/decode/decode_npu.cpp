@@ -454,7 +454,8 @@ DecodeResult decode_cfg_seti(std::uint32_t word) {
   if (f.dest >= config_register_count(reg_type) || !field) {
     return DecodeError::illegal;
   }
-  return DecodedNpuInstr{CfgInstr{CfgOp::seti, reg_type, f.dest, 0, *field, f.imm}};
+  return DecodedNpuInstr{
+      CfgSetiInstr{.reg_type = reg_type, .dest = f.dest, .field = *field, .imm = f.imm}};
 }
 
 // CFG_REG (R4): major4 = 0111, q = 10.
@@ -464,54 +465,62 @@ DecodeResult decode_cfg_seti(std::uint32_t word) {
 // funct3: 000 setx (xS -> C), 001 copy (CS -> CD), 010 get (C -> xD).
 // N5 is the last destination offset for the writes (setx/copy target
 // D5..D5 + N5); get pins it to zero.
-template <CfgOp Op> DecodeResult decode_cfg_reg(std::uint32_t word) {
+DecodeResult decode_cfg_setx(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto reg_type = cfg_reg_type(f.sel3 >> 1, (f.sel3 & 1) != 0);
   const auto register_count = config_register_count(reg_type);
-  // Scalar operands (xS in setx, xD in get) always name a valid register;
-  // config operands are bounded per register type.
-  if constexpr (Op == CfgOp::get) {
-    if (f.src2 != 0) return DecodeError::illegal;
-  }
-  if (Op != CfgOp::get && f.dest + f.src2 >= register_count) {
+  if (f.dest + f.src2 >= register_count) {
     return DecodeError::illegal;
   }
-  if (Op != CfgOp::setx && f.src1 >= register_count) {
+  const auto field =
+      decode_config_field(reg_type, static_cast<std::uint8_t>(encoding::field<2, 0>(f.arg)));
+  if (!field) {
     return DecodeError::illegal;
   }
-  const auto field_code = static_cast<std::uint8_t>(encoding::field<2, 0>(f.arg));
-  std::optional<ConfigField> field;
-  if constexpr (Op != CfgOp::copy) {
-    field = decode_config_field(reg_type, field_code);
-    if (!field) {
-      return DecodeError::illegal;
-    }
+  return DecodedNpuInstr{CfgSetxInstr{
+      .reg_type = reg_type, .dest = f.dest, .field = *field, .src = f.src1, .n = f.src2}};
+}
+
+DecodeResult decode_cfg_copy(std::uint32_t word) {
+  const auto f = encoding::NpuR4::from(word);
+  const auto reg_type = cfg_reg_type(f.sel3 >> 1, (f.sel3 & 1) != 0);
+  const auto register_count = config_register_count(reg_type);
+  if (f.dest + f.src2 >= register_count || f.src1 >= register_count) {
+    return DecodeError::illegal;
   }
-  return DecodedNpuInstr{CfgInstr{
-      .op = Op, .reg_type = reg_type, .dest = f.dest, .src = f.src1, .field = field, .n = f.src2}};
+  return DecodedNpuInstr{
+      CfgCopyInstr{.reg_type = reg_type, .dest = f.dest, .src = f.src1, .n = f.src2}};
+}
+
+DecodeResult decode_cfg_get(std::uint32_t word) {
+  const auto f = encoding::NpuR4::from(word);
+  const auto reg_type = cfg_reg_type(f.sel3 >> 1, (f.sel3 & 1) != 0);
+  if (f.src2 != 0) return DecodeError::illegal;
+  if (f.src1 >= config_register_count(reg_type)) return DecodeError::illegal;
+  const auto field =
+      decode_config_field(reg_type, static_cast<std::uint8_t>(encoding::field<2, 0>(f.arg)));
+  if (!field) return DecodeError::illegal;
+  return DecodedNpuInstr{
+      CfgGetInstr{.reg_type = reg_type, .dest = f.dest, .src = f.src1, .field = *field}};
 }
 
 // cfg.setw / cfg.getw (CFG_REG R4, funct3 = 011 / 100): whole-word access
 // to the compute configs (sel2 = 00/01, so TC/AC/BC/VC). setw writes xS
 // (S5) into D5..D5 + N5, with N5 = [16:12] as the last destination offset;
-// getw reads config S5 into
-// xD (D5). field5 is zero for both.
-template <CfgOp Op> DecodeResult decode_cfg_word(std::uint32_t word) {
+// getw reads config S5 into xD (D5). field5 is zero for both.
+DecodeResult decode_cfg_setw(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto reg_type = cfg_reg_type(f.sel3 >> 1, (f.sel3 & 1) != 0);
-  const auto register_count = config_register_count(reg_type);
-  if constexpr (Op == CfgOp::setw) {
-    if (f.dest + f.src2 >= register_count) {
-      return DecodeError::illegal;
-    }
-    return DecodedNpuInstr{
-        CfgInstr{.op = Op, .reg_type = reg_type, .dest = f.dest, .src = f.src1, .n = f.src2}};
-  } else {
-    if (f.src1 >= register_count) {
-      return DecodeError::illegal;
-    }
-    return DecodedNpuInstr{CfgInstr{.op = Op, .reg_type = reg_type, .dest = f.dest, .src = f.src1}};
-  }
+  if (f.dest + f.src2 >= config_register_count(reg_type)) return DecodeError::illegal;
+  return DecodedNpuInstr{
+      CfgSetwInstr{.reg_type = reg_type, .dest = f.dest, .src = f.src1, .n = f.src2}};
+}
+
+DecodeResult decode_cfg_getw(std::uint32_t word) {
+  const auto f = encoding::NpuR4::from(word);
+  const auto reg_type = cfg_reg_type(f.sel3 >> 1, (f.sel3 & 1) != 0);
+  if (f.src1 >= config_register_count(reg_type)) return DecodeError::illegal;
+  return DecodedNpuInstr{CfgGetwInstr{.reg_type = reg_type, .dest = f.dest, .src = f.src1}};
 }
 
 // clang-format off
@@ -611,13 +620,13 @@ constexpr DecodeEntry NPU_TABLE[] = {
     // CFG_REG (R4): funct3 000/001/010 = setx/copy/get; field5 high bits and
     // reserved5 must be 0; copy requires field5 = 0. The handlers check
     // setx/get field codes against the selected config register type.
-    {"0111 ??? 000 00??? ????? ????? ????? 10", decode_cfg_reg<CfgOp::setx>},
-    {"0111 ??? 001 00000 ????? ????? ????? 10", decode_cfg_reg<CfgOp::copy>},
-    {"0111 ??? 010 00??? 00000 ????? ????? 10", decode_cfg_reg<CfgOp::get>},
+    {"0111 ??? 000 00??? ????? ????? ????? 10", decode_cfg_setx},
+    {"0111 ??? 001 00000 ????? ????? ????? 10", decode_cfg_copy},
+    {"0111 ??? 010 00??? 00000 ????? ????? 10", decode_cfg_get},
     // setw/getw (funct3 011/100): compute configs only (sel2 = 0x); setw
     // carries the last destination offset N in [16:12].
-    {"0111 0?? 011 00000 ????? ????? ????? 10", decode_cfg_word<CfgOp::setw>},
-    {"0111 0?? 100 00000 00000 ????? ????? 10", decode_cfg_word<CfgOp::getw>},
+    {"0111 0?? 011 00000 ????? ????? ????? 10", decode_cfg_setw},
+    {"0111 0?? 100 00000 00000 ????? ????? 10", decode_cfg_getw},
     {"0111 ??? ??? ????? ????? ????? ????? 10", illegal},
 
     // SYS (Z format): one pattern pins reserved23 to 0; the handler rejects

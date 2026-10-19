@@ -8,15 +8,6 @@
 namespace tile_npu {
 namespace {
 
-ConfigRange dest_range(const CfgInstr &instr) {
-  return {.dest = instr.dest, .last_offset = instr.n};
-}
-
-ConfigField field_of(const CfgInstr &instr) {
-  if (!instr.field) unreachable("validated cfg instruction has no field");
-  return *instr.field;
-}
-
 ExecuteResult cfg_write_result(ConfigAccessStatus status) {
   switch (status) {
   case ConfigAccessStatus::success: return {.status = StepStatus::retired};
@@ -25,43 +16,48 @@ ExecuteResult cfg_write_result(ConfigAccessStatus status) {
   }
 }
 
-ExecuteResult cfg_write(const CfgInstr &instr, State &state, std::uint64_t value) {
+ConfigRange config_range(RegisterIndex dest, std::uint8_t n) {
+  return {.dest = dest, .last_offset = n};
+}
+
+ExecuteResult write_field(ExecContext &ctx, ConfigRegType reg_type, RegisterIndex dest,
+                          std::uint8_t n, ConfigField field, std::uint64_t value) {
   return cfg_write_result(
-      write_config_field_range(state, instr.reg_type, dest_range(instr), field_of(instr), value));
+      write_config_field_range(ctx.state, reg_type, config_range(dest, n), field, value));
 }
 
 } // namespace
 
-ExecuteResult execute(const CfgInstr &instr, ExecContext &ctx) {
-  State &state = ctx.state;
-  switch (instr.op) {
-  case CfgOp::seti: {
-    const auto value = static_cast<std::uint64_t>(static_cast<std::int64_t>(instr.imm));
-    return cfg_write(instr, state, value);
-  }
-  case CfgOp::setx: {
-    const auto value = state.scalar.read_x(instr.src);
-    return cfg_write(instr, state, value);
-  }
-  case CfgOp::copy: {
-    return cfg_write_result(copy_config_range(state, instr.reg_type, dest_range(instr), instr.src));
-  }
-  case CfgOp::get: {
-    const auto field = field_of(instr);
-    state.scalar.write_x(instr.dest, read_config_field(state, instr.reg_type, instr.src, field));
-    return {.status = StepStatus::retired};
-  }
-  case CfgOp::setw: {
-    // An invalid field or a set reserved bit is CFG_ERROR for the whole span.
-    const auto word = static_cast<std::uint32_t>(state.scalar.read_x(instr.src));
-    return cfg_write_result(
-        write_compute_config_range(state, instr.reg_type, dest_range(instr), word));
-  }
-  case CfgOp::getw:
-    state.scalar.write_x(instr.dest, read_compute_config(state, instr.reg_type, instr.src));
-    return {.status = StepStatus::retired};
-  default: unreachable("invalid config operation");
-  }
+ExecuteResult execute(const CfgSetiInstr &instr, ExecContext &ctx) {
+  const auto value = static_cast<std::uint64_t>(static_cast<std::int64_t>(instr.imm));
+  return write_field(ctx, instr.reg_type, instr.dest, 0, instr.field, value);
+}
+
+ExecuteResult execute(const CfgSetxInstr &instr, ExecContext &ctx) {
+  return write_field(ctx, instr.reg_type, instr.dest, instr.n, instr.field,
+                     ctx.state.scalar.read_x(instr.src));
+}
+
+ExecuteResult execute(const CfgCopyInstr &instr, ExecContext &ctx) {
+  return cfg_write_result(
+      copy_config_range(ctx.state, instr.reg_type, config_range(instr.dest, instr.n), instr.src));
+}
+
+ExecuteResult execute(const CfgGetInstr &instr, ExecContext &ctx) {
+  const auto value = read_config_field(ctx.state, instr.reg_type, instr.src, instr.field);
+  ctx.state.scalar.write_x(instr.dest, value);
+  return {.status = StepStatus::retired};
+}
+
+ExecuteResult execute(const CfgSetwInstr &instr, ExecContext &ctx) {
+  const auto word = static_cast<std::uint32_t>(ctx.state.scalar.read_x(instr.src));
+  return cfg_write_result(write_compute_config_range(ctx.state, instr.reg_type,
+                                                     config_range(instr.dest, instr.n), word));
+}
+
+ExecuteResult execute(const CfgGetwInstr &instr, ExecContext &ctx) {
+  ctx.state.scalar.write_x(instr.dest, read_compute_config(ctx.state, instr.reg_type, instr.src));
+  return {.status = StepStatus::retired};
 }
 
 } // namespace tile_npu

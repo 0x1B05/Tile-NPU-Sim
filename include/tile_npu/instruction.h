@@ -3,7 +3,6 @@
 #include "tile_npu/state.h"
 
 #include <cstdint>
-#include <optional>
 #include <variant>
 
 namespace tile_npu {
@@ -290,16 +289,46 @@ enum class ConfigField : std::uint8_t {
 };
 // clang-format on
 
-enum class CfgOp : std::uint8_t { seti, setx, copy, get, setw, getw };
-
-struct CfgInstr {
-  CfgOp op = CfgOp::seti;
+struct CfgSetiInstr {
   ConfigRegType reg_type = ConfigRegType::tc;
-  RegisterIndex dest = 0;           // Scalar for get/getw; destination config index otherwise.
-  RegisterIndex src = 0;            // Scalar for setx/setw; config for copy/get/getw.
-  std::optional<ConfigField> field; // Decoded field for seti/setx/get; absent otherwise.
-  std::int32_t imm = 0;             // Sign-extended imm16 for seti.
-  std::uint8_t n = 0;               // Zero-based last destination offset N5.
+  RegisterIndex dest = 0;
+  ConfigField field = ConfigField::dtype;
+  std::int32_t imm = 0;
+};
+
+struct CfgSetxInstr {
+  ConfigRegType reg_type = ConfigRegType::tc;
+  RegisterIndex dest = 0;
+  ConfigField field = ConfigField::dtype;
+  RegisterIndex src = 0;
+  std::uint8_t n = 0;
+};
+
+struct CfgCopyInstr {
+  ConfigRegType reg_type = ConfigRegType::tc;
+  RegisterIndex dest = 0;
+  RegisterIndex src = 0;
+  std::uint8_t n = 0;
+};
+
+struct CfgGetInstr {
+  ConfigRegType reg_type = ConfigRegType::tc;
+  RegisterIndex dest = 0;
+  RegisterIndex src = 0;
+  ConfigField field = ConfigField::dtype;
+};
+
+struct CfgSetwInstr {
+  ConfigRegType reg_type = ConfigRegType::tc;
+  RegisterIndex dest = 0;
+  RegisterIndex src = 0;
+  std::uint8_t n = 0;
+};
+
+struct CfgGetwInstr {
+  ConfigRegType reg_type = ConfigRegType::tc;
+  RegisterIndex dest = 0;
+  RegisterIndex src = 0;
 };
 
 enum class SysOp : std::uint8_t {

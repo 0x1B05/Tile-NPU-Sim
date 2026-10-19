@@ -14,11 +14,17 @@ struct DecodedScalarInstr {
   std::int32_t imm = 0;
 };
 
-using DecodedNpuInstr =
-    std::variant<MblkInstr, FillInstr, MoveInstr, RowInstr, LaneExtractInstr, LaneInsertInstr,
-                 LaneBroadcastInstr, MmaInstr, EbinInstr, EunInstr, CmpInstr, BcastInstr, Er4Instr,
-                 MaskInstr, AreduceInstr, VreduceInstr, VreduceArgmaxInstr, CvtInstr, QntInstr,
-                 CfgInstr, SysInstr>;
+// clang-format off
+using DecodedNpuInstr = std::variant<
+    // Memory access and movement.
+    MblkInstr, FillInstr, MoveInstr, RowInstr, LaneExtractInstr, LaneInsertInstr, LaneBroadcastInstr,
+    // Matrix and elementwise arithmetic.
+    MmaInstr, EbinInstr, EunInstr, CmpInstr, BcastInstr, Er4Instr, MaskInstr,
+    // Reductions, conversions, and quantization.
+    AreduceInstr, VreduceInstr, VreduceArgmaxInstr, CvtInstr, QntInstr,
+    // Configuration and system control.
+    CfgSetiInstr, CfgSetxInstr, CfgCopyInstr, CfgGetInstr, CfgSetwInstr, CfgGetwInstr, SysInstr>;
+// clang-format on
 
 // Every undecodable word is illegal: encodings the ISA reserves, and (on the
 // scalar side) encodings of extensions this hart does not implement, which
