@@ -145,11 +145,12 @@ TEST_CASE(validate_rejects_bad_emask) {
 }
 
 TEST_CASE(validate_rejects_bad_mblk) {
-  check_illegal(MblkInstr{MblkOp::gather, A(0), {}, ImmediateIndex{}, 0}, "gather on acc");
-  check_illegal(MblkInstr{MblkOp::row_load, B(0), {}, ImmediateIndex{0}, 0}, "row form on vec8");
-  check_illegal(MblkInstr{MblkOp::gather, T(0), {}, ImmediateIndex{}, 32}, "gather_src index 32");
-  check_illegal(MblkInstr{MblkOp::load, T(16), {}, ImmediateIndex{}, 0}, "dest index 16");
-  check_illegal(MblkInstr{static_cast<MblkOp>(5), T(0), {}, ImmediateIndex{}, 0}, "reserved op");
+  check_illegal(MblkInstr{.op = MblkOp::gather, .reg = A(0)}, "gather on acc");
+  check_illegal(MblkInstr{.op = MblkOp::row_load, .reg = B(0)}, "row form on vec8");
+  check_illegal(MblkInstr{.op = MblkOp::gather, .reg = T(0), .gather_src = 32},
+                "gather_src index 32");
+  check_illegal(MblkInstr{.op = MblkOp::load, .reg = T(16)}, "reg index 16");
+  check_illegal(MblkInstr{.op = static_cast<MblkOp>(5), .reg = T(0)}, "reserved op");
 }
 
 TEST_CASE(validate_rejects_bad_fill) {

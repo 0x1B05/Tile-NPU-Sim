@@ -99,7 +99,7 @@ bool valid_structure(const MaskInstr &instr) {
 }
 
 bool valid_structure(const MblkInstr &instr) {
-  const auto &reg = accessed_reg(instr);
+  const auto &reg = instr.reg;
   if (!in_range(reg) || !index_in_range(instr.index)) {
     return false;
   }

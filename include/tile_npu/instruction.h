@@ -65,17 +65,12 @@ enum class MblkOp : std::uint8_t { load, store, gather, row_load, row_store };
 
 struct MblkInstr {
   MblkOp op = MblkOp::load;
-  NpuRegister dest{};                    // Loads and gather.
-  NpuRegister src{};                     // Stores.
+  NpuRegister reg{};                     // Load/gather destination or store source.
   IndexOperand index = ImmediateIndex{}; // Row forms only.
   RegisterIndex gather_src = 0;          // Vec32 index vector.
 };
 
 inline constexpr bool is_store(MblkOp op) { return op == MblkOp::store || op == MblkOp::row_store; }
-
-inline constexpr const NpuRegister &accessed_reg(const MblkInstr &instr) {
-  return is_store(instr.op) ? instr.src : instr.dest;
-}
 
 struct FillImm16 {
   std::uint16_t bits = 0;

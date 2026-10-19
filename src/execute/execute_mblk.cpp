@@ -39,8 +39,7 @@ void store_element(AddressSpace &memory, std::uint64_t address, Element value) {
 }
 
 bool transform_legal(const MblkInstr &instr, const MatrixDescriptor &desc) {
-  return desc.transform == 0 ||
-         (instr.op == MblkOp::load && accessed_reg(instr).domain == NpuDomain::tile);
+  return desc.transform == 0 || (instr.op == MblkOp::load && instr.reg.domain == NpuDomain::tile);
 }
 
 // Every access runs in two phases: all addresses are computed first, then
@@ -122,7 +121,7 @@ std::int32_t gather_index(const Vec32 &reg, std::size_t lane) {
 
 template <NpuDomain Domain> ExecuteResult block_access(const MblkInstr &instr, ExecContext &ctx) {
   static_assert(Domain == NpuDomain::tile || Domain == NpuDomain::acc);
-  auto [reg, config, descriptor] = bind_register<Domain>(ctx.state, accessed_reg(instr).index);
+  auto [reg, config, descriptor] = bind_register<Domain>(ctx.state, instr.reg.index);
   if (!valid_domain_config(config)) {
     return config_error();
   }
@@ -160,7 +159,7 @@ template <NpuDomain Domain> ExecuteResult block_access(const MblkInstr &instr, E
 
 template <NpuDomain Domain> ExecuteResult row_access(const MblkInstr &instr, ExecContext &ctx) {
   static_assert(Domain == NpuDomain::tile || Domain == NpuDomain::acc);
-  auto [reg, config, descriptor] = bind_register<Domain>(ctx.state, accessed_reg(instr).index);
+  auto [reg, config, descriptor] = bind_register<Domain>(ctx.state, instr.reg.index);
   if (!valid_domain_config(config)) {
     return config_error();
   }
@@ -199,7 +198,7 @@ template <NpuDomain Domain> ExecuteResult row_access(const MblkInstr &instr, Exe
 
 // tload.gather
 ExecuteResult gather_tile_access(const MblkInstr &instr, ExecContext &ctx) {
-  const auto index = accessed_reg(instr).index;
+  const auto index = instr.reg.index;
   const auto &config = ctx.state.tc[index];
   if (!valid_domain_config(config)) {
     return config_error();
@@ -302,7 +301,7 @@ ExecuteResult strided_vector_access(const MblkInstr &instr, ExecContext &ctx, Ve
 
 template <NpuDomain Domain> ExecuteResult vector_access(const MblkInstr &instr, ExecContext &ctx) {
   static_assert(Domain == NpuDomain::vec8 || Domain == NpuDomain::vec32);
-  auto [reg, config, descriptor] = bind_register<Domain>(ctx.state, accessed_reg(instr).index);
+  auto [reg, config, descriptor] = bind_register<Domain>(ctx.state, instr.reg.index);
   if (!valid_domain_config(config)) {
     return config_error();
   }
@@ -322,7 +321,7 @@ template <NpuDomain Domain> ExecuteResult vector_access(const MblkInstr &instr, 
 } // namespace
 
 ExecuteResult execute(const MblkInstr &instr, ExecContext &ctx) {
-  switch (accessed_reg(instr).domain) {
+  switch (instr.reg.domain) {
   case NpuDomain::tile:
     switch (instr.op) {
     case MblkOp::load:

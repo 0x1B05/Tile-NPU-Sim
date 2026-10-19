@@ -310,8 +310,7 @@ template <MblkOp Op> DecodeResult decode_mblk(std::uint32_t word) {
     return DecodeError::illegal;
   }
   const NpuRegister reg{domain, f.dest};
-  return DecodedNpuInstr{is_store(Op) ? MblkInstr{Op, {}, reg, ImmediateIndex{}, f.src2}
-                                      : MblkInstr{Op, reg, {}, ImmediateIndex{}, f.src2}};
+  return DecodedNpuInstr{MblkInstr{.op = Op, .reg = reg, .gather_src = f.src2}};
 }
 
 // M_BLK row (MR): major4 = 0000, q = 01.
@@ -327,8 +326,7 @@ template <MblkOp Op> DecodeResult decode_mblk_row(std::uint32_t word) {
   }
   const NpuRegister reg{domain, f.reg};
   const auto index = decode_index(f.index, (f.sel3 & 1) != 0);
-  return DecodedNpuInstr{is_store(Op) ? MblkInstr{Op, {}, reg, index, 0}
-                                      : MblkInstr{Op, reg, {}, index, 0}};
+  return DecodedNpuInstr{MblkInstr{.op = Op, .reg = reg, .index = index}};
 }
 
 // FILL_IMM (I): major4 = 0001, q = 01.
