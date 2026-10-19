@@ -3,7 +3,6 @@
 #include "utils/common.h"
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -132,33 +131,8 @@ ConfigAccessStatus write_field(VectorDescriptor &desc, ConfigField field, std::u
   default:                        return ConfigAccessStatus::unsupported_field;
   }
 }
+
 // clang-format on
-
-// Field codes index each register type's field list.
-// clang-format off
-constexpr ConfigField TC_FIELDS[] = { ConfigField::dtype, ConfigField::rows, ConfigField::cols, ConfigField::layout, ConfigField::arith_mode};
-constexpr ConfigField AC_FIELDS[] = { ConfigField::dtype, ConfigField::rows, ConfigField::cols, ConfigField::layout};
-constexpr ConfigField BC_FIELDS[] = { ConfigField::dtype, ConfigField::len};
-constexpr ConfigField VC_FIELDS[] = { ConfigField::dtype, ConfigField::len};
-constexpr ConfigField TM_FIELDS[] = { ConfigField::base_addr, ConfigField::row_stride_bytes, ConfigField::col_stride_bytes, ConfigField::transform, ConfigField::flags};
-constexpr ConfigField AM_FIELDS[] = { ConfigField::base_addr, ConfigField::row_stride_bytes, ConfigField::col_stride_bytes, ConfigField::transform, ConfigField::flags};
-constexpr ConfigField BM_FIELDS[] = { ConfigField::base_addr, ConfigField::stride_bytes, ConfigField::flags};
-constexpr ConfigField VM_FIELDS[] = { ConfigField::base_addr, ConfigField::stride_bytes, ConfigField::flags};
-
-// Indexed by ConfigRegType in enum order.
-constexpr std::array<std::span<const ConfigField>,
-                     static_cast<std::size_t>(ConfigRegType::count)>
-    FIELDS_BY_TYPE = {{
-        TC_FIELDS, AC_FIELDS, BC_FIELDS, VC_FIELDS,
-        TM_FIELDS, AM_FIELDS, BM_FIELDS, VM_FIELDS,
-    }};
-// clang-format on
-
-constexpr std::span<const ConfigField> fields_for(ConfigRegType reg_type) {
-  const auto index = static_cast<std::size_t>(reg_type);
-  if (index >= FIELDS_BY_TYPE.size()) return {};
-  return FIELDS_BY_TYPE[index];
-}
 
 struct BitRange {
   unsigned hi;
@@ -175,35 +149,102 @@ struct BitRange {
   }
 };
 
-// Where each compute config field sits in the compute config word (the TC/AC
-// and BC/VC bit diagrams).
-constexpr BitRange compute_config_bits(ConfigRegType reg_type, ConfigField field) {
-  const bool matrix = reg_type == ConfigRegType::tc || reg_type == ConfigRegType::ac;
-  switch (field) {
-  case ConfigField::rows:
-  case ConfigField::len: return {7, 0};
-  case ConfigField::cols: return {15, 8};
-  case ConfigField::dtype: return matrix ? BitRange{19, 16} : BitRange{11, 8};
-  case ConfigField::layout: return {22, 20};
-  case ConfigField::arith_mode: return {24, 23};
-  default: unreachable("not a compute config field");
+struct ConfigFieldInfo {
+  ConfigField field;
+  std::optional<BitRange> bits;
+};
+
+// clang-format off
+constexpr ConfigFieldInfo TC_FIELDS[] = {
+    {ConfigField::dtype,      BitRange{19, 16}}, // field3 = 0
+    {ConfigField::rows,       BitRange{7,   0}}, // field3 = 1
+    {ConfigField::cols,       BitRange{15,  8}}, // field3 = 2
+    {ConfigField::layout,     BitRange{22, 20}}, // field3 = 3
+    {ConfigField::arith_mode, BitRange{24, 23}}, // field3 = 4
+};
+
+constexpr ConfigFieldInfo AC_FIELDS[] = {
+    {ConfigField::dtype,  BitRange{19, 16}}, // field3 = 0
+    {ConfigField::rows,   BitRange{7,   0}}, // field3 = 1
+    {ConfigField::cols,   BitRange{15,  8}}, // field3 = 2
+    {ConfigField::layout, BitRange{22, 20}}, // field3 = 3
+};
+
+constexpr ConfigFieldInfo BC_FIELDS[] = {
+    {ConfigField::dtype, BitRange{11, 8}}, // field3 = 0
+    {ConfigField::len,   BitRange{7,  0}}, // field3 = 1
+};
+
+constexpr ConfigFieldInfo MATRIX_DESC_FIELDS[] = {
+    {ConfigField::base_addr,        std::nullopt}, // field3 = 0
+    {ConfigField::row_stride_bytes, std::nullopt}, // field3 = 1
+    {ConfigField::col_stride_bytes, std::nullopt}, // field3 = 2
+    {ConfigField::transform,        std::nullopt}, // field3 = 3
+    {ConfigField::flags,            std::nullopt}, // field3 = 4
+};
+
+constexpr ConfigFieldInfo VECTOR_DESC_FIELDS[] = {
+    {ConfigField::base_addr,    std::nullopt}, // field3 = 0
+    {ConfigField::stride_bytes, std::nullopt}, // field3 = 1
+    {ConfigField::flags,        std::nullopt}, // field3 = 2
+};
+// clang-format on
+
+template <std::size_t N>
+consteval bool config_fields_are_valid(const ConfigFieldInfo (&fields)[N], bool has_bits) {
+  if (N > 8) return false;
+  std::uint32_t used = 0;
+  for (std::size_t i = 0; i < N; ++i) {
+    const auto &entry = fields[i];
+    if (entry.bits.has_value() != has_bits) return false;
+    for (std::size_t previous = 0; previous < i; ++previous) {
+      if (entry.field == fields[previous].field) return false;
+    }
+    if (entry.bits) {
+      if (entry.bits->lo > entry.bits->hi || entry.bits->hi >= 32) return false;
+      const auto bits = entry.bits->mask();
+      if ((used & bits) != 0) return false;
+      used |= bits;
+    }
+  }
+  return true;
+}
+
+static_assert(config_fields_are_valid(TC_FIELDS, true), "invalid TC config fields");
+static_assert(config_fields_are_valid(AC_FIELDS, true), "invalid AC config fields");
+static_assert(config_fields_are_valid(BC_FIELDS, true), "invalid vector config fields");
+static_assert(config_fields_are_valid(MATRIX_DESC_FIELDS, false),
+              "invalid matrix descriptor fields");
+static_assert(config_fields_are_valid(VECTOR_DESC_FIELDS, false),
+              "invalid vector descriptor fields");
+
+constexpr std::span<const ConfigFieldInfo> fields_for(ConfigRegType reg_type) {
+  switch (reg_type) {
+  case ConfigRegType::tc: return TC_FIELDS;
+  case ConfigRegType::ac: return AC_FIELDS;
+  case ConfigRegType::bc:
+  case ConfigRegType::vc: return BC_FIELDS;
+  case ConfigRegType::tm:
+  case ConfigRegType::am: return MATRIX_DESC_FIELDS;
+  case ConfigRegType::bm:
+  case ConfigRegType::vm: return VECTOR_DESC_FIELDS;
+  default: return {};
   }
 }
 
-// Calls fn for each compute config field, in field-code order.
-template <typename Fn> void for_each_compute_field(ConfigRegType reg_type, Fn &&fn) {
-  for (const auto field : fields_for(reg_type)) {
-    fn(field, compute_config_bits(reg_type, field));
-  }
+constexpr std::span<const ConfigFieldInfo> compute_fields_for(ConfigRegType reg_type) {
+  if (!is_compute_config(reg_type)) unreachable("not a compute config");
+  return fields_for(reg_type);
 }
 
 // Encodes one compute config as a 32-bit config word.
 template <typename Config>
 std::uint32_t encode_compute_config(const Config &config, ConfigRegType reg_type) {
   std::uint32_t word = 0;
-  for_each_compute_field(reg_type, [&](ConfigField field, BitRange bits) {
-    word |= bits.place(read_field(config, field));
-  });
+  for (const auto entry : compute_fields_for(reg_type)) {
+    if (!entry.bits) unreachable("compute config field has no bit range");
+    word |= entry.bits->place(read_field(config, entry.field));
+  }
   return word;
 }
 
@@ -214,10 +255,12 @@ std::optional<Config> decode_compute_config(ConfigRegType reg_type, std::uint32_
   Config config{};
   std::uint32_t defined = 0;
   bool valid = true;
-  for_each_compute_field(reg_type, [&](ConfigField field, BitRange bits) {
-    defined |= bits.mask();
-    valid = valid && write_field(config, field, bits.extract(word)) == ConfigAccessStatus::success;
-  });
+  for (const auto entry : compute_fields_for(reg_type)) {
+    if (!entry.bits) unreachable("compute config field has no bit range");
+    defined |= entry.bits->mask();
+    valid = valid && write_field(config, entry.field, entry.bits->extract(word)) ==
+                         ConfigAccessStatus::success;
+  }
   if (!valid || (word & ~defined) != 0) {
     return std::nullopt;
   }
@@ -300,12 +343,13 @@ ConfigAccessStatus copy_config_range(State &state, ConfigRegType reg_type, Confi
 std::optional<ConfigField> decode_config_field(ConfigRegType reg_type, std::uint8_t field_code) {
   const auto fields = fields_for(reg_type);
   if (field_code >= fields.size()) return std::nullopt;
-  return fields[field_code];
+  return fields[field_code].field;
 }
 
 bool config_field_defined(ConfigRegType reg_type, ConfigField field) {
   const auto fields = fields_for(reg_type);
-  return std::find(fields.begin(), fields.end(), field) != fields.end();
+  return std::find_if(fields.begin(), fields.end(),
+                      [field](const auto &entry) { return entry.field == field; }) != fields.end();
 }
 
 } // namespace tile_npu
