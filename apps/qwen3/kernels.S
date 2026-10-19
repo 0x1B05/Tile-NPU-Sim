@@ -226,7 +226,7 @@ nq_matvec_q:
     VLOAD   6                             # 32 weight scales
     VMUL    4, 4, 6
     VMULX   4, 4, X_S6
-    INIT_R2 3, 2, 8, 4                    # vcopy v8, v4
+    REG_MOVE 3, 2, 8, 4                    # vcopy v8, v4
     VSTORE  8
     addi    s2, s2, 1
     bltu    s2, s3, .Lmv_epi
@@ -430,7 +430,7 @@ nq_rmsnorm:
     VLOAD   3
     VMUL    3, 3, 2
     VMUL    1, 1, 3
-    INIT_R2 3, 2, 4, 1                    # vcopy v4, v1
+    REG_MOVE 3, 2, 4, 1                    # vcopy v4, v1
     VSTORE  4
     addi    t6, t6, -1
     bnez    t6, .Lrn_out
@@ -624,7 +624,7 @@ nq_softmax_exp:
     VMULX   1, 1, X_A2
     VEXP2   1, 1
     VADD    2, 2, 1
-    INIT_R2 3, 2, 3, 1                    # vcopy v3, v1
+    REG_MOVE 3, 2, 3, 1                    # vcopy v3, v1
     VSTORE  3
     addi    t6, t6, -1
     bnez    t6, .Lsm_exp
@@ -724,7 +724,7 @@ nq_silu_mul:
     VSILU   0, 0
     VLOAD   1
     VMUL    0, 0, 1
-    INIT_R2 3, 2, 2, 0                    # vcopy v2, v0
+    REG_MOVE 3, 2, 2, 0                    # vcopy v2, v0
     VSTORE  2
     addi    t6, t6, -1
     bnez    t6, .Lsl_loop
@@ -748,7 +748,7 @@ nq_add:
     VLOAD   0
     VLOAD   1
     VADD    0, 0, 1
-    INIT_R2 3, 2, 2, 0                    # vcopy v2, v0
+    REG_MOVE 3, 2, 2, 0                    # vcopy v2, v0
     VSTORE  2
     addi    t6, t6, -1
     bnez    t6, .Lad_loop

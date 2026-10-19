@@ -169,7 +169,9 @@
 
 # R4 format (CFG_REG), mirroring NpuR4 in src/decode/encoding.h:
 #   [31:28] major4 = 7  [27:26] sel2  [25] MV  [24:22] funct3
-#   [21:17] field5  [16:12] N5  [11:7] S5  [6:2] D5  [1:0] q = 10
+#   cfg.setx/get: [21:20] reserved2 [19:17] field3 [16:12] N5/reserved5
+#   cfg.copy/setw: [21:17] reserved5 [16:12] N5; cfg.getw: [21:12] reserved10
+#   [11:7] S5  [6:2] D5  [1:0] q = 10
 # funct3: 0 = setx (S5 = xS, D5 = C), 1 = copy (S5 = CS, D5 = CD),
 #         2 = get (S5 = C, D5 = xD)
 # N5 ([16:12]) is the last destination offset N; omitted N defaults to 0.
