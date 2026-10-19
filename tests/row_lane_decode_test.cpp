@@ -11,6 +11,8 @@
 #include "support/index_helpers.h"
 #include "support/row_lane_helpers.h"
 
+using namespace tile_npu::test;
+
 namespace {
 
 using tile_npu::LaneBroadcastInstr;

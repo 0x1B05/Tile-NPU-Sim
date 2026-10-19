@@ -3,7 +3,7 @@
 // Qwen3 inference app for the Tile-NPU simulator: shared layout constants,
 // the Q3B1 blob format view, and console I/O.
 //
-// Guest memory map (sim_run -m 2048):
+// Guest memory map (sim_run -m 1024):
 //   0x80000000  this image (code + rodata + data + bss, a few MB)
 //   0x81000000  Q3B1 model blob (598 MB for Qwen3-0.6B)
 //   0xB0000000  KV cache region (256 MB budget)

@@ -4,6 +4,8 @@
 
 #include <cstdint>
 
+namespace tile_npu::test {
+
 // Shared QNT instruction word builder for the qnt test files; the field
 // layout mirrors encoding::NpuR4:
 //   [31:28] major4 = 0100  [27:26] dom2  [25] IS  [24:22] funct3
@@ -18,3 +20,5 @@ constexpr std::uint32_t make_qnt(tile_npu::NpuDomain domain, std::uint32_t funct
          (static_cast<std::uint32_t>(index_is_scalar) << 25) | (funct3 << 22) | (scale << 17) |
          (index << 12) | (src << 7) | (dest << 2) | 2u;
 }
+
+} // namespace tile_npu::test

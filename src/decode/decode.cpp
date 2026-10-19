@@ -1,5 +1,3 @@
-#include "tile_npu/decode.h"
-
 #include "decode_npu.h"
 #include "decode_rv64im.h"
 #include "encoding.h"

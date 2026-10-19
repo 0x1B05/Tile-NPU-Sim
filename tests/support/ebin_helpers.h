@@ -4,6 +4,8 @@
 
 #include <cstdint>
 
+namespace tile_npu::test {
+
 // Shared E_BIN (R3) instruction word builder for the ebin test files; the
 // field layout mirrors encoding::NpuR3:
 //   [31:28] major4 = 0000  [27:26] dom2  [25] BX  [24:21] funct4
@@ -16,3 +18,5 @@ constexpr std::uint32_t make_ebin(tile_npu::EbinOp op, tile_npu::NpuDomain domai
          (static_cast<std::uint32_t>(scalar_src2) << 25) | (static_cast<std::uint32_t>(op) << 21) |
          (src2 << 12) | (src1 << 7) | (dest << 2);
 }
+
+} // namespace tile_npu::test

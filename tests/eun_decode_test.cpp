@@ -9,6 +9,8 @@
 #include "support/decode_helpers.h"
 #include "support/eun_helpers.h"
 
+using namespace tile_npu::test;
+
 namespace {
 
 using tile_npu::EunInstr;

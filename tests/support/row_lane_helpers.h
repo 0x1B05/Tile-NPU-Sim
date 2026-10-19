@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+namespace tile_npu::test {
+
 // Shared ROW_MOVE / LANE_MOVE instruction word builders for the row/lane
 // test files; the field layout mirrors encoding::NpuR4:
 //   [31:28] major4 (3 = ROW_MOVE, 4 = LANE_MOVE)  [27] 0  [26] EW  [25] IS
@@ -22,3 +24,5 @@ constexpr std::uint32_t make_lane_move(bool ew, bool is, std::uint32_t funct3, s
          (static_cast<std::uint32_t>(is) << 25) | (funct3 << 22) | (index5 << 12) | (s5 << 7) |
          (d5 << 2) | 1;
 }
+
+} // namespace tile_npu::test

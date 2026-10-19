@@ -4,6 +4,8 @@
 
 #include <cstdint>
 
+namespace tile_npu::test {
+
 // Shared FILL_IMM / REG_MOVE instruction word builders for the move test
 // files; the field layouts mirror encoding::NpuI / encoding::NpuR2:
 //   I:  [31:28] major4 = 0001  [27:26] dom2  [25:23] funct3 = 000
@@ -22,3 +24,5 @@ constexpr std::uint32_t make_reg_move(tile_npu::NpuDomain domain, std::uint32_t 
   return 0x20000001u | (static_cast<std::uint32_t>(domain) << 26) | (funct3 << 22) | (src << 7) |
          (dest << 2);
 }
+
+} // namespace tile_npu::test

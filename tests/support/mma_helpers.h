@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+namespace tile_npu::test {
+
 // Shared MMA_BDOT instruction word builder for the mma test files; the field
 // layout mirrors encoding::NpuR4:
 //   [31:28] major4 = 0000  [27:25] reserved3  [24:22] funct3
@@ -13,3 +15,5 @@ constexpr std::uint32_t make_mma(std::uint32_t funct3, std::uint32_t dest, std::
                                  std::uint32_t src_b) {
   return (funct3 << 22) | (src_b << 12) | (src_a << 7) | (dest << 2) | 2u;
 }
+
+} // namespace tile_npu::test

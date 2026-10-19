@@ -4,6 +4,8 @@
 
 #include <cstdint>
 
+namespace tile_npu::test {
+
 // Shared E_MASK instruction word builder for the emask test files; the field
 // layout mirrors encoding::NpuR4:
 //   [31:28] major4 = 0100  [27:26] dom2  [25] FS  [24:22] funct3
@@ -18,3 +20,5 @@ constexpr std::uint32_t make_emask(tile_npu::NpuDomain domain, std::uint32_t fun
          (static_cast<std::uint32_t>(fill_is_scalar) << 25) | (funct3 << 22) | (bound << 17) |
          (fill << 12) | (src << 7) | (dest << 2);
 }
+
+} // namespace tile_npu::test

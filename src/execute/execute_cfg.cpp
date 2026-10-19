@@ -20,8 +20,8 @@ ConfigRange config_range(RegisterIndex dest, std::uint8_t n) {
   return {.dest = dest, .last_offset = n};
 }
 
-ExecuteResult write_field(ExecContext &ctx, ConfigRegType reg_type, RegisterIndex dest,
-                          std::uint8_t n, ConfigField field, std::uint64_t value) {
+ExecuteResult write_config_field(ExecContext &ctx, ConfigRegType reg_type, RegisterIndex dest,
+                                 std::uint8_t n, ConfigField field, std::uint64_t value) {
   return cfg_write_result(
       write_config_field_range(ctx.state, reg_type, config_range(dest, n), field, value));
 }
@@ -30,12 +30,12 @@ ExecuteResult write_field(ExecContext &ctx, ConfigRegType reg_type, RegisterInde
 
 ExecuteResult execute(const CfgSetiInstr &instr, ExecContext &ctx) {
   const auto value = static_cast<std::uint64_t>(static_cast<std::int64_t>(instr.imm));
-  return write_field(ctx, instr.reg_type, instr.dest, 0, instr.field, value);
+  return write_config_field(ctx, instr.reg_type, instr.dest, 0, instr.field, value);
 }
 
 ExecuteResult execute(const CfgSetxInstr &instr, ExecContext &ctx) {
-  return write_field(ctx, instr.reg_type, instr.dest, instr.n, instr.field,
-                     ctx.state.scalar.read_x(instr.src));
+  return write_config_field(ctx, instr.reg_type, instr.dest, instr.n, instr.field,
+                            ctx.state.scalar.read_x(instr.src));
 }
 
 ExecuteResult execute(const CfgCopyInstr &instr, ExecContext &ctx) {

@@ -11,6 +11,8 @@
 
 #include "framework.h"
 
+namespace tile_npu::test {
+
 template <typename T>
 const T &expect_npu(const tile_npu::DecodeResult &result, std::string_view what) {
   const std::string context(what);
@@ -39,3 +41,5 @@ template <std::size_t N> void expect_illegal(const std::array<DecodeCase, N> &ca
     expect_illegal(test.word, test.name);
   }
 }
+
+} // namespace tile_npu::test

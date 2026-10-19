@@ -16,6 +16,8 @@
 #include "support/execute_helpers.h"
 #include "utils/endian.h"
 
+using namespace tile_npu::test;
+
 namespace {
 constexpr std::uint64_t IMAGE_BASE = 0x80000000;
 

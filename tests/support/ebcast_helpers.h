@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+namespace tile_npu::test {
+
 // Shared E_BCAST instruction word builder for the ebcast test files; the
 // field layout mirrors encoding::NpuR3:
 //   [31:28] major4 = 0101  [27] 0  [26] EW  [25] DIR  [24:21] funct4
@@ -14,3 +16,5 @@ constexpr std::uint32_t make_ebcast(bool acc_side, bool by_col, std::uint32_t fu
          (static_cast<std::uint32_t>(by_col ? 1 : 0) << 25) | (funct4 << 21) | (vec << 12) |
          (src1 << 7) | (dest << 2);
 }
+
+} // namespace tile_npu::test

@@ -26,9 +26,6 @@ using DecodedNpuInstr = std::variant<
     CfgSetiInstr, CfgSetxInstr, CfgCopyInstr, CfgGetInstr, CfgSetwInstr, CfgGetwInstr, SysInstr>;
 // clang-format on
 
-// Every undecodable word is illegal: encodings the ISA reserves, and (on the
-// scalar side) encodings of extensions this hart does not implement, which
-// are illegal by RISC-V hart semantics.
 enum class DecodeError { illegal };
 using DecodeResult = std::variant<DecodedScalarInstr, DecodedNpuInstr, DecodeError>;
 

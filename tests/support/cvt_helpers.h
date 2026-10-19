@@ -4,6 +4,8 @@
 
 #include <cstdint>
 
+namespace tile_npu::test {
+
 // Shared CVT instruction word builder for the cvt test files; the field
 // layout mirrors encoding::NpuR2:
 //   [31:28] major4 = 0011  [27:26] dom2 (dst domain)  [25] 0
@@ -15,3 +17,5 @@ constexpr std::uint32_t make_cvt(tile_npu::NpuDomain domain, std::uint32_t funct
   return (3u << 28) | (static_cast<std::uint32_t>(domain) << 26) | (funct3 << 22) | (src << 7) |
          (dest << 2) | 2u;
 }
+
+} // namespace tile_npu::test

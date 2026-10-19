@@ -6,6 +6,8 @@
 
 #include "support/execute_helpers.h"
 
+using namespace tile_npu::test;
+
 TEST_CASE(state) {
   tile_npu::State state{};
   state.scalar.write_x(0, 42);

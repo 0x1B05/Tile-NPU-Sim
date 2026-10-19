@@ -6,6 +6,8 @@
 #include "support/execute_helpers.h"
 #include "support/mma_helpers.h"
 
+using namespace tile_npu::test;
+
 namespace {
 using tile_npu::DType;
 using tile_npu::Ram;

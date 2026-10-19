@@ -9,6 +9,8 @@
 
 #include "framework.h"
 
+namespace tile_npu::test {
+
 // Shared decode-side assertion for the IndexOperand variant: an immediate
 // index decodes to ImmediateIndex, an xS form to ScalarRegister.
 inline void check_index(const tile_npu::IndexOperand &operand, std::uint8_t expected,
@@ -28,3 +30,5 @@ inline void check_index(const tile_npu::IndexOperand &operand, std::uint8_t expe
     check_eq(imm->value, expected, context + ": index");
   }
 }
+
+} // namespace tile_npu::test

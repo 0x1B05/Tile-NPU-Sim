@@ -4,6 +4,8 @@
 
 #include <cstdint>
 
+namespace tile_npu::test {
+
 // Shared M_BLK instruction word builders for the mblk test files; the field
 // layouts mirror encoding::NpuR2 / encoding::NpuMR:
 //   R2: [31:28] major4 = 0000  [27:26] dom2  [25] 0  [24:22] funct3
@@ -25,3 +27,5 @@ constexpr std::uint32_t make_mrow(bool acc_side, bool scalar_index, std::uint32_
          (static_cast<std::uint32_t>(scalar_index) << 25) | (funct3 << 22) | (index << 12) |
          (reg << 2) | 1;
 }
+
+} // namespace tile_npu::test

@@ -4,6 +4,8 @@
 
 #include "support/execute_helpers.h"
 
+using namespace tile_npu::test;
+
 namespace {
 using tile_npu::Ram;
 using tile_npu::Simulator;

@@ -9,6 +9,8 @@
 #include "support/cvt_helpers.h"
 #include "support/decode_helpers.h"
 
+using namespace tile_npu::test;
+
 namespace {
 
 using tile_npu::CvtInstr;

@@ -16,6 +16,8 @@
 #include <cstddef>
 #include <cstdint>
 
+namespace tile_npu::test {
+
 // Every host-side execute test loads its instruction(s) at CODE_BASE and
 // resets the simulator onto them.
 inline constexpr std::uint64_t CODE_BASE = 0x1000;
@@ -58,3 +60,5 @@ using tile_npu::f32_bits;
 constexpr std::uint8_t i8_bits(std::int32_t value) {
   return static_cast<std::uint8_t>(static_cast<std::int8_t>(value));
 }
+
+} // namespace tile_npu::test

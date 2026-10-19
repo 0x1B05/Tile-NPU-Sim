@@ -4,6 +4,8 @@
 
 #include <cstdint>
 
+namespace tile_npu::test {
+
 // Shared E_R4 instruction word builder for the er4 test files; the field
 // layout mirrors encoding::NpuR4:
 //   [31:28] major4 = 0011  [27:26] dom2  [25] 0  [24:22] funct3
@@ -16,3 +18,5 @@ constexpr std::uint32_t make_er4(tile_npu::NpuDomain domain, std::uint32_t funct
   return (3u << 28) | (static_cast<std::uint32_t>(domain) << 26) | (funct3 << 22) | (arg << 17) |
          (src2 << 12) | (src1 << 7) | (dest << 2);
 }
+
+} // namespace tile_npu::test

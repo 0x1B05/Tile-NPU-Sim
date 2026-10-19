@@ -4,6 +4,8 @@
 
 #include <cstdint>
 
+namespace tile_npu::test {
+
 // Shared E_UNARY instruction word builder for the eun test files; the field
 // layout mirrors encoding::NpuR2:
 //   [31:28] major4 = 0001  [27:26] dom2  [25] 0  [24:22] funct3
@@ -15,3 +17,5 @@ constexpr std::uint32_t make_eun(tile_npu::NpuDomain domain, std::uint32_t funct
   return (1u << 28) | (static_cast<std::uint32_t>(domain) << 26) | (funct3 << 22) | (src << 7) |
          (dest << 2);
 }
+
+} // namespace tile_npu::test

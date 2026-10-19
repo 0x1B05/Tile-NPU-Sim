@@ -11,6 +11,8 @@
 #include "support/ebin_helpers.h"
 #include "support/execute_helpers.h"
 
+using namespace tile_npu::test;
+
 namespace {
 using tile_npu::ArithMode;
 using tile_npu::DType;

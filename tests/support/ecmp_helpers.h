@@ -4,6 +4,8 @@
 
 #include <cstdint>
 
+namespace tile_npu::test {
+
 // Shared E_CMP instruction word builder for the ecmp test files; the field
 // layout mirrors encoding::NpuR4:
 //   [31:28] major4 = 0010  [27:26] dom2  [25] BX  [24:22] funct3 (cond)
@@ -17,3 +19,5 @@ constexpr std::uint32_t make_ecmp(tile_npu::NpuDomain domain, bool scalar_src2,
          (static_cast<std::uint32_t>(scalar_src2 ? 1 : 0) << 25) | (funct3 << 22) | (src2 << 12) |
          (src1 << 7) | (mask << 2);
 }
+
+} // namespace tile_npu::test

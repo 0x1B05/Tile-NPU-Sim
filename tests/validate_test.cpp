@@ -18,6 +18,8 @@
 #include <limits>
 #include <string>
 
+using namespace tile_npu::test;
+
 namespace {
 
 using tile_npu::AreduceInstr;

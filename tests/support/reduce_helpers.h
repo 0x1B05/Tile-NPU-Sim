@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+namespace tile_npu::test {
+
 // Shared reduce instruction word builders for the reduce test files; the
 // field layout mirrors encoding::NpuR2 / NpuR4:
 //   AREDUCE (R2): [31:28] major4 = 0001  [27:25] reserved3  [24:22] funct3
@@ -22,3 +24,5 @@ constexpr std::uint32_t make_vreduce_argmax(std::uint32_t x_index, std::uint32_t
                                             std::uint32_t vs) {
   return (2u << 28) | (4u << 22) | (x_value << 12) | (vs << 7) | (x_index << 2) | 2u;
 }
+
+} // namespace tile_npu::test
