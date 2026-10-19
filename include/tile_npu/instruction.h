@@ -215,7 +215,7 @@ enum class Er4Op : std::uint8_t { select = 0b000, fmadd = 0b001 };
 struct Er4Instr {
   Er4Op op = Er4Op::select;
   NpuRegister dest{};
-  NpuRegister arg{}; // Mask for select; addend for fmadd.
+  NpuRegister arg{}; // M5/C5: mask for select; addend for fmadd.
   NpuRegister src1{};
   NpuRegister src2{};
 };

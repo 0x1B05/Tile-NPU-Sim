@@ -22,7 +22,7 @@ using tile_npu::VquantInstr;
 TEST_CASE(qnt_decode) {
   {
     // Anchor word computed by hand from the encoding figure: the asm operand
-    // order is tD, vScale, aS; arg5 carries vScale.
+    // order is tD, vScale, aS; vScale5 is in [21:17].
     const auto word = 0x40020102u;
     const auto result = tile_npu::decode(word);
     const auto &decoded = expect_npu<TquantInstr>(result, "tquant.rows.q8s32");

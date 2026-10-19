@@ -130,9 +130,9 @@ DecodeResult decode_ebcast(std::uint32_t word) {
 
 // E_R4 (R4): major4 = 0011, q = 00.
 // 31    28 27  26 25  24    22 21      17 16      12 11       7 6        2 1   0
-// [major4] [dom2] [0] [funct3] [  arg5  ] [   B5   ] [   A5   ] [   D5   ] [ q ]
+// [major4] [dom2] [0] [funct3] [ M5/C5 ] [   B5   ] [   A5   ] [   D5   ] [ q ]
 // dom2: 00 Tile, 01 Acc, 11 Vec32; 10 reserved.
-// funct3: 000 select (arg5 = mask M), 001 fmadd (arg5 = addend C);
+// funct3: 000 select (M5/C5 = mask M), 001 fmadd (M5/C5 = addend C);
 //         010..111 reserved. fmadd requires Acc/Vec32 with f32 dtype.
 DecodeResult decode_er4(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);

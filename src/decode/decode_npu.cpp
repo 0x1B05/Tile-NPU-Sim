@@ -23,7 +23,7 @@ namespace {
 
 //   R3: major4 sel3 funct4 reserved4 src2 src1 dest q
 //   I:  major4 sel2 field3 imm16(4x4)  C5   q
-//   R4: major4 sel3 funct3 arg5    src2 src1 dest q
+//   R4: major4 sel3 funct3 [21:17] src2 src1 dest q
 //   R2: major4 sel3 funct3 reserved10  S5   D5  q
 //   MR: major4 sel3 funct3 reserved5 index5 reserved5 reg5 q
 // E_BIN reads sel3 as {dom2, BX}: dom tile=00 acc=01 vec8=10 vec32=11.
@@ -47,7 +47,7 @@ constexpr DecodeEntry NPU_TABLE[] = {
     // E_BCAST (R3): sel3 = {0, EW, DIR}, reserved4 pinned to 0.
     {"0101 0?? ???? 0000 ????? ????? ????? 00", decode_ebcast},
     {"0101 ??? ???? ???? ????? ????? ????? 00", illegal},                             // reserved E_BCAST encodings
-    // E_R4 (R4): sel3 = {dom2, 0}, arg5 is the fourth operand (mask/addend).
+    // E_R4 (R4): sel3 = {dom2, 0}, M5/C5 is the fourth operand (mask/addend).
     {"0011 ??0 ??? ????? ????? ????? ????? 00", decode_er4},
     {"0011 ??? ??? ????? ????? ????? ????? 00", illegal},                             // reserved E_R4 encodings
     // E_MASK (R4): sel3 = {dom2, FS}, [21:17] = xBound, [16:12] = fill5/xFill;
@@ -105,7 +105,7 @@ constexpr DecodeEntry NPU_TABLE[] = {
     {"0010 000 0?? 0000000000 ????? ????? 10", decode_vreduce},
     {"0010 000 100 00000 ????? ????? ????? 10", decode_vreduce_argmax},
     {"0010 ??? ??? ????? ????? ????? ????? 10", illegal},                             // reserved VREDUCE encodings
-    // QNT (R4): sel3 = {dom2, IS}, vScale5 in arg5, index5 in the src2
+    // QNT (R4): sel3 = {dom2, IS}, vScale5 in [21:17], index5 in the src2
     // position; one pattern, the handler rejects the reserved funct3 and
     // matrix-form IS/index5 encodings.
     {"0100 ??? ??? ????? ????? ????? ????? 10", decode_qnt},

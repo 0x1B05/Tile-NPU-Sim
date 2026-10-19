@@ -159,7 +159,7 @@ struct NpuR4 {
   std::uint8_t major4;
   std::uint8_t sel3;
   std::uint8_t funct3;
-  std::uint8_t arg;  // [21:17]
+  std::uint8_t arg;  // [21:17], M5/C5 for E_R4
   std::uint8_t src2; // [16:12]
   std::uint8_t src1; // [11:7]
   std::uint8_t dest; // [6:2]

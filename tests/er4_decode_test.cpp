@@ -50,7 +50,7 @@ template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
 TEST_CASE(er4_decode) {
   constexpr std::array cases{
       // Anchor word computed by hand from the encoding figure: the asm
-      // operand order is D, M, A, B; arg5 carries M.
+      // operand order is D, M, A, B; M5/C5 carries M.
       Case{.name = "tselect t0, t1, t2, t3",
            .word = 0x30023100u,
            .op = Er4Op::select,
@@ -75,7 +75,7 @@ TEST_CASE(er4_decode) {
            .arg = 30,
            .src1 = 29,
            .src2 = 28},
-      // fmadd asm order is D, A, B, C; arg5 carries C.
+      // fmadd asm order is D, A, B, C; M5/C5 carries C.
       Case{.name = "afmadd a0, a1, a2, a3",
            .word = make_er4(NpuDomain::acc, 1, 0, 3, 1, 2),
            .op = Er4Op::fmadd,
