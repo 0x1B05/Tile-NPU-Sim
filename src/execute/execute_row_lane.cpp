@@ -54,46 +54,47 @@ std::uint64_t extend_element(DType dtype, std::uint32_t raw) {
   }
 }
 
-template <NpuDomain Domain> ExecuteResult lane_move(const LaneInstr &instr, State &state) {
+template <NpuDomain Domain>
+ExecuteResult lane_extract(const LaneExtractInstr &instr, State &state) {
+  auto &regs = domain_regs<Domain>(state);
+  const auto &configs = domain_configs<Domain>(state);
+  const auto lane = resolve_index(instr.index, state);
+  const auto &config = configs[instr.src.index];
+  if (!valid_domain_config(config) || lane >= config.len) {
+    return config_error();
+  }
+  state.scalar.write_x(instr.dest.index, extend_element(config.dtype, regs[instr.src.index][lane]));
+  return {.status = StepStatus::retired};
+}
+
+template <NpuDomain Domain> ExecuteResult lane_insert(const LaneInsertInstr &instr, State &state) {
   auto &regs = domain_regs<Domain>(state);
   const auto &configs = domain_configs<Domain>(state);
   using Element = typename std::remove_cvref_t<decltype(regs)>::value_type::value_type;
   const auto lane = resolve_index(instr.index, state);
-
-  if (instr.op == LaneOp::extract) {
-    const auto &src = std::get<NpuRegister>(instr.src);
-    const auto &dst = std::get<ScalarRegister>(instr.dst);
-    const auto &config = configs[src.index];
-    if (!valid_domain_config(config) || lane >= config.len) {
-      return config_error();
-    }
-    state.scalar.write_x(dst.index, extend_element(config.dtype, regs[src.index][lane]));
-    return {.status = StepStatus::retired};
+  const auto &config = configs[instr.dest.index];
+  if (!valid_domain_config(config) || lane >= config.len) {
+    return config_error();
   }
+  // Like fillx, the lane keeps the low element-width bits of the scalar.
+  regs[instr.dest.index][lane] = static_cast<Element>(state.scalar.read_x(instr.src.index));
+  return {.status = StepStatus::retired};
+}
 
-  if (instr.op == LaneOp::insert) {
-    const auto &dst = std::get<NpuRegister>(instr.dst);
-    const auto &src = std::get<ScalarRegister>(instr.src);
-    const auto &config = configs[dst.index];
-    if (!valid_domain_config(config) || lane >= config.len) {
-      return config_error();
-    }
-    // Like fillx, the lane keeps the low element-width bits of the scalar.
-    regs[dst.index][lane] = static_cast<Element>(state.scalar.read_x(src.index));
-    return {.status = StepStatus::retired};
-  }
-
-  const auto &dst = std::get<NpuRegister>(instr.dst);
-  const auto &src = std::get<NpuRegister>(instr.src);
-  const auto &dst_config = configs[dst.index];
-  const auto &src_config = configs[src.index];
+template <NpuDomain Domain>
+ExecuteResult lane_broadcast(const LaneBroadcastInstr &instr, State &state) {
+  auto &regs = domain_regs<Domain>(state);
+  const auto &configs = domain_configs<Domain>(state);
+  const auto lane = resolve_index(instr.index, state);
+  const auto &dst_config = configs[instr.dest.index];
+  const auto &src_config = configs[instr.src.index];
   if (!valid_domain_config(dst_config) || !valid_domain_config(src_config) ||
       dst_config.dtype != src_config.dtype || lane >= src_config.len) {
     return config_error();
   }
-  const auto value = regs[src.index][lane];
+  const auto value = regs[instr.src.index][lane];
   for (std::size_t j = 0; j < dst_config.len; ++j) {
-    regs[dst.index][j] = value;
+    regs[instr.dest.index][j] = value;
   }
   return {.status = StepStatus::retired};
 }
@@ -120,16 +121,28 @@ ExecuteResult execute(const RowInstr &instr, State &state) {
   unreachable("execute_row_move with an unknown operation");
 }
 
-// The dispatched register file is the vector operand's domain.
-ExecuteResult execute(const LaneInstr &instr, State &state) {
-  const auto &vec = instr.op == LaneOp::extract ? std::get<NpuRegister>(instr.src)
-                                                : std::get<NpuRegister>(instr.dst);
-  switch (vec.domain) {
-  case NpuDomain::vec8: return lane_move<NpuDomain::vec8>(instr, state);
-  case NpuDomain::vec32: return lane_move<NpuDomain::vec32>(instr, state);
-  default: break; // LANE_MOVE has no matrix-domain encoding
+ExecuteResult execute(const LaneExtractInstr &instr, State &state) {
+  switch (instr.src.domain) {
+  case NpuDomain::vec8: return lane_extract<NpuDomain::vec8>(instr, state);
+  case NpuDomain::vec32: return lane_extract<NpuDomain::vec32>(instr, state);
+  default: unreachable("lane extract without a vector source");
   }
-  unreachable("execute_lane_move without a vector operand");
+}
+
+ExecuteResult execute(const LaneInsertInstr &instr, State &state) {
+  switch (instr.dest.domain) {
+  case NpuDomain::vec8: return lane_insert<NpuDomain::vec8>(instr, state);
+  case NpuDomain::vec32: return lane_insert<NpuDomain::vec32>(instr, state);
+  default: unreachable("lane insert without a vector destination");
+  }
+}
+
+ExecuteResult execute(const LaneBroadcastInstr &instr, State &state) {
+  switch (instr.dest.domain) {
+  case NpuDomain::vec8: return lane_broadcast<NpuDomain::vec8>(instr, state);
+  case NpuDomain::vec32: return lane_broadcast<NpuDomain::vec32>(instr, state);
+  default: unreachable("lane broadcast without a vector destination");
+  }
 }
 
 } // namespace tile_npu

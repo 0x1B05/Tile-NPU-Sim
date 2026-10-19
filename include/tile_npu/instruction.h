@@ -99,13 +99,22 @@ struct RowInstr {
   IndexOperand index = ImmediateIndex{};
 };
 
-enum class LaneOp : std::uint8_t { extract, insert, broadcast };
+struct LaneExtractInstr {
+  ScalarRegister dest{};
+  NpuRegister src{};
+  IndexOperand index = ImmediateIndex{};
+};
 
-struct LaneInstr {
-  LaneOp op = LaneOp::extract;
-  NpuOperand dst{};                      // Scalar for extract; vector otherwise.
-  NpuOperand src{};                      // Scalar for insert; vector otherwise.
-  IndexOperand index = ImmediateIndex{}; // Destination lane for insert; source lane otherwise.
+struct LaneInsertInstr {
+  NpuRegister dest{};
+  ScalarRegister src{};
+  IndexOperand index = ImmediateIndex{};
+};
+
+struct LaneBroadcastInstr {
+  NpuRegister dest{};
+  NpuRegister src{};
+  IndexOperand index = ImmediateIndex{};
 };
 
 enum class MmaOp : std::uint8_t {

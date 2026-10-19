@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <type_traits>
 
 namespace tile_npu {
 namespace {
@@ -401,14 +402,30 @@ template <RowOp Op> DecodeResult decode_row_move(std::uint32_t word) {
 // IS: 0 = immediate lane, 1 = Scalar register in index5.
 // funct3: 000 extract (vector S5 -> Scalar D5), 001 insert (Scalar S5 -> vector D5),
 //         010 broadcast (vector S5 -> vector D5)
-template <LaneOp Op> DecodeResult decode_lane_move(std::uint32_t word) {
+template <typename Instr> DecodeResult decode_lane_move(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domain = paired_domains(f.sel3).vector;
-  const auto dst = Op == LaneOp::extract ? NpuOperand{ScalarRegister{f.dest}}
-                                         : NpuOperand{NpuRegister{domain, f.dest}};
-  const auto src = Op == LaneOp::insert ? NpuOperand{ScalarRegister{f.src1}}
-                                        : NpuOperand{NpuRegister{domain, f.src1}};
-  return DecodedNpuInstr{LaneInstr{Op, dst, src, decode_index(f.src2, (f.sel3 & 1) != 0)}};
+  const auto index = decode_index(f.src2, (f.sel3 & 1) != 0);
+  if constexpr (std::is_same_v<Instr, LaneExtractInstr>) {
+    return DecodedNpuInstr{LaneExtractInstr{
+        .dest = {.index = f.dest},
+        .src = {.domain = domain, .index = f.src1},
+        .index = index,
+    }};
+  } else if constexpr (std::is_same_v<Instr, LaneInsertInstr>) {
+    return DecodedNpuInstr{LaneInsertInstr{
+        .dest = {.domain = domain, .index = f.dest},
+        .src = {.index = f.src1},
+        .index = index,
+    }};
+  } else {
+    static_assert(std::is_same_v<Instr, LaneBroadcastInstr>);
+    return DecodedNpuInstr{LaneBroadcastInstr{
+        .dest = {.domain = domain, .index = f.dest},
+        .src = {.domain = domain, .index = f.src1},
+        .index = index,
+    }};
+  }
 }
 
 // sel2 selects the register family pair, the vector-side bit picks within it:
@@ -558,9 +575,9 @@ constexpr DecodeEntry NPU_TABLE[] = {
     {"0011 0?? 001 00000 ????? ????? ????? 01", decode_row_move<RowOp::extract>},      // extract.row
     {"0011 ??? ??? ????? ????? ????? ????? 01", illegal},                             // reserved ROW_MOVE encodings
     // LANE_MOVE (R4): sel3 = {0, EW, IS}, funct3 = extract/insert/broadcast.
-    {"0100 0?? 000 00000 ????? ????? ????? 01", decode_lane_move<LaneOp::extract>},     // extract
-    {"0100 0?? 001 00000 ????? ????? ????? 01", decode_lane_move<LaneOp::insert>},      // insert
-    {"0100 0?? 010 00000 ????? ????? ????? 01", decode_lane_move<LaneOp::broadcast>},   // broadcast
+    {"0100 0?? 000 00000 ????? ????? ????? 01", decode_lane_move<LaneExtractInstr>},     // extract
+    {"0100 0?? 001 00000 ????? ????? ????? 01", decode_lane_move<LaneInsertInstr>},      // insert
+    {"0100 0?? 010 00000 ????? ????? ????? 01", decode_lane_move<LaneBroadcastInstr>},   // broadcast
     {"0100 ??? ??? ????? ????? ????? ????? 01", illegal},                             // reserved LANE_MOVE encodings
     // All assigned data movement majors decode above; the rest is reserved.
     {"???? ??? ???? ???? ????? ????? ????? 01", illegal},

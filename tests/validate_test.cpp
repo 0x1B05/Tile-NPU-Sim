@@ -45,8 +45,9 @@ using tile_npu::Fill5Code;
 using tile_npu::FillImm16;
 using tile_npu::FillInstr;
 using tile_npu::ImmediateIndex;
-using tile_npu::LaneInstr;
-using tile_npu::LaneOp;
+using tile_npu::LaneBroadcastInstr;
+using tile_npu::LaneExtractInstr;
+using tile_npu::LaneInsertInstr;
 using tile_npu::MaskInstr;
 using tile_npu::MaskOp;
 using tile_npu::MblkInstr;
@@ -177,15 +178,20 @@ TEST_CASE(validate_rejects_bad_row_move) {
 }
 
 TEST_CASE(validate_rejects_bad_lane_move) {
-  check_unassigned_ops(LaneInstr{LaneOp::extract, ScalarRegister{0}, B(1), ImmediateIndex{0}}, 3);
-  check_illegal(LaneInstr{LaneOp::extract, B(0), B(1), ImmediateIndex{0}},
-                "extract with a vector dst");
-  check_illegal(LaneInstr{LaneOp::broadcast, B(0), V(1), ImmediateIndex{0}},
+  check_illegal(
+      LaneExtractInstr{.dest = ScalarRegister{32}, .src = B(1), .index = ImmediateIndex{0}},
+      "extract xD index 32");
+  check_illegal(LaneBroadcastInstr{.dest = B(0), .src = V(1), .index = ImmediateIndex{0}},
                 "broadcast with mismatched domains");
-  check_illegal(LaneInstr{LaneOp::insert, B(0), ScalarRegister{32}, ImmediateIndex{0}},
-                "insert xS index 32");
-  check_illegal(LaneInstr{LaneOp::extract, T(0), B(1), ImmediateIndex{0}},
-                "extract dst variant mismatch");
+  check_illegal(
+      LaneInsertInstr{.dest = B(0), .src = ScalarRegister{32}, .index = ImmediateIndex{0}},
+      "insert xS index 32");
+  check_illegal(
+      LaneExtractInstr{.dest = ScalarRegister{0}, .src = T(1), .index = ImmediateIndex{0}},
+      "extract source domain");
+  check_illegal(
+      LaneExtractInstr{.dest = ScalarRegister{0}, .src = B(1), .index = ScalarRegister{32}},
+      "extract index xS index 32");
 }
 
 TEST_CASE(validate_rejects_bad_cfg) {

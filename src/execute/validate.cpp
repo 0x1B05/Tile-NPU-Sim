@@ -141,27 +141,19 @@ bool valid_structure(const RowInstr &instr) {
   }
 }
 
-bool valid_structure(const LaneInstr &instr) {
-  const auto vector_operand = [](const NpuOperand &operand) {
-    const auto *reg = std::get_if<NpuRegister>(&operand);
-    return reg != nullptr && is_vector_domain(reg->domain) && in_range(*reg);
-  };
-  switch (instr.op) {
-  case LaneOp::extract: {
-    const auto *dst = std::get_if<ScalarRegister>(&instr.dst);
-    return dst != nullptr && in_range(*dst) && vector_operand(instr.src);
-  }
-  case LaneOp::insert: {
-    const auto *src = std::get_if<ScalarRegister>(&instr.src);
-    return src != nullptr && in_range(*src) && vector_operand(instr.dst);
-  }
-  case LaneOp::broadcast: {
-    const auto *dst = std::get_if<NpuRegister>(&instr.dst);
-    const auto *src = std::get_if<NpuRegister>(&instr.src);
-    return vector_operand(instr.dst) && vector_operand(instr.src) && dst->domain == src->domain;
-  }
-  default: return false;
-  }
+bool valid_structure(const LaneExtractInstr &instr) {
+  return in_range(instr.dest) && is_vector_domain(instr.src.domain) && in_range(instr.src) &&
+         index_in_range(instr.index);
+}
+
+bool valid_structure(const LaneInsertInstr &instr) {
+  return is_vector_domain(instr.dest.domain) && in_range(instr.dest) && in_range(instr.src) &&
+         index_in_range(instr.index);
+}
+
+bool valid_structure(const LaneBroadcastInstr &instr) {
+  return is_vector_domain(instr.dest.domain) && instr.dest.domain == instr.src.domain &&
+         in_range(instr.dest) && in_range(instr.src) && index_in_range(instr.index);
 }
 
 bool valid_structure(const CfgInstr &instr) {

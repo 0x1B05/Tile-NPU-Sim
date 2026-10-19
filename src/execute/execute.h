@@ -51,7 +51,9 @@ ExecuteResult execute(const MblkInstr &instr, ExecContext &ctx);
 ExecuteResult execute(const FillInstr &instr, State &state);
 ExecuteResult execute(const MoveInstr &instr, State &state);
 ExecuteResult execute(const RowInstr &instr, State &state);
-ExecuteResult execute(const LaneInstr &instr, State &state);
+ExecuteResult execute(const LaneExtractInstr &instr, State &state);
+ExecuteResult execute(const LaneInsertInstr &instr, State &state);
+ExecuteResult execute(const LaneBroadcastInstr &instr, State &state);
 
 // Numeric operations
 ExecuteResult execute(const CvtInstr &instr, State &state);

@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
-#include <variant>
+#include <type_traits>
 
 #include "framework.h"
 #include "support/decode_helpers.h"
@@ -13,13 +13,12 @@
 
 namespace {
 
-using tile_npu::LaneInstr;
-using tile_npu::LaneOp;
+using tile_npu::LaneBroadcastInstr;
+using tile_npu::LaneExtractInstr;
+using tile_npu::LaneInsertInstr;
 using tile_npu::NpuDomain;
-using tile_npu::NpuRegister;
 using tile_npu::RowInstr;
 using tile_npu::RowOp;
-using tile_npu::ScalarRegister;
 
 struct RowCase {
   const char *name;
@@ -50,8 +49,6 @@ template <std::size_t N> void check_row_cases(const std::array<RowCase, N> &case
 struct LaneCase {
   const char *name;
   std::uint32_t word;
-  LaneOp op;
-  bool dst_is_scalar;
   NpuDomain vector_domain;
   std::uint8_t dst;
   std::uint8_t src;
@@ -59,36 +56,27 @@ struct LaneCase {
   bool index_is_scalar = false;
 };
 
-template <std::size_t N> void check_lane_cases(const std::array<LaneCase, N> &cases) {
+template <typename Instr, std::size_t N>
+void check_lane_cases(const std::array<LaneCase, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
     const std::string what = std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
-    const auto &decoded = expect_npu<LaneInstr>(result, what);
-    check_eq(decoded.op, test.op, what + ": op");
+    const auto &decoded = expect_npu<Instr>(result, what);
     check_index(decoded.index, test.index, test.index_is_scalar, what);
-    if (test.dst_is_scalar) {
-      const auto *dst = std::get_if<ScalarRegister>(&decoded.dst);
-      check(dst != nullptr, what + ": dst is scalar");
-      check_eq(dst->index, test.dst, what + ": dst");
-      const auto *src = std::get_if<NpuRegister>(&decoded.src);
-      check(src != nullptr, what + ": src is vector");
-      check_eq(src->domain, test.vector_domain, what + ": vector domain");
-      check_eq(src->index, test.src, what + ": src");
+    if constexpr (std::is_same_v<Instr, LaneExtractInstr>) {
+      check_eq(decoded.dest.index, test.dst, what + ": dst");
+      check_eq(decoded.src.domain, test.vector_domain, what + ": src domain");
+      check_eq(decoded.src.index, test.src, what + ": src");
+    } else if constexpr (std::is_same_v<Instr, LaneInsertInstr>) {
+      check_eq(decoded.dest.domain, test.vector_domain, what + ": dst domain");
+      check_eq(decoded.dest.index, test.dst, what + ": dst");
+      check_eq(decoded.src.index, test.src, what + ": src");
     } else {
-      const auto *dst = std::get_if<NpuRegister>(&decoded.dst);
-      check(dst != nullptr, what + ": dst is vector");
-      check_eq(dst->domain, test.vector_domain, what + ": vector domain");
-      check_eq(dst->index, test.dst, what + ": dst");
-      if (test.op == LaneOp::insert) {
-        const auto *src = std::get_if<ScalarRegister>(&decoded.src);
-        check(src != nullptr, what + ": src is scalar");
-        check_eq(src->index, test.src, what + ": src");
-      } else {
-        const auto *src = std::get_if<NpuRegister>(&decoded.src);
-        check(src != nullptr, what + ": src is vector");
-        check_eq(src->domain, test.vector_domain, what + ": vector domain");
-        check_eq(src->index, test.src, what + ": src");
-      }
+      static_assert(std::is_same_v<Instr, LaneBroadcastInstr>);
+      check_eq(decoded.dest.domain, test.vector_domain, what + ": dst domain");
+      check_eq(decoded.dest.index, test.dst, what + ": dst");
+      check_eq(decoded.src.domain, test.vector_domain, what + ": src domain");
+      check_eq(decoded.src.index, test.src, what + ": src");
     }
   }
 }
@@ -136,51 +124,47 @@ TEST_CASE(row_move_decode) {
 }
 
 TEST_CASE(lane_move_decode) {
-  constexpr std::array cases{
+  constexpr std::array extract_cases{
       LaneCase{.name = "vextract x3, v4[2]",
                .word = make_lane_move(true, false, 0, 2, 4, 3),
-               .op = LaneOp::extract,
-               .dst_is_scalar = true,
                .vector_domain = NpuDomain::vec32,
                .dst = 3,
                .src = 4,
                .index = 2},
       LaneCase{.name = "bextract x0, b9[x1]",
                .word = make_lane_move(false, true, 0, 1, 9, 0),
-               .op = LaneOp::extract,
-               .dst_is_scalar = true,
                .vector_domain = NpuDomain::vec8,
                .dst = 0,
                .src = 9,
                .index = 1,
                .index_is_scalar = true},
+  };
+  constexpr std::array insert_cases{
       LaneCase{.name = "vinsert v5[6], x9",
                .word = make_lane_move(true, false, 1, 6, 9, 5),
-               .op = LaneOp::insert,
-               .dst_is_scalar = false,
                .vector_domain = NpuDomain::vec32,
                .dst = 5,
                .src = 9,
                .index = 6},
+  };
+  constexpr std::array broadcast_cases{
       LaneCase{.name = "bbroadcast b1, b2[5]",
                .word = make_lane_move(false, false, 2, 5, 2, 1),
-               .op = LaneOp::broadcast,
-               .dst_is_scalar = false,
                .vector_domain = NpuDomain::vec8,
                .dst = 1,
                .src = 2,
                .index = 5},
       LaneCase{.name = "vbroadcast v3, v4[x8]",
                .word = make_lane_move(true, true, 2, 8, 4, 3),
-               .op = LaneOp::broadcast,
-               .dst_is_scalar = false,
                .vector_domain = NpuDomain::vec32,
                .dst = 3,
                .src = 4,
                .index = 8,
                .index_is_scalar = true},
   };
-  check_lane_cases(cases);
+  check_lane_cases<LaneExtractInstr>(extract_cases);
+  check_lane_cases<LaneInsertInstr>(insert_cases);
+  check_lane_cases<LaneBroadcastInstr>(broadcast_cases);
 }
 
 TEST_CASE(row_lane_decode_rejects_reserved) {
