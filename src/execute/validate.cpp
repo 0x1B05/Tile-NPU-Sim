@@ -251,10 +251,14 @@ bool valid_structure(const BdequantInstr &instr) {
 }
 
 bool valid_structure(const MmaInstr &instr) {
-  if (!assigned_op(instr.op, MMA_BY_FUNCT3)) return false;
-  const auto &info = *MMA_BY_FUNCT3[static_cast<std::uint8_t>(instr.op)];
-  return instr.dest.domain == info.dest_domain && in_range(instr.dest) &&
-         instr.src_a.domain == info.lhs_domain && in_range(instr.src_a) &&
+  return instr.op <= MmaOp::nn_acc && instr.dest.domain == NpuDomain::acc && in_range(instr.dest) &&
+         instr.src_a.domain == NpuDomain::tile && in_range(instr.src_a) &&
+         instr.src_b.domain == NpuDomain::tile && in_range(instr.src_b);
+}
+
+bool valid_structure(const BdotInstr &instr) {
+  return instr.op <= BdotOp::nt_acc && instr.dest.domain == NpuDomain::vec32 &&
+         in_range(instr.dest) && instr.src_a.domain == NpuDomain::vec8 && in_range(instr.src_a) &&
          instr.src_b.domain == NpuDomain::tile && in_range(instr.src_b);
 }
 

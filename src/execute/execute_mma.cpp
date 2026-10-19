@@ -16,9 +16,11 @@ constexpr std::int32_t i8_product(std::uint8_t lhs, std::uint8_t rhs) {
          static_cast<std::int32_t>(std::bit_cast<std::int8_t>(rhs));
 }
 
-constexpr bool is_nt(MmaOp op) { return (static_cast<std::uint8_t>(op) & 0b010) != 0; }
+constexpr bool is_accumulate(MmaOp op) { return op == MmaOp::nn_acc; }
 
-constexpr bool is_accumulate(MmaOp op) { return (static_cast<std::uint8_t>(op) & 0b001) != 0; }
+constexpr bool is_nt(BdotOp op) { return op == BdotOp::nt_zero || op == BdotOp::nt_acc; }
+
+constexpr bool is_accumulate(BdotOp op) { return op == BdotOp::nn_acc || op == BdotOp::nt_acc; }
 
 // mma.nn.{zero,acc}.i8.i32: D = A x B with B stored K x N; acc adds the
 // i32 partial into the existing value.
@@ -56,7 +58,7 @@ ExecuteResult mma(const MmaInstr &instr, State &state) {
 // bdot.{nn,nt}[.acc].i8.i32: vD[j] = dot(bA, tB column j) for nn,
 //                                    dot(bA, tB row j) for nt;
 // acc adds the i32 partial into the existing lane value.
-ExecuteResult bdot(const MmaInstr &instr, State &state) {
+ExecuteResult bdot(const BdotInstr &instr, State &state) {
   const auto &dst_config = state.vc[instr.dest.index];
   const auto &lhs_config = state.bc[instr.src_a.index];
   const auto &rhs_config = state.tc[instr.src_b.index];
@@ -86,11 +88,8 @@ ExecuteResult bdot(const MmaInstr &instr, State &state) {
 
 } // namespace
 
-ExecuteResult execute(const MmaInstr &instr, State &state) {
-  if (instr.dest.domain == NpuDomain::vec32) {
-    return bdot(instr, state);
-  }
-  return mma(instr, state);
-}
+ExecuteResult execute(const MmaInstr &instr, State &state) { return mma(instr, state); }
+
+ExecuteResult execute(const BdotInstr &instr, State &state) { return bdot(instr, state); }
 
 } // namespace tile_npu

@@ -117,20 +117,28 @@ struct LaneBroadcastInstr {
 };
 
 enum class MmaOp : std::uint8_t {
-  // clang-format off
-  nn_zero     = 0b000,
-  nn_acc      = 0b001,
-  nn_bdot     = 0b100,
-  nn_bdot_acc = 0b101,
-  nt_bdot     = 0b110,
-  nt_bdot_acc = 0b111,
-  // clang-format on
+  nn_zero,
+  nn_acc,
 };
 
 struct MmaInstr {
   MmaOp op = MmaOp::nn_zero;
-  NpuRegister dest{};  // Acc for mma; Vec32 for bdot.
-  NpuRegister src_a{}; // Tile for mma; Vec8 for bdot.
+  NpuRegister dest{};  // Acc.
+  NpuRegister src_a{}; // Tile.
+  NpuRegister src_b{}; // Tile.
+};
+
+enum class BdotOp : std::uint8_t {
+  nn_zero,
+  nn_acc,
+  nt_zero,
+  nt_acc,
+};
+
+struct BdotInstr {
+  BdotOp op = BdotOp::nn_zero;
+  NpuRegister dest{};  // Vec32.
+  NpuRegister src_a{}; // Vec8.
   NpuRegister src_b{}; // Tile.
 };
 

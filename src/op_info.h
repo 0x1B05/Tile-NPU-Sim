@@ -106,25 +106,4 @@ inline constexpr std::uint8_t FILL5_INT_MAX = 4;
 
 inline constexpr std::uint8_t FILL5_MAX = 8;
 
-// Destination and left-source domains for each MMA_BDOT operation.
-struct MmaInfo {
-  NpuDomain dest_domain;
-  NpuDomain lhs_domain;
-};
-
-// Indexed by funct3 code; 010/011 (the dropped mma.nt) are reserved.
-inline constexpr std::array<std::optional<MmaInfo>, 8> MMA_BY_FUNCT3 = [] {
-  std::array<std::optional<MmaInfo>, 8> table{};
-  // clang-format off
-  //                     dest              lhs
-  table[0b000] = MmaInfo{NpuDomain::acc  , NpuDomain::tile}; // nn_zero
-  table[0b001] = MmaInfo{NpuDomain::acc  , NpuDomain::tile}; // nn_acc
-  table[0b100] = MmaInfo{NpuDomain::vec32, NpuDomain::vec8}; // nn_bdot
-  table[0b101] = MmaInfo{NpuDomain::vec32, NpuDomain::vec8}; // nn_bdot_acc
-  table[0b110] = MmaInfo{NpuDomain::vec32, NpuDomain::vec8}; // nt_bdot
-  table[0b111] = MmaInfo{NpuDomain::vec32, NpuDomain::vec8}; // nt_bdot_acc
-  // clang-format on
-  return table;
-}();
-
 } // namespace tile_npu

@@ -2,7 +2,6 @@
 
 #include "domain.h"
 #include "encoding.h"
-#include "op_info.h"
 
 #include <cstdint>
 
@@ -156,24 +155,40 @@ DecodeResult decode_qnt(std::uint32_t word) {
 // 31    28 27       25 24    22 21       17 16      12 11       7 6        2 1   0
 // [major4] [reserved3] [funct3] [reserved5] [   B5   ] [   A5   ] [   D5   ] [ q ]
 // funct3 = {mma/bdot, nn/nt, zero/acc}; nt is bdot-only, so 010/011 are reserved.
-DecodeResult decode_mma(std::uint32_t word) {
+DecodeResult decode_mma_bdot(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
-  const auto &info = MMA_BY_FUNCT3[f.funct3];
-  if (!info) {
-    return DecodeError::illegal;
+  const auto make_mma = [&](MmaOp op) -> DecodeResult {
+    if (f.dest >= ACC_REGISTERS || f.src1 >= TILE_REGISTERS || f.src2 >= TILE_REGISTERS) {
+      return DecodeError::illegal;
+    }
+    return DecodedNpuInstr{MmaInstr{
+        .op = op,
+        .dest = {.domain = NpuDomain::acc, .index = f.dest},
+        .src_a = {.domain = NpuDomain::tile, .index = f.src1},
+        .src_b = {.domain = NpuDomain::tile, .index = f.src2},
+    }};
+  };
+  const auto make_bdot = [&](BdotOp op) -> DecodeResult {
+    if (f.dest >= VECTOR_REGISTERS || f.src1 >= VECTOR_REGISTERS || f.src2 >= TILE_REGISTERS) {
+      return DecodeError::illegal;
+    }
+    return DecodedNpuInstr{BdotInstr{
+        .op = op,
+        .dest = {.domain = NpuDomain::vec32, .index = f.dest},
+        .src_a = {.domain = NpuDomain::vec8, .index = f.src1},
+        .src_b = {.domain = NpuDomain::tile, .index = f.src2},
+    }};
+  };
+
+  switch (f.funct3) {
+  case 0b000: return make_mma(MmaOp::nn_zero);
+  case 0b001: return make_mma(MmaOp::nn_acc);
+  case 0b100: return make_bdot(BdotOp::nn_zero);
+  case 0b101: return make_bdot(BdotOp::nn_acc);
+  case 0b110: return make_bdot(BdotOp::nt_zero);
+  case 0b111: return make_bdot(BdotOp::nt_acc);
+  default: return DecodeError::illegal;
   }
-  const auto op = static_cast<MmaOp>(f.funct3);
-  // src2 is always tile
-  if (f.dest >= domain_register_count(info->dest_domain) ||
-      f.src1 >= domain_register_count(info->lhs_domain) || f.src2 >= TILE_REGISTERS) {
-    return DecodeError::illegal;
-  }
-  return DecodedNpuInstr{MmaInstr{
-      .op = op,
-      .dest = {.domain = info->dest_domain, .index = f.dest},
-      .src_a = {.domain = info->lhs_domain, .index = f.src1},
-      .src_b = {.domain = NpuDomain::tile, .index = f.src2},
-  }};
 }
 
 } // namespace tile_npu

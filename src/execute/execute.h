@@ -65,6 +65,7 @@ ExecuteResult execute(const TdequantInstr &instr, State &state);
 ExecuteResult execute(const VquantInstr &instr, State &state);
 ExecuteResult execute(const BdequantInstr &instr, State &state);
 ExecuteResult execute(const MmaInstr &instr, State &state);
+ExecuteResult execute(const BdotInstr &instr, State &state);
 
 // Configuration and system
 ExecuteResult execute(const CfgSetiInstr &instr, ExecContext &ctx);

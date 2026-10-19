@@ -25,6 +25,8 @@ namespace {
 using tile_npu::AreduceInstr;
 using tile_npu::BcastInstr;
 using tile_npu::BdequantInstr;
+using tile_npu::BdotInstr;
+using tile_npu::BdotOp;
 using tile_npu::CfgCopyInstr;
 using tile_npu::CfgGetInstr;
 using tile_npu::CfgGetwInstr;
@@ -285,12 +287,25 @@ TEST_CASE(validate_rejects_bad_qnt) {
 }
 
 TEST_CASE(validate_rejects_bad_mma) {
-  check_illegal(MmaInstr{static_cast<MmaOp>(8), V(0), B(0), T(1)}, "op code past funct3");
-  check_illegal(MmaInstr{static_cast<MmaOp>(2), A(0), T(0), T(1)}, "reserved mma.nt code");
-  check_illegal(MmaInstr{MmaOp::nn_bdot_acc, A(0), B(0), T(1)}, "bdot.acc with an acc dest");
-  check_illegal(MmaInstr{MmaOp::nn_bdot, V(0), T(0), T(1)}, "bdot with a tile src_a");
-  check_illegal(MmaInstr{MmaOp::nn_zero, A(12), T(0), T(1)}, "dest index 12");
-  check_illegal(MmaInstr{MmaOp::nn_zero, A(0), T(0), A(1)}, "src_b not a tile");
+  check_illegal(MmaInstr{.op = static_cast<MmaOp>(2), .dest = A(0), .src_a = T(0), .src_b = T(1)},
+                "unassigned mma op");
+  check_illegal(MmaInstr{.op = MmaOp::nn_zero, .dest = V(0), .src_a = T(0), .src_b = T(1)},
+                "mma destination domain");
+  check_illegal(MmaInstr{.op = MmaOp::nn_zero, .dest = A(12), .src_a = T(0), .src_b = T(1)},
+                "mma destination index");
+  check_illegal(MmaInstr{.op = MmaOp::nn_zero, .dest = A(0), .src_a = T(0), .src_b = A(1)},
+                "mma src_b domain");
+}
+
+TEST_CASE(validate_rejects_bad_bdot) {
+  check_illegal(BdotInstr{.op = static_cast<BdotOp>(4), .dest = V(0), .src_a = B(0), .src_b = T(1)},
+                "unassigned bdot op");
+  check_illegal(BdotInstr{.op = BdotOp::nn_zero, .dest = A(0), .src_a = B(0), .src_b = T(1)},
+                "bdot destination domain");
+  check_illegal(BdotInstr{.op = BdotOp::nn_zero, .dest = V(0), .src_a = T(0), .src_b = T(1)},
+                "bdot src_a domain");
+  check_illegal(BdotInstr{.op = BdotOp::nn_zero, .dest = V(0), .src_a = B(0), .src_b = A(1)},
+                "bdot src_b domain");
 }
 
 TEST_CASE(validate_rejects_bad_sys) {
