@@ -6,10 +6,24 @@
 #include <cstdint>
 
 namespace tile_npu {
+namespace {
+
+// sel2 selects the register family pair, the vector-side bit picks within it:
+// 00 -> TC/BC, 01 -> AC/VC, 10 -> TM/BM, 11 -> AM/VM.
+ConfigRegType cfg_reg_type(std::uint8_t sel2, bool vector_side) {
+  switch (sel2) {
+  case 0: return vector_side ? ConfigRegType::bc : ConfigRegType::tc;
+  case 1: return vector_side ? ConfigRegType::vc : ConfigRegType::ac;
+  case 2: return vector_side ? ConfigRegType::bm : ConfigRegType::tm;
+  default: return vector_side ? ConfigRegType::vm : ConfigRegType::am;
+  }
+}
 
 // The cfg.seti majors: 0101 is the matrix side (TC/AC/TM/AM), 0110 the
 // vector side (BC/VC/BM/VM).
 constexpr std::uint8_t MAJOR4_CFG_VEC_SETI = 0b0110;
+
+} // namespace
 
 // CFG_MAT_SETI / CFG_VEC_SETI (I): major4 = 0101 / 0110, q = 10.
 // 31    28 27  26 25    23 22                             7 6        2 1   0

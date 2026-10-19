@@ -1,11 +1,8 @@
 #include "decode_npu.h"
 
-#include "domain.h"
-#include "encoding.h"
 #include "pattern.h"
 
 #include <cstdint>
-#include <optional>
 
 namespace tile_npu {
 
@@ -16,27 +13,8 @@ PairedDomains paired_domains(std::uint8_t sel3) {
                              : PairedDomains{NpuDomain::tile, NpuDomain::vec8};
 }
 
-std::optional<NpuOperand> decode_bx_src2(std::uint8_t sel3, std::uint8_t src2, NpuDomain domain) {
-  if ((sel3 & 1) != 0) {
-    return NpuOperand{ScalarRegister{src2}};
-  }
-  if (src2 >= domain_register_count(domain)) {
-    return std::nullopt;
-  }
-  return NpuOperand{NpuRegister{domain, src2}};
-}
-
 IndexOperand decode_index(RegisterIndex raw, bool is_scalar) {
   return is_scalar ? IndexOperand{ScalarRegister{raw}} : IndexOperand{ImmediateIndex{raw}};
-}
-
-ConfigRegType cfg_reg_type(std::uint8_t sel2, bool vector_side) {
-  switch (sel2) {
-  case 0: return vector_side ? ConfigRegType::bc : ConfigRegType::tc;
-  case 1: return vector_side ? ConfigRegType::vc : ConfigRegType::ac;
-  case 2: return vector_side ? ConfigRegType::bm : ConfigRegType::tm;
-  default: return vector_side ? ConfigRegType::vm : ConfigRegType::am;
-  }
 }
 
 namespace {

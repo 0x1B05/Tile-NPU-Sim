@@ -35,13 +35,6 @@ bool index_in_range(const IndexOperand &index) {
                     index);
 }
 
-// The matrix forms reserve IS/index5: the encoding carries immediate 0.
-bool index_imm_zero(const IndexOperand &index) {
-  return std::visit(Overloaded{[](ImmediateIndex imm) { return imm.value == 0; },
-                               [](ScalarRegister) { return false; }},
-                    index);
-}
-
 // The register form names a Scalar register; the fill5 form is legal for
 // codes 0-8 (codes 5-8 are f32-only, a dynamic dtype check).
 bool fill_in_range(const FillOperand &fill) {
@@ -226,18 +219,35 @@ bool valid_structure(const VreduceArgmaxInstr &instr) {
          instr.src.domain == NpuDomain::vec32 && in_range(instr.src);
 }
 
-bool valid_structure(const QntInstr &instr) {
-  if (instr.scale >= VECTOR_REGISTERS) {
-    return false;
-  }
-  if (!qnt_dest_legal(instr.op, instr.dest.domain) ||
-      instr.src.domain != qnt_paired_domain(instr.dest.domain)) {
-    return false;
-  }
-  // The matrix forms reserve IS/index5: the encoding carries immediate 0.
-  return in_range(instr.dest) && in_range(instr.src) &&
-         (is_vector_domain(instr.dest.domain) ? index_in_range(instr.index)
-                                              : index_imm_zero(instr.index));
+template <NpuDomain DestDomain, NpuDomain SrcDomain>
+bool valid_matrix_quant(const NpuRegister &dest, const NpuRegister &src, RegisterIndex scale) {
+  return dest.domain == DestDomain && src.domain == SrcDomain && scale < VECTOR_REGISTERS &&
+         in_range(dest) && in_range(src);
+}
+
+template <NpuDomain DestDomain, NpuDomain SrcDomain>
+bool valid_vector_quant(const NpuRegister &dest, const NpuRegister &src, RegisterIndex scale,
+                        const IndexOperand &index) {
+  return valid_matrix_quant<DestDomain, SrcDomain>(dest, src, scale) && index_in_range(index);
+}
+
+bool valid_structure(const TquantInstr &instr) {
+  return instr.scale_source <= QntScaleSource::provided &&
+         valid_matrix_quant<NpuDomain::tile, NpuDomain::acc>(instr.dest, instr.src, instr.scale);
+}
+
+bool valid_structure(const TdequantInstr &instr) {
+  return valid_matrix_quant<NpuDomain::acc, NpuDomain::tile>(instr.dest, instr.src, instr.scale);
+}
+
+bool valid_structure(const VquantInstr &instr) {
+  return valid_vector_quant<NpuDomain::vec8, NpuDomain::vec32>(instr.dest, instr.src, instr.scale,
+                                                               instr.index);
+}
+
+bool valid_structure(const BdequantInstr &instr) {
+  return valid_vector_quant<NpuDomain::vec32, NpuDomain::vec8>(instr.dest, instr.src, instr.scale,
+                                                               instr.index);
 }
 
 bool valid_structure(const MmaInstr &instr) {

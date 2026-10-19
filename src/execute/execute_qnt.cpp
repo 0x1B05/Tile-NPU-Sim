@@ -4,7 +4,6 @@
 #include "f32_util.h"
 #include "matrix_view.h"
 #include "operand.h"
-#include "utils/common.h"
 
 #include <bit>
 #include <cmath>
@@ -66,9 +65,9 @@ float row_amax(MatrixView<const std::uint32_t> src, std::size_t row, std::size_t
 // Resolves the vector-form scale lane: an immediate index or the value of
 // the named Scalar register; the lane must fall inside vScale's effective
 // length.
-std::optional<std::uint32_t> scale_lane(const QntInstr &instr, const State &state,
+std::optional<std::uint32_t> scale_lane(const IndexOperand &index, const State &state,
                                         std::uint8_t vscale_len) {
-  const auto lane = resolve_index(instr.index, state);
+  const auto lane = resolve_index(index, state);
   if (lane >= vscale_len) {
     return std::nullopt;
   }
@@ -78,19 +77,20 @@ std::optional<std::uint32_t> scale_lane(const QntInstr &instr, const State &stat
 // tquant.rows[.scale].q8s32: per-row quantization of an f32 Acc into an i8
 // Tile of the same shape; the dynamic form also writes each row's scale
 // into vScale.
-ExecuteResult tquant(const QntInstr &instr, State &state) {
+ExecuteResult tquant(const TquantInstr &instr, State &state) {
   const auto &dst_config = state.tc[instr.dest.index];
   const auto &src_config = state.ac[instr.src.index];
   const auto &scale_config = state.vc[instr.scale];
   if (!valid_matrix_quant_configs(dst_config, src_config, scale_config)) {
     return config_error();
   }
+  const bool external_scale = instr.scale_source == QntScaleSource::provided;
   auto dst = matrix_view(state.t[instr.dest.index]);
   auto src = matrix_view(std::as_const(state.a[instr.src.index]));
   auto &scale_reg = state.v[instr.scale];
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     float scale;
-    if (instr.op == QntOp::quant_ext_scale) {
+    if (external_scale) {
       scale = std::bit_cast<float>(scale_reg[row]);
     } else {
       scale = row_amax(src, row, src_config.cols) / Q8_MAX_MAGNITUDE;
@@ -105,7 +105,7 @@ ExecuteResult tquant(const QntInstr &instr, State &state) {
 }
 
 // tdequant.rows.f32: aD[i,j] = f32(tS[i,j]) x vScale[i].
-ExecuteResult tdequant(const QntInstr &instr, State &state) {
+ExecuteResult tdequant(const TdequantInstr &instr, State &state) {
   const auto &dst_config = state.ac[instr.dest.index];
   const auto &src_config = state.tc[instr.src.index];
   const auto &scale_config = state.vc[instr.scale];
@@ -127,14 +127,14 @@ ExecuteResult tdequant(const QntInstr &instr, State &state) {
 
 // vquant.q8s32: quantizes an f32 Vec32 into an i8 Vec8 of the same length;
 // the single scale lands in vScale[index].
-ExecuteResult vquant(const QntInstr &instr, State &state) {
+ExecuteResult vquant(const VquantInstr &instr, State &state) {
   const auto &dst_config = state.bc[instr.dest.index];
   const auto &src_config = state.vc[instr.src.index];
   const auto &scale_config = state.vc[instr.scale];
   if (!valid_vector_quant_configs(dst_config, src_config, scale_config)) {
     return config_error();
   }
-  const auto lane = scale_lane(instr, state, scale_config.len);
+  const auto lane = scale_lane(instr.index, state, scale_config.len);
   if (!lane) {
     return config_error();
   }
@@ -150,14 +150,14 @@ ExecuteResult vquant(const QntInstr &instr, State &state) {
 }
 
 // bdequant.f32: vD[j] = f32(bS[j]) x vScale[index].
-ExecuteResult bdequant(const QntInstr &instr, State &state) {
+ExecuteResult bdequant(const BdequantInstr &instr, State &state) {
   const auto &dst_config = state.vc[instr.dest.index];
   const auto &src_config = state.bc[instr.src.index];
   const auto &scale_config = state.vc[instr.scale];
   if (!valid_vector_quant_configs(src_config, dst_config, scale_config)) {
     return config_error();
   }
-  const auto lane = scale_lane(instr, state, scale_config.len);
+  const auto lane = scale_lane(instr.index, state, scale_config.len);
   if (!lane) {
     return config_error();
   }
@@ -173,17 +173,12 @@ ExecuteResult bdequant(const QntInstr &instr, State &state) {
 
 } // namespace
 
-// The op fixes the direction; the destination domain only picks the matrix
-// or vector shape of the form (validated structurally at execute_npu).
-ExecuteResult execute(const QntInstr &instr, State &state) {
-  switch (instr.op) {
-  case QntOp::quant:
-    return instr.dest.domain == NpuDomain::tile ? tquant(instr, state) : vquant(instr, state);
-  case QntOp::quant_ext_scale: return tquant(instr, state);
-  case QntOp::dequant:
-    return instr.dest.domain == NpuDomain::acc ? tdequant(instr, state) : bdequant(instr, state);
-  default: unreachable("execute_qnt with an unknown op");
-  }
-}
+ExecuteResult execute(const TquantInstr &instr, State &state) { return tquant(instr, state); }
+
+ExecuteResult execute(const TdequantInstr &instr, State &state) { return tdequant(instr, state); }
+
+ExecuteResult execute(const VquantInstr &instr, State &state) { return vquant(instr, state); }
+
+ExecuteResult execute(const BdequantInstr &instr, State &state) { return bdequant(instr, state); }
 
 } // namespace tile_npu

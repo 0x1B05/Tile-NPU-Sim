@@ -264,18 +264,38 @@ struct CvtInstr {
   NpuRegister src{};
 };
 
-enum class QntOp : std::uint8_t {
-  quant,
-  dequant,
-  quant_ext_scale,
+enum class QntScaleSource : std::uint8_t { computed, provided };
+
+// tquant.rows[.scale].q8s32: per-row quantization with either a computed or
+// externally provided Vec32 scale.
+struct TquantInstr {
+  NpuRegister dest{};      // Tile
+  NpuRegister src{};       // Acc
+  RegisterIndex scale = 0; // Vec32
+  QntScaleSource scale_source = QntScaleSource::computed;
 };
 
-struct QntInstr {
-  QntOp op = QntOp::quant;
-  NpuRegister dest{};
-  NpuRegister src{};
-  RegisterIndex scale = 0;               // Vec32: written by quant, read otherwise.
-  IndexOperand index = ImmediateIndex{}; // Scale lane for vector forms only.
+// tdequant.rows.f32: per-row scale from a Vec32 register.
+struct TdequantInstr {
+  NpuRegister dest{}; // Acc
+  NpuRegister src{};  // Tile
+  RegisterIndex scale = 0;
+};
+
+// vquant.q8s32: writes one selected lane of the Vec32 scale register.
+struct VquantInstr {
+  NpuRegister dest{}; // Vec8
+  NpuRegister src{};  // Vec32
+  RegisterIndex scale = 0;
+  IndexOperand index = ImmediateIndex{};
+};
+
+// bdequant.f32: reads one selected lane of the Vec32 scale register.
+struct BdequantInstr {
+  NpuRegister dest{}; // Vec32
+  NpuRegister src{};  // Vec8
+  RegisterIndex scale = 0;
+  IndexOperand index = ImmediateIndex{};
 };
 
 enum class ConfigRegType : std::uint8_t { tc, ac, bc, vc, tm, am, bm, vm, count };

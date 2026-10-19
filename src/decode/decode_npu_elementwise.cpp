@@ -1,11 +1,28 @@
 #include "decode_npu.h"
 
+#include "domain.h"
 #include "encoding.h"
 #include "op_info.h"
 
 #include <cstdint>
+#include <optional>
 
 namespace tile_npu {
+namespace {
+
+// The BX bit selects the second source: BX = 0 a same-domain register, BX = 1
+// the Scalar register xS. The register form fails on an out-of-range number.
+std::optional<NpuOperand> decode_bx_src2(std::uint8_t sel3, std::uint8_t src2, NpuDomain domain) {
+  if ((sel3 & 1) != 0) {
+    return NpuOperand{ScalarRegister{src2}};
+  }
+  if (src2 >= domain_register_count(domain)) {
+    return std::nullopt;
+  }
+  return NpuOperand{NpuRegister{domain, src2}};
+}
+
+} // namespace
 
 // E_BIN (R3): major4 = 0000, q = 00.
 // 31    28 27  26  25  24    21 20       17 16      12 11       7 6        2 1   0

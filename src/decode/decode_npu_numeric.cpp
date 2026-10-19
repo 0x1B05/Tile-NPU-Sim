@@ -7,6 +7,21 @@
 #include <cstdint>
 
 namespace tile_npu {
+namespace {
+
+// QNT pairs a quantized 8-bit domain with its f32 counterpart: Tile with Acc
+// (the matrix forms) and Vec8 with Vec32 (the vector forms).
+constexpr NpuDomain qnt_paired_domain(NpuDomain domain) {
+  switch (domain) {
+  case NpuDomain::tile: return NpuDomain::acc;
+  case NpuDomain::acc: return NpuDomain::tile;
+  case NpuDomain::vec8: return NpuDomain::vec32;
+  case NpuDomain::vec32: return NpuDomain::vec8;
+  default: return NpuDomain::tile;
+  }
+}
+
+} // namespace
 
 // CVT (R2): major4 = 0011, q = 10.
 // 31    28 27  26 25  24    22 21                12 11       7 6        2 1   0
@@ -83,28 +98,58 @@ DecodeResult decode_vreduce_argmax(std::uint32_t word) {
 DecodeResult decode_qnt(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domain = sel3_domain(f.sel3);
-  const bool index_is_scalar = (f.sel3 & 1) != 0;
-  const bool vector_form = is_vector_domain(domain);
-  // funct3 = 000 quantizes into Tile/Vec8 destinations and dequantizes into
-  // Acc/Vec32 destinations; the source is the paired domain.
-  const auto op = f.funct3 == 0b001                 ? QntOp::quant_ext_scale
-                  : qnt_domain_is_quantized(domain) ? QntOp::quant
-                                                    : QntOp::dequant;
-  if (f.funct3 > 0b001 || !qnt_dest_legal(op, domain) ||
-      (!vector_form && (index_is_scalar || f.src2 != 0))) {
-    return DecodeError::illegal;
-  }
   const auto src_domain = qnt_paired_domain(domain);
-  if (f.dest >= domain_register_count(domain) || f.src1 >= domain_register_count(src_domain)) {
+  const bool vector_form = is_vector_domain(domain);
+  const bool index_is_scalar = (f.sel3 & 1) != 0;
+
+  // Tile has two forms: dynamic (funct3 = 000) and external scale (001).
+  // Acc/Vec8/Vec32 each have exactly one form (funct3 = 000).
+  const bool valid_funct3 = domain == NpuDomain::tile ? f.funct3 <= 0b001 : f.funct3 == 0b000;
+
+  // Matrix forms reserve IS and index5; vector forms use them as the scale lane.
+  const bool valid_index = vector_form || (!index_is_scalar && f.src2 == 0);
+
+  if (!valid_funct3 || !valid_index || f.dest >= domain_register_count(domain) ||
+      f.src1 >= domain_register_count(src_domain)) {
     return DecodeError::illegal;
   }
-  return DecodedNpuInstr{QntInstr{
-      .op = op,
-      .dest = {.domain = domain, .index = f.dest},
-      .src = {.domain = src_domain, .index = f.src1},
-      .scale = f.arg,
-      .index = decode_index(f.src2, index_is_scalar),
-  }};
+
+  const NpuRegister dest{domain, f.dest};
+  const NpuRegister src{src_domain, f.src1};
+
+  // Only vector forms consume the lane index; matrix forms force it to 0 above.
+  const auto index = decode_index(f.src2, index_is_scalar);
+
+  switch (domain) {
+  case NpuDomain::tile:
+    return DecodedNpuInstr{TquantInstr{
+        .dest = dest,
+        .src = src,
+        .scale = f.arg,
+        .scale_source = f.funct3 == 0b000 ? QntScaleSource::computed : QntScaleSource::provided,
+    }};
+  case NpuDomain::acc:
+    return DecodedNpuInstr{TdequantInstr{
+        .dest = dest,
+        .src = src,
+        .scale = f.arg,
+    }};
+  case NpuDomain::vec8:
+    return DecodedNpuInstr{VquantInstr{
+        .dest = dest,
+        .src = src,
+        .scale = f.arg,
+        .index = index,
+    }};
+  case NpuDomain::vec32:
+    return DecodedNpuInstr{BdequantInstr{
+        .dest = dest,
+        .src = src,
+        .scale = f.arg,
+        .index = index,
+    }};
+  default: return DecodeError::illegal;
+  }
 }
 
 // MMA_BDOT (R4): major4 = 0000, q = 10.

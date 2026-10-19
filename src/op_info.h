@@ -106,33 +106,6 @@ inline constexpr std::uint8_t FILL5_INT_MAX = 4;
 
 inline constexpr std::uint8_t FILL5_MAX = 8;
 
-// QNT pairs a quantized 8-bit domain with its f32 counterpart: Tile with Acc
-// (the matrix forms) and Vec8 with Vec32 (the vector forms).
-inline constexpr bool qnt_domain_is_quantized(NpuDomain domain) {
-  return domain == NpuDomain::tile || domain == NpuDomain::vec8;
-}
-
-inline constexpr NpuDomain qnt_paired_domain(NpuDomain domain) {
-  switch (domain) {
-  case NpuDomain::tile: return NpuDomain::acc;
-  case NpuDomain::acc: return NpuDomain::tile;
-  case NpuDomain::vec8: return NpuDomain::vec32;
-  case NpuDomain::vec32: return NpuDomain::vec8;
-  default: return NpuDomain::tile;
-  }
-}
-
-// The destination domains an op can write: quant writes the quantized
-// side, dequant the f32 side; the external-scale form is Tile-only.
-inline constexpr bool qnt_dest_legal(QntOp op, NpuDomain dest) {
-  switch (op) {
-  case QntOp::quant: return qnt_domain_is_quantized(dest);
-  case QntOp::dequant: return !qnt_domain_is_quantized(dest);
-  case QntOp::quant_ext_scale: return dest == NpuDomain::tile;
-  default: return false;
-  }
-}
-
 // Destination and left-source domains for each MMA_BDOT operation.
 struct MmaInfo {
   NpuDomain dest_domain;

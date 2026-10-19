@@ -24,6 +24,7 @@ namespace {
 
 using tile_npu::AreduceInstr;
 using tile_npu::BcastInstr;
+using tile_npu::BdequantInstr;
 using tile_npu::CfgCopyInstr;
 using tile_npu::CfgGetInstr;
 using tile_npu::CfgGetwInstr;
@@ -63,8 +64,7 @@ using tile_npu::MoveInstr;
 using tile_npu::MoveOp;
 using tile_npu::NpuDomain;
 using tile_npu::NpuRegister;
-using tile_npu::QntInstr;
-using tile_npu::QntOp;
+using tile_npu::QntScaleSource;
 using tile_npu::Ram;
 using tile_npu::ReduceOp;
 using tile_npu::RowInstr;
@@ -74,6 +74,9 @@ using tile_npu::State;
 using tile_npu::StepStatus;
 using tile_npu::SysInstr;
 using tile_npu::SysOp;
+using tile_npu::TdequantInstr;
+using tile_npu::TquantInstr;
+using tile_npu::VquantInstr;
 using tile_npu::VreduceArgmaxInstr;
 using tile_npu::VreduceInstr;
 
@@ -261,16 +264,24 @@ TEST_CASE(validate_rejects_bad_reduce) {
 }
 
 TEST_CASE(validate_rejects_bad_qnt) {
-  check_unassigned_ops(QntInstr{QntOp::quant, T(0), A(0), 0, ImmediateIndex{0}}, 3);
-  check_illegal(QntInstr{QntOp::quant, T(0), A(0), 0, ScalarRegister{0}},
-                "matrix form with a scalar index");
-  check_illegal(QntInstr{QntOp::quant_ext_scale, A(0), T(0), 0, ImmediateIndex{0}},
-                "ext_scale with an acc dest");
-  check_illegal(QntInstr{QntOp::quant, B(0), B(1), 0, ImmediateIndex{0}}, "vquant with a vec8 src");
-  check_illegal(QntInstr{QntOp::quant, B(0), V(1), 32, ImmediateIndex{0}}, "scale index 32");
-  check_illegal(QntInstr{QntOp::quant, A(0), T(0), 0, ImmediateIndex{0}}, "quant with an acc dest");
-  check_illegal(QntInstr{QntOp::dequant, T(0), A(0), 0, ImmediateIndex{0}},
-                "dequant with a tile dest");
+  check_illegal(TquantInstr{.dest = T(0), .src = A(0), .scale = 32}, "tquant scale index 32");
+  check_illegal(TquantInstr{.dest = A(0), .src = T(0), .scale = 0}, "tquant destination domain");
+  check_illegal(
+      TquantInstr{
+          .dest = T(0), .src = A(0), .scale = 0, .scale_source = static_cast<QntScaleSource>(2)},
+      "tquant scale source");
+  check_illegal(TdequantInstr{.dest = T(0), .src = A(0), .scale = 0},
+                "tdequant destination domain");
+  check_illegal(VquantInstr{.dest = B(0), .src = B(1), .scale = 0, .index = ImmediateIndex{0}},
+                "vquant source domain");
+  check_illegal(VquantInstr{.dest = B(0), .src = V(1), .scale = 32, .index = ImmediateIndex{0}},
+                "vquant scale index 32");
+  check_illegal(VquantInstr{.dest = B(0), .src = V(1), .scale = 0, .index = ScalarRegister{32}},
+                "vquant scalar lane index 32");
+  check_illegal(BdequantInstr{.dest = V(0), .src = V(1), .scale = 0, .index = ImmediateIndex{0}},
+                "bdequant source domain");
+  check_illegal(BdequantInstr{.dest = B(0), .src = B(1), .scale = 0, .index = ImmediateIndex{0}},
+                "bdequant destination domain");
 }
 
 TEST_CASE(validate_rejects_bad_mma) {

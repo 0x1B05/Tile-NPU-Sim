@@ -3,7 +3,6 @@
 #include "tile_npu/decode.h"
 
 #include <cstdint>
-#include <optional>
 
 namespace tile_npu {
 
@@ -16,9 +15,7 @@ struct PairedDomains {
 
 NpuDomain sel3_domain(std::uint8_t sel3);
 PairedDomains paired_domains(std::uint8_t sel3);
-std::optional<NpuOperand> decode_bx_src2(std::uint8_t sel3, std::uint8_t src2, NpuDomain domain);
 IndexOperand decode_index(RegisterIndex raw, bool is_scalar);
-ConfigRegType cfg_reg_type(std::uint8_t sel2, bool vector_side);
 
 // Elementwise decoders.
 DecodeResult decode_ebin(std::uint32_t word);
