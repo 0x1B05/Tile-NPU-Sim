@@ -1,4 +1,6 @@
-#include "qwen3.h"
+#include "q3b.h"
+
+#include "console.h"
 
 // Q3B1 blob directory access. Sections are looked up by name at startup;
 // the pointers stay valid for the whole run.
@@ -8,7 +10,7 @@ static const struct q3b_header *const blob = (const struct q3b_header *)BLOB_BAS
 static const struct q3b_section *sections =
     (const struct q3b_section *)(BLOB_BASE + sizeof(struct q3b_header));
 
-const void *blob_section(const char name[8]) {
+const void *q3b_find_section(const char name[8]) {
   for (uint32_t i = 0; i < blob->n_sections; ++i) {
     uint64_t want, have;
     __builtin_memcpy(&want, name, 8);
@@ -17,11 +19,10 @@ const void *blob_section(const char name[8]) {
       return (const void *)(BLOB_BASE + sections[i].offset);
     }
   }
-  print_str("missing blob section: ");
-  for (int i = 0; i < 8 && name[i]; ++i)
-    serial_putc(name[i]);
-  serial_putc('\n');
-  halt(1);
+  char text[9];
+  __builtin_memcpy(text, name, 8);
+  text[8] = '\0';
+  panic("missing blob section: %s", text);
 }
 
-const struct q3b_header *blob_header(void) { return blob; }
+const struct q3b_header *q3b_header(void) { return blob; }

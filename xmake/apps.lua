@@ -3,6 +3,7 @@
 -- needs a converted model blob, so it is not part of xmake test.
 
 local app_srcdir = path.join(os.projectdir(), "apps", "qwen3")
+local app_includedir = path.join(app_srcdir, "include")
 local buildir = get_config("buildir") or "build"
 local app_bindir = path.join(path.is_absolute(buildir) and buildir or path.join(os.projectdir(), buildir), "apps")
 
@@ -21,12 +22,8 @@ target("qwen3_app", function()
 		local bin = path.join(app_bindir, "qwen3.bin")
 		-- Shared NPU bindings live with the guest tests (see xmake/guest.lua).
 		local guest_incdir = path.join(os.projectdir(), "tests", "guest", "include")
-		local deps = {
-			linkscript,
-			path.join(app_srcdir, "qwen3.h"),
-			path.join(app_srcdir, "dims.h"),
-			path.join(guest_incdir, "npu.inc"),
-		}
+		local deps = { linkscript, path.join(guest_incdir, "npu.inc") }
+		table.join2(deps, os.files(path.join(app_includedir, "*.h")))
 		table.join2(deps, sources)
 		-- lastmtime anchors on the outputs: a missing one forces a rebuild.
 		depend.on_changed(function()
@@ -39,7 +36,7 @@ target("qwen3_app", function()
 				"-static",
 				"-no-pie",
 				"-I",
-				app_srcdir,
+				app_includedir,
 				"-I",
 				guest_incdir,
 				"-T",

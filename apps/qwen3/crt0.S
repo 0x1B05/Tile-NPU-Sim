@@ -4,7 +4,7 @@
 
     .section .text.crt0, "ax", @progbits
     .globl _start
-    # STACK_TOP from qwen3.h (assembler sources cannot include the C header)
+    # STACK_TOP from include/qwen3.h (assembler cannot include the C header)
     .equ    STACK_TOP, 0xC0000000
 _start:
     la      t0, __bss_start

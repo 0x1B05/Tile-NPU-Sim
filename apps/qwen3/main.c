@@ -1,58 +1,43 @@
 #include "qwen3.h"
 
-void forward_init(void);
-void forward_prefill(const uint32_t *tokens, uint32_t n);
-uint32_t forward(uint32_t token, uint32_t pos, int want_logits);
-const void *blob_section(const char name[8]);
-const struct q3b_header *blob_header(void);
+#include "console.h"
+#include "q3b.h"
 
 #define MAX_NEW_TOKENS 32
 #define EOS_IM_END 151645u
 #define EOS_ENDOFTEXT 151643u
 
 int main(void) {
-  const struct q3b_header *h = blob_header();
-  if (h->magic != 0x31423351u) { // "Q3B1" little-endian
-    print_str("bad blob magic: ");
-    print_hex32(h->magic);
-    serial_putc('\n');
-    return 1;
-  }
-  forward_init();
-  const uint32_t *tokens = blob_section("tokens\0\0");
-  if (h->n_prompt == 0 || h->n_prompt > h->max_pos) {
-    print_str("prompt length out of range\n");
-    return 1;
-  }
-  for (uint32_t i = 0; i < h->n_prompt; ++i) {
-    if (tokens[i] >= h->vocab) {
-      print_str("prompt token id out of range\n");
-      return 1;
-    }
-  }
-  print_str("prompt tokens: ");
-  for (uint32_t i = 0; i < h->n_prompt; ++i) {
-    print_u32(tokens[i]);
-    serial_putc(' ');
-  }
-  serial_putc('\n');
+  const struct q3b_header *h = q3b_header();
+  if ((h)->magic != Q3B_MAGIC) panic("bad blob magic: %x", (h)->magic);
 
-  if (h->n_prompt > 1) forward_prefill(tokens, h->n_prompt - 1);
+  qwen3_init();
+
+  const uint32_t *tokens = q3b_find_section("tokens\0\0");
+  if (h->n_prompt == 0 || h->n_prompt > h->max_pos) panic("prompt length out of range");
+  for (uint32_t i = 0; i < h->n_prompt; ++i) {
+    if (tokens[i] >= h->vocab) panic("prompt token id out of range: %u", tokens[i]);
+  }
+  printf("prompt tokens: ");
+  for (uint32_t i = 0; i < h->n_prompt; ++i)
+    printf("%u ", tokens[i]);
+  printf("\n");
+
+  if (h->n_prompt > 1) qwen3_prefill(tokens, h->n_prompt - 1);
   uint32_t pos = h->n_prompt - 1;
-  uint32_t next = forward(tokens[pos], pos, 1);
+  uint32_t next = qwen3_forward(tokens[pos], pos, 1);
   ++pos;
 
-  print_str("generated: ");
+  printf("generated: ");
   for (uint32_t i = 0; i < MAX_NEW_TOKENS && pos < h->max_pos; ++i) {
-    print_u32(next);
-    serial_putc(' ');
+    printf("%u ", next);
     if (next == EOS_IM_END || next == EOS_ENDOFTEXT) break;
     // skip the forward when the next iteration would not run; its result
     // would never be printed
     if (i + 1 == MAX_NEW_TOKENS || pos + 1 >= h->max_pos) break;
-    next = forward(next, pos, 1);
+    next = qwen3_forward(next, pos, 1);
     ++pos;
   }
-  serial_putc('\n');
+  printf("\n");
   return 0;
 }

@@ -1,4 +1,5 @@
 # Qwen3 NPU kernels. C ABI (rv64im lp64): args a0..a7, return a0.
+# qwen3_ = Qwen3 NPU kernel.
 # Dimensions are multiples of 32 unless noted; f32 data is 4-byte aligned.
 # NPU register/descriptor usage is local to each kernel; scalar s-registers
 # are preserved. Vector loads/stores bind descriptor vmN to register vN, so
@@ -9,28 +10,28 @@
 
     .bss
     .align 4
-    .globl nq_accbuf
-nq_accbuf: .skip VOCAB_CAP * 4
+    .globl qwen3_accbuf
+qwen3_accbuf: .skip VOCAB_CAP * 4
 
     .bss
     .align 3
-    .globl nq_debug_qtile
-nq_debug_qtile: .skip 8
+    .globl qwen3_debug_qtile
+qwen3_debug_qtile: .skip 8
 
     .text
 
 # ---------------------------------------------------------------------------
-# uint32_t nq_quant_act(const float *x, uint32_t k)
+# uint32_t qwen3_quant_act(const float *x, uint32_t k)
 #
 # Quantizes x (f32[k], zero-padded by the caller to ceil(k/1024)*1024) with a
 # uniform symmetric scale into ceil(k/1024) 32x32 i8 tile panels t2..t4
 # (k <= 3072); zero x padding makes the padded tile rows contribute nothing.
 # Returns the f32 activation scale bits. The panels stay resident in t2..t4
-# for nq_matvec_q.
+# for qwen3_matvec_q.
 # ---------------------------------------------------------------------------
     .text
-    .globl nq_quant_act
-nq_quant_act:
+    .globl qwen3_quant_act
+qwen3_quant_act:
     LI_CWV  t6, DT_F32, 32
     SETW    SEL_VC, 1, 0, X_T6, 2
 
@@ -86,7 +87,7 @@ nq_quant_act:
     bltu    t4, t3, .Lqa_quant
 
     # debug hook: dump the last quantized activation tile when requested
-    la      t0, nq_debug_qtile
+    la      t0, qwen3_debug_qtile
     ld      t1, 0(t0)
     beqz    t1, .Lqa_nodump
     SETX    SEL_TM, 0, CF_BASE, 2, X_T1
@@ -99,18 +100,18 @@ nq_quant_act:
     ret
 
 # ---------------------------------------------------------------------------
-# void nq_matvec_q(const int8_t *w, const float *w_scales, float *out,
+# void qwen3_matvec_q(const int8_t *w, const float *w_scales, float *out,
 #                  uint32_t n, uint32_t k, uint32_t xs_bits)
 #
 # out[j] = xs * w_scales[j] * sum_k quant(x)[k] * W[j,k]
 # W is [n, k] i8 row-major with per-row f32 scales. quant(x) is the tile
-# panels t2..t4 left resident by nq_quant_act; nothing between the two calls
+# panels t2..t4 left resident by qwen3_quant_act; nothing between the two calls
 # may clobber them. Cross-tile accumulation runs in an i32 memory buffer
-# (nq_accbuf). n % 32 == 0, 32 | k, k <= 3072.
+# (qwen3_accbuf). n % 32 == 0, 32 | k, k <= 3072.
 # ---------------------------------------------------------------------------
     .text
-    .globl nq_matvec_q
-nq_matvec_q:
+    .globl qwen3_matvec_q
+qwen3_matvec_q:
     addi    sp, sp, -48
     sd      s2, 0(sp)
     sd      s3, 8(sp)
@@ -138,7 +139,7 @@ nq_matvec_q:
     SETIM   SEL_TM, CF_FLAGS, 2, 1        # inc along cols: += 32 * 1
     LI_CWV  t0, DT_I8, 32
     SETW    SEL_BC, 1, 0, X_T0, 31
-    la      t0, nq_accbuf
+    la      t0, qwen3_accbuf
     SETX    SEL_VM, 1, CF_BASE, 4, X_T0
     SETIV   SEL_VM, CF_STRIDE, 4, 4
     SETIV   SEL_VM, CF_VFLAGS, 0, 4
@@ -190,7 +191,7 @@ nq_matvec_q:
     add     t0, t0, t1
     add     t0, a0, t0
     SETX    SEL_TM, 0, CF_BASE, 1, X_T0
-    la      t0, nq_accbuf
+    la      t0, qwen3_accbuf
     slli    t1, s2, 7
     add     t0, t0, t1
     SETX    SEL_VM, 1, CF_BASE, 4, X_T0
@@ -215,7 +216,7 @@ nq_matvec_q:
 
     # epilogue: i32 -> f32, per-row weight scales, activation scale
     SETIV   SEL_VM, CF_VFLAGS, 1, 4       # accbuf descriptor now advances
-    la      t0, nq_accbuf
+    la      t0, qwen3_accbuf
     SETX    SEL_VM, 1, CF_BASE, 4, X_T0
     srli    s3, a4, 5
     li      s2, 0
@@ -240,9 +241,9 @@ nq_matvec_q:
     ret
 
 # ---------------------------------------------------------------------------
-# void nq_quant_rows(const float *x, uint32_t k, int8_t *xq, float *xs)
+# void qwen3_quant_rows(const float *x, uint32_t k, int8_t *xq, float *xs)
 #
-# Batched sibling of nq_quant_act: x is [32, k] f32 row-major (rows are
+# Batched sibling of qwen3_quant_act: x is [32, k] f32 row-major (rows are
 # tokens, zero or garbage padding rows are quantized but never consumed).
 # Pass 1 folds per-row absmax over the k/32 chunks (areduce.absmax + vmax)
 # and stores xs = absmax * (1/127) as 32 f32 scales; pass 2 quantizes each
@@ -250,8 +251,8 @@ nq_matvec_q:
 # Rows whose absmax is 0 quantize to 0 (NaN quotient rule).
 # ---------------------------------------------------------------------------
     .text
-    .globl nq_quant_rows
-nq_quant_rows:
+    .globl qwen3_quant_rows
+qwen3_quant_rows:
     LI_CWV  t6, DT_F32, 32
     SETW    SEL_VC, 1, 0, X_T6, 1
     LI_CWM  t6, DT_F32, 32, 32
@@ -300,12 +301,12 @@ nq_quant_rows:
     ret
 
 # ---------------------------------------------------------------------------
-# void nq_matmul_q(const int8_t *w, const float *w_scales, const int8_t *xq,
+# void qwen3_matmul_q(const int8_t *w, const float *w_scales, const int8_t *xq,
 #                  const float *xs, float *out, uint32_t n, uint32_t k)
 #
-# Batched sibling of nq_matvec_q: out[t,j] = xs[t] * w_scales[j] *
+# Batched sibling of qwen3_matvec_q: out[t,j] = xs[t] * w_scales[j] *
 # sum_c xq[t,c] * W[j,c] for t in [0,32), computing one 32-row token batch.
-# xq is [32, k] i8 row-major (nq_quant_rows output), xs its 32 row scales.
+# xq is [32, k] i8 row-major (qwen3_quant_rows output), xs its 32 row scales.
 # Per 32-column block of out: t1 holds the weight chunk transposed (tm1
 # transform = transpose, so t1 is [32 of k, 32 of n]) and mma.nn accumulates
 # the k/32 chunks in acc a0,
@@ -313,8 +314,8 @@ nq_quant_rows:
 # one block per store). n % 32 == 0, 32 | k, k <= 3072.
 # ---------------------------------------------------------------------------
     .text
-    .globl nq_matmul_q
-nq_matmul_q:
+    .globl qwen3_matmul_q
+qwen3_matmul_q:
     addi    sp, sp, -48
     sd      s2, 0(sp)
     sd      s3, 8(sp)
@@ -393,12 +394,12 @@ nq_matmul_q:
     ret
 
 # ---------------------------------------------------------------------------
-# void nq_rmsnorm(float *x, const float *gamma, float *out, uint32_t n,
+# void qwen3_rmsnorm(float *x, const float *gamma, float *out, uint32_t n,
 #                 uint32_t eps_bits, uint32_t inv_n_bits)
 # out = x * rsqrt(mean(x^2) + eps) * gamma, n % 32 == 0.
 # ---------------------------------------------------------------------------
-    .globl nq_rmsnorm
-nq_rmsnorm:
+    .globl qwen3_rmsnorm
+qwen3_rmsnorm:
     LI_CWV  t6, DT_F32, 32
     SETW    SEL_VC, 1, 0, X_T6, 4
     SETX    SEL_VM, 1, CF_BASE, 1, X_A0
@@ -437,13 +438,13 @@ nq_rmsnorm:
     ret
 
 # ---------------------------------------------------------------------------
-# void nq_rope(float *x, const float *cos_h, const float *sin_h, uint32_t hd)
+# void qwen3_rope(float *x, const float *cos_h, const float *sin_h, uint32_t hd)
 # In-place rotate-half RoPE on one head. cos_h/sin_h point at the position's
 # row (hd/2 f32 each). Requires hd/2 <= 64; the half is processed in 32-lane
 # chunks (a single sub-32 chunk when hd/2 < 32).
 # ---------------------------------------------------------------------------
-    .globl nq_rope
-nq_rope:
+    .globl qwen3_rope
+qwen3_rope:
     srli    t6, a3, 1                     # half = hd/2
     li      t5, 32
     bltu    t6, t5, 1f
@@ -530,12 +531,12 @@ nq_rope:
     ret
 
 # ---------------------------------------------------------------------------
-# void nq_scores(const float *q, const char *k_base, uint32_t row_stride,
+# void qwen3_scores(const float *q, const char *k_base, uint32_t row_stride,
 #                float *scores, uint32_t n_keys, uint32_t hd)
 # scores[j] = dot(q, K_j) over hd f32; K_j at k_base + j*row_stride.
 # ---------------------------------------------------------------------------
-    .globl nq_scores
-nq_scores:
+    .globl qwen3_scores
+qwen3_scores:
     LI_CWV  t6, DT_F32, 32
     SETW    SEL_VC, 1, 0, X_T6, 20
     srli    t6, a5, 5                     # chunks = hd / 32
@@ -591,13 +592,13 @@ nq_scores:
     ret
 
 # ---------------------------------------------------------------------------
-# void nq_softmax_exp(float *scores, uint32_t n, uint32_t scale_log2e_bits,
+# void qwen3_softmax_exp(float *scores, uint32_t n, uint32_t scale_log2e_bits,
 #                     uint32_t *rcp_out)
 # In place: s[i] = exp2((s[i] - max) * scale_log2e); *rcp_out = rcp(sum).
 # n % 32 == 0 (the caller pads the score tail with -inf).
 # ---------------------------------------------------------------------------
-    .globl nq_softmax_exp
-nq_softmax_exp:
+    .globl qwen3_softmax_exp
+qwen3_softmax_exp:
     LI_CWV  t6, DT_F32, 32
     SETW    SEL_VC, 1, 0, X_T6, 4
     SETIV   SEL_VM, CF_STRIDE, 4, 1
@@ -637,12 +638,12 @@ nq_softmax_exp:
     ret
 
 # ---------------------------------------------------------------------------
-# void nq_pv(const char *v_base, uint32_t row_stride, const float *probs,
+# void qwen3_pv(const char *v_base, uint32_t row_stride, const float *probs,
 #            float *out, uint32_t n_keys, uint32_t hd, uint32_t rcp_bits)
 # out[c] = rcp * sum_j probs[j] * V_j[c], V_j at v_base + j*row_stride.
 # ---------------------------------------------------------------------------
-    .globl nq_pv
-nq_pv:
+    .globl qwen3_pv
+qwen3_pv:
     LI_CWV  t6, DT_F32, 32
     SETW    SEL_VC, 1, 0, X_T6, 20
     srli    t6, a5, 5                     # chunks
@@ -705,11 +706,11 @@ nq_pv:
     ret
 
 # ---------------------------------------------------------------------------
-# void nq_silu_mul(float *gate, const float *up, float *out, uint32_t n)
+# void qwen3_silu_mul(float *gate, const float *up, float *out, uint32_t n)
 # out = silu(gate) * up, n % 32 == 0.
 # ---------------------------------------------------------------------------
-    .globl nq_silu_mul
-nq_silu_mul:
+    .globl qwen3_silu_mul
+qwen3_silu_mul:
     LI_CWV  t6, DT_F32, 32
     SETW    SEL_VC, 1, 0, X_T6, 2
     SETIV   SEL_VM, CF_STRIDE, 4, 0
@@ -731,10 +732,10 @@ nq_silu_mul:
     ret
 
 # ---------------------------------------------------------------------------
-# void nq_add(float *dst, const float *src, uint32_t n)   dst += src
+# void qwen3_add(float *dst, const float *src, uint32_t n)   dst += src
 # ---------------------------------------------------------------------------
-    .globl nq_add
-nq_add:
+    .globl qwen3_add
+qwen3_add:
     LI_CWV  t6, DT_F32, 32
     SETW    SEL_VC, 1, 0, X_T6, 2
     SETIV   SEL_VM, CF_STRIDE, 4, 0
@@ -755,12 +756,12 @@ nq_add:
     ret
 
 # ---------------------------------------------------------------------------
-# void nq_embed(const int8_t *table, const float *scales, uint32_t id,
+# void qwen3_embed(const int8_t *table, const float *scales, uint32_t id,
 #               float *out, uint32_t hidden)
 # out = dequant(table[id]) with the row's f32 scale, hidden % 32 == 0.
 # ---------------------------------------------------------------------------
-    .globl nq_embed
-nq_embed:
+    .globl qwen3_embed
+qwen3_embed:
     LI_CWV  t0, DT_F32, 32
     SETW    SEL_VC, 1, 0, X_T0, 1
     LI_CWV  t0, DT_I8, 32
@@ -787,11 +788,11 @@ nq_embed:
     ret
 
 # ---------------------------------------------------------------------------
-# uint32_t nq_argmax(const float *x, uint32_t n)   n % 32 == 0
+# uint32_t qwen3_argmax(const float *x, uint32_t n)   n % 32 == 0
 # Greedy index of the maximum, combining per-chunk vreduce.argmax results.
 # ---------------------------------------------------------------------------
-    .globl nq_argmax
-nq_argmax:
+    .globl qwen3_argmax
+qwen3_argmax:
     addi    sp, sp, -16
     sd      s2, 0(sp)
     sd      s3, 8(sp)

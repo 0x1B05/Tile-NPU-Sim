@@ -25,7 +25,7 @@ import sys
 
 REF_PY = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ref.py")
 
-# Guest memory map (apps/qwen3/qwen3.h): blob at 0x81000000, KV cache and
+# Guest memory map (apps/qwen3/include/qwen3.h): blob at 0x81000000, KV cache and
 # stack top below 0xC0000000, so 1 GiB of RAM covers the tiny model.
 MEMORY_MIB = "1024"
 BLOB_BASE = "0x81000000"
