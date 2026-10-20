@@ -9,7 +9,7 @@
 #include "tile_npu/simulator.h"
 #include "tile_npu/state.h"
 
-#include "execute/f32_util.h"
+#include "execute/reduce_util.h"
 #include "utils/endian.h"
 
 #include <array>

@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cfenv>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 
@@ -64,6 +65,40 @@ TEST_CASE(qnt_tquant_dynamic) {
   check_eq(hex(state.t[0][33]), hex(0x00u), "row1 col1 NaN quotient -> 0");
   check_eq(hex(state.v[0][0]), hex(f32_bits(1.0f)), "row0 dynamic scale");
   check_eq(hex(state.v[0][1]), hex(0x00000000u), "row1 scale is +0.0");
+}
+
+TEST_CASE(qnt_tquant_nan_absmax) {
+  Ram memory(CODE_BASE, 4);
+  Simulator sim(memory);
+  // A NaN-only row uses the same absmax tree as areduce.rows.absmax: NaN
+  // becomes +0, so the derived scale is +0 and every quotient quantizes to 0.
+  load_one(sim, memory, make_qnt(NpuDomain::tile, 0, 0, 1, 0));
+  auto &state = sim.state();
+  tile_i8(state, 0, 1, 1);
+  acc_f32(state, 1, 1, 1);
+  vec32_f32(state, 0, 1);
+  state.a[1][0] = f32_bits(std::nanf(""));
+
+  check_eq(sim.step().status, StepStatus::retired, "tquant NaN row retires");
+  check_eq(hex(state.t[0][0]), hex(0x00u), "NaN quotient quantizes to 0");
+  check_eq(hex(state.v[0][0]), hex(0x00000000u), "NaN absmax yields a +0 scale");
+}
+
+TEST_CASE(qnt_tquant_single_negative) {
+  Ram memory(CODE_BASE, 4);
+  Simulator sim(memory);
+  // A single negative element uses the absmax tree leaf mapping: amax = 3,
+  // scale = 3/127, and the quantized value is -127.
+  load_one(sim, memory, make_qnt(NpuDomain::tile, 0, 0, 1, 0));
+  auto &state = sim.state();
+  tile_i8(state, 0, 1, 1);
+  acc_f32(state, 1, 1, 1);
+  vec32_f32(state, 0, 1);
+  state.a[1][0] = f32_bits(-3.0f);
+
+  check_eq(sim.step().status, StepStatus::retired, "tquant single negative retires");
+  check_eq(hex(state.t[0][0]), hex(0x81u), "single negative quantizes to -127");
+  check_eq(hex(state.v[0][0]), hex(f32_bits(3.0f / 127.0f)), "single negative absmax scale");
 }
 
 TEST_CASE(qnt_tquant_external_scale) {

@@ -50,7 +50,8 @@ xmake project -k compile_commands      # 为 clangd 生成 compile_commands.json
 | `src/execute/execute_*.cpp` | 按指令族实现执行语义；`execute_cfg.cpp` 负责配置指令取值和执行结果转换 |
 | `src/execute/execute_move.cpp` | `FillInstr` 执行立即数/Scalar 填充，`MoveInstr` 执行同域复制和 Tile 转置 |
 | `src/domain.h` | 数据域工具、寄存器堆/配置/描述符绑定、域分派与有效区域遍历 |
-| `src/execute/elementwise_op.h`、`operand.h`、`f32_util.h` | 执行域共享的元素运算、操作数读取和浮点工具 |
+| `src/execute/elementwise_op.h`、`operand.h` | 执行域共享的元素运算、操作数读取和浮点工具 |
+| `src/execute/reduce_util.h` | 规约树、absmax 叶映射、f32 位模式与跨指令族共享的规约工具 |
 | `src/rv64_util.h` | 译码与执行共享的符号扩展及 RV64 字运算工具 |
 | `src/utils/` | 通用内部工具：小端转换、variant visitor 与 `unreachable`；十六进制格式化位于 `src/monitor/format.h` |
 | `src/main.cpp`、`src/monitor/` | CLI、镜像装载、`npu_exec` 步进循环和 sdb 命令 |
@@ -72,6 +73,7 @@ xmake project -k compile_commands      # 为 clangd 生成 compile_commands.json
 - `decode()` 保证输出 IR 的结构合法；`exec_npu_instr` 通过 `valid_structure` 统一复查手工构造的 IR。各族执行器只检查 dtype/shape/描述符等动态约束，不逐层重复寄存器号和操作数 variant 检查。
 - 译码失败使用 `DecodeError::illegal`；手工构造的非法 NPU IR 返回 `StepStatus::illegal_instruction`，非法配置返回 `invalid_configuration`。这些是模拟器诊断，尚未建模 ISA trap 投递；不变式被破坏属于实现错误，使用始终生效的 `unreachable()`。
 - 浮点规则同时由编译与执行保证：`-ffp-contract=off` 禁止隐式乘加融合，`std::fma` 实现显式单次舍入；`FpEnvGuard` 在 NPU 执行入口设置默认浮点环境 (RNE、默认 subnormal 处理)，结束后恢复宿主环境。
+- 规约按相邻两两二叉树执行，奇数节点直通下一层；`sum`/`sumsq` 的每个加法节点执行一次 f32 RNE，`sumsq` 先对乘积做 f32 舍入。`max`/`min`/`absmax`/`argmax` 的 NaN、带符号零与并列规则遵循手册，不使用单位元填充非空规约树。
 - 单 hart 同步模型中 RV64 `FENCE` 与 NPU `fence.*` 为 no-op。`ECALL`、`EBREAK`、`kernel.end` 停在当前 PC，交给调用方处理。
 - `reset(entry_pc)` 将状态恢复为 `State{}` 并设置 PC，不清内存。runner 默认入口、RAM 容量、串口窗口以及 `ebreak/kernel.end` 以 `a0` 为退出码的约定见 README；这些平台约定与 ISA 指令语义分开维护。
 

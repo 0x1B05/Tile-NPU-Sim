@@ -1,10 +1,11 @@
 #include "execute.h"
 
 #include "config_check.h"
-#include "f32_util.h"
 #include "matrix_view.h"
 #include "operand.h"
+#include "reduce_util.h"
 
+#include <array>
 #include <bit>
 #include <cmath>
 #include <cstddef>
@@ -51,15 +52,15 @@ std::int8_t quantize_lane(float value, float scale) {
   return static_cast<std::int8_t>(rounded);
 }
 
-// The absmax scan of one source row. An all-zero or all-NaN row yields
-// +0.0, whose derived scale quantizes every element of the row to 0 through
-// the NaN quotient rule.
+// The absmax tree of one source row. NaN is treated as +0, so an all-zero or
+// all-NaN row yields +0.0, whose derived scale quantizes every element to 0
+// through the NaN quotient rule.
 float row_amax(MatrixView<const std::uint32_t> src, std::size_t row, std::size_t cols) {
-  float amax = 0.0f;
+  std::array<float, REDUCE_LEAVES> values{};
   for (std::size_t col = 0; col < cols; ++col) {
-    amax = f32_absmax_step(amax, std::bit_cast<float>(src.at(row, col)));
+    values[col] = std::bit_cast<float>(src.at(row, col));
   }
-  return amax;
+  return f32_absmax(std::span(values).first(cols));
 }
 
 // Resolves the vector-form scale lane: an immediate index or the value of
@@ -140,7 +141,11 @@ ExecuteResult vquant(const VquantInstr &instr, State &state) {
   }
   const auto &src_reg = state.v[instr.src.index];
   auto &dst_reg = state.b[instr.dest.index];
-  const float amax = f32_absmax(std::span(src_reg).first(src_config.len));
+  std::array<float, REDUCE_LEAVES> values{};
+  for (std::size_t j = 0; j < src_config.len; ++j) {
+    values[j] = std::bit_cast<float>(src_reg[j]);
+  }
+  const float amax = f32_absmax(std::span(values).first(src_config.len));
   const float scale = amax / Q8_MAX_MAGNITUDE;
   for (std::size_t j = 0; j < src_config.len; ++j) {
     dst_reg[j] = static_cast<std::uint8_t>(quantize_lane(std::bit_cast<float>(src_reg[j]), scale));
