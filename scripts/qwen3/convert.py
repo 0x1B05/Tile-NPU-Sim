@@ -9,55 +9,31 @@ carries a section directory so the guest locates tensors at runtime:
   directory: n_sections x { name char[8], offset u32, size u32 }
   sections: 16-byte aligned tensor data
 
-Modes:
-  convert.py MODEL_DIR out.q3b --ids "1,2,3"      real weights
-  convert.py MODEL_DIR out.q3b --prompt "..." [--chat]
-  convert.py --tiny out.q3b out_ref.npz           random tiny model
-                                                  (+ f32 reference dump)
+Commands:
+  convert.py real MODEL_DIR OUT --prompt "..."
+  convert.py tiny --out OUT --ref REF
+
+Run `convert.py --help` or `convert.py real --help` for details.
 """
 
+import argparse
 import json
-import os
-import struct
+import logging
 import sys
+from pathlib import Path
 
 import numpy as np
 
-if __package__:
-    from .quant import quantize_rows
-else:
-    from quant import quantize_rows
+# These tools are run as scripts, so sibling modules are top-level imports.
+from blob import Blob, check_output, write_npz
+from quant import quantize_rows
+from safetensors import SafeTensors
+from tokenizer import Tokenizer
 
-MAGIC = b"Q3B1"
-
-
-# ---- safetensors ------------------------------------------------------
+LOGGER = logging.getLogger("qwen3.convert")
 
 
-def bf16_to_f32(raw):
-    return (np.frombuffer(raw, dtype="<u2").astype(np.uint32) << 16).view(
-        "<f4")
-
-
-class SafeTensors:
-    """Lazily materializes tensors; peak memory stays near one tensor."""
-
-    def __init__(self, path):
-        self.path = path
-        with open(path, "rb") as f:
-            n = struct.unpack("<Q", f.read(8))[0]
-            self.header = json.loads(f.read(n))
-            self.data_start = 8 + n
-
-    def get(self, name):
-        info = self.header[name]
-        begin, end = info["data_offsets"]
-        with open(self.path, "rb") as f:
-            f.seek(self.data_start + begin)
-            raw = f.read(end - begin)
-        if info["dtype"] != "BF16":
-            raise ValueError(f"{name}: unexpected dtype {info['dtype']}")
-        return bf16_to_f32(raw).reshape(info["shape"])
+# ---- quantization stats ---------------------------------------------------
 
 
 def quant_error(w, q, s):
@@ -78,45 +54,7 @@ def rope_tables(max_pos, head_dim, theta):
     return (np.cos(freqs).astype("<f4"), np.sin(freqs).astype("<f4"))
 
 
-# ---- blob writer ----------------------------------------------------------
-
-
-class Blob:
-    def __init__(self, arch, n_prompt):
-        self.arch = arch  # dict of u32 arch fields
-        self.n_prompt = n_prompt
-        self.sections = []  # (name, bytes)
-
-    def add(self, name, data):
-        assert len(name) <= 8, name
-        self.sections.append((name, data))
-
-    def write(self, path):
-        header_size = 12 * 4
-        directory_size = len(self.sections) * 16
-        offset = header_size + directory_size
-        entries = []
-        payload = bytearray()
-        for name, data in self.sections:
-            pad = (-offset) % 16
-            payload += b"\0" * pad
-            offset += pad
-            entries.append((name, offset, len(data)))
-            payload += data
-            offset += len(data)
-        a = self.arch
-        header = struct.pack(
-            "<4s11I", MAGIC, a["n_layers"], a["hidden"], a["inter"],
-            a["n_q_heads"], a["n_kv_heads"], a["head_dim"], a["vocab"],
-            a["max_pos"], self.n_prompt,
-            np.frombuffer(np.float32(a["eps"]).tobytes(), "<u4")[0],
-            len(self.sections))
-        with open(path, "wb") as f:
-            f.write(header)
-            for name, off, size in entries:
-                f.write(struct.pack("<8sII", name.encode(), off, size))
-            f.write(payload)
-        return offset
+# ---- model tensors --------------------------------------------------------
 
 
 LAYER_TENSORS = [
@@ -135,74 +73,133 @@ LAYER_TENSORS = [
 ]
 
 
+# ---- model conversion -----------------------------------------------------
+
+
+def load_prompt_ids(model_dir, prompt):
+    if not prompt:
+        raise ValueError("prompt is empty")
+    tokenizer_path = model_dir / "tokenizer.json"
+    if not tokenizer_path.is_file():
+        raise ValueError(f"tokenizer not found: {tokenizer_path}")
+    tokenizer = Tokenizer(str(tokenizer_path))
+    return tokenizer.encode(prompt)
+
+
 def convert_real(model_dir, prompt_ids, max_pos):
-    cfg = json.load(open(f"{model_dir}/config.json"))
+    config_path = model_dir / "config.json"
+    weights_path = model_dir / "model.safetensors"
+    if not config_path.is_file():
+        raise ValueError(f"model config not found: {config_path}")
+    if not weights_path.is_file():
+        raise ValueError(f"weights not found: {weights_path}")
+
+    with config_path.open(encoding="utf-8") as f:
+        cfg = json.load(f)
+    try:
+        arch = {
+            "n_layers": cfg["num_hidden_layers"],
+            "hidden": cfg["hidden_size"],
+            "inter": cfg["intermediate_size"],
+            "n_q_heads": cfg["num_attention_heads"],
+            "n_kv_heads": cfg["num_key_value_heads"],
+            "head_dim": cfg["head_dim"],
+            "vocab": cfg["vocab_size"],
+            "max_pos": max_pos,
+            "eps": cfg["rms_norm_eps"],
+        }
+        rope_theta = cfg["rope_theta"]
+    except KeyError as exc:
+        raise ValueError(f"{config_path}: missing key {exc.args[0]!r}") from exc
+
     if not prompt_ids:
-        sys.exit("error: prompt is empty")
+        raise ValueError("prompt is empty")
     if len(prompt_ids) > max_pos:
-        sys.exit(f"error: prompt has {len(prompt_ids)} tokens, "
-                 f"context capacity is {max_pos}")
-    vocab = cfg["vocab_size"]
-    bad = [i for i in prompt_ids if not 0 <= i < vocab]
-    if bad:
-        sys.exit(f"error: prompt token id {bad[0]} out of range "
-                 f"[0, {vocab})")
-    arch = {
-        "n_layers": cfg["num_hidden_layers"],
-        "hidden": cfg["hidden_size"],
-        "inter": cfg["intermediate_size"],
-        "n_q_heads": cfg["num_attention_heads"],
-        "n_kv_heads": cfg["num_key_value_heads"],
-        "head_dim": cfg["head_dim"],
-        "vocab": cfg["vocab_size"],
-        "max_pos": max_pos,
-        "eps": cfg["rms_norm_eps"],
-    }
-    st = SafeTensors(f"{model_dir}/model.safetensors")
+        raise ValueError(
+            f"prompt has {len(prompt_ids)} tokens, context capacity is {max_pos}"
+        )
+    vocab = arch["vocab"]
+    bad = next((i for i in prompt_ids if not 0 <= i < vocab), None)
+    if bad is not None:
+        raise ValueError(f"prompt token id {bad} out of range [0, {vocab})")
+
+    st = SafeTensors(weights_path)
+    LOGGER.info(
+        "model: %d layers, hidden=%d, vocab=%d",
+        arch["n_layers"],
+        arch["hidden"],
+        vocab,
+    )
+
     blob = Blob(arch, len(prompt_ids))
     blob.add("tokens", np.asarray(prompt_ids, "<u4").tobytes())
-    cos, sin = rope_tables(max_pos, arch["head_dim"], cfg["rope_theta"])
+    cos, sin = rope_tables(max_pos, arch["head_dim"], rope_theta)
     blob.add("rope_cos", cos.tobytes())
     blob.add("rope_sin", sin.tobytes())
 
+    quant_errors = []
     embed = st.get("model.embed_tokens.weight")
     q, s = quantize_rows(embed)
-    print(f"embed {embed.shape} rel-err {quant_error(embed, q, s):.4f}")
+    error = quant_error(embed, q, s)
+    quant_errors.append(error)
+    LOGGER.debug("embed %s rel-err %.4f", embed.shape, error)
     blob.add("embed", q.tobytes())
     blob.add("embed_s", s.tobytes())
     del embed, q, s
 
-    for i in range(arch["n_layers"]):
+    n_layers = arch["n_layers"]
+    for i in range(n_layers):
+        LOGGER.info("[%02d/%d] layer %d", i + 1, n_layers, i)
         for suffix, templ, kind in LAYER_TENSORS:
             name = templ.format(i=i)
             w = st.get(name)
             sec = f"l{i:02d}_{suffix}"
             if kind == "f32":
-                assert w.ndim == 1, name
+                if w.ndim != 1:
+                    raise ValueError(f"{name}: expected a 1-D tensor, got {w.shape}")
                 blob.add(sec, w.astype("<f4").tobytes())
             else:
                 q, s = quantize_rows(w)
-                if i == 0:
-                    print(f"{name} {w.shape} rel-err "
-                          f"{quant_error(w, q, s):.4f}")
+                error = quant_error(w, q, s)
+                quant_errors.append(error)
+                LOGGER.debug("%s %s rel-err %.4f", name, w.shape, error)
                 blob.add(sec, q.tobytes())
                 blob.add(sec + "s", s.tobytes())
+
     norm = st.get("model.norm.weight")
+    if norm.ndim != 1:
+        raise ValueError(f"model.norm.weight: expected a 1-D tensor, got {norm.shape}")
     blob.add("fin_norm", norm.astype("<f4").tobytes())
+
+    if quant_errors:
+        LOGGER.info(
+            "quantization: mean rel-err %.4f, max %.4f",
+            np.mean(quant_errors),
+            np.max(quant_errors),
+        )
     return blob
 
 
-def convert_tiny(ref_path):
+def convert_tiny():
+    LOGGER.info("generating tiny model")
     rng = np.random.default_rng(0)
-    arch = {"n_layers": 2, "hidden": 64, "inter": 128, "n_q_heads": 2,
-            "n_kv_heads": 1, "head_dim": 32, "vocab": 320, "max_pos": 64,
-            "eps": 1e-6}
+    arch = {
+        "n_layers": 2,
+        "hidden": 64,
+        "inter": 128,
+        "n_q_heads": 2,
+        "n_kv_heads": 1,
+        "head_dim": 32,
+        "vocab": 320,
+        "max_pos": 64,
+        "eps": 1e-6,
+    }
 
     def mat(rows, cols):
         return rng.standard_normal((rows, cols), dtype=np.float32) * 0.02
 
     def vec(n):
-        return (1.0 + 0.1 * rng.standard_normal(n, dtype=np.float32))
+        return 1.0 + 0.1 * rng.standard_normal(n, dtype=np.float32)
 
     prompt_ids = [1, 5, 9, 42, 100, 7]
     blob = Blob(arch, len(prompt_ids))
@@ -214,10 +211,12 @@ def convert_tiny(ref_path):
 
     def emit(sec, w, kind):
         if kind == "f32":
+            LOGGER.debug("%s %s", sec, w.shape)
             blob.add(sec, w.astype("<f4").tobytes())
             ref[sec] = w
         else:
             q, s = quantize_rows(w)
+            LOGGER.debug("%s %s rel-err %.4f", sec, w.shape, quant_error(w, q, s))
             blob.add(sec, q.tobytes())
             blob.add("embed_s" if sec == "embed" else sec + "s", s.tobytes())
             # the reference consumes the same dequantized weights as the guest
@@ -233,59 +232,154 @@ def convert_tiny(ref_path):
         "gw": (arch["inter"], arch["hidden"]),
         "uw": (arch["inter"], arch["hidden"]),
         "dw": (arch["hidden"], arch["inter"]),
-        "inln": (arch["hidden"],), "ptln": (arch["hidden"],),
-        "qn": (arch["head_dim"],), "kn": (arch["head_dim"],),
+        "inln": (arch["hidden"],),
+        "ptln": (arch["hidden"],),
+        "qn": (arch["head_dim"],),
+        "kn": (arch["head_dim"],),
     }
     for i in range(arch["n_layers"]):
         for suffix, _, kind in LAYER_TENSORS:
             sec = f"l{i:02d}_{suffix}"
-            w = vec(hf_shapes[suffix][0]) if kind == "f32" else mat(
-                *hf_shapes[suffix])
+            w = vec(hf_shapes[suffix][0]) if kind == "f32" else mat(*hf_shapes[suffix])
             emit(sec, w, kind)
     fin = vec(arch["hidden"])
     blob.add("fin_norm", fin.astype("<f4").tobytes())
     ref["fin_norm"] = fin
     ref["tokens"] = np.asarray(prompt_ids, "<u4")
-    np.savez(ref_path, **ref)
-    return blob
+    return blob, ref
 
 
-def main():
-    args = sys.argv[1:]
-    max_pos = 512
-    if "--max-pos" in args:
-        k = args.index("--max-pos")
-        max_pos = int(args[k + 1])
-        del args[k:k + 2]
-    if args and args[0] == "--tiny":
-        blob = convert_tiny(args[2])
-        size = blob.write(args[1])
-        print(f"tiny blob: {size} bytes -> {args[1]}, reference -> {args[2]}")
-        return
-    if len(args) < 2:
-        print(__doc__)
-        return
-    model_dir, out = args[0], args[1]
-    chat = "--chat" in args
-    if chat:
-        args.remove("--chat")
-    if "--prompt" in args:
-        k = args.index("--prompt")
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        from tokenizer import CHAT_WRAP, Tokenizer
-        text = args[k + 1]
-        ids = Tokenizer().encode(CHAT_WRAP.format(text) if chat else text)
-    elif "--ids" in args:
-        k = args.index("--ids")
-        ids = [int(x) for x in args[k + 1].split(",") if x]
-    else:
-        print("error: --prompt or --ids required")
-        return
-    print(f"prompt: {len(ids)} tokens")
-    blob = convert_real(model_dir, ids, max_pos)
-    size = blob.write(out)
-    print(f"blob: {size / 1e6:.1f} MB -> {out}")
+# ---- command line ---------------------------------------------------------
+
+
+def positive_int(value):
+    try:
+        number = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            f"expected a positive integer, got {value!r}"
+        ) from exc
+    if number <= 0:
+        raise argparse.ArgumentTypeError(f"expected a positive integer, got {value!r}")
+    return number
+
+
+def add_verbosity(parser):
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="print per-tensor quantization errors",
+    )
+    group.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="only print errors",
+    )
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(
+        description="Convert Qwen3 weights into the flat q8s32 blob consumed by apps/qwen3.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "The blob is little-endian: header, section directory, "
+            "then 16-byte aligned sections."
+        ),
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
+
+    real = subparsers.add_parser(
+        "real",
+        help="convert Hugging Face safetensors",
+        description="Convert a Hugging Face Qwen3 model directory.",
+    )
+    real.add_argument(
+        "model_dir",
+        type=Path,
+        metavar="MODEL_DIR",
+        help="directory containing config.json, model.safetensors, and tokenizer.json",
+    )
+    real.add_argument("out", type=Path, metavar="OUT", help="output .q3b blob")
+    real.add_argument(
+        "--prompt",
+        required=True,
+        metavar="TEXT",
+        help="prompt text to bake in",
+    )
+    real.add_argument(
+        "--max-pos",
+        type=positive_int,
+        default=512,
+        metavar="N",
+        help="maximum context positions (default: 512)",
+    )
+    add_verbosity(real)
+
+    tiny = subparsers.add_parser(
+        "tiny",
+        help="generate a fixed-seed random tiny model",
+        description="Generate a fixed-seed random tiny model and its f32 reference.",
+    )
+    tiny.add_argument(
+        "--out",
+        type=Path,
+        required=True,
+        metavar="OUT",
+        help="output .q3b blob",
+    )
+    tiny.add_argument(
+        "--ref",
+        type=Path,
+        required=True,
+        metavar="REF",
+        help="output .npz reference",
+    )
+    add_verbosity(tiny)
+    return parser
+
+
+def run_real(args):
+    prompt_ids = load_prompt_ids(args.model_dir, args.prompt)
+    LOGGER.info("prompt: %d tokens", len(prompt_ids))
+    check_output(args.out)
+    blob = convert_real(args.model_dir, prompt_ids, args.max_pos)
+    size = blob.write(args.out)
+    LOGGER.info("blob: %.1f MB -> %s", size / 1e6, args.out)
+    return 0
+
+
+def run_tiny(args):
+    check_output(args.out)
+    check_output(args.ref)
+    if args.out.resolve() == args.ref.resolve():
+        raise ValueError("--out and --ref must be different paths")
+    blob, ref = convert_tiny()
+    size = blob.write(args.out)
+    write_npz(args.ref, ref)
+    LOGGER.info("tiny blob: %d bytes -> %s, reference -> %s", size, args.out, args.ref)
+    return 0
+
+
+def main(argv=None):
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    level = logging.INFO
+    if args.verbose:
+        level = logging.DEBUG
+    elif args.quiet:
+        level = logging.ERROR
+    logging.basicConfig(level=level, format="%(message)s")
+
+    if args.command == "real":
+        return run_real(args)
+    if args.command == "tiny":
+        return run_tiny(args)
+    raise AssertionError(f"unhandled command: {args.command}")
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

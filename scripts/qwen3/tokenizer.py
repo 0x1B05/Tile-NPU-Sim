@@ -7,7 +7,7 @@ Reimplements the HuggingFace fast tokenizer pipeline from tokenizer.json:
   literally before BPE. Decoding reverses the byte-level map.
 
 Usage:
-  tokenizer.py [--chat] "prompt text"        # print token ids
+  tokenizer.py "prompt text"                 # print token ids
   tokenizer.py --decode 151644,9707,11       # print text
 """
 
@@ -21,9 +21,11 @@ TOKENIZER_JSON = "external/qwen3/tokenizer.json"
 def bytes_to_unicode():
     # GPT-2 byte<->unicode map: printable bytes map to themselves, the rest
     # to code points starting at 256.
-    bs = (list(range(ord("!"), ord("~") + 1)) +
-          list(range(ord("¡"), ord("¬") + 1)) +
-          list(range(ord("®"), ord("ÿ") + 1)))
+    bs = (
+        list(range(ord("!"), ord("~") + 1))
+        + list(range(ord("¡"), ord("¬") + 1))
+        + list(range(ord("®"), ord("ÿ") + 1))
+    )
     cs = bs[:]
     n = 0
     for b in range(256):
@@ -81,13 +83,12 @@ class Tokenizer:
         while i < n:
             c = text[i]
             for con in ("'s", "'t", "'re", "'ve", "'m", "'ll", "'d"):
-                if text[i:i + len(con)].lower() == con:
-                    chunks.append(text[i:i + len(con)])
+                if text[i : i + len(con)].lower() == con:
+                    chunks.append(text[i : i + len(con)])
                     i += len(con)
                     break
             else:
-                if is_l(c) or (is_prefix(c) and i + 1 < n and
-                               is_l(text[i + 1])):
+                if is_l(c) or (is_prefix(c) and i + 1 < n and is_l(text[i + 1])):
                     j = i if is_l(c) else i + 1
                     while j < n and is_l(text[j]):
                         j += 1
@@ -96,8 +97,7 @@ class Tokenizer:
                 elif is_n(c):
                     chunks.append(c)
                     i += 1
-                elif is_sym(c) or (c == " " and i + 1 < n and
-                                   is_sym(text[i + 1])):
+                elif is_sym(c) or (c == " " and i + 1 < n and is_sym(text[i + 1])):
                     j = i if is_sym(c) else i + 1
                     while j < n and is_sym(text[j]):
                         j += 1
@@ -113,7 +113,7 @@ class Tokenizer:
                     run = text[i:j]
                     last_nl = max(run.rfind("\n"), run.rfind("\r"))
                     if last_nl >= 0:
-                        chunks.append(run[:last_nl + 1])
+                        chunks.append(run[: last_nl + 1])
                         i += last_nl + 1
                     elif j == n or len(run) == 1:
                         chunks.append(run)
@@ -137,8 +137,7 @@ class Tokenizer:
                     best, best_rank = k, rank
             if best is None:
                 return word
-            word = (word[:best] + [word[best] + word[best + 1]] +
-                    word[best + 2:])
+            word = word[:best] + [word[best] + word[best + 1]] + word[best + 2 :]
 
     def _encode_chunk(self, chunk):
         word = [self.byte_encode[b] for b in chunk.encode("utf-8")]
@@ -151,8 +150,7 @@ class Tokenizer:
         while i < len(text):
             hit = None
             for s, tid in self.special.items():
-                if text.startswith(s, i) and \
-                        (hit is None or len(s) > len(hit[0])):
+                if text.startswith(s, i) and (hit is None or len(s) > len(hit[0])):
                     hit = (s, tid)
             if hit:
                 ids.append(hit[1])
@@ -161,7 +159,8 @@ class Tokenizer:
             # plain run up to the next special token
             j = i
             while j < len(text) and not any(
-                    text.startswith(s, j) for s in self.special):
+                text.startswith(s, j) for s in self.special
+            ):
                 j += 1
             for chunk in self._split(text[i:j]):
                 ids.extend(self._encode_chunk(chunk))
@@ -174,15 +173,8 @@ class Tokenizer:
         return data.decode("utf-8", errors="replace")
 
 
-CHAT_WRAP = "<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n"
-
-
 def main():
     args = sys.argv[1:]
-    chat = False
-    if args and args[0] == "--chat":
-        chat = True
-        args = args[1:]
     tk = Tokenizer()
     if args and args[0] == "--decode":
         ids = [int(x) for x in args[1].split(",") if x]
@@ -191,10 +183,7 @@ def main():
     if not args:
         print(__doc__)
         return
-    prompt = args[0]
-    if chat:
-        prompt = CHAT_WRAP.format(prompt)
-    ids = tk.encode(prompt)
+    ids = tk.encode(args[0])
     print(" ".join(str(i) for i in ids))
     print(f"# {len(ids)} tokens", file=sys.stderr)
 

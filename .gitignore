@@ -1,6 +1,20 @@
+# XMake build state
 /.xmake/
-build/
-/compile_commands.json
-/.cache/
+/build/
+compile_commands.json
+
+# Downloaded dependencies
 /external/
+
+# Local caches
+.cache/
+.ruff_cache/
 __pycache__/
+
+# Local editor / language-server settings
+/.luarc.json
+/pyrightconfig.json
+
+# Generated Qwen3 model artifacts
+*.q3b
+*.npz

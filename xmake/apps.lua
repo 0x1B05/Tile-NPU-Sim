@@ -44,7 +44,7 @@ target("qwen3_app")
     end)
 target_end()
 
--- Optional tiny-model alignment test (--qwen3test=y): convert.py --tiny
+-- Optional tiny-model alignment test (--qwen3test=y): convert.py tiny
 -- emits a fixed-seed random model, sim_run executes the guest forward on it,
 -- and scripts/qwen3/tiny_check.py compares the probe stream and generated
 -- token ids against ref.py's numpy reference. Skipped with a warning when
@@ -92,9 +92,10 @@ if has_config("qwen3test") then
             local blob = path.join(app_bindir, "tiny.q3b")
             local ref = path.join(app_bindir, "tiny_ref.npz")
             depend.on_changed(function()
-                os.vrunv(target:data("python"), {convert, "--tiny", blob, ref})
+                os.vrunv(target:data("python"),
+                         {convert, "tiny", "--out", blob, "--ref", ref})
             end, {dependfile = target:dependfile("tiny"),
-                  files = {convert},
+                  files = {convert, path.join(scripts_dir, "quant.py")},
                   changed = target:is_rebuilt(),
                   lastmtime = math.min(os.mtime(blob), os.mtime(ref)),
                   values = {target:data("python")}})

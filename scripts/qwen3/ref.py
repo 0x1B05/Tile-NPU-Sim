@@ -13,10 +13,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-if __package__:
-    from .quant import quantize_rows
-else:
-    from quant import quantize_rows
+from quant import quantize_rows
 
 
 @dataclass(frozen=True)
@@ -41,9 +38,10 @@ def matvec_ref(w_f32, x):
     return MatvecResult(value, xq, acc)
 
 
-def rmsnorm(x, gamma, eps):
+def rmsnorm(x: np.ndarray, gamma: np.ndarray, eps: float) -> np.ndarray:
     xf = x.astype(np.float32)
-    inv = np.float32(1.0) / np.sqrt(np.mean(xf * xf) + np.float32(eps))
+    mean_sq = np.mean(xf * xf, axis=-1, keepdims=True)
+    inv = np.float32(1.0) / np.sqrt(mean_sq + np.float32(eps))
     return xf * inv * gamma
 
 
@@ -62,7 +60,7 @@ class Ref:
         self.sin = d["rope_sin"]
         self.fin = d["fin_norm"]
         self.tokens = d["tokens"]
-        # tiny arch constants (mirror scripts/qwen3/convert.py --tiny)
+        # tiny arch constants (mirror scripts/qwen3/convert.py tiny)
         self.n_layers = 2
         self.n_q = 2
         self.n_kv = 1
@@ -77,15 +75,13 @@ class Ref:
 
         def probe(tag, v):
             if probeme:
-                bits = " ".join(
-                    f"{x.view(np.uint32):08x}" for x in v[:4].astype("<f4"))
+                bits = " ".join(f"{x.view(np.uint32):08x}" for x in v[:4].astype("<f4"))
                 vals = " ".join(f"{x:.6f}" for x in v[:4])
                 print(f"{tag} {bits}  ({vals})")
 
         x = self.embed[token].copy()
         probe("embed", x)
         q_dim = self.n_q * self.hd
-        kv_dim = self.n_kv * self.hd
         for L in range(self.n_layers):
             h = rmsnorm(x, self.layer(L, "inln"), self.eps)
             if L == 0:
@@ -97,59 +93,62 @@ class Ref:
                 words = np.frombuffer(packed, "<u4")
                 print("qx0 " + " ".join(f"{w:08x}" for w in words))
                 accw = np.frombuffer(
-                    q_result.accumulator.astype("<i4").tobytes(), "<u4")
+                    q_result.accumulator.astype("<i4").tobytes(), "<u4"
+                )
                 print("ac0 " + " ".join(f"{w:08x}" for w in accw[:8]))
                 probe("q0", q)
             k = matvec_ref(self.layer(L, "kw"), h).value
             v = matvec_ref(self.layer(L, "vw"), h).value
             for hh in range(self.n_q):
-                q[hh * self.hd:(hh + 1) * self.hd] = rmsnorm(
-                    q[hh * self.hd:(hh + 1) * self.hd],
-                    self.layer(L, "qn"), self.eps)
+                q[hh * self.hd : (hh + 1) * self.hd] = rmsnorm(
+                    q[hh * self.hd : (hh + 1) * self.hd], self.layer(L, "qn"), self.eps
+                )
             if L == 0:
                 probe("q0n", q)
             for hh in range(self.n_kv):
-                k[hh * self.hd:(hh + 1) * self.hd] = rmsnorm(
-                    k[hh * self.hd:(hh + 1) * self.hd],
-                    self.layer(L, "kn"), self.eps)
+                k[hh * self.hd : (hh + 1) * self.hd] = rmsnorm(
+                    k[hh * self.hd : (hh + 1) * self.hd], self.layer(L, "kn"), self.eps
+                )
             cos_p, sin_p = self.cos[pos], self.sin[pos]
             for hh in range(self.n_q):
-                q[hh * self.hd:(hh + 1) * self.hd] = rope(
-                    q[hh * self.hd:(hh + 1) * self.hd], cos_p, sin_p)
+                q[hh * self.hd : (hh + 1) * self.hd] = rope(
+                    q[hh * self.hd : (hh + 1) * self.hd], cos_p, sin_p
+                )
             if L == 0:
                 probe("q0r", q)
-                probe("q1r", q[self.hd:])
+                probe("q1r", q[self.hd :])
             for hh in range(self.n_kv):
-                k[hh * self.hd:(hh + 1) * self.hd] = rope(
-                    k[hh * self.hd:(hh + 1) * self.hd], cos_p, sin_p)
+                k[hh * self.hd : (hh + 1) * self.hd] = rope(
+                    k[hh * self.hd : (hh + 1) * self.hd], cos_p, sin_p
+                )
             kv_cache[L][0][pos] = k
             kv_cache[L][1][pos] = v
             attn = np.zeros(q_dim, dtype=np.float32)
             group = self.n_q // self.n_kv
             for hh in range(self.n_q):
                 kvh = hh // group
-                keys = kv_cache[L][0][:pos + 1, kvh * self.hd:(kvh + 1) *
-                                      self.hd]
-                vals = kv_cache[L][1][:pos + 1, kvh * self.hd:(kvh + 1) *
-                                      self.hd]
-                s = (keys @ q[hh * self.hd:(hh + 1) * self.hd])
+                keys = kv_cache[L][0][: pos + 1, kvh * self.hd : (kvh + 1) * self.hd]
+                vals = kv_cache[L][1][: pos + 1, kvh * self.hd : (kvh + 1) * self.hd]
+                s = keys @ q[hh * self.hd : (hh + 1) * self.hd]
                 if L == 0 and probeme:
-                    print(f"sc_h{hh} " + " ".join(
-                        f"{x.view(np.uint32):08x}"
-                        for x in s.astype("<f4")))
+                    print(
+                        f"sc_h{hh} "
+                        + " ".join(f"{x.view(np.uint32):08x}" for x in s.astype("<f4"))
+                    )
                 s = s / np.sqrt(np.float32(self.hd))
                 p = np.exp(s - s.max()).astype(np.float32)
                 if L == 0 and probeme:
                     rcp = np.float32(1.0) / p.sum()
-                    print(f"pb_h{hh} " + " ".join(
-                        f"{x.view(np.uint32):08x}"
-                        for x in p.astype("<f4")) +
-                        f" {rcp.view(np.uint32):08x}")
+                    print(
+                        f"pb_h{hh} "
+                        + " ".join(f"{x.view(np.uint32):08x}" for x in p.astype("<f4"))
+                        + f" {rcp.view(np.uint32):08x}"
+                    )
                 p /= p.sum()
-                attn[hh * self.hd:(hh + 1) * self.hd] = p @ vals
+                attn[hh * self.hd : (hh + 1) * self.hd] = p @ vals
             if L == 0:
                 probe("attn0", attn)
-                probe("attn1", attn[self.hd:])
+                probe("attn1", attn[self.hd :])
             o_result = matvec_ref(self.layer(L, "ow"), attn)
             o = o_result.value
             if L == 0 and probeme:
@@ -157,7 +156,8 @@ class Ref:
                 words = np.frombuffer(packed, "<u4")
                 print("qxa " + " ".join(f"{w:08x}" for w in words))
                 accw = np.frombuffer(
-                    o_result.accumulator.astype("<i4").tobytes(), "<u4")
+                    o_result.accumulator.astype("<i4").tobytes(), "<u4"
+                )
                 print("aca " + " ".join(f"{w:08x}" for w in accw[:8]))
                 probe("o0", o)
             x = x + o
@@ -171,8 +171,9 @@ class Ref:
             if L == 0:
                 probe("g0", gate)
                 probe("u0", up)
-            act = (gate / (1.0 + np.exp(-gate.astype(np.float64)))
-                   ).astype(np.float32) * up
+            act = (gate / (1.0 + np.exp(-gate.astype(np.float64)))).astype(
+                np.float32
+            ) * up
             if L == 0:
                 probe("m0", act)
             d = matvec_ref(self.layer(L, "dw"), act).value
@@ -193,9 +194,13 @@ def main():
     ref = Ref(sys.argv[1])
     n_gen = int(sys.argv[2]) if len(sys.argv) > 2 else 32
     max_pos = ref.cos.shape[0]
-    kv_cache = [[np.zeros((max_pos, ref.n_kv * ref.hd), np.float32),
-                 np.zeros((max_pos, ref.n_kv * ref.hd), np.float32)]
-                for _ in range(ref.n_layers)]
+    kv_cache = [
+        [
+            np.zeros((max_pos, ref.n_kv * ref.hd), np.float32),
+            np.zeros((max_pos, ref.n_kv * ref.hd), np.float32),
+        ]
+        for _ in range(ref.n_layers)
+    ]
     tokens = list(ref.tokens)
     for pos in range(len(tokens) - 1):
         ref.forward(tokens[pos], pos, kv_cache, want_logits=False)

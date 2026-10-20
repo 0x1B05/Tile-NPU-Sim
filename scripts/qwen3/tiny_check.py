@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tiny Qwen3 regression: guest forward under sim_run vs the numpy reference.
 
-convert.py --tiny emits a fixed-seed random model (a q3b blob plus an f32
+convert.py tiny emits a fixed-seed random model (a q3b blob plus an f32
 reference npz). This script runs the guest app on the simulator and compares
 its probe stream against ref.py line by line:
 
@@ -59,14 +59,13 @@ def probe_lines(text):
 def generated_ids(text, prefix):
     for line in text.splitlines():
         if line.startswith(prefix):
-            return [int(tok) for tok in line[len(prefix):].split()]
+            return [int(tok) for tok in line[len(prefix) :].split()]
     return None
 
 
 def run(cmd):
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True,
-                              timeout=600)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     except subprocess.TimeoutExpired:
         sys.exit(f"command timed out: {' '.join(cmd)}")
     if proc.returncode != 0:
@@ -78,8 +77,7 @@ def run(cmd):
 
 def main():
     sim_run, app_bin, blob, ref_npz = sys.argv[1:5]
-    guest = run([sim_run, "-m", MEMORY_MIB, app_bin,
-                 f"{blob}@{BLOB_BASE}"])
+    guest = run([sim_run, "-m", MEMORY_MIB, app_bin, f"{blob}@{BLOB_BASE}"])
     ref = run([sys.executable, REF_PY, ref_npz])
 
     failures = []
@@ -89,7 +87,8 @@ def main():
         failures.append(
             f"probe tags differ: guest-only "
             f"{sorted(set(guest_probes) - set(ref_probes))}, ref-only "
-            f"{sorted(set(ref_probes) - set(guest_probes))}")
+            f"{sorted(set(ref_probes) - set(guest_probes))}"
+        )
 
     worst_rel, worst_where = 0.0, ""
     for tag in sorted(ref_probes):
@@ -113,36 +112,48 @@ def main():
                 worst_rel, worst_where = rel, f"{tag}[{i}]"
 
     # the guest dumps logits at fixed ids; ref.py prints its own top5
-    logit_line = next((l for l in guest.splitlines()
-                       if l.startswith("logit probe: ")), None)
-    top5_line = next((l for l in ref.splitlines()
-                      if l.startswith("ref logits top5: ")), None)
+    logit_line = next(
+        (line for line in guest.splitlines() if line.startswith("logit probe: ")), None
+    )
+    top5_line = next(
+        (line for line in ref.splitlines() if line.startswith("ref logits top5: ")),
+        None,
+    )
     if logit_line is None or top5_line is None:
         failures.append("missing logit probe output")
     else:
-        words = [int(w, 16) for w in logit_line[len("logit probe: "):].split()]
-        top5 = ast.literal_eval(top5_line[len("ref logits top5: "):])
+        words = [int(w, 16) for w in logit_line[len("logit probe: ") :].split()]
+        top5 = ast.literal_eval(top5_line[len("ref logits top5: ") :])
         if len(words) != len(top5):
-            failures.append(f"logit probe: {len(words)} guest values vs "
-                            f"{len(top5)} ref")
+            failures.append(
+                f"logit probe: {len(words)} guest values vs {len(top5)} ref"
+            )
         else:
             for rank, (w, (idx, val)) in enumerate(zip(words, top5)):
-                if not math.isclose(f32(w), val, rel_tol=FLOAT_RTOL,
-                                    abs_tol=FLOAT_ATOL):
-                    failures.append(f"logit top{rank + 1} (id {idx}): guest "
-                                    f"{f32(w)!r} vs ref {val!r}")
+                if not math.isclose(
+                    f32(w), val, rel_tol=FLOAT_RTOL, abs_tol=FLOAT_ATOL
+                ):
+                    failures.append(
+                        f"logit top{rank + 1} (id {idx}): guest "
+                        f"{f32(w)!r} vs ref {val!r}"
+                    )
 
     g_ids = generated_ids(guest, "generated: ")
     r_ids = generated_ids(ref, "ref generated: ")
-    if g_ids != r_ids:
+    if g_ids is None or r_ids is None:
+        failures.append(f"generated ids missing: guest {g_ids} vs ref {r_ids}")
+        r_ids = r_ids or []
+    elif g_ids != r_ids:
         failures.append(f"generated ids differ: guest {g_ids} vs ref {r_ids}")
 
     if failures:
         for f in failures:
             print(f"MISMATCH: {f}")
         sys.exit(f"tiny_check: FAIL ({len(failures)} mismatch(es))")
-    print(f"tiny_check: PASS ({len(ref_probes)} probes, worst float rel err "
-          f"{worst_rel:.3g} at {worst_where}, {len(r_ids)} generated tokens)")
+    print(
+        f"tiny_check: PASS ({len(ref_probes)} probes, worst float rel err "
+        f"{worst_rel:.3g} at {worst_where}, {len(r_ids)} generated tokens)"
+    )
 
 
 if __name__ == "__main__":

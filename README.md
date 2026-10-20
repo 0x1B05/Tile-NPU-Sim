@@ -61,10 +61,10 @@ Running it needs a converted model blob. Fetch the pinned weights and tokenizer 
 
 ```sh
 scripts/qwen3/fetch_model.sh   # set HF_BASE=... for another mirror
-python3 scripts/qwen3/convert.py external/qwen3 model.q3b --prompt "Hi" --chat
+python3 scripts/qwen3/convert.py real external/qwen3 model.q3b --prompt "Hi"
 ```
 
-`--ids "1,2,3"` supplies token ids directly and `--max-pos N` caps positions; conversion needs python3 with numpy. Run the app image together with the blob, which must land at the address the guest is linked against (`BLOB_BASE` in `apps/qwen3/qwen3.h`); the default 128 MiB RAM does not fit the real blob, hence `-m 1024`:
+`--max-pos N` caps positions; conversion needs python3 with numpy. Run `scripts/qwen3/convert.py --help` for all options; `--verbose` reports per-tensor quantization errors and `--quiet` suppresses progress. Run the app image together with the blob, which must land at the address the guest is linked against (`BLOB_BASE` in `apps/qwen3/qwen3.h`); the default 128 MiB RAM does not fit the real blob, hence `-m 1024`:
 
 ```sh
 ./build/linux/x86_64/release/sim_run -m 1024 \
@@ -76,7 +76,7 @@ The app prints the prompt and generated token ids over the serial console and st
 A fixed-seed random tiny model exercises the same path without any download, and the opt-in regression wraps the whole chain — convert, guest forward under `sim_run`, then compare against the numpy reference `ref.py` (integer probes bit-exact, f32 probes within tolerance, generated tokens exact):
 
 ```sh
-python3 scripts/qwen3/convert.py --tiny tiny.q3b tiny_ref.npz
+python3 scripts/qwen3/convert.py tiny --out tiny.q3b --ref tiny_ref.npz
 xmake f --qwen3test=y && xmake test
 ```
 
