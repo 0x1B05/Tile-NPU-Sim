@@ -4,9 +4,9 @@
 #include "domain.h"
 #include "op_info.h"
 #include "operand.h"
+#include "utils/bits.h"
 #include "utils/common.h"
 
-#include <bit>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -30,8 +30,8 @@ bool op_supports_dtype(CmpOp op, DType dtype) {
 // unord holds exactly when an operand is NaN).
 bool compare(CmpOp op, DType dtype, std::uint32_t lhs, std::uint32_t rhs) {
   if (dtype == DType::f32) {
-    const auto left = std::bit_cast<float>(lhs);
-    const auto right = std::bit_cast<float>(rhs);
+    const auto left = as_f32(lhs);
+    const auto right = as_f32(rhs);
     switch (op) {
     case CmpOp::eq: return left == right;
     case CmpOp::lt: return left < right;

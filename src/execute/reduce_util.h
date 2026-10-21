@@ -3,15 +3,11 @@
 #include "tile_npu/state.h"
 #include "utils/common.h"
 
-#include <bit>
 #include <cmath>
 #include <cstddef>
-#include <cstdint>
 #include <span>
 
 namespace tile_npu {
-
-constexpr std::uint32_t f32_bits(float value) { return std::bit_cast<std::uint32_t>(value); }
 
 inline constexpr std::size_t REDUCE_LEAVES = VECTOR_LANES;
 

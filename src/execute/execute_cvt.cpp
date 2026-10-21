@@ -3,6 +3,7 @@
 #include "config_check.h"
 #include "domain.h"
 #include "matrix_view.h"
+#include "utils/bits.h"
 
 #include <bit>
 #include <cstddef>
@@ -14,7 +15,7 @@ namespace {
 
 // One i32 -> f32 conversion on raw storage bits.
 constexpr std::uint32_t i32_to_f32_bits(std::uint32_t bits) {
-  return std::bit_cast<std::uint32_t>(static_cast<float>(std::bit_cast<std::int32_t>(bits)));
+  return as_u32(static_cast<float>(std::bit_cast<std::int32_t>(bits)));
 }
 
 // acvt/vcvt: in-place-capable i32 -> f32 conversion over the destination's

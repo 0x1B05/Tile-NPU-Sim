@@ -2,9 +2,9 @@
 
 #include "config_check.h"
 #include "domain.h"
+#include "utils/bits.h"
 #include "utils/common.h"
 
-#include <bit>
 #include <cmath>
 #include <cstddef>
 #include <type_traits>
@@ -46,8 +46,7 @@ template <typename E> E apply_er4_op(Er4Op op, E arg, E lhs, E rhs) {
     return arg != 0 ? lhs : rhs;
   }
   if constexpr (sizeof(E) == sizeof(float)) {
-    return std::bit_cast<E>(
-        std::fma(std::bit_cast<float>(lhs), std::bit_cast<float>(rhs), std::bit_cast<float>(arg)));
+    return static_cast<E>(as_u32(std::fma(as_f32(lhs), as_f32(rhs), as_f32(arg))));
   }
   unreachable("fmadd on an 8-bit domain");
 }

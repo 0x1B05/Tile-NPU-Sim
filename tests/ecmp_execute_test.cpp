@@ -114,14 +114,14 @@ TEST_CASE(ecmp_vec_f32) {
     const auto inf = std::numeric_limits<float>::infinity();
     for (auto index : {0, 1, 2})
       vec_cfg(state, index, index == 0 ? DType::u32 : DType::f32, 4);
-    state.v[1][0] = f32_bits(1.5f);
-    state.v[1][1] = f32_bits(-0.0f); // -0 == +0
-    state.v[1][2] = f32_bits(nan);   // NaN falsifies ordered conds
-    state.v[1][3] = f32_bits(inf);   // +inf < 1 is false
-    state.v[2][0] = f32_bits(1.5f);
-    state.v[2][1] = f32_bits(0.0f);
-    state.v[2][2] = f32_bits(nan);
-    state.v[2][3] = f32_bits(1.0f);
+    state.v[1][0] = as_u32(1.5f);
+    state.v[1][1] = as_u32(-0.0f); // -0 == +0
+    state.v[1][2] = as_u32(nan);   // NaN falsifies ordered conds
+    state.v[1][3] = as_u32(inf);   // +inf < 1 is false
+    state.v[2][0] = as_u32(1.5f);
+    state.v[2][1] = as_u32(0.0f);
+    state.v[2][2] = as_u32(nan);
+    state.v[2][3] = as_u32(1.0f);
   };
 
   load_one(sim, memory, make_ecmp(NpuDomain::vec32, false, 0, 0, 1, 2));

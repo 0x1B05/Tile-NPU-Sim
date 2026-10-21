@@ -39,17 +39,17 @@ TEST_CASE(areduce_sum_max_min) {
   vec_cfg(state, 0, DType::f32, 2);
   const float src[6] = {1.0f, 2.0f, 3.5f, -1.0f, -2.5f, 4.0f};
   for (std::uint8_t k = 0; k < 6; ++k)
-    state.a[1][(k / 3) * 32 + (k % 3)] = f32_bits(src[k]);
+    state.a[1][(k / 3) * 32 + (k % 3)] = as_u32(src[k]);
 
   check_eq(sim.step().status, StepStatus::retired, "areduce.rows.sum retires");
-  check_eq(hex(state.v[0][0]), hex(f32_bits(6.5f)), "row0 sum");
-  check_eq(hex(state.v[0][1]), hex(f32_bits(0.5f)), "row1 sum");
+  check_eq(hex(state.v[0][0]), hex(as_u32(6.5f)), "row0 sum");
+  check_eq(hex(state.v[0][1]), hex(as_u32(0.5f)), "row1 sum");
   check_eq(sim.step().status, StepStatus::retired, "areduce.rows.max retires");
-  check_eq(hex(state.v[0][0]), hex(f32_bits(3.5f)), "row0 max");
-  check_eq(hex(state.v[0][1]), hex(f32_bits(4.0f)), "row1 max");
+  check_eq(hex(state.v[0][0]), hex(as_u32(3.5f)), "row0 max");
+  check_eq(hex(state.v[0][1]), hex(as_u32(4.0f)), "row1 max");
   check_eq(sim.step().status, StepStatus::retired, "areduce.rows.min retires");
-  check_eq(hex(state.v[0][0]), hex(f32_bits(1.0f)), "row0 min");
-  check_eq(hex(state.v[0][1]), hex(f32_bits(-2.5f)), "row1 min");
+  check_eq(hex(state.v[0][0]), hex(as_u32(1.0f)), "row0 min");
+  check_eq(hex(state.v[0][1]), hex(as_u32(-2.5f)), "row1 min");
 }
 
 TEST_CASE(areduce_sumsq_absmax) {
@@ -63,17 +63,17 @@ TEST_CASE(areduce_sumsq_absmax) {
   auto &state = sim.state();
   acc_f32(state, 1, 2, 2);
   vec_cfg(state, 0, DType::f32, 2);
-  state.a[1][0] = f32_bits(3.0f);
-  state.a[1][1] = f32_bits(4.0f);
-  state.a[1][32] = f32_bits(-5.0f);
-  state.a[1][33] = f32_bits(2.0f);
+  state.a[1][0] = as_u32(3.0f);
+  state.a[1][1] = as_u32(4.0f);
+  state.a[1][32] = as_u32(-5.0f);
+  state.a[1][33] = as_u32(2.0f);
 
   check_eq(sim.step().status, StepStatus::retired, "areduce.rows.sumsq retires");
-  check_eq(hex(state.v[0][0]), hex(f32_bits(25.0f)), "row0 sumsq");
-  check_eq(hex(state.v[0][1]), hex(f32_bits(29.0f)), "row1 sumsq");
+  check_eq(hex(state.v[0][0]), hex(as_u32(25.0f)), "row0 sumsq");
+  check_eq(hex(state.v[0][1]), hex(as_u32(29.0f)), "row1 sumsq");
   check_eq(sim.step().status, StepStatus::retired, "areduce.rows.absmax retires");
-  check_eq(hex(state.v[0][0]), hex(f32_bits(4.0f)), "row0 absmax");
-  check_eq(hex(state.v[0][1]), hex(f32_bits(5.0f)), "row1 absmax");
+  check_eq(hex(state.v[0][0]), hex(as_u32(4.0f)), "row0 absmax");
+  check_eq(hex(state.v[0][1]), hex(as_u32(5.0f)), "row1 absmax");
 }
 
 TEST_CASE(areduce_argmax) {
@@ -85,12 +85,12 @@ TEST_CASE(areduce_argmax) {
   auto &state = sim.state();
   acc_f32(state, 1, 3, 4);
   vec_cfg(state, 0, DType::i32, 3);
-  const auto nan = f32_bits(std::nanf(""));
+  const auto nan = as_u32(std::nanf(""));
   const float row0[4] = {1.0f, 5.0f, 5.0f, 2.0f};
-  const std::uint32_t row1[4] = {f32_bits(1.0f), nan, f32_bits(3.0f), f32_bits(2.0f)};
-  const std::uint32_t row2[4] = {nan, f32_bits(1.0f), f32_bits(2.0f), f32_bits(3.0f)};
+  const std::uint32_t row1[4] = {as_u32(1.0f), nan, as_u32(3.0f), as_u32(2.0f)};
+  const std::uint32_t row2[4] = {nan, as_u32(1.0f), as_u32(2.0f), as_u32(3.0f)};
   for (std::uint8_t col = 0; col < 4; ++col) {
-    state.a[1][col] = f32_bits(row0[col]);
+    state.a[1][col] = as_u32(row0[col]);
     state.a[1][32 + col] = row1[col];
     state.a[1][64 + col] = row2[col];
   }
@@ -113,18 +113,18 @@ TEST_CASE(vreduce_reductions) {
   sim.reset(CODE_BASE);
   auto &state = sim.state();
   vec_cfg(state, 1, DType::f32, 3);
-  state.v[1][0] = f32_bits(1.5f);
-  state.v[1][1] = f32_bits(-2.0f);
-  state.v[1][2] = f32_bits(4.0f);
+  state.v[1][0] = as_u32(1.5f);
+  state.v[1][1] = as_u32(-2.0f);
+  state.v[1][2] = as_u32(4.0f);
 
   check_eq(sim.step().status, StepStatus::retired, "vreduce.sum retires");
-  check_eq(hex(state.scalar.read_x(5)), hex(f32_bits(3.5f)), "sum bits");
+  check_eq(hex(state.scalar.read_x(5)), hex(as_u32(3.5f)), "sum bits");
   check_eq(sim.step().status, StepStatus::retired, "vreduce.max retires");
-  check_eq(hex(state.scalar.read_x(6)), hex(f32_bits(4.0f)), "max bits");
+  check_eq(hex(state.scalar.read_x(6)), hex(as_u32(4.0f)), "max bits");
   check_eq(sim.step().status, StepStatus::retired, "vreduce.min retires");
-  check_eq(hex(state.scalar.read_x(7)), hex(f32_bits(-2.0f)), "min bits");
+  check_eq(hex(state.scalar.read_x(7)), hex(as_u32(-2.0f)), "min bits");
   check_eq(sim.step().status, StepStatus::retired, "vreduce.sumsq retires");
-  check_eq(hex(state.scalar.read_x(8)), hex(f32_bits(22.25f)), "sumsq bits");
+  check_eq(hex(state.scalar.read_x(8)), hex(as_u32(22.25f)), "sumsq bits");
 }
 
 TEST_CASE(vreduce_sumsq_rounds_each_product) {
@@ -151,9 +151,9 @@ TEST_CASE(vreduce_argmax) {
   load_one(sim, memory, make_vreduce_argmax(5, 6, 1));
   auto &state = sim.state();
   vec_cfg(state, 1, DType::f32, 3);
-  state.v[1][0] = f32_bits(1.0f);
-  state.v[1][1] = f32_bits(7.0f);
-  state.v[1][2] = f32_bits(std::nanf(""));
+  state.v[1][0] = as_u32(1.0f);
+  state.v[1][1] = as_u32(7.0f);
+  state.v[1][2] = as_u32(std::nanf(""));
 
   check_eq(sim.step().status, StepStatus::retired, "vreduce.argmax retires");
   check_eq(hex(state.scalar.read_x(5)), hex(0x2u), "NaN lane index wins");
@@ -169,10 +169,10 @@ TEST_CASE(vreduce_sum_tree_order) {
   load_one(sim, memory, make_vreduce(0, 5, 1));
   auto &state = sim.state();
   vec_cfg(state, 1, DType::f32, 4);
-  state.v[1][0] = f32_bits(1.0e8f);
-  state.v[1][1] = f32_bits(1.0f);
-  state.v[1][2] = f32_bits(-1.0e8f);
-  state.v[1][3] = f32_bits(1.0f);
+  state.v[1][0] = as_u32(1.0e8f);
+  state.v[1][1] = as_u32(1.0f);
+  state.v[1][2] = as_u32(-1.0e8f);
+  state.v[1][3] = as_u32(1.0f);
 
   check_eq(sim.step().status, StepStatus::retired, "vreduce.sum tree retires");
   check_eq(hex(state.scalar.read_x(5)), hex(std::uint64_t{0}), "tree pairs the outer terms");
@@ -203,10 +203,10 @@ TEST_CASE(areduce_sum_tree_order) {
   auto &state = sim.state();
   acc_f32(state, 1, 1, 4);
   vec_cfg(state, 0, DType::f32, 1);
-  state.a[1][0] = f32_bits(1.0e8f);
-  state.a[1][1] = f32_bits(1.0f);
-  state.a[1][2] = f32_bits(-1.0e8f);
-  state.a[1][3] = f32_bits(1.0f);
+  state.a[1][0] = as_u32(1.0e8f);
+  state.a[1][1] = as_u32(1.0f);
+  state.a[1][2] = as_u32(-1.0e8f);
+  state.a[1][3] = as_u32(1.0f);
 
   check_eq(sim.step().status, StepStatus::retired, "areduce.rows.sum tree retires");
   check_eq(hex(state.v[0][0]), hex(std::uint64_t{0}), "row tree pairs the outer terms");
@@ -221,21 +221,21 @@ TEST_CASE(vreduce_max_min_nan_zero) {
   sim.reset(CODE_BASE);
   auto &state = sim.state();
   vec_cfg(state, 1, DType::f32, 4);
-  state.v[1][0] = f32_bits(std::nanf(""));
-  state.v[1][1] = f32_bits(-std::numeric_limits<float>::infinity());
-  state.v[1][2] = f32_bits(0.0f);
-  state.v[1][3] = f32_bits(-0.0f);
+  state.v[1][0] = as_u32(std::nanf(""));
+  state.v[1][1] = as_u32(-std::numeric_limits<float>::infinity());
+  state.v[1][2] = as_u32(0.0f);
+  state.v[1][3] = as_u32(-0.0f);
 
   check_eq(sim.step().status, StepStatus::retired, "vreduce.max NaN/zero retires");
   check_eq(hex(state.scalar.read_x(5)), hex(std::uint64_t{0x00000000ull}), "max returns +0");
-  state.v[1][1] = f32_bits(std::numeric_limits<float>::infinity());
+  state.v[1][1] = as_u32(std::numeric_limits<float>::infinity());
   check_eq(sim.step().status, StepStatus::retired, "vreduce.min NaN/zero retires");
   check_eq(hex(state.scalar.read_x(6)), hex(std::uint64_t{0x80000000ull}), "min returns -0");
 
   // Two NaNs keep the left candidate, preserving its bits.
   load_one(sim, memory, make_vreduce(1, 5, 1));
   vec_cfg(state, 1, DType::f32, 2);
-  const auto nan_bits = f32_bits(std::nanf(""));
+  const auto nan_bits = as_u32(std::nanf(""));
   state.v[1][0] = nan_bits;
   state.v[1][1] = nan_bits ^ 0x00000001u;
   check_eq(sim.step().status, StepStatus::retired, "vreduce.max both-NaN retires");
@@ -253,11 +253,11 @@ TEST_CASE(areduce_sum_tree_five) {
   vec_cfg(state, 0, DType::f32, 1);
   const float src[5] = {1.0e8f, 1.0f, -1.0e8f, 1.0f, 2.0f};
   for (std::uint8_t col = 0; col < 5; ++col) {
-    state.a[1][col] = f32_bits(src[col]);
+    state.a[1][col] = as_u32(src[col]);
   }
 
   check_eq(sim.step().status, StepStatus::retired, "areduce.rows.sum five retires");
-  check_eq(hex(state.v[0][0]), hex(f32_bits(2.0f)), "odd node passes through at the last level");
+  check_eq(hex(state.v[0][0]), hex(as_u32(2.0f)), "odd node passes through at the last level");
 }
 
 TEST_CASE(areduce_absmax_single_and_all_nan) {
@@ -271,21 +271,21 @@ TEST_CASE(areduce_absmax_single_and_all_nan) {
   acc_f32(state, 1, 1, 1);
   vec_cfg(state, 0, DType::f32, 1);
 
-  state.a[1][0] = f32_bits(-3.0f);
+  state.a[1][0] = as_u32(-3.0f);
   check_eq(sim.step().status, StepStatus::retired, "single-element absmax retires");
-  check_eq(hex(state.v[0][0]), hex(f32_bits(3.0f)), "single negative leaf becomes its magnitude");
+  check_eq(hex(state.v[0][0]), hex(as_u32(3.0f)), "single negative leaf becomes its magnitude");
 
-  state.a[1][0] = f32_bits(-0.0f);
+  state.a[1][0] = as_u32(-0.0f);
   check_eq(sim.step().status, StepStatus::retired, "single -0 absmax retires");
   check_eq(hex(state.v[0][0]), hex(std::uint64_t{0}), "-0 leaf becomes +0");
 
-  state.a[1][0] = f32_bits(std::nanf(""));
+  state.a[1][0] = as_u32(std::nanf(""));
   check_eq(sim.step().status, StepStatus::retired, "single NaN absmax retires");
   check_eq(hex(state.v[0][0]), hex(std::uint64_t{0}), "NaN leaf becomes +0");
 
   acc_f32(state, 1, 1, 2);
-  state.a[1][0] = f32_bits(std::nanf(""));
-  state.a[1][1] = f32_bits(std::nanf(""));
+  state.a[1][0] = as_u32(std::nanf(""));
+  state.a[1][1] = as_u32(std::nanf(""));
   check_eq(sim.step().status, StepStatus::retired, "all-NaN absmax retires");
   check_eq(hex(state.v[0][0]), hex(std::uint64_t{0}), "all-NaN absmax is +0");
 }
@@ -299,12 +299,12 @@ TEST_CASE(areduce_absmax_three) {
   auto &state = sim.state();
   acc_f32(state, 1, 1, 3);
   vec_cfg(state, 0, DType::f32, 1);
-  state.a[1][0] = f32_bits(-3.0f);
-  state.a[1][1] = f32_bits(-0.0f);
-  state.a[1][2] = f32_bits(std::nanf(""));
+  state.a[1][0] = as_u32(-3.0f);
+  state.a[1][1] = as_u32(-0.0f);
+  state.a[1][2] = as_u32(std::nanf(""));
 
   check_eq(sim.step().status, StepStatus::retired, "three-element absmax retires");
-  check_eq(hex(state.v[0][0]), hex(f32_bits(3.0f)), "three-leaf absmax is the magnitude");
+  check_eq(hex(state.v[0][0]), hex(as_u32(3.0f)), "three-leaf absmax is the magnitude");
 }
 
 TEST_CASE(reduce_rejects_invalid) {

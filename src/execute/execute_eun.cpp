@@ -2,9 +2,9 @@
 
 #include "config_check.h"
 #include "domain.h"
+#include "utils/bits.h"
 #include "utils/common.h"
 
-#include <bit>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -39,7 +39,7 @@ template <typename E> E apply_unary(EunOp op, DType dtype, E value) {
   if (op == EunOp::bit_not) return static_cast<E>(~value);
   if constexpr (sizeof(E) == sizeof(float)) {
     if (dtype == DType::f32) {
-      const auto x = std::bit_cast<float>(value);
+      const auto x = as_f32(value);
       float result = 0.0f;
       switch (op) {
       case EunOp::abs: result = std::fabs(x); break;
@@ -50,7 +50,7 @@ template <typename E> E apply_unary(EunOp op, DType dtype, E value) {
       case EunOp::silu: result = silu_f32(x); break;
       default: unreachable("f32 element with an integer-only E_UNARY op");
       }
-      return std::bit_cast<E>(result);
+      return static_cast<E>(as_u32(result));
     }
   }
   // i32 neg/abs: unsigned arithmetic keeps INT32_MIN well-defined (it wraps,

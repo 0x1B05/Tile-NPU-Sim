@@ -78,14 +78,14 @@ TEST_CASE(er4_vec_select_f32) {
   vec_cfg(state, 1, DType::u32, 2);
   state.v[1][0] = 1; // != 0 counts as true
   state.v[1][1] = 0;
-  state.v[2][0] = f32_bits(-1.5f);
-  state.v[2][1] = f32_bits(2.5f);
-  state.v[3][0] = f32_bits(10.0f);
-  state.v[3][1] = f32_bits(20.0f);
+  state.v[2][0] = as_u32(-1.5f);
+  state.v[2][1] = as_u32(2.5f);
+  state.v[3][0] = as_u32(10.0f);
+  state.v[3][1] = as_u32(20.0f);
 
   check_eq(sim.step().status, StepStatus::retired, "vselect retires");
-  check_eq(hex(state.v[0][0]), hex(f32_bits(-1.5f)), "nonzero mask picks A");
-  check_eq(hex(state.v[0][1]), hex(f32_bits(20.0f)), "zero mask picks B");
+  check_eq(hex(state.v[0][0]), hex(as_u32(-1.5f)), "nonzero mask picks A");
+  check_eq(hex(state.v[0][1]), hex(as_u32(20.0f)), "zero mask picks B");
 }
 
 TEST_CASE(er4_fmadd) {
@@ -97,25 +97,25 @@ TEST_CASE(er4_fmadd) {
   load_one(sim, memory, make_er4(NpuDomain::vec32, 1, 0, 3, 1, 2));
   for (auto index : {0, 1, 2, 3})
     vec_cfg(state, index, DType::f32, 2);
-  state.v[1][0] = f32_bits(1.5f);
-  state.v[1][1] = f32_bits(-2.0f);
-  state.v[2][0] = f32_bits(4.0f);
-  state.v[2][1] = f32_bits(0.5f);
-  state.v[3][0] = f32_bits(0.25f);
-  state.v[3][1] = f32_bits(1.0f);
+  state.v[1][0] = as_u32(1.5f);
+  state.v[1][1] = as_u32(-2.0f);
+  state.v[2][0] = as_u32(4.0f);
+  state.v[2][1] = as_u32(0.5f);
+  state.v[3][0] = as_u32(0.25f);
+  state.v[3][1] = as_u32(1.0f);
   check_eq(sim.step().status, StepStatus::retired, "vfmadd retires");
-  check_eq(hex(state.v[0][0]), hex(f32_bits(6.25f)), "1.5*4 + 0.25");
-  check_eq(hex(state.v[0][1]), hex(f32_bits(0.0f)), "-2*0.5 + 1");
+  check_eq(hex(state.v[0][0]), hex(as_u32(6.25f)), "1.5*4 + 0.25");
+  check_eq(hex(state.v[0][1]), hex(as_u32(0.0f)), "-2*0.5 + 1");
 
   // afmadd a0, a1, a2, a3 on a 1x1 matrix.
   load_one(sim, memory, make_er4(NpuDomain::acc, 1, 0, 3, 1, 2));
   for (auto index : {0, 1, 2, 3})
     acc_cfg(state, index, DType::f32, 1, 1);
-  state.a[1][0] = f32_bits(3.0f);
-  state.a[2][0] = f32_bits(0.5f);
-  state.a[3][0] = f32_bits(-1.0f);
+  state.a[1][0] = as_u32(3.0f);
+  state.a[2][0] = as_u32(0.5f);
+  state.a[3][0] = as_u32(-1.0f);
   check_eq(sim.step().status, StepStatus::retired, "afmadd retires");
-  check_eq(hex(state.a[0][0]), hex(f32_bits(0.5f)), "3*0.5 - 1");
+  check_eq(hex(state.a[0][0]), hex(as_u32(0.5f)), "3*0.5 - 1");
 }
 
 TEST_CASE(er4_rejects_invalid) {

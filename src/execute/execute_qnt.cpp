@@ -4,6 +4,7 @@
 #include "matrix_view.h"
 #include "operand.h"
 #include "reduce_util.h"
+#include "utils/bits.h"
 
 #include <array>
 #include <bit>
@@ -58,7 +59,7 @@ std::int8_t quantize_lane(float value, float scale) {
 float row_amax(MatrixView<const std::uint32_t> src, std::size_t row, std::size_t cols) {
   std::array<float, REDUCE_LEAVES> values{};
   for (std::size_t col = 0; col < cols; ++col) {
-    values[col] = std::bit_cast<float>(src.at(row, col));
+    values[col] = as_f32(src.at(row, col));
   }
   return f32_absmax(std::span(values).first(cols));
 }
@@ -92,14 +93,13 @@ ExecuteResult tquant(const TquantInstr &instr, State &state) {
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     float scale;
     if (external_scale) {
-      scale = std::bit_cast<float>(scale_reg[row]);
+      scale = as_f32(scale_reg[row]);
     } else {
       scale = row_amax(src, row, src_config.cols) / Q8_MAX_MAGNITUDE;
-      scale_reg[row] = f32_bits(scale);
+      scale_reg[row] = as_u32(scale);
     }
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
-      dst.at(row, col) =
-          static_cast<std::uint8_t>(quantize_lane(std::bit_cast<float>(src.at(row, col)), scale));
+      dst.at(row, col) = static_cast<std::uint8_t>(quantize_lane(as_f32(src.at(row, col)), scale));
     }
   }
   return {.status = StepStatus::retired};
@@ -117,10 +117,10 @@ ExecuteResult tdequant(const TdequantInstr &instr, State &state) {
   auto src = matrix_view(std::as_const(state.t[instr.src.index]));
   const auto &scale_reg = state.v[instr.scale];
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
-    const float scale = std::bit_cast<float>(scale_reg[row]);
+    const float scale = as_f32(scale_reg[row]);
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
       const float element = static_cast<float>(std::bit_cast<std::int8_t>(src.at(row, col)));
-      dst.at(row, col) = f32_bits(element * scale);
+      dst.at(row, col) = as_u32(element * scale);
     }
   }
   return {.status = StepStatus::retired};
@@ -143,14 +143,14 @@ ExecuteResult vquant(const VquantInstr &instr, State &state) {
   auto &dst_reg = state.b[instr.dest.index];
   std::array<float, REDUCE_LEAVES> values{};
   for (std::size_t j = 0; j < src_config.len; ++j) {
-    values[j] = std::bit_cast<float>(src_reg[j]);
+    values[j] = as_f32(src_reg[j]);
   }
   const float amax = f32_absmax(std::span(values).first(src_config.len));
   const float scale = amax / Q8_MAX_MAGNITUDE;
   for (std::size_t j = 0; j < src_config.len; ++j) {
-    dst_reg[j] = static_cast<std::uint8_t>(quantize_lane(std::bit_cast<float>(src_reg[j]), scale));
+    dst_reg[j] = static_cast<std::uint8_t>(quantize_lane(as_f32(src_reg[j]), scale));
   }
-  state.v[instr.scale][*lane] = f32_bits(scale);
+  state.v[instr.scale][*lane] = as_u32(scale);
   return {.status = StepStatus::retired};
 }
 
@@ -166,12 +166,12 @@ ExecuteResult bdequant(const BdequantInstr &instr, State &state) {
   if (!lane) {
     return config_error();
   }
-  const float scale = std::bit_cast<float>(state.v[instr.scale][*lane]);
+  const float scale = as_f32(state.v[instr.scale][*lane]);
   const auto &src_reg = state.b[instr.src.index];
   auto &dst_reg = state.v[instr.dest.index];
   for (std::size_t j = 0; j < dst_config.len; ++j) {
     const float element = static_cast<float>(std::bit_cast<std::int8_t>(src_reg[j]));
-    dst_reg[j] = f32_bits(element * scale);
+    dst_reg[j] = as_u32(element * scale);
   }
   return {.status = StepStatus::retired};
 }

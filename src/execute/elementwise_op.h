@@ -2,10 +2,10 @@
 
 #include "op_info.h"
 #include "tile_npu/state.h"
+#include "utils/bits.h"
 #include "utils/common.h"
 
 #include <algorithm>
-#include <bit>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -93,8 +93,7 @@ template <typename E> E apply_ebin_int(EbinOp op, DType dtype, ArithMode arith, 
 template <typename E> E apply_ebin_op(EbinOp op, DType dtype, ArithMode arith, E lhs, E rhs) {
   if constexpr (sizeof(E) == sizeof(float)) {
     if (dtype == DType::f32) {
-      return std::bit_cast<E>(
-          apply_ebin_f32(op, std::bit_cast<float>(lhs), std::bit_cast<float>(rhs)));
+      return static_cast<E>(as_u32(apply_ebin_f32(op, as_f32(lhs), as_f32(rhs))));
     }
   }
   return apply_ebin_int(op, dtype, arith, lhs, rhs);

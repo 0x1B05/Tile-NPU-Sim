@@ -77,16 +77,16 @@ TEST_CASE(emask_acc_triu_f32) {
   for (auto index : {0, 1})
     acc_cfg(state, index, DType::f32, 2, 2);
   state.scalar.write_x(2, 0);
-  state.a[1][0] = f32_bits(1.0f);
-  state.a[1][1] = f32_bits(2.0f);
-  state.a[1][32] = f32_bits(3.0f);
-  state.a[1][33] = f32_bits(4.0f);
+  state.a[1][0] = as_u32(1.0f);
+  state.a[1][1] = as_u32(2.0f);
+  state.a[1][32] = as_u32(3.0f);
+  state.a[1][33] = as_u32(4.0f);
 
   check_eq(sim.step().status, StepStatus::retired, "amask.triu retires");
-  check_eq(hex(state.a[0][0]), hex(f32_bits(1.0f)), "diagonal keeps source");
-  check_eq(hex(state.a[0][1]), hex(f32_bits(2.0f)), "above keeps source");
-  check_eq(hex(state.a[0][32]), hex(f32_bits(INFINITY)), "below fills +inf");
-  check_eq(hex(state.a[0][33]), hex(f32_bits(4.0f)), "diagonal keeps source");
+  check_eq(hex(state.a[0][0]), hex(as_u32(1.0f)), "diagonal keeps source");
+  check_eq(hex(state.a[0][1]), hex(as_u32(2.0f)), "above keeps source");
+  check_eq(hex(state.a[0][32]), hex(as_u32(INFINITY)), "below fills +inf");
+  check_eq(hex(state.a[0][33]), hex(as_u32(4.0f)), "diagonal keeps source");
 }
 
 TEST_CASE(emask_vec_tail) {

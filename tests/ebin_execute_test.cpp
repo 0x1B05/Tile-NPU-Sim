@@ -289,19 +289,19 @@ TEST_CASE(ebin_f32_arithmetic) {
   for (auto index : {0, 1, 2, 3, 4, 5, 6, 7, 8}) {
     vec_cfg(state, index, DType::f32, 1);
   }
-  state.v[1][0] = f32_bits(1.5f);
-  state.v[2][0] = f32_bits(0.5f);
-  state.v[4][0] = f32_bits(3.0f);
-  state.v[5][0] = f32_bits(2.0f);
+  state.v[1][0] = as_u32(1.5f);
+  state.v[2][0] = as_u32(0.5f);
+  state.v[4][0] = as_u32(3.0f);
+  state.v[5][0] = as_u32(2.0f);
   state.v[7][0] = 0x7fc00000u; // qNaN
-  state.v[8][0] = f32_bits(1.0f);
+  state.v[8][0] = as_u32(1.0f);
   check_eq(sim.step().status, StepStatus::retired, "vadd retires");
   check_eq(sim.step().status, StepStatus::retired, "vdiv retires");
   check_eq(sim.step().status, StepStatus::retired, "vmin retires");
-  check_eq(hex(state.v[0][0]), hex(f32_bits(2.0f)), "f32 add");
-  check_eq(hex(state.v[3][0]), hex(f32_bits(1.5f)), "f32 div");
+  check_eq(hex(state.v[0][0]), hex(as_u32(2.0f)), "f32 add");
+  check_eq(hex(state.v[3][0]), hex(as_u32(1.5f)), "f32 div");
   // IEEE minNum: NaN does not propagate, the number wins.
-  check_eq(hex(state.v[6][0]), hex(f32_bits(1.0f)), "f32 min drops NaN");
+  check_eq(hex(state.v[6][0]), hex(as_u32(1.0f)), "f32 min drops NaN");
 }
 
 TEST_CASE(ebin_f32_scalar_source) {
@@ -316,12 +316,12 @@ TEST_CASE(ebin_f32_scalar_source) {
   auto &state = sim.state();
   vec_cfg(state, 0, DType::f32, 2);
   vec_cfg(state, 1, DType::f32, 2);
-  state.v[1][0] = f32_bits(1.5f);
-  state.v[1][1] = f32_bits(-2.0f);
+  state.v[1][0] = as_u32(1.5f);
+  state.v[1][1] = as_u32(-2.0f);
   state.scalar.write_x(2, 0xffffffff3f800000u); // f32 1.0 in the low 32 bits
   check_eq(sim.step().status, StepStatus::retired, "vaddx f32 retires");
-  check_eq(hex(state.v[0][0]), hex(f32_bits(2.5f)), "f32 add 1.5 + 1.0");
-  check_eq(hex(state.v[0][1]), hex(f32_bits(-1.0f)), "f32 add -2.0 + 1.0");
+  check_eq(hex(state.v[0][0]), hex(as_u32(2.5f)), "f32 add 1.5 + 1.0");
+  check_eq(hex(state.v[0][1]), hex(as_u32(-1.0f)), "f32 add -2.0 + 1.0");
 }
 
 TEST_CASE(ebin_f32_rejects_integer_only_ops) {
@@ -333,7 +333,7 @@ TEST_CASE(ebin_f32_rejects_integer_only_ops) {
   auto &state = sim.state();
   for (auto index : {0, 1, 2})
     vec_cfg(state, index, DType::f32, 1);
-  state.v[1][0] = f32_bits(1.0f);
+  state.v[1][0] = as_u32(1.0f);
   check_eq(sim.step().status, StepStatus::invalid_configuration,
            "f32 bitwise op is a config error");
   check_eq(hex(state.v[0][0]), hex(0), "rejected op leaves v0 untouched");
@@ -457,7 +457,7 @@ TEST_CASE(ebin_legality_matrix) {
             vec_cfg(state, index, dtype, 1);
           }
         }
-        const auto value = dtype == DType::f32 ? f32_bits(1.0f) : 1u;
+        const auto value = dtype == DType::f32 ? as_u32(1.0f) : 1u;
         if (domain == NpuDomain::tile) {
           state.t[1][0] = static_cast<std::uint8_t>(value);
           state.t[2][0] = static_cast<std::uint8_t>(value);

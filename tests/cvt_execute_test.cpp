@@ -32,11 +32,11 @@ TEST_CASE(cvt_acc_i32_f32) {
   state.a[1][33] = 0xfffffffdu; // -3
 
   check_eq(sim.step().status, StepStatus::retired, "acvt retires");
-  check_eq(hex(state.a[0][0]), hex(f32_bits(1.0f)), "1 -> 1.0f");
-  check_eq(hex(state.a[0][1]), hex(f32_bits(-2.0f)), "-2 -> -2.0f");
+  check_eq(hex(state.a[0][0]), hex(as_u32(1.0f)), "1 -> 1.0f");
+  check_eq(hex(state.a[0][1]), hex(as_u32(-2.0f)), "-2 -> -2.0f");
   // 2^31 - 1 rounds up to 2^31 in f32.
   check_eq(hex(state.a[0][32]), hex(0x4f000000u), "INT32_MAX -> 2^31");
-  check_eq(hex(state.a[0][33]), hex(f32_bits(-3.0f)), "-3 -> -3.0f");
+  check_eq(hex(state.a[0][33]), hex(as_u32(-3.0f)), "-3 -> -3.0f");
   check_eq(state.ac[0].dtype, DType::f32, "acvt updates the destination dtype");
   check_eq(state.ac[1].dtype, DType::i32, "the source dtype is unchanged");
 }
@@ -53,8 +53,8 @@ TEST_CASE(cvt_acc_in_place) {
   state.a[0][1] = 0xfffffff9u; // -7
 
   check_eq(sim.step().status, StepStatus::retired, "in-place acvt retires");
-  check_eq(hex(state.a[0][0]), hex(f32_bits(7.0f)), "7 -> 7.0f");
-  check_eq(hex(state.a[0][1]), hex(f32_bits(-7.0f)), "-7 -> -7.0f");
+  check_eq(hex(state.a[0][0]), hex(as_u32(7.0f)), "7 -> 7.0f");
+  check_eq(hex(state.a[0][1]), hex(as_u32(-7.0f)), "-7 -> -7.0f");
   check_eq(state.ac[0].dtype, DType::f32, "in-place acvt updates the dtype");
 }
 
@@ -72,8 +72,8 @@ TEST_CASE(cvt_vec32) {
   state.v[1][1] = 0xffffffffu; // -1
 
   check_eq(sim.step().status, StepStatus::retired, "vcvt retires");
-  check_eq(hex(state.v[0][0]), hex(f32_bits(42.0f)), "42 -> 42.0f");
-  check_eq(hex(state.v[0][1]), hex(f32_bits(-1.0f)), "-1 -> -1.0f");
+  check_eq(hex(state.v[0][0]), hex(as_u32(42.0f)), "42 -> 42.0f");
+  check_eq(hex(state.v[0][1]), hex(as_u32(-1.0f)), "-1 -> -1.0f");
   check_eq(state.vc[0].dtype, DType::f32, "vcvt updates the destination dtype");
 }
 

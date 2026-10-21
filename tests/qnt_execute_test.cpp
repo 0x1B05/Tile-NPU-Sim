@@ -53,17 +53,17 @@ TEST_CASE(qnt_tquant_dynamic) {
   tile_i8(state, 0, 2, 2);
   acc_f32(state, 1, 2, 2);
   vec32_f32(state, 0, 2);
-  state.a[1][0] = f32_bits(127.0f);
-  state.a[1][1] = f32_bits(-63.5f);
-  state.a[1][32] = f32_bits(0.0f);
-  state.a[1][33] = f32_bits(-0.0f);
+  state.a[1][0] = as_u32(127.0f);
+  state.a[1][1] = as_u32(-63.5f);
+  state.a[1][32] = as_u32(0.0f);
+  state.a[1][33] = as_u32(-0.0f);
 
   check_eq(sim.step().status, StepStatus::retired, "tquant.rows.q8s32 retires");
   check_eq(hex(state.t[0][0]), hex(0x7fu), "row0 col0 saturates at 127");
   check_eq(hex(state.t[0][1]), hex(0xc0u), "row0 col1 rounds to -64");
   check_eq(hex(state.t[0][32]), hex(0x00u), "row1 col0 NaN quotient -> 0");
   check_eq(hex(state.t[0][33]), hex(0x00u), "row1 col1 NaN quotient -> 0");
-  check_eq(hex(state.v[0][0]), hex(f32_bits(1.0f)), "row0 dynamic scale");
+  check_eq(hex(state.v[0][0]), hex(as_u32(1.0f)), "row0 dynamic scale");
   check_eq(hex(state.v[0][1]), hex(0x00000000u), "row1 scale is +0.0");
 }
 
@@ -77,7 +77,7 @@ TEST_CASE(qnt_tquant_nan_absmax) {
   tile_i8(state, 0, 1, 1);
   acc_f32(state, 1, 1, 1);
   vec32_f32(state, 0, 1);
-  state.a[1][0] = f32_bits(std::nanf(""));
+  state.a[1][0] = as_u32(std::nanf(""));
 
   check_eq(sim.step().status, StepStatus::retired, "tquant NaN row retires");
   check_eq(hex(state.t[0][0]), hex(0x00u), "NaN quotient quantizes to 0");
@@ -94,11 +94,11 @@ TEST_CASE(qnt_tquant_single_negative) {
   tile_i8(state, 0, 1, 1);
   acc_f32(state, 1, 1, 1);
   vec32_f32(state, 0, 1);
-  state.a[1][0] = f32_bits(-3.0f);
+  state.a[1][0] = as_u32(-3.0f);
 
   check_eq(sim.step().status, StepStatus::retired, "tquant single negative retires");
   check_eq(hex(state.t[0][0]), hex(0x81u), "single negative quantizes to -127");
-  check_eq(hex(state.v[0][0]), hex(f32_bits(3.0f / 127.0f)), "single negative absmax scale");
+  check_eq(hex(state.v[0][0]), hex(as_u32(3.0f / 127.0f)), "single negative absmax scale");
 }
 
 TEST_CASE(qnt_tquant_external_scale) {
@@ -112,16 +112,16 @@ TEST_CASE(qnt_tquant_external_scale) {
   tile_i8(state, 0, 1, 3);
   acc_f32(state, 1, 1, 3);
   vec32_f32(state, 0, 1);
-  state.a[1][0] = f32_bits(64.0f);
-  state.a[1][1] = f32_bits(-33.0f);
-  state.a[1][2] = f32_bits(10.0f);
-  state.v[0][0] = f32_bits(0.5f);
+  state.a[1][0] = as_u32(64.0f);
+  state.a[1][1] = as_u32(-33.0f);
+  state.a[1][2] = as_u32(10.0f);
+  state.v[0][0] = as_u32(0.5f);
 
   check_eq(sim.step().status, StepStatus::retired, "tquant.rows.scale.q8s32 retires");
   check_eq(hex(state.t[0][0]), hex(0x7fu), "col0 saturates at 127");
   check_eq(hex(state.t[0][1]), hex(0xbeu), "col1 is -66");
   check_eq(hex(state.t[0][2]), hex(0x14u), "col2 is 20");
-  check_eq(hex(state.v[0][0]), hex(f32_bits(0.5f)), "vScale stays untouched");
+  check_eq(hex(state.v[0][0]), hex(as_u32(0.5f)), "vScale stays untouched");
 }
 
 TEST_CASE(qnt_tdequant) {
@@ -135,11 +135,11 @@ TEST_CASE(qnt_tdequant) {
   vec32_f32(state, 0, 1);
   state.t[1][0] = 100;
   state.t[1][1] = 0xfeu; // -2
-  state.v[0][0] = f32_bits(0.5f);
+  state.v[0][0] = as_u32(0.5f);
 
   check_eq(sim.step().status, StepStatus::retired, "tdequant.rows.f32 retires");
-  check_eq(hex(state.a[2][0]), hex(f32_bits(50.0f)), "col0 dequantizes");
-  check_eq(hex(state.a[2][1]), hex(f32_bits(-1.0f)), "col1 dequantizes");
+  check_eq(hex(state.a[2][0]), hex(as_u32(50.0f)), "col0 dequantizes");
+  check_eq(hex(state.a[2][1]), hex(as_u32(-1.0f)), "col1 dequantizes");
 }
 
 TEST_CASE(qnt_vquant) {
@@ -154,9 +154,9 @@ TEST_CASE(qnt_vquant) {
   vec8_i8(state, 0, 3);
   vec32_f32(state, 1, 3);
   vec32_f32(state, 2, 4);
-  state.v[1][0] = f32_bits(127.0f);
-  state.v[1][1] = f32_bits(0.0f);
-  state.v[1][2] = f32_bits(-63.5f);
+  state.v[1][0] = as_u32(127.0f);
+  state.v[1][1] = as_u32(0.0f);
+  state.v[1][2] = as_u32(-63.5f);
   for (std::size_t lane = 0; lane < 4; ++lane)
     state.v[2][lane] = 0xdeadbeefu;
   state.scalar.write_x(3, 1);
@@ -165,14 +165,14 @@ TEST_CASE(qnt_vquant) {
   check_eq(hex(state.b[0][0]), hex(0x7fu), "lane0 saturates at 127");
   check_eq(hex(state.b[0][1]), hex(0x00u), "lane1 is 0");
   check_eq(hex(state.b[0][2]), hex(0xc0u), "lane2 rounds to -64");
-  check_eq(hex(state.v[2][2]), hex(f32_bits(1.0f)), "scale lane 2 written");
+  check_eq(hex(state.v[2][2]), hex(as_u32(1.0f)), "scale lane 2 written");
   check_eq(hex(state.v[2][1]), hex(0xdeadbeefu), "lane1 untouched");
 
   state.b[0][0] = 0x55u; // clobber to prove the second form rewrites it
   check_eq(sim.step().status, StepStatus::retired, "vquant.q8s32 with scalar lane retires");
   check_eq(hex(state.b[0][0]), hex(0x7fu), "lane0 rewritten");
-  check_eq(hex(state.v[2][1]), hex(f32_bits(1.0f)), "scale lane x3 written");
-  check_eq(hex(state.v[2][2]), hex(f32_bits(1.0f)), "lane2 keeps old scale");
+  check_eq(hex(state.v[2][1]), hex(as_u32(1.0f)), "scale lane x3 written");
+  check_eq(hex(state.v[2][2]), hex(as_u32(1.0f)), "lane2 keeps old scale");
 }
 
 TEST_CASE(qnt_bdequant) {
@@ -186,11 +186,11 @@ TEST_CASE(qnt_bdequant) {
   vec32_f32(state, 2, 2);
   state.b[1][0] = 100;
   state.b[1][1] = 0xfeu; // -2
-  state.v[2][1] = f32_bits(0.5f);
+  state.v[2][1] = as_u32(0.5f);
 
   check_eq(sim.step().status, StepStatus::retired, "bdequant.f32 retires");
-  check_eq(hex(state.v[3][0]), hex(f32_bits(50.0f)), "lane0 dequantizes");
-  check_eq(hex(state.v[3][1]), hex(f32_bits(-1.0f)), "lane1 dequantizes");
+  check_eq(hex(state.v[3][0]), hex(as_u32(50.0f)), "lane0 dequantizes");
+  check_eq(hex(state.v[3][1]), hex(as_u32(-1.0f)), "lane1 dequantizes");
 }
 
 TEST_CASE(qnt_rejects_invalid) {
@@ -254,9 +254,9 @@ TEST_CASE(qnt_rounding_ignores_host_fp_mode) {
     tile_i8(state, 0, 1, 2);
     acc_f32(state, 1, 1, 2);
     vec32_f32(state, 0, 1);
-    state.v[0][0] = f32_bits(1.0f);
-    state.a[1][0] = f32_bits(0.5f);
-    state.a[1][1] = f32_bits(-0.5f);
+    state.v[0][0] = as_u32(1.0f);
+    state.a[1][0] = as_u32(0.5f);
+    state.a[1][1] = as_u32(-0.5f);
 
     std::fesetround(rounding_mode);
     const auto status = sim.step().status;

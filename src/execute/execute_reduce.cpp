@@ -3,10 +3,10 @@
 #include "config_check.h"
 #include "matrix_view.h"
 #include "reduce_util.h"
+#include "utils/bits.h"
 #include "utils/common.h"
 
 #include <array>
-#include <bit>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -103,14 +103,14 @@ ExecuteResult areduce(const AreduceInstr &instr, State &state) {
   std::array<float, REDUCE_LEAVES> values{};
   for (std::size_t row = 0; row < src_config.rows; ++row) {
     for (std::size_t col = 0; col < src_config.cols; ++col) {
-      values[col] = std::bit_cast<float>(src.at(row, col));
+      values[col] = as_f32(src.at(row, col));
     }
     const auto row_values = std::span(values).first(src_config.cols);
     if (instr.op == ReduceOp::argmax) {
       const auto best = reduce_argmax(row_values);
       dst_reg[row] = best.index;
     } else {
-      const auto result = f32_bits(reduce_f32(instr.op, row_values));
+      const auto result = as_u32(reduce_f32(instr.op, row_values));
       dst_reg[row] = result;
     }
   }
@@ -119,7 +119,7 @@ ExecuteResult areduce(const AreduceInstr &instr, State &state) {
 
 void load_vector(const Vec32 &reg, std::span<float> values) {
   for (std::size_t lane = 0; lane < values.size(); ++lane) {
-    values[lane] = std::bit_cast<float>(reg[lane]);
+    values[lane] = as_f32(reg[lane]);
   }
 }
 
@@ -133,7 +133,7 @@ ExecuteResult vreduce(const VreduceInstr &instr, State &state) {
   std::array<float, REDUCE_LEAVES> values{};
   const auto active = std::span(values).first(src_config.len);
   load_vector(state.v[instr.src.index], active);
-  const auto result = f32_bits(reduce_f32(instr.op, active));
+  const auto result = as_u32(reduce_f32(instr.op, active));
   state.scalar.write_x(instr.dest.index, static_cast<std::uint64_t>(result));
   return {.status = StepStatus::retired};
 }
@@ -151,7 +151,7 @@ ExecuteResult vreduce_argmax(const VreduceArgmaxInstr &instr, State &state) {
   const auto index = static_cast<std::int32_t>(best.index);
   state.scalar.write_x(instr.index_dest.index,
                        static_cast<std::uint64_t>(static_cast<std::int64_t>(index)));
-  state.scalar.write_x(instr.value_dest.index, static_cast<std::uint64_t>(f32_bits(best.value)));
+  state.scalar.write_x(instr.value_dest.index, static_cast<std::uint64_t>(as_u32(best.value)));
   return {.status = StepStatus::retired};
 }
 

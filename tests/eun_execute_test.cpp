@@ -1,6 +1,5 @@
 #include "tile_npu/simulator.h"
 
-#include <bit>
 #include <cmath>
 #include <cstdint>
 #include <initializer_list>
@@ -78,16 +77,16 @@ TEST_CASE(eun_vec_f32_abs_neg) {
   load_one(sim, memory, make_eun(NpuDomain::vec32, 1, 0, 1)); // vabs v0, v1
   for (auto index : {0, 1})
     vec_cfg(state, index, DType::f32, 1);
-  state.v[1][0] = f32_bits(-1.5f);
+  state.v[1][0] = as_u32(-1.5f);
   check_eq(sim.step().status, StepStatus::retired, "vabs retires");
-  check_eq(hex(state.v[0][0]), hex(f32_bits(1.5f)), "vabs lane 0");
+  check_eq(hex(state.v[0][0]), hex(as_u32(1.5f)), "vabs lane 0");
 
   load_one(sim, memory, make_eun(NpuDomain::vec32, 2, 0, 1)); // vneg v0, v1
   for (auto index : {0, 1})
     vec_cfg(state, index, DType::f32, 1);
-  state.v[1][0] = f32_bits(2.5f);
+  state.v[1][0] = as_u32(2.5f);
   check_eq(sim.step().status, StepStatus::retired, "vneg retires");
-  check_eq(hex(state.v[0][0]), hex(f32_bits(-2.5f)), "vneg lane 0");
+  check_eq(hex(state.v[0][0]), hex(as_u32(-2.5f)), "vneg lane 0");
 }
 
 TEST_CASE(eun_exp2_special_values) {
@@ -97,16 +96,16 @@ TEST_CASE(eun_exp2_special_values) {
   auto &state = sim.state();
   for (auto index : {0, 1})
     vec_cfg(state, index, DType::f32, 4);
-  state.v[1][0] = f32_bits(3.0f);
-  state.v[1][1] = f32_bits(-std::numeric_limits<float>::infinity());
-  state.v[1][2] = f32_bits(200.0f); // overflows to +inf
-  state.v[1][3] = f32_bits(std::numeric_limits<float>::quiet_NaN());
+  state.v[1][0] = as_u32(3.0f);
+  state.v[1][1] = as_u32(-std::numeric_limits<float>::infinity());
+  state.v[1][2] = as_u32(200.0f); // overflows to +inf
+  state.v[1][3] = as_u32(std::numeric_limits<float>::quiet_NaN());
   check_eq(sim.step().status, StepStatus::retired, "vexp2 retires");
-  check_eq(hex(state.v[0][0]), hex(f32_bits(8.0f)), "exp2(3) = 8");
+  check_eq(hex(state.v[0][0]), hex(as_u32(8.0f)), "exp2(3) = 8");
   check_eq(hex(state.v[0][1]), hex(0x0u), "exp2(-inf) = +0");
-  check_eq(hex(state.v[0][2]), hex(f32_bits(std::numeric_limits<float>::infinity())),
+  check_eq(hex(state.v[0][2]), hex(as_u32(std::numeric_limits<float>::infinity())),
            "exp2 overflow = +inf");
-  check(std::isnan(std::bit_cast<float>(state.v[0][3])), "exp2(NaN) = NaN");
+  check(std::isnan(as_f32(state.v[0][3])), "exp2(NaN) = NaN");
 }
 
 TEST_CASE(eun_rcp_rsqrt_special_values) {
@@ -117,13 +116,13 @@ TEST_CASE(eun_rcp_rsqrt_special_values) {
   load_one(sim, memory, make_eun(NpuDomain::vec32, 4, 0, 1)); // vrcp v0, v1
   for (auto index : {0, 1})
     vec_cfg(state, index, DType::f32, 4);
-  state.v[1][0] = f32_bits(4.0f);
-  state.v[1][1] = f32_bits(0.0f);
-  state.v[1][2] = f32_bits(-std::numeric_limits<float>::infinity());
-  state.v[1][3] = f32_bits(-0.0f);
+  state.v[1][0] = as_u32(4.0f);
+  state.v[1][1] = as_u32(0.0f);
+  state.v[1][2] = as_u32(-std::numeric_limits<float>::infinity());
+  state.v[1][3] = as_u32(-0.0f);
   check_eq(sim.step().status, StepStatus::retired, "vrcp retires");
-  check_eq(hex(state.v[0][0]), hex(f32_bits(0.25f)), "rcp(4) = 0.25");
-  check_eq(hex(state.v[0][1]), hex(f32_bits(std::numeric_limits<float>::infinity())),
+  check_eq(hex(state.v[0][0]), hex(as_u32(0.25f)), "rcp(4) = 0.25");
+  check_eq(hex(state.v[0][1]), hex(as_u32(std::numeric_limits<float>::infinity())),
            "rcp(+0) = +inf");
   check_eq(hex(state.v[0][2]), hex(0x80000000u), "rcp(-inf) = -0");
   check_eq(hex(state.v[0][3]), hex(0xff800000u), "rcp(-0) = -inf");
@@ -131,14 +130,14 @@ TEST_CASE(eun_rcp_rsqrt_special_values) {
   load_one(sim, memory, make_eun(NpuDomain::vec32, 5, 0, 1)); // vrsqrt v0, v1
   for (auto index : {0, 1})
     vec_cfg(state, index, DType::f32, 4);
-  state.v[1][0] = f32_bits(0.25f);
-  state.v[1][1] = f32_bits(4.0f);
-  state.v[1][2] = f32_bits(-1.0f);
-  state.v[1][3] = f32_bits(std::numeric_limits<float>::infinity());
+  state.v[1][0] = as_u32(0.25f);
+  state.v[1][1] = as_u32(4.0f);
+  state.v[1][2] = as_u32(-1.0f);
+  state.v[1][3] = as_u32(std::numeric_limits<float>::infinity());
   check_eq(sim.step().status, StepStatus::retired, "vrsqrt retires");
-  check_eq(hex(state.v[0][0]), hex(f32_bits(2.0f)), "rsqrt(0.25) = 2");
-  check_eq(hex(state.v[0][1]), hex(f32_bits(0.5f)), "rsqrt(4) = 0.5");
-  check(std::isnan(std::bit_cast<float>(state.v[0][2])), "rsqrt(x<0) = NaN");
+  check_eq(hex(state.v[0][0]), hex(as_u32(2.0f)), "rsqrt(0.25) = 2");
+  check_eq(hex(state.v[0][1]), hex(as_u32(0.5f)), "rsqrt(4) = 0.5");
+  check(std::isnan(as_f32(state.v[0][2])), "rsqrt(x<0) = NaN");
   check_eq(hex(state.v[0][3]), hex(0x0u), "rsqrt(+inf) = +0");
 }
 
@@ -149,21 +148,21 @@ TEST_CASE(eun_silu) {
   auto &state = sim.state();
   for (auto index : {0, 1})
     vec_cfg(state, index, DType::f32, 5);
-  state.v[1][0] = f32_bits(0.0f);
-  state.v[1][1] = f32_bits(1.0f);
-  state.v[1][2] = f32_bits(std::numeric_limits<float>::infinity());
-  state.v[1][3] = f32_bits(-89.0f);
-  state.v[1][4] = f32_bits(-0.0f);
+  state.v[1][0] = as_u32(0.0f);
+  state.v[1][1] = as_u32(1.0f);
+  state.v[1][2] = as_u32(std::numeric_limits<float>::infinity());
+  state.v[1][3] = as_u32(-89.0f);
+  state.v[1][4] = as_u32(-0.0f);
   check_eq(sim.step().status, StepStatus::retired, "vsilu retires");
   check_eq(hex(state.v[0][0]), hex(0x0u), "silu(+0) = +0");
   // silu is evaluated in double precision, then rounded once to f32.
-  check_eq(hex(state.v[0][1]), hex(f32_bits(static_cast<float>(1.0 / (1.0 + std::exp(-1.0))))),
+  check_eq(hex(state.v[0][1]), hex(as_u32(static_cast<float>(1.0 / (1.0 + std::exp(-1.0))))),
            "silu(1)");
-  check_eq(hex(state.v[0][2]), hex(f32_bits(std::numeric_limits<float>::infinity())),
+  check_eq(hex(state.v[0][2]), hex(as_u32(std::numeric_limits<float>::infinity())),
            "silu(+inf) = +inf");
   // silu(-89) ~= -1.98e-37 is a normal f32; a single-precision exp(89)
   // overflows and would flush it to -0.
-  check_eq(hex(state.v[0][3]), hex(f32_bits(static_cast<float>(-89.0 / (1.0 + std::exp(89.0))))),
+  check_eq(hex(state.v[0][3]), hex(as_u32(static_cast<float>(-89.0 / (1.0 + std::exp(89.0))))),
            "silu(-89) stays normal");
   check_eq(hex(state.v[0][4]), hex(0x80000000u), "silu(-0) = -0");
 }

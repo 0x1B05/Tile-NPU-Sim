@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rv64_util.h"
+#include "utils/bits.h"
 
 #include <cstdint>
 

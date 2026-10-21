@@ -116,13 +116,13 @@ TEST_CASE(ebcast_acc_bycol_f32_div) {
     acc_cfg(state, index, DType::f32, 1, 2);
   state.vc[2].dtype = DType::f32;
   state.vc[2].len = 2;
-  state.a[1][0] = f32_bits(8.0f);
-  state.a[1][1] = f32_bits(9.0f);
-  state.v[2][0] = f32_bits(2.0f);
-  state.v[2][1] = f32_bits(0.0f); // 9 / 0 = +inf
+  state.a[1][0] = as_u32(8.0f);
+  state.a[1][1] = as_u32(9.0f);
+  state.v[2][0] = as_u32(2.0f);
+  state.v[2][1] = as_u32(0.0f); // 9 / 0 = +inf
 
   check_eq(sim.step().status, StepStatus::retired, "adivv.bycol retires");
-  check_eq(hex(state.a[0][0]), hex(f32_bits(4.0f)), "8 / 2 = 4");
+  check_eq(hex(state.a[0][0]), hex(as_u32(4.0f)), "8 / 2 = 4");
   check_eq(hex(state.a[0][1]), hex(0x7f800000u), "9 / 0 = +inf");
 }
 
