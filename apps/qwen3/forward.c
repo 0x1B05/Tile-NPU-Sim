@@ -92,9 +92,9 @@ static uint32_t quant_act(const float *x, uint32_t k, const char *tag, int activ
 }
 
 // PROBE sites all sit in qwen3_forward(), gated on its `probing` local.
-#define PROBE(tag, v, n)                                                                           \
+#define PROBE(name, kind, data, count)                                                             \
   do {                                                                                             \
-    if (probing) probe_values(tag, v, n);                                                          \
+    if (probing) probe_record(name, -1, kind, (const uint32_t *)(data), count);                    \
   } while (0)
 
 static uint32_t inv_n_bits(uint32_t n) {
@@ -201,14 +201,14 @@ static void attention(uint32_t layer, uint32_t pos, const float *q, float *attn)
       ((uint32_t *)scores)[i] = 0xFF800000u;
     }
     if (attention_probe_enabled(layer, h, pos, model.n_prompt))
-      probe_head_values("sc_h", h, (const uint32_t *)scores, 6);
+      probe_record("sc", (int)h, "f32", (const uint32_t *)scores, 6);
     qwen3_softmax_exp(scores, n_padded, model.scale_log2e_bits, rcp_word);
     // pb_h appends the softmax rcp as a 7th word (ref.py prints it inline)
     if (attention_probe_enabled(layer, h, pos, model.n_prompt)) {
       uint32_t words[7];
       __builtin_memcpy(words, scores, 6 * sizeof(uint32_t));
       words[6] = rcp_word[0];
-      probe_head_values("pb_h", h, words, 7);
+      probe_record("pb", (int)h, "f32", words, 7);
     }
     qwen3_pv(vb, model.kv_dim * 4, scores, attn + h * model.head_dim, n_keys, model.head_dim,
              rcp_word[0]);
@@ -220,23 +220,23 @@ uint32_t qwen3_forward(uint32_t token, uint32_t pos, int want_logits) {
   const int probing = QWEN3_PROBES && want_logits && pos == model.n_prompt - 1;
   uint32_t xs;
   qwen3_embed(model.embed, model.embed_s, token, x_buf, model.hidden);
-  PROBE("embed", x_buf, 4);
+  PROBE("embed", "f32", x_buf, 4);
   for (uint32_t L = 0; L < model.n_layers; ++L) {
     const void **sec = model.layer_sections[L];
     qwen3_rmsnorm(x_buf, sec[SEC_INLN], h1, model.hidden, model.eps_bits, inv_n_bits(model.hidden));
-    if (L == 0) PROBE("ln0", h1, 4);
+    if (L == 0) PROBE("ln0", "f32", h1, 4);
     // q/k/v share one activation quantization; the tiles stay resident
     xs = quant_act(h1, model.hidden, "qx0", probing && L == 0);
     qwen3_matvec_q(sec[SEC_QW], sec[SEC_QWS], q_buf, model.q_dim, model.hidden, xs);
-    if (L == 0) PROBE("ac0", (const float *)qwen3_accbuf, 8);
-    if (L == 0) PROBE("q0", q_buf, 4);
+    if (L == 0) PROBE("ac0", "i32", qwen3_accbuf, 8);
+    if (L == 0) PROBE("q0", "f32", q_buf, 4);
     qwen3_matvec_q(sec[SEC_KW], sec[SEC_KWS], k_buf, model.kv_dim, model.hidden, xs);
     qwen3_matvec_q(sec[SEC_VW], sec[SEC_VWS], v_buf, model.kv_dim, model.hidden, xs);
     for (uint32_t h = 0; h < model.n_q_heads; ++h) {
       qwen3_rmsnorm(q_buf + h * model.head_dim, sec[SEC_QN], q_buf + h * model.head_dim,
                     model.head_dim, model.eps_bits, inv_n_bits(model.head_dim));
     }
-    if (L == 0) PROBE("q0n", q_buf, 4);
+    if (L == 0) PROBE("q0n", "f32", q_buf, 4);
     for (uint32_t h = 0; h < model.n_kv_heads; ++h) {
       qwen3_rmsnorm(k_buf + h * model.head_dim, sec[SEC_KN], k_buf + h * model.head_dim,
                     model.head_dim, model.eps_bits, inv_n_bits(model.head_dim));
@@ -246,40 +246,40 @@ uint32_t qwen3_forward(uint32_t token, uint32_t pos, int want_logits) {
     for (uint32_t h = 0; h < model.n_q_heads; ++h) {
       qwen3_rope(q_buf + h * model.head_dim, cos_p, sin_p, model.head_dim);
     }
-    if (L == 0) PROBE("q0r", q_buf, 4);
-    if (L == 0) PROBE("q1r", q_buf + model.head_dim, 4);
+    if (L == 0) PROBE("q0r", "f32", q_buf, 4);
+    if (L == 0) PROBE("q1r", "f32", q_buf + model.head_dim, 4);
     for (uint32_t h = 0; h < model.n_kv_heads; ++h) {
       qwen3_rope(k_buf + h * model.head_dim, cos_p, sin_p, model.head_dim);
     }
     cache_append(L, pos, k_buf, v_buf);
     attention(L, pos, q_buf, attn_buf);
-    if (L == 0) PROBE("attn0", attn_buf, 4);
-    if (L == 0) PROBE("attn1", attn_buf + model.head_dim, 4);
+    if (L == 0) PROBE("attn0", "f32", attn_buf, 4);
+    if (L == 0) PROBE("attn1", "f32", attn_buf + model.head_dim, 4);
     xs = quant_act(attn_buf, model.q_dim, "qxa", probing && L == 0);
     qwen3_matvec_q(sec[SEC_OW], sec[SEC_OWS], h2, model.hidden, model.q_dim, xs);
-    if (L == 0) PROBE("aca", (const float *)qwen3_accbuf, 8);
-    if (L == 0) PROBE("o0", h2, 4);
+    if (L == 0) PROBE("aca", "i32", qwen3_accbuf, 8);
+    if (L == 0) PROBE("o0", "f32", h2, 4);
     qwen3_add(x_buf, h2, model.hidden);
-    if (L == 0) PROBE("xr0", x_buf, 4);
+    if (L == 0) PROBE("xr0", "f32", x_buf, 4);
     qwen3_rmsnorm(x_buf, sec[SEC_PTLN], h1, model.hidden, model.eps_bits, inv_n_bits(model.hidden));
-    if (L == 0) PROBE("ln1", h1, 4);
+    if (L == 0) PROBE("ln1", "f32", h1, 4);
     // gate/up share one activation quantization
     xs = qwen3_quant_act(h1, model.hidden);
     qwen3_matvec_q(sec[SEC_GW], sec[SEC_GWS], gate_buf, model.inter, model.hidden, xs);
     qwen3_matvec_q(sec[SEC_UW], sec[SEC_UWS], up_buf, model.inter, model.hidden, xs);
-    if (L == 0) PROBE("g0", gate_buf, 4);
-    if (L == 0) PROBE("u0", up_buf, 4);
+    if (L == 0) PROBE("g0", "f32", gate_buf, 4);
+    if (L == 0) PROBE("u0", "f32", up_buf, 4);
     qwen3_silu_mul(gate_buf, up_buf, gate_buf, model.inter);
-    if (L == 0) PROBE("m0", gate_buf, 4);
+    if (L == 0) PROBE("m0", "f32", gate_buf, 4);
     xs = qwen3_quant_act(gate_buf, model.inter);
     qwen3_matvec_q(sec[SEC_DW], sec[SEC_DWS], h2, model.hidden, model.inter, xs);
-    if (L == 0) PROBE("d0", h2, 4);
+    if (L == 0) PROBE("d0", "f32", h2, 4);
     qwen3_add(x_buf, h2, model.hidden);
-    if (L == 0) PROBE("x_l0", x_buf, 4);
+    if (L == 0) PROBE("x_l0", "f32", x_buf, 4);
   }
   if (!want_logits) return 0;
   qwen3_rmsnorm(x_buf, model.fin_norm, h1, model.hidden, model.eps_bits, inv_n_bits(model.hidden));
-  PROBE("lnf", h1, 4);
+  PROBE("lnf", "f32", h1, 4);
   xs = qwen3_quant_act(h1, model.hidden);
   qwen3_matvec_q(model.embed, model.embed_s, logits, model.vocab, model.hidden, xs);
   probe_logits(logits);

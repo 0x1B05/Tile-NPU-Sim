@@ -6,18 +6,12 @@
 // Packed activation tile dumped around qwen3_quant_act on probed calls.
 static char qtile_dump[1024];
 
-void probe_values(const char *tag, const float *v, int n) {
-  printf("%s ", tag);
+void probe_record(const char *name, int index, const char *kind, const uint32_t *words, int n) {
+  printf("PROBE %s", name);
+  if (index >= 0) printf(" %d", index);
+  printf(" %s %d", kind, n);
   for (int i = 0; i < n; ++i)
-    printf("%08x ", ((const uint32_t *)v)[i]);
-  printf("\n");
-}
-
-// Head-indexed probe line "<tag><h> w0 ...": ref.py's sc_hN / pb_hN.
-void probe_head_values(const char *tag, uint32_t head, const uint32_t *words, int n) {
-  printf("%s%u ", tag, head);
-  for (int i = 0; i < n; ++i)
-    printf("%08x ", words[i]);
+    printf(" %08x", words[i]);
   printf("\n");
 }
 
@@ -29,7 +23,7 @@ uint32_t probe_quant_act(const float *x, uint32_t k, const char *tag) {
   qwen3_debug_qtile = qtile_dump;
   uint32_t xs = qwen3_quant_act(x, k);
   qwen3_debug_qtile = 0;
-  probe_values(tag, (const float *)qtile_dump, 16);
+  probe_record(tag, -1, "i8", (const uint32_t *)qtile_dump, 16);
   return xs;
 }
 
@@ -41,5 +35,5 @@ void probe_logits(const float *logits) {
   uint32_t words[5];
   for (int i = 0; i < 5; ++i)
     words[i] = ((const uint32_t *)logits)[ids[i]];
-  probe_values("logit probe:", (const float *)words, 5);
+  probe_record("logits", -1, "f32", words, 5);
 }

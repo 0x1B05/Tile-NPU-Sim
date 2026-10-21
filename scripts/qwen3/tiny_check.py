@@ -3,25 +3,26 @@
 
 convert.py tiny emits a fixed-seed random model (a q3b blob plus an f32
 reference npz). This script runs the guest app on the simulator and compares
-its probe stream against ref.py line by line:
+ordered records emitted by guest and ref.py:
 
-  - qx0/ac0/qxa/aca carry packed integers (q8 activations, i32 accumulators)
-    and must match bit-exactly;
-  - the remaining probes are f32 bit patterns compared with a relative
-    tolerance: summation order and the approx instructions diverge in the
-    last ulps (observed drift is single-digit ulp);
-  - the logits top-5 and the generated token ids must match exactly.
+  PROBE <name> [index] <kind> <count> <word>...
+
+  - f32 records are compared by value with a relative tolerance; summation
+    order and the approx instructions diverge in the last ulps;
+  - i8/i32 records (packed q8 activations, i32 accumulators) must match
+    bit-exactly;
+  - order, duplicate records, kinds, and word counts must match;
+  - generated token ids must match exactly.
 
 Usage: tiny_check.py SIM_RUN APP_BIN TINY_Q3B TINY_REF_NPZ
 """
 
-import ast
 import math
 import os
-import re
 import struct
 import subprocess
 import sys
+from dataclasses import dataclass
 
 REF_PY = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ref.py")
 
@@ -30,30 +31,67 @@ REF_PY = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ref.py")
 MEMORY_MIB = "1024"
 BLOB_BASE = "0x81000000"
 
-INT_TAGS = {"qx0", "ac0", "qxa", "aca"}
 FLOAT_RTOL = 1e-4
 FLOAT_ATOL = 1e-6
+PROBE_KINDS = {"f32", "i8", "i32"}
 
-WORD = re.compile(r"[0-9a-f]{8}")
+
+@dataclass(frozen=True)
+class ProbeRecord:
+    name: str
+    index: int | None
+    kind: str
+    words: list[int]
 
 
 def f32(bits):
     return struct.unpack("<f", struct.pack("<I", bits))[0]
 
 
-def probe_lines(text):
-    """Parse "tag w0 w1 ..." lines into tag -> list of u32 words."""
-    probes = {}
-    for line in text.splitlines():
-        tokens = line.split()
-        if len(tokens) > 1 and WORD.fullmatch(tokens[1]):
-            words = []
-            for tok in tokens[1:]:
-                if not WORD.fullmatch(tok):
-                    break  # ref.py appends a parenthesized float rendering
-                words.append(int(tok, 16))
-            probes[tokens[0]] = words
-    return probes
+def parse_probes(text):
+    """Parse the explicit PROBE record protocol."""
+    records = []
+    for lineno, line in enumerate(text.splitlines(), 1):
+        if not line.startswith("PROBE "):
+            continue
+        fields = line.split()
+        if len(fields) < 5:
+            raise ValueError(f"line {lineno}: malformed PROBE record")
+        name = fields[1]
+        pos = 2
+        index = None
+        if fields[pos] not in PROBE_KINDS:
+            try:
+                index = int(fields[pos])
+            except ValueError as exc:
+                raise ValueError(f"line {lineno}: invalid probe index") from exc
+            pos += 1
+        if pos + 2 > len(fields):
+            raise ValueError(f"line {lineno}: missing probe kind or count")
+        kind = fields[pos]
+        pos += 1
+        if kind not in PROBE_KINDS:
+            raise ValueError(f"line {lineno}: invalid probe kind {kind!r}")
+        try:
+            count = int(fields[pos])
+        except ValueError as exc:
+            raise ValueError(f"line {lineno}: invalid probe count") from exc
+        pos += 1
+        raw_words = fields[pos:]
+        if len(raw_words) != count:
+            raise ValueError(
+                f"line {lineno}: PROBE count {count} but {len(raw_words)} words"
+            )
+        words = []
+        for raw in raw_words:
+            if len(raw) != 8:
+                raise ValueError(f"line {lineno}: invalid probe word {raw!r}")
+            try:
+                words.append(int(raw, 16))
+            except ValueError as exc:
+                raise ValueError(f"line {lineno}: invalid probe word {raw!r}") from exc
+        records.append(ProbeRecord(name, index, kind, words))
+    return records
 
 
 def generated_ids(text, prefix):
@@ -81,62 +119,60 @@ def main():
     ref = run([sys.executable, REF_PY, ref_npz])
 
     failures = []
-    guest_probes = probe_lines(guest)
-    ref_probes = probe_lines(ref)
-    if set(guest_probes) != set(ref_probes):
+    try:
+        guest_probes = parse_probes(guest)
+        ref_probes = parse_probes(ref)
+    except ValueError as exc:
+        sys.exit(f"tiny_check: {exc}")
+
+    for label, records in (("guest", guest_probes), ("ref", ref_probes)):
+        seen = set()
+        for record in records:
+            key = (record.name, record.index)
+            if key in seen:
+                failures.append(f"{label}: duplicate probe {key}")
+            seen.add(key)
+
+    if len(guest_probes) != len(ref_probes):
         failures.append(
-            f"probe tags differ: guest-only "
-            f"{sorted(set(guest_probes) - set(ref_probes))}, ref-only "
-            f"{sorted(set(ref_probes) - set(guest_probes))}"
+            f"probe count: guest {len(guest_probes)} vs ref {len(ref_probes)}"
         )
+    if guest_probes and ref_probes:
+        guest_names = [(r.name, r.index) for r in guest_probes]
+        ref_names = [(r.name, r.index) for r in ref_probes]
+        if guest_names != ref_names:
+            failures.append(
+                f"probe order: guest {guest_names} vs ref {ref_names}"
+            )
 
     worst_rel, worst_where = 0.0, ""
-    for tag in sorted(ref_probes):
-        if tag not in guest_probes:
+    for i, (g, r) in enumerate(zip(guest_probes, ref_probes)):
+        label = f"{g.name}[{g.index}]" if g.index is not None else g.name
+        if g.name != r.name or g.index != r.index:
+            failures.append(
+                f"record {i}: guest {g.name}/{g.index} vs ref {r.name}/{r.index}"
+            )
             continue
-        g, r = guest_probes[tag], ref_probes[tag]
-        if len(g) != len(r):
-            failures.append(f"{tag}: {len(g)} guest words vs {len(r)} ref")
+        if g.kind != r.kind:
+            failures.append(f"{label}: kind {g.kind} vs {r.kind}")
             continue
-        if tag in INT_TAGS:
-            if g != r:
-                diff = [i for i, (a, b) in enumerate(zip(g, r)) if a != b]
-                failures.append(f"{tag}: integer words differ at {diff[:4]}")
+        if len(g.words) != len(r.words):
+            failures.append(
+                f"{label}: {len(g.words)} guest words vs {len(r.words)} ref"
+            )
             continue
-        for i, (gw, rw) in enumerate(zip(g, r)):
+        if g.kind != "f32":
+            if g.words != r.words:
+                diff = [j for j, (a, b) in enumerate(zip(g.words, r.words)) if a != b]
+                failures.append(f"{label}: integer words differ at {diff[:4]}")
+            continue
+        for j, (gw, rw) in enumerate(zip(g.words, r.words)):
             a, b = f32(gw), f32(rw)
             if not math.isclose(a, b, rel_tol=FLOAT_RTOL, abs_tol=FLOAT_ATOL):
-                failures.append(f"{tag}[{i}]: guest {a!r} vs ref {b!r}")
+                failures.append(f"{label}[{j}]: guest {a!r} vs ref {b!r}")
             rel = abs(a - b) / max(abs(b), 1e-30)
             if rel > worst_rel:
-                worst_rel, worst_where = rel, f"{tag}[{i}]"
-
-    # the guest dumps logits at fixed ids; ref.py prints its own top5
-    logit_line = next(
-        (line for line in guest.splitlines() if line.startswith("logit probe: ")), None
-    )
-    top5_line = next(
-        (line for line in ref.splitlines() if line.startswith("ref logits top5: ")),
-        None,
-    )
-    if logit_line is None or top5_line is None:
-        failures.append("missing logit probe output")
-    else:
-        words = [int(w, 16) for w in logit_line[len("logit probe: ") :].split()]
-        top5 = ast.literal_eval(top5_line[len("ref logits top5: ") :])
-        if len(words) != len(top5):
-            failures.append(
-                f"logit probe: {len(words)} guest values vs {len(top5)} ref"
-            )
-        else:
-            for rank, (w, (idx, val)) in enumerate(zip(words, top5)):
-                if not math.isclose(
-                    f32(w), val, rel_tol=FLOAT_RTOL, abs_tol=FLOAT_ATOL
-                ):
-                    failures.append(
-                        f"logit top{rank + 1} (id {idx}): guest "
-                        f"{f32(w)!r} vs ref {val!r}"
-                    )
+                worst_rel, worst_where = rel, f"{label}[{j}]"
 
     g_ids = generated_ids(guest, "generated: ")
     r_ids = generated_ids(ref, "ref generated: ")

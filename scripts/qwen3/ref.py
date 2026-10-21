@@ -73,11 +73,32 @@ class Ref:
     def forward(self, token, pos, kv_cache, want_logits=True):
         probeme = want_logits and pos == len(self.tokens) - 1
 
-        def probe(tag, v):
-            if probeme:
-                bits = " ".join(f"{x.view(np.uint32):08x}" for x in v[:4].astype("<f4"))
-                vals = " ".join(f"{x:.6f}" for x in v[:4])
-                print(f"{tag} {bits}  ({vals})")
+        def emit_probe(name, words, kind, index=None):
+            if not probeme:
+                return
+            prefix = f"PROBE {name}"
+            if index is not None:
+                prefix += f" {index}"
+            print(
+                prefix
+                + f" {kind} {len(words)} "
+                + " ".join(f"{int(w):08x}" for w in words)
+            )
+
+        def probe(name, v, kind="f32", index=None, count: int | None = 4):
+            if not probeme:
+                return
+            dtype = {"f32": "<f4", "i8": "<i1", "i32": "<i4"}.get(kind)
+            if dtype is None:
+                raise ValueError(f"unknown probe kind: {kind}")
+            data = np.asarray(v, dtype=dtype).reshape(-1)
+            if count is not None:
+                data = data[:count]
+            if kind == "f32":
+                words = data.view(np.uint32)
+            else:
+                words = np.frombuffer(data.tobytes(), "<u4")
+            emit_probe(name, words, kind, index)
 
         x = self.embed[token].copy()
         probe("embed", x)
@@ -89,13 +110,8 @@ class Ref:
             q_result = matvec_ref(self.layer(L, "qw"), h)
             q = q_result.value
             if L == 0 and probeme:
-                packed = q_result.activation_q.astype("<i1").tobytes()
-                words = np.frombuffer(packed, "<u4")
-                print("qx0 " + " ".join(f"{w:08x}" for w in words))
-                accw = np.frombuffer(
-                    q_result.accumulator.astype("<i4").tobytes(), "<u4"
-                )
-                print("ac0 " + " ".join(f"{w:08x}" for w in accw[:8]))
+                probe("qx0", q_result.activation_q, "i8", count=None)
+                probe("ac0", q_result.accumulator, "i32", count=8)
                 probe("q0", q)
             k = matvec_ref(self.layer(L, "kw"), h).value
             v = matvec_ref(self.layer(L, "vw"), h).value
@@ -131,19 +147,18 @@ class Ref:
                 vals = kv_cache[L][1][: pos + 1, kvh * self.hd : (kvh + 1) * self.hd]
                 s = keys @ q[hh * self.hd : (hh + 1) * self.hd]
                 if L == 0 and probeme:
-                    print(
-                        f"sc_h{hh} "
-                        + " ".join(f"{x.view(np.uint32):08x}" for x in s.astype("<f4"))
-                    )
+                    probe("sc", s, index=hh, count=6)
                 s = s / np.sqrt(np.float32(self.hd))
                 p = np.exp(s - s.max()).astype(np.float32)
                 if L == 0 and probeme:
                     rcp = np.float32(1.0) / p.sum()
-                    print(
-                        f"pb_h{hh} "
-                        + " ".join(f"{x.view(np.uint32):08x}" for x in p.astype("<f4"))
-                        + f" {rcp.view(np.uint32):08x}"
+                    words = np.concatenate(
+                        [
+                            np.asarray(p[:6], dtype="<f4").view(np.uint32),
+                            np.asarray([rcp], dtype="<f4").view(np.uint32),
+                        ]
                     )
+                    emit_probe("pb", words, "f32", hh)
                 p /= p.sum()
                 attn[hh * self.hd : (hh + 1) * self.hd] = p @ vals
             if L == 0:
@@ -152,13 +167,8 @@ class Ref:
             o_result = matvec_ref(self.layer(L, "ow"), attn)
             o = o_result.value
             if L == 0 and probeme:
-                packed = o_result.activation_q.astype("<i1").tobytes()
-                words = np.frombuffer(packed, "<u4")
-                print("qxa " + " ".join(f"{w:08x}" for w in words))
-                accw = np.frombuffer(
-                    o_result.accumulator.astype("<i4").tobytes(), "<u4"
-                )
-                print("aca " + " ".join(f"{w:08x}" for w in accw[:8]))
+                probe("qxa", o_result.activation_q, "i8", count=None)
+                probe("aca", o_result.accumulator, "i32", count=8)
                 probe("o0", o)
             x = x + o
             if L == 0:
@@ -205,8 +215,10 @@ def main():
     for pos in range(len(tokens) - 1):
         ref.forward(tokens[pos], pos, kv_cache, want_logits=False)
     nxt, logits = ref.forward(tokens[-1], len(tokens) - 1, kv_cache)
+    assert logits is not None
     top = np.argsort(logits)[::-1][:5]
-    print("ref logits top5:", [(int(i), float(logits[i])) for i in top])
+    logit_words = np.asarray([logits[i] for i in top], dtype="<f4").view(np.uint32)
+    print("PROBE logits f32 5 " + " ".join(f"{int(w):08x}" for w in logit_words))
     gen = []
     pos = len(tokens)
     for _ in range(n_gen):
