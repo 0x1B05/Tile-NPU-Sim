@@ -122,27 +122,15 @@ ExecuteResult execute(const RowInstr &instr, State &state) {
 }
 
 ExecuteResult execute(const LaneExtractInstr &instr, State &state) {
-  switch (instr.src.domain) {
-  case NpuDomain::vec8: return lane_extract<NpuDomain::vec8>(instr, state);
-  case NpuDomain::vec32: return lane_extract<NpuDomain::vec32>(instr, state);
-  default: unreachable("lane extract without a vector source");
-  }
+  return lane_extract<NpuDomain::vec32>(instr, state);
 }
 
 ExecuteResult execute(const LaneInsertInstr &instr, State &state) {
-  switch (instr.dest.domain) {
-  case NpuDomain::vec8: return lane_insert<NpuDomain::vec8>(instr, state);
-  case NpuDomain::vec32: return lane_insert<NpuDomain::vec32>(instr, state);
-  default: unreachable("lane insert without a vector destination");
-  }
+  return lane_insert<NpuDomain::vec32>(instr, state);
 }
 
 ExecuteResult execute(const LaneBroadcastInstr &instr, State &state) {
-  switch (instr.dest.domain) {
-  case NpuDomain::vec8: return lane_broadcast<NpuDomain::vec8>(instr, state);
-  case NpuDomain::vec32: return lane_broadcast<NpuDomain::vec32>(instr, state);
-  default: unreachable("lane broadcast without a vector destination");
-  }
+  return lane_broadcast<NpuDomain::vec32>(instr, state);
 }
 
 } // namespace tile_npu

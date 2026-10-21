@@ -118,7 +118,7 @@ bool valid_structure(const MoveInstr &instr) {
     return false;
   }
   switch (instr.op) {
-  case MoveOp::copy: return true;
+  case MoveOp::copy: return instr.dest.domain != NpuDomain::vec8;
   case MoveOp::transpose: return instr.dest.domain == NpuDomain::tile;
   default: return false;
   }
@@ -135,17 +135,17 @@ bool valid_structure(const RowInstr &instr) {
 }
 
 bool valid_structure(const LaneExtractInstr &instr) {
-  return in_range(instr.dest) && is_vector_domain(instr.src.domain) && in_range(instr.src) &&
+  return in_range(instr.dest) && instr.src.domain == NpuDomain::vec32 && in_range(instr.src) &&
          index_in_range(instr.index);
 }
 
 bool valid_structure(const LaneInsertInstr &instr) {
-  return is_vector_domain(instr.dest.domain) && in_range(instr.dest) && in_range(instr.src) &&
+  return instr.dest.domain == NpuDomain::vec32 && in_range(instr.dest) && in_range(instr.src) &&
          index_in_range(instr.index);
 }
 
 bool valid_structure(const LaneBroadcastInstr &instr) {
-  return is_vector_domain(instr.dest.domain) && instr.dest.domain == instr.src.domain &&
+  return instr.dest.domain == NpuDomain::vec32 && instr.dest.domain == instr.src.domain &&
          in_range(instr.dest) && in_range(instr.src) && index_in_range(instr.index);
 }
 

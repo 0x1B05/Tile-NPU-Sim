@@ -151,6 +151,7 @@ TEST_CASE(validate_rejects_bad_er4) {
 
 TEST_CASE(validate_rejects_bad_emask) {
   check_illegal(MaskInstr{static_cast<MaskOp>(3), A(0), A(1), 0, Fill5Code{0}}, "reserved op");
+  check_illegal(MaskInstr{MaskOp::tail, B(0), B(1), 0, Fill5Code{0}}, "tail on vec8");
   check_illegal(MaskInstr{MaskOp::tril, B(0), B(1), 0, Fill5Code{0}}, "tril on a vector domain");
   check_illegal(MaskInstr{MaskOp::tail, A(0), A(1), 0, Fill5Code{9}}, "fill5 code 9");
   check_illegal(MaskInstr{MaskOp::tail, A(0), A(1), 0, ScalarRegister{32}}, "xFill index 32");
@@ -177,6 +178,7 @@ TEST_CASE(validate_rejects_bad_move) {
   check_illegal(MoveInstr{MoveOp::copy, T(0), T(16)}, "copy src index 16");
   check_illegal(MoveInstr{MoveOp::copy, T(16), T(0)}, "copy dest index 16");
   check_illegal(MoveInstr{MoveOp::copy, T(0), A(0)}, "cross-domain copy");
+  check_illegal(MoveInstr{MoveOp::copy, B(0), B(1)}, "copy on vec8");
   check_illegal(MoveInstr{MoveOp::transpose, T(0), B(0)}, "cross-domain transpose");
   check_illegal(MoveInstr{static_cast<MoveOp>(2), T(0), T(1)}, "reserved op");
 }
@@ -191,6 +193,9 @@ TEST_CASE(validate_rejects_bad_lane_move) {
   check_illegal(
       LaneExtractInstr{.dest = ScalarRegister{32}, .src = B(1), .index = ImmediateIndex{0}},
       "extract xD index 32");
+  check_illegal(
+      LaneExtractInstr{.dest = ScalarRegister{0}, .src = B(1), .index = ImmediateIndex{0}},
+      "extract on vec8");
   check_illegal(LaneBroadcastInstr{.dest = B(0), .src = V(1), .index = ImmediateIndex{0}},
                 "broadcast with mismatched domains");
   check_illegal(

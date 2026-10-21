@@ -317,23 +317,11 @@
 .endm
 
 # LANE_MOVE (R4): major4 = 4, same layout as ROW_MOVE.
-# EW = 0: Vec8; EW = 1: Vec32.
+# EW = 0 is reserved (Vec8 lane operations removed); EW = 1: Vec32.
 # funct3: 0 = extract (D5 = xD, S5 = vector), 1 = insert (D5 = vector,
 #         S5 = xS), 2 = broadcast (D5/S5 vectors).
 .macro LANE_MOVE ew, is, funct3, index5, s5, d5
     .word ((4 << 28) | (\ew << 26) | (\is << 25) | (\funct3 << 22) | (\index5 << 12) | (\s5 << 7) | (\d5 << 2) | 1)
-.endm
-
-.macro BEXTRACT xd, s5, idx
-    LANE_MOVE 0, 0, 0, \idx, \s5, \xd
-.endm
-
-.macro BINSERT d5, idx, xs
-    LANE_MOVE 0, 0, 1, \idx, \xs, \d5
-.endm
-
-.macro BBROADCAST d5, s5, idx
-    LANE_MOVE 0, 0, 2, \idx, \s5, \d5
 .endm
 
 .macro VEXTRACT xd, s5, idx

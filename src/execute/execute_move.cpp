@@ -77,7 +77,7 @@ ExecuteResult execute(const MoveInstr &instr, State &state) {
   if (instr.op == MoveOp::transpose) {
     return transpose_tile(instr, state);
   }
-  return with_domain<NpuDomain::tile, NpuDomain::acc, NpuDomain::vec8, NpuDomain::vec32>(
+  return with_domain<NpuDomain::tile, NpuDomain::acc, NpuDomain::vec32>(
       state, instr.dest.domain, [&](auto &regs, const auto &configs) -> ExecuteResult {
         const auto &dst_config = configs[instr.dest.index];
         const auto &src_config = configs[instr.src.index];

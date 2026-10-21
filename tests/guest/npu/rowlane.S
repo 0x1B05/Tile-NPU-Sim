@@ -72,30 +72,6 @@ _start:
     li        a0, 2
     bne       x4, x5, fail
 
-    # bbroadcast b1, b0[2]: every effective lane takes b0[2] = 7.
-    BBROADCAST 1, 0, 2
-    BSTORE    1
-    lla       x3, dstbuf
-    lwu       x4, 0(x3)
-    li        x5, 0x07070707
-    li        a0, 3
-    bne       x4, x5, fail
-
-    # bextract x5, b0[1] = 6; binsert b0[x9], x6 with x9 = 3, x6 = 0x1FF
-    # writes the low 8 bits (0xFF) into lane 3.
-    BEXTRACT  5, 0, 1
-    li        x7, 6
-    li        a0, 4
-    bne       x5, x7, fail
-    li        x6, 0x1FF
-    li        x9, 3
-    LANE_MOVE 0, 1, 1, 9, 6, 0   # binsert b0[x9], x6
-    BSTORE    0
-    lla       x3, dstbuf
-    lwu       x4, 0(x3)
-    li        x5, 0xFF070605
-    bne       x4, x5, fail
-
     # aextract.row v0, a0[x9]: a0 = {1, 2, 3, 4} (2x2), x9 = 1 -> v0 = {3, 4}.
     ALOAD     0
     li        x9, 1

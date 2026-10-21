@@ -74,8 +74,8 @@ DecodeResult decode_fill(std::uint32_t word) {
 // 31    28 27  26 25  24    22 21                12 11       7 6        2 1   0
 // [major4] [dom2] [0] [funct3] [    reserved10    ] [   S5   ] [   D5   ] [ q ]
 // dom2: 00 Tile, 01 Acc, 10 Vec8, 11 Vec32.
-// funct3[24:22]: 001 fillx (S5 = xS), 010 copy (S5 = same-domain source),
-//               011 ttranspose (Tile only).
+// funct3[24:22]: 001 fillx (S5 = xS), 010 copy (S5 = same-domain source;
+//               Vec8 copy is reserved), 011 ttranspose (Tile only).
 DecodeResult decode_fillx(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = sel3_domain(f.sel3);
@@ -91,7 +91,8 @@ DecodeResult decode_fillx(std::uint32_t word) {
 template <MoveOp Op> DecodeResult decode_reg_move(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = sel3_domain(f.sel3);
-  if (Op == MoveOp::transpose && domain != NpuDomain::tile) {
+  if ((Op == MoveOp::copy && domain == NpuDomain::vec8) ||
+      (Op == MoveOp::transpose && domain != NpuDomain::tile)) {
     return DecodeError::illegal;
   }
   const auto count = domain_register_count(domain);
@@ -143,13 +144,16 @@ DecodeResult decode_row_extract(std::uint32_t word) {
 // LANE_MOVE (R4): major4 = 0100, q = 01.
 // 31    28  27  26   25  24    22 21       17 16      12 11       7 6        2 1   0
 // [major4] [0] [EW] [IS] [funct3] [reserved5] [ index5 ] [   S5   ] [   D5   ] [ q ]
-// EW: 0 = 8-bit Vec8, 1 = 32-bit Vec32.
+// EW: 0 is reserved (Vec8 lane operations removed), 1 = 32-bit Vec32.
 // IS: 0 = immediate lane, 1 = Scalar register in index5.
 // funct3: 000 extract (vector S5 -> Scalar D5), 001 insert (Scalar S5 -> vector D5),
 //         010 broadcast (vector S5 -> vector D5)
 template <typename Instr> DecodeResult decode_lane_move(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domain = paired_domains(f.sel3).vector;
+  if (domain == NpuDomain::vec8) {
+    return DecodeError::illegal;
+  }
   const auto index = decode_index(f.src2, (f.sel3 & 1) != 0);
   if constexpr (std::is_same_v<Instr, LaneExtractInstr>) {
     return DecodedNpuInstr{LaneExtractInstr{

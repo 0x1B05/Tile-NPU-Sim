@@ -99,7 +99,6 @@ TEST_CASE(move_decode_fill_scalar) {
 
 TEST_CASE(move_decode_copy_transpose) {
   constexpr std::array cases{
-      MoveCase{"bcopy b3, b4", 0x2880020du, MoveOp::copy, NpuDomain::vec8, 3, 4},
       MoveCase{"vcopy v31, v0", 0x2c80007du, MoveOp::copy, NpuDomain::vec32, 31, 0},
       MoveCase{"tcopy t15, t1", 0x208000bdu, MoveOp::copy, NpuDomain::tile, 15, 1},
       MoveCase{"ttranspose t0, t2", 0x20c00101u, MoveOp::transpose, NpuDomain::tile, 0, 2},
@@ -115,7 +114,8 @@ TEST_CASE(move_decode_rejects_reserved) {
       // funct3 = 1xx is reserved.
       DecodeCase{"funct3 100", make_reg_move(NpuDomain::tile, 4, 0, 0)},
       DecodeCase{"funct3 111", make_reg_move(NpuDomain::tile, 7, 0, 0)},
-      // ttranspose is Tile-only.
+      // Vec8 copy and non-Tile transpose are reserved.
+      DecodeCase{"bcopy", make_reg_move(NpuDomain::vec8, 2, 0, 0)},
       DecodeCase{"atranspose", make_reg_move(NpuDomain::acc, 3, 0, 0)},
       DecodeCase{"vtranspose", make_reg_move(NpuDomain::vec32, 3, 0, 0)},
       // Copy and transpose use the domain's source register count; fillx uses Scalar.

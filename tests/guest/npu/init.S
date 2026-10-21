@@ -1,10 +1,11 @@
 #include "npu.inc"
 
 # Self-checking fill/move image: programs configs and descriptors, then
-# exercises fill/fillx/copy on the tile, acc and vec8 domains and ttranspose
-# (including in-place). Every stage stores results back to memory and checks
-# them with scalar loads; the transpose config update is read back with
-# cfg.get. Ends with ebreak: a0 = 0 pass, a0 = N identifies the failing check.
+# exercises fill/fillx on the tile, acc and vec8 domains and ttranspose,
+# and copy on the tile and acc domain (including in-place). Every stage
+# stores results back to memory and checks them with scalar loads; the
+# transpose config update is read back with cfg.get.
+# Ends with ebreak: a0 = 0 pass, a0 = N identifies the failing check.
 #
 # Buffer addresses go through lla (pc-relative): the image is loaded at
 # 0x80000000, where medlow's %hi/%lo expansion would sign-extend bit 31.

@@ -92,7 +92,7 @@ inline constexpr bool er4_legal(Er4Op op, NpuDomain domain) {
 // tril/triu are matrix-only.
 inline constexpr bool mask_legal(MaskOp op, NpuDomain domain) {
   switch (op) {
-  case MaskOp::tail: return true;
+  case MaskOp::tail: return domain != NpuDomain::vec8;
   case MaskOp::tril:
   case MaskOp::triu: return !is_vector_domain(domain);
   default: return false;
