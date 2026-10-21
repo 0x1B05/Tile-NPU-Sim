@@ -247,7 +247,7 @@ TEST_CASE(npu_guest_rowlane) {
 
 TEST_CASE(npu_guest_eun) {
   // tests/guest/npu/eun.S self-configures configs and descriptors, then
-  // exercises the E_UNARY family (not/abs/neg/exp2/rcp/rsqrt/silu) with
+  // exercises the E_UNARY family (not/abs/neg/exp2/rcp/rsqrt) with
   // store-back checks against expected values in .data. It reaches ebreak
   // with a0 = 0 on success; a failing check reports its stage in a0.
   check_guest_image("eun", 1024);

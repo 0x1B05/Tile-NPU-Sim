@@ -58,7 +58,7 @@ DecodeResult decode_ebin(std::uint32_t word) {
 // [major4] [dom2] [0] [funct3] [    reserved10    ] [   S5   ] [   D5   ] [ q ]
 // dom2: 00 Tile (only the not operation), 01 Acc, 11 Vec32; 10 reserved.
 // funct3: 000 not, 001 abs, 010 neg, 011 exp2.approx, 100 rcp.approx,
-//         101 rsqrt.approx, 110 silu.approx; 111 reserved.
+//         101 rsqrt.approx; 110/111 reserved.
 DecodeResult decode_eun(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = sel3_domain(f.sel3);

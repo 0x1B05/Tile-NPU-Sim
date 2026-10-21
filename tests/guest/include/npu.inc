@@ -352,7 +352,7 @@
 #   [31:28] major4 = 1  [27:26] dom2  [25] 0  [24:22] funct3
 #   [21:12] reserved(0)  [11:7] S5  [6:2] D5  [1:0] q = 00
 # funct3: 0 not, 1 abs, 2 neg, 3 exp2.approx, 4 rcp.approx, 5 rsqrt.approx,
-#         6 silu.approx (7 reserved).
+#         6/7 reserved.
 .macro E_UNARY dom2, funct3, d5, s5
     .word ((1 << 28) | (\dom2 << 26) | (\funct3 << 22) | (\s5 << 7) | (\d5 << 2))
 .endm
@@ -379,10 +379,6 @@
 
 .macro VRSQRT d5, s5
     E_UNARY 3, 5, \d5, \s5
-.endm
-
-.macro VSILU d5, s5
-    E_UNARY 3, 6, \d5, \s5
 .endm
 
 .macro VABS d5, s5

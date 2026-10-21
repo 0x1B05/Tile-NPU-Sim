@@ -55,8 +55,7 @@ inline constexpr bool eun_legal(EunOp op, NpuDomain domain) {
   case EunOp::neg:
   case EunOp::exp2:
   case EunOp::rcp:
-  case EunOp::rsqrt:
-  case EunOp::silu: return domain == NpuDomain::acc || domain == NpuDomain::vec32;
+  case EunOp::rsqrt: return domain == NpuDomain::acc || domain == NpuDomain::vec32;
   default: return false;
   }
 }

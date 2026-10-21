@@ -719,10 +719,16 @@ qwen3_silu_mul:
     SETX    SEL_VM, 1, CF_BASE, 0, X_A0
     SETX    SEL_VM, 1, CF_BASE, 1, X_A1
     SETX    SEL_VM, 1, CF_BASE, 2, X_A2
+    li      t0, 0xBFB8AA3B                 # -log2(e), f32 bits
+    li      t1, 0x3F800000                 # 1.0f, f32 bits
     srli    t6, a3, 5
 .Lsl_loop:
     VLOAD   0
-    VSILU   0, 0
+    VMULX   1, 0, X_T0                     # -x * log2(e)
+    VEXP2   1, 1
+    VADDX   1, 1, X_T1
+    VRCP    1, 1                           # 1 / (1 + exp(-x))
+    VMUL    0, 0, 1
     VLOAD   1
     VMUL    0, 0, 1
     REG_MOVE 3, 2, 2, 0                    # vcopy v2, v0

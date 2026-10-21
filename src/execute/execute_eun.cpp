@@ -23,18 +23,11 @@ bool op_supports_dtype(EunOp op, DType dtype) {
   }
 }
 
-// silu(x) = x/(1+e^-x) evaluated in double: in single precision exp(-x)
-// overflows for x < -88, flushing normal-range results like silu(-89) to -0
-// and breaking the ISA's 2^-10 relative-error bound.
-float silu_f32(float x) {
-  return static_cast<float>(static_cast<double>(x) / (1.0 + std::exp(-static_cast<double>(x))));
-}
-
 // One element of the operation on raw storage bits. abs/neg only reach here
 // with i32/f32 and the approximate functions with f32; i32 neg/abs wrap on
 // the most negative value. The approximate functions use the host libm,
 // which satisfies the ISA's 2^-10 relative-error bound and its special-value
-// table (rcp = 1/x, rsqrt = 1/sqrt(x), silu = x/(1+e^-x) in IEEE arithmetic).
+// table (rcp = 1/x, rsqrt = 1/sqrt(x) in IEEE arithmetic).
 template <typename E> E apply_unary(EunOp op, DType dtype, E value) {
   if (op == EunOp::bit_not) return static_cast<E>(~value);
   if constexpr (sizeof(E) == sizeof(float)) {
@@ -47,7 +40,6 @@ template <typename E> E apply_unary(EunOp op, DType dtype, E value) {
       case EunOp::exp2: result = std::exp2(x); break;
       case EunOp::rcp: result = 1.0f / x; break;
       case EunOp::rsqrt: result = 1.0f / std::sqrt(x); break;
-      case EunOp::silu: result = silu_f32(x); break;
       default: unreachable("f32 element with an integer-only E_UNARY op");
       }
       return static_cast<E>(as_u32(result));

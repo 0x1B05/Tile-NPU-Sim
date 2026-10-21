@@ -86,23 +86,18 @@ TEST_CASE(eun_decode) {
            .domain = NpuDomain::vec32,
            .dest = 1,
            .src = 2},
-      Case{.name = "vsilu.approx v31, v0",
-           .word = make_eun(NpuDomain::vec32, 6, 31, 0),
-           .op = EunOp::silu,
-           .domain = NpuDomain::vec32,
-           .dest = 31,
-           .src = 0},
   };
   check_cases(cases);
 }
 
 TEST_CASE(eun_decode_rejects_reserved) {
   constexpr std::array cases{
-      // Vec8 has no E_UNARY; on Tile only `not` exists; funct3 = 111 is
+      // Vec8 has no E_UNARY; on Tile only `not` exists; funct3 = 110/111 are
       // reserved.
       DecodeCase{"bnot", make_eun(NpuDomain::vec8, 0, 0, 0)},
       DecodeCase{"tabs", make_eun(NpuDomain::tile, 1, 0, 0)},
       DecodeCase{"texp2", make_eun(NpuDomain::tile, 3, 0, 0)},
+      DecodeCase{"funct3 110", make_eun(NpuDomain::acc, 6, 0, 0)},
       DecodeCase{"funct3 111", make_eun(NpuDomain::acc, 7, 0, 0)},
       // sel3 bit 0 and reserved10 must be 0.
       DecodeCase{"sel3 bit0", make_eun(NpuDomain::vec32, 0, 0, 0) | (1u << 25)},

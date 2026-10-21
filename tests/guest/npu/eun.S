@@ -92,27 +92,6 @@ _start:
     addi      x6, x6, -1
     bnez      x6, 3b
 
-    # vsilu.approx: {+0, -0, +inf, +0} -> {+0, -0, +inf, +0}
-    lla       x3, src_f4
-    CFG_REG   3, 1, 0, 0, 3, 0
-    VLOAD     0
-    VSILU     0, 0
-    lla       x3, dstbuf32
-    CFG_REG   3, 1, 0, 0, 3, 0
-    VSTORE    0
-    lla       x3, dstbuf32
-    lla       x4, exp_f4
-    li        x6, 4
-    li        a0, 4
-4:  lwu       x5, 0(x3)
-    lwu       x7, 0(x4)
-    subw      x5, x5, x7
-    bnez      x5, fail
-    addi      x3, x3, 4
-    addi      x4, x4, 4
-    addi      x6, x6, -1
-    bnez      x6, 4b
-
     # tnot: {0x0F, 0xF0, 0x55, 0xAA} -> {0xF0, 0x0F, 0xAA, 0x55}
     lla       x3, src_b
     CFG_REG   2, 0, 0, 0, 3, 0
@@ -189,8 +168,6 @@ src_f2: .word 0x40800000, 0xC0000000, 0x7F800000, 0x80000000
 exp_f2: .word 0x3E800000, 0xBF000000, 0x00000000, 0xFF800000
 src_f3: .word 0x3E800000, 0x40800000, 0x7F800000, 0x00000000
 exp_f3: .word 0x40000000, 0x3F000000, 0x00000000, 0x7F800000
-src_f4: .word 0x00000000, 0x80000000, 0x7F800000, 0x00000000
-exp_f4: .word 0x00000000, 0x80000000, 0x7F800000, 0x00000000
 src_b:  .byte 0x0F, 0xF0, 0x55, 0xAA
 exp_b:  .byte 0xF0, 0x0F, 0xAA, 0x55
     .balign 4

@@ -174,7 +174,6 @@ enum class EunOp : std::uint8_t {
   exp2    = 0b011,
   rcp     = 0b100,
   rsqrt   = 0b101,
-  silu    = 0b110,
   // clang-format on
 };
 
