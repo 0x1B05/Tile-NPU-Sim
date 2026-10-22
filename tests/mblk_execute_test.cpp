@@ -64,6 +64,12 @@ void config_tile_2x2(tile_npu::State &state, std::uint8_t index) {
   state.tc[index].cols = 2;
 }
 
+void config_acc_2x2(tile_npu::State &state, std::uint8_t index) {
+  state.ac[index].dtype = DType::i32;
+  state.ac[index].rows = 2;
+  state.ac[index].cols = 2;
+}
+
 void stride_desc(tile_npu::MatrixDescriptor &desc, std::uint64_t base, std::int32_t row_stride,
                  std::int32_t col_stride) {
   desc.base_addr = base;
@@ -128,6 +134,53 @@ TEST_CASE(mblk_tstore_block) {
   check(bytes == expected, "memory holds the stored 2x2 block");
   check_eq(state.t[1][tile_index(0, 0)], std::uint8_t{9},
            "store does not modify the source register");
+}
+
+TEST_CASE(mblk_tstore_transpose) {
+  MblkRun run(block(NpuDomain::tile, 1, 1)); // tstore t1
+  auto &state = run.sim.state();
+  config_tile_2x2(state, 1);
+  stride_desc(state.tm[1], DATA, 2, 1);
+  state.tm[1].transform = 1; // transpose: memory[addr(j,i)] = t1[i,j]
+  state.t[1][tile_index(0, 0)] = 9;
+  state.t[1][tile_index(0, 1)] = 8;
+  state.t[1][tile_index(1, 0)] = 7;
+  state.t[1][tile_index(1, 1)] = 6;
+
+  check_eq(run.sim.step().status, StepStatus::retired, "transposed tstore retires");
+  const auto bytes = peek<4>(run.memory, DATA);
+  const std::array<std::uint8_t, 4> expected{9, 7, 8, 6};
+  check(bytes == expected, "memory holds the transposed 2x2 block");
+  check_eq(state.t[1][tile_index(0, 0)], std::uint8_t{9},
+           "store does not modify the source register");
+}
+
+TEST_CASE(mblk_transform_restrictions) {
+  {
+    MblkRun run(block(NpuDomain::acc, 0, 1)); // astore a0 with transform
+    auto &state = run.sim.state();
+    config_acc_2x2(state, 0);
+    stride_desc(state.am[0], DATA, 8, 4);
+    state.am[0].transform = 1; // transpose is defined for full Tile transfers only
+    check_eq(run.sim.step().status, StepStatus::invalid_configuration, "astore rejects transform");
+  }
+  {
+    MblkRun run(block(NpuDomain::acc, 0, 0)); // aload a0 with transform
+    auto &state = run.sim.state();
+    config_acc_2x2(state, 0);
+    stride_desc(state.am[0], DATA, 8, 4);
+    state.am[0].transform = 1;
+    check_eq(run.sim.step().status, StepStatus::invalid_configuration, "aload rejects transform");
+  }
+  {
+    MblkRun run(make_mrow(false, false, 5, 0, 1)); // tstore.row t1[0] with transform
+    auto &state = run.sim.state();
+    config_tile_2x2(state, 1);
+    stride_desc(state.tm[1], DATA, 2, 1);
+    state.tm[1].transform = 1;
+    check_eq(run.sim.step().status, StepStatus::invalid_configuration,
+             "row form rejects transform");
+  }
 }
 
 TEST_CASE(mblk_row_load_forms) {
@@ -299,7 +352,6 @@ TEST_CASE(mblk_rejects_invalid_configs) {
 
   // Each scenario starts from a valid 2x2 i8 tile setup and breaks one rule.
   constexpr std::array scenarios{
-      Scenario{"transform on tstore", block(NpuDomain::tile, 1, 0)},
       Scenario{"transform on row load", make_mrow(false, false, 4, 0, 0)},
   };
   for (const auto &test : scenarios) {

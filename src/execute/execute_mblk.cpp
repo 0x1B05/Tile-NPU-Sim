@@ -39,7 +39,9 @@ void store_element(AddressSpace &memory, std::uint64_t address, Element value) {
 }
 
 bool transform_legal(const MblkInstr &instr, const MatrixDescriptor &desc) {
-  return desc.transform == 0 || (instr.op == MblkOp::load && instr.reg.domain == NpuDomain::tile);
+  const bool full_tile_block = instr.reg.domain == NpuDomain::tile &&
+                               (instr.op == MblkOp::load || instr.op == MblkOp::store);
+  return desc.transform == 0 || full_tile_block;
 }
 
 // Every access runs in two phases: all addresses are computed first, then
@@ -136,7 +138,8 @@ template <NpuDomain Domain> ExecuteResult block_access(const MblkInstr &instr, E
     return config_error();
   }
 
-  // A transpose load swaps the coordinates handed to the descriptor.
+  // A transpose block transfer swaps the coordinates handed to the
+  // descriptor.
   const bool transpose = desc.descriptor().transform != 0;
   const auto addrs = collect_addresses<MATRIX_ELEMENTS>(rows * cols, [&](std::size_t n) {
     return transpose ? desc.matrix_element_addr(n % cols, n / cols)
