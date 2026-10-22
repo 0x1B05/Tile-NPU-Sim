@@ -264,9 +264,9 @@ TEST_CASE(npu_guest_ecmp) {
 
 TEST_CASE(npu_guest_ebcast) {
   // tests/guest/npu/ebcast.S self-configures configs and descriptors, then
-  // exercises a Tile byrow broadcast add (i8 wrap) and an Acc bycol broadcast
-  // mul (i32) with store-back checks. It reaches ebreak with a0 = 0 on
-  // success; a failing check reports its stage in a0.
+  // exercises an Acc byrow broadcast add (i32) and an Acc bycol broadcast mul
+  // (i32) with store-back checks. It reaches ebreak with a0 = 0 on success; a
+  // failing check reports its stage in a0.
   check_guest_image("ebcast", 1024);
 }
 

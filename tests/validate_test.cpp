@@ -138,6 +138,7 @@ TEST_CASE(validate_rejects_bad_ecmp) {
 TEST_CASE(validate_rejects_bad_ebcast) {
   check_illegal(BcastInstr{static_cast<EbinOp>(3), A(0), A(1), V(0), false},
                 "reserved funct4 code");
+  check_illegal(BcastInstr{EbinOp::add, T(0), T(1), B(0), false}, "tile bcast reserved");
   check_illegal(BcastInstr{EbinOp::add, T(0), T(1), V(0), false}, "tile paired with vec32");
   check_illegal(BcastInstr{EbinOp::add, V(0), V(1), B(0), false}, "vector destination");
   check_illegal(BcastInstr{EbinOp::add, A(0), A(1), V(32), false}, "vector index 32");

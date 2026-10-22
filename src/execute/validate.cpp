@@ -70,8 +70,8 @@ bool valid_structure(const CmpInstr &instr) {
 }
 
 bool valid_structure(const BcastInstr &instr) {
-  if (!is_domains_paired(instr.dest.domain, instr.vector.domain) ||
-      !ebin_legal(instr.op, instr.dest.domain)) {
+  if (instr.dest.domain != NpuDomain::acc || instr.vector.domain != NpuDomain::vec32 ||
+      !ebin_legal(instr.op, NpuDomain::acc)) {
     return false;
   }
   return instr.src1.domain == instr.dest.domain && in_range(instr.dest) && in_range(instr.src1) &&

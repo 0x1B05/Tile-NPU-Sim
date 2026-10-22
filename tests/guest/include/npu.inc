@@ -411,13 +411,13 @@
 # E_BCAST (R3), mirroring NpuR3 in src/decode/encoding.h:
 #   [31:28] major4 = 5  [27] 0  [26] EW  [25] DIR  [24:21] funct4
 #   [20:17] reserved(0)  [16:12] S5  [11:7] A5  [6:2] D5  [1:0] q = 00
-# EW: 0 = Tile + Vec8, 1 = Acc + Vec32. DIR: 0 = byrow, 1 = bycol.
+# EW: 0 = reserved, 1 = Acc + Vec32. DIR: 0 = byrow, 1 = bycol.
 .macro E_BCAST ew, dir, funct4, d5, a5, s5
     .word ((5 << 28) | (\ew << 26) | (\dir << 25) | (\funct4 << 21) | (\s5 << 12) | (\a5 << 7) | (\d5 << 2))
 .endm
 
-.macro TADDB_ROW d5, a5, s5
-    E_BCAST 0, 0, 0, \d5, \a5, \s5
+.macro AADDV_ROW d5, a5, s5
+    E_BCAST 1, 0, 0, \d5, \a5, \s5
 .endm
 
 .macro AMULV_COL d5, a5, s5

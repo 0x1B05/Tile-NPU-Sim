@@ -107,24 +107,25 @@ DecodeResult decode_ecmp(std::uint32_t word) {
 // E_BCAST (R3): major4 = 0101, q = 00.
 // 31    28  27  26   25   24    21 20       17 16      12 11       7 6        2 1   0
 // [major4] [0] [EW] [DIR] [funct4] [reserved4] [   S5   ] [   A5   ] [   D5   ] [ q ]
-// EW: 0 = Tile/Vec8, 1 = Acc/Vec32; A5/D5 are matrices, S5 is a vector.
+// EW: 0 reserved, 1 = Acc/Vec32; A5/D5 are matrices, S5 is a vector.
 // DIR: 0 = byrow, 1 = bycol. funct4 = {G, op3}, shared with E_BIN.
 DecodeResult decode_ebcast(std::uint32_t word) {
   const auto f = encoding::NpuR3::from(word);
-  const auto domains = paired_domains(f.sel3);
+  constexpr auto MATRIX_DOMAIN = NpuDomain::acc;
+  constexpr auto VECTOR_DOMAIN = NpuDomain::vec32;
   const auto op = static_cast<EbinOp>(f.funct4);
-  if (!ebin_legal(op, domains.matrix)) {
+  if ((f.sel3 & 0b010) == 0 || !ebin_legal(op, MATRIX_DOMAIN)) {
     return DecodeError::illegal;
   }
-  const auto count = domain_register_count(domains.matrix);
+  const auto count = domain_register_count(MATRIX_DOMAIN);
   if (f.dest >= count || f.src1 >= count) {
     return DecodeError::illegal;
   }
   return DecodedNpuInstr{BcastInstr{
       .op = op,
-      .dest = {.domain = domains.matrix, .index = f.dest},
-      .src1 = {.domain = domains.matrix, .index = f.src1},
-      .vector = {.domain = domains.vector, .index = f.src2},
+      .dest = {.domain = MATRIX_DOMAIN, .index = f.dest},
+      .src1 = {.domain = MATRIX_DOMAIN, .index = f.src1},
+      .vector = {.domain = VECTOR_DOMAIN, .index = f.src2},
       .by_col = (f.sel3 & 1) != 0,
   }};
 }

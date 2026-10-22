@@ -49,25 +49,15 @@ template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
 
 TEST_CASE(ebcast_decode) {
   constexpr std::array cases{
-      // Anchor word computed by hand from the encoding figure.
-      Case{.name = "taddb.byrow t0, t1, b2",
-           .word = 0x50002080u,
+      Case{.name = "aaddv.byrow a0, a1, v2",
+           .word = make_ebcast(true, false, 0, 0, 1, 2),
            .op = EbinOp::add,
-           .matrix_domain = NpuDomain::tile,
-           .vector_domain = NpuDomain::vec8,
+           .matrix_domain = NpuDomain::acc,
+           .vector_domain = NpuDomain::vec32,
            .dest = 0,
            .src1 = 1,
            .vec = 2,
            .by_col = false},
-      Case{.name = "tsubb.bycol t15, t14, b31",
-           .word = make_ebcast(false, true, 1, 15, 14, 31),
-           .op = EbinOp::sub,
-           .matrix_domain = NpuDomain::tile,
-           .vector_domain = NpuDomain::vec8,
-           .dest = 15,
-           .src1 = 14,
-           .vec = 31,
-           .by_col = true},
       Case{.name = "amulv.byrow a0, a1, v2",
            .word = make_ebcast(true, false, 2, 0, 1, 2),
            .op = EbinOp::mul,
@@ -95,33 +85,22 @@ TEST_CASE(ebcast_decode) {
            .src1 = 4,
            .vec = 5,
            .by_col = false},
-      Case{.name = "tsrab.byrow t2, t3, b4",
-           .word = make_ebcast(false, false, 13, 2, 3, 4),
-           .op = EbinOp::sra,
-           .matrix_domain = NpuDomain::tile,
-           .vector_domain = NpuDomain::vec8,
-           .dest = 2,
-           .src1 = 3,
-           .vec = 4,
-           .by_col = false},
   };
   check_cases(cases);
 }
 
 TEST_CASE(ebcast_decode_rejects_reserved) {
   constexpr std::array cases{
-      // sel3 bit 2 and reserved4 must be 0.
-      DecodeCase{"sel3 bit2", make_ebcast(false, false, 0, 0, 0, 0) | (1u << 27)},
-      DecodeCase{"reserved4", make_ebcast(false, false, 0, 0, 0, 0) | (1u << 17)},
+      // EW = 0, sel3 bit 2, and reserved4 must be 0.
+      DecodeCase{"EW=0 reserved", make_ebcast(false, false, 0, 0, 1, 2)},
+      DecodeCase{"EW=0 bycol reserved", make_ebcast(false, true, 0, 0, 1, 2)},
+      DecodeCase{"sel3 bit2", make_ebcast(true, false, 0, 0, 0, 0) | (1u << 27)},
+      DecodeCase{"reserved4", make_ebcast(true, false, 0, 0, 0, 0) | (1u << 17)},
       // Unassigned funct4 codes are reserved (shared E_BIN table).
-      DecodeCase{"funct4 0110", make_ebcast(false, false, 6, 0, 0, 0)},
+      DecodeCase{"funct4 0110", make_ebcast(true, false, 6, 0, 0, 0)},
       DecodeCase{"funct4 1111", make_ebcast(true, false, 15, 0, 0, 0)},
-      // Tile has no mul encoding; op3 = 011 is reserved.
-      DecodeCase{"tmulb", make_ebcast(false, false, 2, 0, 0, 0)},
       DecodeCase{"reserved funct4 0011", make_ebcast(true, true, 3, 0, 0, 0)},
-      // Matrix register numbers are bounded per domain; the vector side
-      // takes all 32.
-      DecodeCase{"taddb t16", make_ebcast(false, false, 0, 16, 0, 0)},
+      // Matrix register numbers are bounded; the vector side takes all 32.
       DecodeCase{"amulv a12", make_ebcast(true, false, 2, 0, 12, 0)},
   };
   expect_illegal(cases);

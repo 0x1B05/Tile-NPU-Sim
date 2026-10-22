@@ -10,17 +10,16 @@
 #include <utility>
 
 namespace tile_npu {
-namespace {
 
-// Shared matrix-times-broadcast-vector loop over the destination's effective
-// shape: byrow feeds S[row], bycol S[col]. The ISA fixes the vector's dtype
-// to the matrix dtype and its length to rows (byrow) or cols (bycol).
-template <NpuDomain Domain> ExecuteResult bcast(const BcastInstr &instr, State &state) {
-  constexpr auto VECTOR_DOMAIN = paired_vector_domain(Domain);
-  auto &matrix_regs = domain_regs<Domain>(state);
-  const auto &matrix_configs = domain_configs<Domain>(state);
-  const auto &vector_regs = domain_regs<VECTOR_DOMAIN>(state);
-  const auto &vector_configs = domain_configs<VECTOR_DOMAIN>(state);
+ExecuteResult execute(const BcastInstr &instr, State &state) {
+  if (instr.dest.domain != NpuDomain::acc || instr.vector.domain != NpuDomain::vec32) {
+    unreachable("E_BCAST requires Acc and Vec32");
+  }
+
+  auto &matrix_regs = state.a;
+  const auto &matrix_configs = state.ac;
+  const auto &vector_regs = state.v;
+  const auto &vector_configs = state.vc;
 
   const auto &dst_config = matrix_configs[instr.dest.index];
   const auto &src_config = matrix_configs[instr.src1.index];
@@ -44,17 +43,6 @@ template <NpuDomain Domain> ExecuteResult bcast(const BcastInstr &instr, State &
     }
   }
   return {.status = StepStatus::retired};
-}
-
-} // namespace
-
-ExecuteResult execute(const BcastInstr &instr, State &state) {
-  switch (instr.dest.domain) {
-  case NpuDomain::tile: return bcast<NpuDomain::tile>(instr, state);
-  case NpuDomain::acc: return bcast<NpuDomain::acc>(instr, state);
-  default: break;
-  }
-  unreachable("execute_ebcast without a matrix destination");
 }
 
 } // namespace tile_npu
