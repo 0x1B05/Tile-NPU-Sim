@@ -70,12 +70,11 @@ DecodeResult decode_fill(std::uint32_t word) {
   }};
 }
 
-// REG_MOVE fillx/copy/ttranspose (R2): major4 = 0010, q = 01.
+// REG_MOVE fillx/copy (R2): major4 = 0010, q = 01.
 // 31    28 27  26 25  24    22 21                12 11       7 6        2 1   0
 // [major4] [dom2] [0] [funct3] [    reserved10    ] [   S5   ] [   D5   ] [ q ]
 // dom2: 00 Tile, 01 Acc, 10 Vec8, 11 Vec32.
-// funct3[24:22]: 001 fillx (S5 = xS), 010 copy (S5 = same-domain source),
-//               011 ttranspose (Tile only).
+// funct3[24:22]: 001 fillx (S5 = xS), 010 copy (S5 = same-domain source).
 DecodeResult decode_fillx(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = sel3_domain(f.sel3);
@@ -88,27 +87,17 @@ DecodeResult decode_fillx(std::uint32_t word) {
   }};
 }
 
-template <MoveOp Op> DecodeResult decode_reg_move(std::uint32_t word) {
+DecodeResult decode_move_copy(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = sel3_domain(f.sel3);
-  if (Op == MoveOp::transpose && domain != NpuDomain::tile) {
-    return DecodeError::illegal;
-  }
   const auto count = domain_register_count(domain);
   if (f.dest >= count || f.src2 >= count) {
     return DecodeError::illegal;
   }
   return DecodedNpuInstr{MoveInstr{
-      .op = Op,
       .dest = {.domain = domain, .index = f.dest},
       .src = {.domain = domain, .index = f.src2},
   }};
-}
-
-DecodeResult decode_move_copy(std::uint32_t word) { return decode_reg_move<MoveOp::copy>(word); }
-
-DecodeResult decode_move_transpose(std::uint32_t word) {
-  return decode_reg_move<MoveOp::transpose>(word);
 }
 
 // ROW_MOVE (R4): major4 = 0011, q = 01.

@@ -81,10 +81,7 @@ struct FillInstr {
   std::variant<FillImm16, ScalarRegister> value = FillImm16{};
 };
 
-enum class MoveOp : std::uint8_t { copy, transpose };
-
 struct MoveInstr {
-  MoveOp op = MoveOp::copy;
   NpuRegister dest{};
   NpuRegister src{};
 };

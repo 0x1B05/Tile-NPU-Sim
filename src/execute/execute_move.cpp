@@ -2,7 +2,6 @@
 
 #include "config_check.h"
 #include "domain.h"
-#include "matrix_view.h"
 #include "utils/common.h"
 
 #include <bit>
@@ -29,35 +28,6 @@ std::uint32_t fill_value(const FillInstr &instr, const State &state, DType dtype
                     instr.value);
 }
 
-// ttranspose writes tD[i,j] = tS[j,i] and rebinds the destination config to
-// the swapped shape. The destination shape is an output, so only its dtype
-// and layout constrain the execution. The source is staged so that an
-// in-place transpose stays safe.
-ExecuteResult transpose_tile(const MoveInstr &instr, State &state) {
-  const auto &src_config = state.tc[instr.src.index];
-  const auto &dst_config = state.tc[instr.dest.index];
-  if (!valid_domain_config(src_config) || dst_config.layout != Layout::row_major ||
-      dst_config.dtype != src_config.dtype) {
-    return config_error();
-  }
-
-  const auto staged = state.t[instr.src.index];
-  // Capture the source shape up front: for an in-place transpose the config
-  // writes below would otherwise alias src_config.
-  const auto src_rows = src_config.rows;
-  const auto src_cols = src_config.cols;
-  const auto src = matrix_view(staged);
-  auto dst = matrix_view(state.t[instr.dest.index]);
-  for (std::size_t row = 0; row < src_cols; ++row) {
-    for (std::size_t col = 0; col < src_rows; ++col) {
-      dst.at(row, col) = src.at(col, row);
-    }
-  }
-  state.tc[instr.dest.index].rows = src_cols;
-  state.tc[instr.dest.index].cols = src_rows;
-  return {.status = StepStatus::retired};
-}
-
 } // namespace
 
 ExecuteResult execute(const FillInstr &instr, State &state) {
@@ -74,9 +44,6 @@ ExecuteResult execute(const FillInstr &instr, State &state) {
 }
 
 ExecuteResult execute(const MoveInstr &instr, State &state) {
-  if (instr.op == MoveOp::transpose) {
-    return transpose_tile(instr, state);
-  }
   return with_domain<NpuDomain::tile, NpuDomain::acc, NpuDomain::vec8, NpuDomain::vec32>(
       state, instr.dest.domain, [&](auto &regs, const auto &configs) -> ExecuteResult {
         const auto &dst_config = configs[instr.dest.index];

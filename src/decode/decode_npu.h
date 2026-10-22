@@ -42,7 +42,6 @@ DecodeResult decode_mblk_row_store(std::uint32_t word);
 DecodeResult decode_fill(std::uint32_t word);
 DecodeResult decode_fillx(std::uint32_t word);
 DecodeResult decode_move_copy(std::uint32_t word);
-DecodeResult decode_move_transpose(std::uint32_t word);
 DecodeResult decode_row_insert(std::uint32_t word);
 DecodeResult decode_row_extract(std::uint32_t word);
 DecodeResult decode_lane_extract(std::uint32_t word);

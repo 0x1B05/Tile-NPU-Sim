@@ -114,14 +114,7 @@ bool valid_structure(const FillInstr &instr) {
 }
 
 bool valid_structure(const MoveInstr &instr) {
-  if (instr.dest.domain != instr.src.domain || !in_range(instr.dest) || !in_range(instr.src)) {
-    return false;
-  }
-  switch (instr.op) {
-  case MoveOp::copy: return true;
-  case MoveOp::transpose: return instr.dest.domain == NpuDomain::tile;
-  default: return false;
-  }
+  return instr.dest.domain == instr.src.domain && in_range(instr.dest) && in_range(instr.src);
 }
 
 bool valid_structure(const RowInstr &instr) {

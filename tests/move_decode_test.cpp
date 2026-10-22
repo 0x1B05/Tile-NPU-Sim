@@ -18,7 +18,6 @@ namespace {
 using tile_npu::FillImm16;
 using tile_npu::FillInstr;
 using tile_npu::MoveInstr;
-using tile_npu::MoveOp;
 using tile_npu::NpuDomain;
 using tile_npu::NpuRegister;
 using tile_npu::ScalarRegister;
@@ -55,7 +54,6 @@ template <std::size_t N> void check_fills(const std::array<FillCase, N> &cases) 
 struct MoveCase {
   const char *name;
   std::uint32_t word;
-  MoveOp op;
   NpuDomain domain;
   std::uint8_t dest;
   std::uint8_t src;
@@ -66,7 +64,6 @@ template <std::size_t N> void check_moves(const std::array<MoveCase, N> &cases) 
     const auto result = tile_npu::decode(test.word);
     const std::string what = std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
     const auto &decoded = expect_npu<MoveInstr>(result, what);
-    check_eq(decoded.op, test.op, what + ": op");
     check_eq(decoded.dest.domain, test.domain, what + ": dest domain");
     check_eq(decoded.dest.index, test.dest, what + ": dest");
     check_eq(decoded.src.domain, test.domain, what + ": src domain");
@@ -97,12 +94,11 @@ TEST_CASE(move_decode_fill_scalar) {
   check_fills(cases);
 }
 
-TEST_CASE(move_decode_copy_transpose) {
+TEST_CASE(move_decode_copy) {
   constexpr std::array cases{
-      MoveCase{"bcopy b3, b4", 0x2880020du, MoveOp::copy, NpuDomain::vec8, 3, 4},
-      MoveCase{"vcopy v31, v0", 0x2c80007du, MoveOp::copy, NpuDomain::vec32, 31, 0},
-      MoveCase{"tcopy t15, t1", 0x208000bdu, MoveOp::copy, NpuDomain::tile, 15, 1},
-      MoveCase{"ttranspose t0, t2", 0x20c00101u, MoveOp::transpose, NpuDomain::tile, 0, 2},
+      MoveCase{"bcopy b3, b4", 0x2880020du, NpuDomain::vec8, 3, 4},
+      MoveCase{"vcopy v31, v0", 0x2c80007du, NpuDomain::vec32, 31, 0},
+      MoveCase{"tcopy t15, t1", 0x208000bdu, NpuDomain::tile, 15, 1},
   };
   check_moves(cases);
 }
@@ -112,17 +108,14 @@ TEST_CASE(move_decode_rejects_reserved) {
       // R2 forms require sel3 bit 0 = 0 and reserved10 = 0.
       DecodeCase{"fillx sel3 bit0", make_reg_move(NpuDomain::tile, 1, 0, 0) | (1u << 25)},
       DecodeCase{"copy reserved10", make_reg_move(NpuDomain::tile, 2, 0, 0) | (1u << 12)},
-      // funct3 = 1xx is reserved.
+      // funct3 = 011 and 1xx are reserved.
+      DecodeCase{"funct3 011", make_reg_move(NpuDomain::tile, 3, 0, 0)},
       DecodeCase{"funct3 100", make_reg_move(NpuDomain::tile, 4, 0, 0)},
       DecodeCase{"funct3 111", make_reg_move(NpuDomain::tile, 7, 0, 0)},
-      // ttranspose is Tile-only.
-      DecodeCase{"atranspose", make_reg_move(NpuDomain::acc, 3, 0, 0)},
-      DecodeCase{"vtranspose", make_reg_move(NpuDomain::vec32, 3, 0, 0)},
-      // Copy and transpose use the domain's source register count; fillx uses Scalar.
+      // Copy uses the domain's source register count; fillx uses Scalar.
       DecodeCase{"tfill t16", make_fill_imm(NpuDomain::tile, 16, 0)},
       DecodeCase{"afillx a12", make_reg_move(NpuDomain::acc, 1, 12, 0)},
       DecodeCase{"tcopy t0, t16", make_reg_move(NpuDomain::tile, 2, 0, 16)},
-      DecodeCase{"ttranspose t0, t16", make_reg_move(NpuDomain::tile, 3, 0, 16)},
       // FILL_IMM funct3 != 000 and REG_MOVE funct3 = 000 are reserved.
       DecodeCase{"fill funct3 010", 0x11000001u},
       DecodeCase{"REG_MOVE funct3 000", make_reg_move(NpuDomain::tile, 0, 0, 0)},

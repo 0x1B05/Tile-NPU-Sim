@@ -1,24 +1,22 @@
 #include "npu.inc"
 
 # Self-checking fill/move image: programs configs and descriptors, then
-# exercises fill/fillx/copy on the tile, acc and vec8 domains and ttranspose
-# (including in-place). Every stage stores results back to memory and checks
-# them with scalar loads; the transpose config update is read back with
-# cfg.get. Ends with ebreak: a0 = 0 pass, a0 = N identifies the failing check.
+# exercises fill/fillx/copy on the tile, acc and vec8 domains. Every stage
+# stores results back to memory and checks them with scalar loads. Ends with
+# ebreak: a0 = 0 pass, a0 = N identifies the failing check.
 #
 # Buffer addresses go through lla (pc-relative): the image is loaded at
 # 0x80000000, where medlow's %hi/%lo expansion would sign-extend bit 31.
 
     .globl _start
 _start:
-    # tc0/tc1: dtype = i8 (0), rows = 2, cols = 3; tc2: i8 (transpose output)
+    # tc0/tc1: dtype = i8 (0), rows = 2, cols = 3
     CFG_SETI  5, 0, 0, 0, 0
     CFG_SETI  5, 0, 1, 2, 0
     CFG_SETI  5, 0, 2, 3, 0
     CFG_SETI  5, 0, 0, 0, 1
     CFG_SETI  5, 0, 1, 2, 1
     CFG_SETI  5, 0, 2, 3, 1
-    CFG_SETI  5, 0, 0, 0, 2
     # ac0: dtype = i32 (2), rows = 1, cols = 2
     CFG_SETI  5, 1, 0, 2, 0
     CFG_SETI  5, 1, 1, 1, 0
@@ -83,47 +81,6 @@ _start:
     li        a0, 4
     bne       x4, x5, fail
 
-    # tload t0 = {1..6} (2x3), then ttranspose t2, t0 -> 3x2:
-    #   1 2 3        1 4
-    #   4 5 6  -->   2 5
-    #                3 6
-    lla       x3, srcbuf
-    CFG_REG   2, 0, 0, 0, 3, 0   # tm0 base = srcbuf (strides still 3/1)
-    TLOAD     0
-    TTRANSPOSE 2, 0
-    lla       x3, dstbuf4
-    CFG_REG   2, 0, 0, 0, 3, 2   # tm2 base = dstbuf4
-    CFG_SETI  5, 2, 1, 2, 2      # tm2 row_stride = 2
-    CFG_SETI  5, 2, 2, 1, 2      # tm2 col_stride = 1
-    TSTORE    2
-    lwu       x4, 0(x3)
-    li        x5, 0x05020401     # bytes {1, 4, 2, 5}
-    li        a0, 5
-    bne       x4, x5, fail
-    lhu       x4, 4(x3)
-    li        x5, 0x0603         # bytes {3, 6}
-    bne       x4, x5, fail
-    CFG_REG   0, 0, 2, 1, 2, 5   # cfg.get x5, tc2, rows
-    li        x7, 3
-    bne       x5, x7, fail
-    CFG_REG   0, 0, 2, 2, 2, 5   # cfg.get x5, tc2, cols
-    li        x7, 2
-    bne       x5, x7, fail
-
-    # In-place: ttranspose t0, t0 turns the 2x3 {1..6} into the same 3x2.
-    TTRANSPOSE 0, 0
-    lla       x3, dstbuf4
-    CFG_REG   2, 0, 0, 0, 3, 0   # tm0 base = dstbuf4
-    CFG_SETI  5, 2, 1, 2, 0      # tm0 row_stride = 2
-    TSTORE    0
-    lwu       x4, 0(x3)
-    li        x5, 0x05020401
-    li        a0, 6
-    bne       x4, x5, fail
-    lhu       x4, 4(x3)
-    li        x5, 0x0603
-    bne       x4, x5, fail
-
     li        a0, 0
     ebreak
 fail:
@@ -131,9 +88,6 @@ fail:
 
     .section .data
     .balign 4
-srcbuf:  .byte 1, 2, 3, 4, 5, 6
-    .balign 4
 dstbuf:  .space 8
 dstbuf2: .space 8
 dstbuf3: .space 4
-dstbuf4: .space 8

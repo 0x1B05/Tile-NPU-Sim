@@ -12,7 +12,7 @@ namespace tile_npu::test {
 //       [22:7] imm16  [6:2] D5  [1:0] q = 01
 //   R2: [31:28] major4 = 0010  [27:26] dom2  [25] 0  [24:22] funct3
 //       [21:12] reserved10 = 0 [11:7] S5  [6:2] D5  [1:0] q = 01
-// funct3: 001 = fillx (S5 = xS), 010 = copy, 011 = ttranspose (Tile only).
+// funct3: 001 = fillx (S5 = xS), 010 = copy.
 constexpr std::uint32_t make_fill_imm(tile_npu::NpuDomain domain, std::uint32_t dest,
                                       std::uint32_t imm16) {
   return 0x10000001u | (static_cast<std::uint32_t>(domain) << 26) | ((imm16 & 0xffffu) << 7) |

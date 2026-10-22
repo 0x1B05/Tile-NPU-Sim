@@ -243,8 +243,7 @@
 # REG_MOVE R2 forms, mirroring NpuR2 in src/decode/encoding.h:
 #   [31:28] major4 = 2  [27:26] dom2  [25] 0  [24:22] funct3
 #   [21:12] reserved(0)  [11:7] S5  [6:2] D5  [1:0] q = 01
-# funct3: 1 = fillx (S5 = xS), 2 = copy (S5 = same-domain source),
-#         3 = ttranspose (Tile only).
+# funct3: 1 = fillx (S5 = xS), 2 = copy (S5 = same-domain source).
 .macro REG_MOVE dom2, funct3, d5, s5
     .word ((2 << 28) | (\dom2 << 26) | (\funct3 << 22) | (\s5 << 7) | (\d5 << 2) | 1)
 .endm
@@ -259,10 +258,6 @@
 
 .macro TCOPY d5, s5
     REG_MOVE 0, 2, \d5, \s5
-.endm
-
-.macro TTRANSPOSE d5, s5
-    REG_MOVE 0, 3, \d5, \s5
 .endm
 
 .macro AFILLX d5, xs

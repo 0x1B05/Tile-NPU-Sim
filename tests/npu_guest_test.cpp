@@ -233,7 +233,7 @@ TEST_CASE(npu_guest_mem) {
 
 TEST_CASE(npu_guest_init) {
   // tests/guest/npu/init.S self-configures configs and descriptors, then
-  // exercises fill/fillx/copy/ttranspose with store-back checks. It reaches
+  // exercises fill/fillx/copy with store-back checks. It reaches
   // ebreak with a0 = 0 on success; a failing check reports its stage in a0.
   check_guest_image("init", 1024);
 }

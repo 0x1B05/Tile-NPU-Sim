@@ -63,7 +63,6 @@ using tile_npu::MblkOp;
 using tile_npu::MmaInstr;
 using tile_npu::MmaOp;
 using tile_npu::MoveInstr;
-using tile_npu::MoveOp;
 using tile_npu::NpuDomain;
 using tile_npu::NpuRegister;
 using tile_npu::QntScaleSource;
@@ -173,12 +172,9 @@ TEST_CASE(validate_rejects_bad_fill) {
 }
 
 TEST_CASE(validate_rejects_bad_move) {
-  check_illegal(MoveInstr{MoveOp::transpose, A(0), A(1)}, "transpose on acc");
-  check_illegal(MoveInstr{MoveOp::copy, T(0), T(16)}, "copy src index 16");
-  check_illegal(MoveInstr{MoveOp::copy, T(16), T(0)}, "copy dest index 16");
-  check_illegal(MoveInstr{MoveOp::copy, T(0), A(0)}, "cross-domain copy");
-  check_illegal(MoveInstr{MoveOp::transpose, T(0), B(0)}, "cross-domain transpose");
-  check_illegal(MoveInstr{static_cast<MoveOp>(2), T(0), T(1)}, "reserved op");
+  check_illegal(MoveInstr{T(0), T(16)}, "copy src index 16");
+  check_illegal(MoveInstr{T(16), T(0)}, "copy dest index 16");
+  check_illegal(MoveInstr{T(0), A(0)}, "cross-domain copy");
 }
 
 TEST_CASE(validate_rejects_bad_row_move) {
