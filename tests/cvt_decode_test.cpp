@@ -66,6 +66,13 @@ TEST_CASE(cvt_decode) {
            .dest = 11,
            .src_domain = NpuDomain::tile,
            .src = 15},
+      Case{.name = "twiden.i8.i32 a31, t31",
+           .word = make_cvt(NpuDomain::acc, 1, 31, 31),
+           .op = CvtOp::widen,
+           .dest_domain = NpuDomain::acc,
+           .dest = 31,
+           .src_domain = NpuDomain::tile,
+           .src = 31},
   };
   check_cases(cases);
 }

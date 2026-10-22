@@ -65,11 +65,11 @@ TEST_CASE(reduce_decode) {
                  .op = ReduceOp::absmax,
                  .src_domain = NpuDomain::acc,
                  .src = 3},
-      ReduceCase{.name = "areduce.rows.argmax v31, a11",
-                 .word = make_areduce(4, 31, 11),
+      ReduceCase{.name = "areduce.rows.argmax v31, a31",
+                 .word = make_areduce(4, 31, 31),
                  .op = ReduceOp::argmax,
                  .src_domain = NpuDomain::acc,
-                 .src = 11},
+                 .src = 31},
   };
   check_areduce_cases(areduce_cases);
 

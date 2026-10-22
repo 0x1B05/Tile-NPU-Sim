@@ -348,4 +348,43 @@ TEST_CASE(validate_accepts_high_index_cfg) {
   const auto ac_result = exec_npu_instr(DecodedNpuInstr{ac}, env.ctx);
   check_eq(ac_result.status, StepStatus::retired, "hand-built cfg.seti ac31 retires");
   check_eq(env.state.ac[31].rows, 4, "ac31 rows written");
+
+  const CfgSetiInstr tm{
+      .reg_type = ConfigRegType::tm, .dest = 31, .field = ConfigField::row_stride_bytes, .imm = 8};
+  const auto tm_result = exec_npu_instr(DecodedNpuInstr{tm}, env.ctx);
+  check_eq(tm_result.status, StepStatus::retired, "hand-built cfg.seti tm31 retires");
+  check_eq(env.state.tm[31].row_stride_bytes, 8, "tm31 row stride written");
+
+  const CfgSetiInstr am{
+      .reg_type = ConfigRegType::am, .dest = 31, .field = ConfigField::row_stride_bytes, .imm = 8};
+  const auto am_result = exec_npu_instr(DecodedNpuInstr{am}, env.ctx);
+  check_eq(am_result.status, StepStatus::retired, "hand-built cfg.seti am31 retires");
+  check_eq(env.state.am[31].row_stride_bytes, 8, "am31 row stride written");
+}
+
+TEST_CASE(validate_accepts_high_index_data_registers) {
+  Env env;
+  for (auto index : {29, 30, 31})
+    tile_cfg(env.state, index, DType::i8, 1, 2);
+  env.state.t[30][0] = i8_bits(3);
+  env.state.t[30][1] = i8_bits(-4);
+  env.state.t[29][0] = i8_bits(5);
+  env.state.t[29][1] = i8_bits(10);
+  const EbinInstr tile_add{EbinOp::add, T(31), T(30), T(29)}; // tadd t31, t30, t29
+  const auto tile_result = exec_npu_instr(DecodedNpuInstr{tile_add}, env.ctx);
+  check_eq(tile_result.status, StepStatus::retired, "hand-built tadd t31 retires");
+  check_eq(env.state.t[31][0], i8_bits(8), "tile lane 0");
+  check_eq(env.state.t[31][1], i8_bits(6), "tile lane 1");
+
+  for (auto index : {29, 30, 31})
+    acc_cfg(env.state, index, DType::i32, 1, 2);
+  env.state.a[30][0] = static_cast<std::uint32_t>(-7);
+  env.state.a[30][1] = 9;
+  env.state.a[29][0] = 12;
+  env.state.a[29][1] = static_cast<std::uint32_t>(-3);
+  const EbinInstr acc_add{EbinOp::add, A(31), A(30), A(29)}; // aadd a31, a30, a29
+  const auto acc_result = exec_npu_instr(DecodedNpuInstr{acc_add}, env.ctx);
+  check_eq(acc_result.status, StepStatus::retired, "hand-built aadd a31 retires");
+  check_eq(env.state.a[31][0], 5u, "acc lane 0");
+  check_eq(env.state.a[31][1], 6u, "acc lane 1");
 }

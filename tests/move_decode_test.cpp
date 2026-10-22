@@ -99,6 +99,8 @@ TEST_CASE(move_decode_copy) {
       MoveCase{"bcopy b3, b4", 0x2880020du, NpuDomain::vec8, 3, 4},
       MoveCase{"vcopy v31, v0", 0x2c80007du, NpuDomain::vec32, 31, 0},
       MoveCase{"tcopy t15, t1", 0x208000bdu, NpuDomain::tile, 15, 1},
+      MoveCase{"tcopy t31, t30", make_reg_move(NpuDomain::tile, 2, 31, 30), NpuDomain::tile, 31,
+               30},
   };
   check_moves(cases);
 }

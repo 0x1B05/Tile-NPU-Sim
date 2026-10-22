@@ -129,9 +129,9 @@ TEST_CASE(cfg_decode_seti) {
            ConfigField::rows, 32767},
       Case{"seti vm31 flags (vector side)", cfg_i(0x6, 3, 2, 1, 31), Case::Kind::seti,
            ConfigRegType::vm, 31, 0, ConfigField::flags, 1},
-      Case{"seti tc15 (last tile)", cfg_i(0x5, 0, 0, 1, 15), Case::Kind::seti, ConfigRegType::tc,
-           15, 0, ConfigField::dtype, 1},
-      Case{"seti ac11 (last acc)", cfg_i(0x5, 1, 0, 1, 11), Case::Kind::seti, ConfigRegType::ac, 11,
+      Case{"seti tc31 (last tile)", cfg_i(0x5, 0, 0, 1, 31), Case::Kind::seti, ConfigRegType::tc,
+           31, 0, ConfigField::dtype, 1},
+      Case{"seti ac31 (last acc)", cfg_i(0x5, 1, 0, 1, 31), Case::Kind::seti, ConfigRegType::ac, 31,
            0, ConfigField::dtype, 1},
   };
   check_cases(cases);
@@ -154,8 +154,8 @@ TEST_CASE(cfg_decode_reg) {
       // N5 is the last destination offset for the writes.
       Case{"cfg.setx vm0, flags, x6, N=2", cfg_reg(3, 1, 0, 2, 6, 0) | (2u << 12), Case::Kind::setx,
            ConfigRegType::vm, 0, 6, ConfigField::flags, 0, 2},
-      Case{"cfg.copy tm1, tm0, N=14", cfg_reg(2, 0, 1, 0, 0, 1) | (14u << 12), Case::Kind::copy,
-           ConfigRegType::tm, 1, 0, std::nullopt, 0, 14},
+      Case{"cfg.copy tm0, tm1, N=31", cfg_reg(2, 0, 1, 0, 1, 0) | (31u << 12), Case::Kind::copy,
+           ConfigRegType::tm, 0, 1, std::nullopt, 0, 31},
       Case{"cfg.setw tc2, x4, N=2", cfg_reg(0, 0, 3, 0, 4, 2) | (2u << 12), Case::Kind::setw,
            ConfigRegType::tc, 2, 4, std::nullopt, 0, 2},
       Case{"cfg.getw x5, vc0", cfg_reg(1, 1, 4, 0, 0, 5), Case::Kind::getw, ConfigRegType::vc, 5, 0,
