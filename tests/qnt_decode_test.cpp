@@ -85,10 +85,6 @@ TEST_CASE(qnt_decode_rejects_reserved) {
       // The matrix forms reserve IS and index5.
       DecodeCase{"tquant IS", make_qnt(NpuDomain::tile, 0, 0, 0, 0, 0, true)},
       DecodeCase{"tdequant index5", make_qnt(NpuDomain::acc, 0, 0, 0, 0, 1)},
-      // Register numbers are bounded per domain.
-      DecodeCase{"tquant t16", make_qnt(NpuDomain::tile, 0, 16, 0, 0)},
-      DecodeCase{"tquant a12", make_qnt(NpuDomain::tile, 0, 0, 12, 0)},
-      DecodeCase{"tdequant t16", make_qnt(NpuDomain::acc, 0, 0, 16, 0)},
   };
   expect_illegal(cases);
 }

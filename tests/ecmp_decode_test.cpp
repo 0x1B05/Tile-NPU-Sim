@@ -146,10 +146,6 @@ TEST_CASE(ecmp_decode_rejects_reserved) {
       DecodeCase{"funct3 111", make_ecmp(NpuDomain::vec32, false, 7, 0, 0, 0)},
       // reserved5 must be 0.
       DecodeCase{"reserved5", make_ecmp(NpuDomain::acc, false, 0, 0, 0, 0) | (1u << 17)},
-      // Acc register numbers are bounded at 12; Vec32 takes all 32.
-      DecodeCase{"acmp a12 mask", make_ecmp(NpuDomain::acc, false, 0, 12, 0, 0)},
-      DecodeCase{"acmp a12 src1", make_ecmp(NpuDomain::acc, false, 0, 0, 12, 0)},
-      DecodeCase{"acmp a12 src2", make_ecmp(NpuDomain::acc, false, 0, 0, 0, 12)},
   };
   expect_illegal(cases);
 }

@@ -82,9 +82,6 @@ TEST_CASE(cvt_decode_rejects_reserved) {
       // reserved10 and bit 25 must be 0.
       DecodeCase{"reserved10", make_cvt(NpuDomain::acc, 0, 0, 0) | (1u << 12)},
       DecodeCase{"sel3 bit0", make_cvt(NpuDomain::acc, 0, 0, 0) | (1u << 25)},
-      // Register numbers are bounded per domain.
-      DecodeCase{"acvt a12", make_cvt(NpuDomain::acc, 0, 12, 0)},
-      DecodeCase{"twiden t16", make_cvt(NpuDomain::acc, 1, 0, 16)},
   };
   expect_illegal(cases);
 }

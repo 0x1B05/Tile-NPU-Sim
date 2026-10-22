@@ -134,9 +134,6 @@ TEST_CASE(emask_decode_rejects_reserved) {
       // xFill and any 5-bit number is a valid Scalar register).
       DecodeCase{"fill5 9", make_emask(NpuDomain::tile, 0, 0, 0, 0, 9)},
       DecodeCase{"fill5 31", make_emask(NpuDomain::acc, 0, 0, 0, 0, 31)},
-      // Register numbers are bounded per domain.
-      DecodeCase{"tmask.tail t16", make_emask(NpuDomain::tile, 0, 16, 0, 0, 0)},
-      DecodeCase{"amask.tail a12 src", make_emask(NpuDomain::acc, 0, 0, 12, 0, 0)},
   };
   expect_illegal(cases);
 }

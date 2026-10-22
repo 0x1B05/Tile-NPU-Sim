@@ -100,8 +100,6 @@ TEST_CASE(ebcast_decode_rejects_reserved) {
       DecodeCase{"funct4 0110", make_ebcast(true, false, 6, 0, 0, 0)},
       DecodeCase{"funct4 1111", make_ebcast(true, false, 15, 0, 0, 0)},
       DecodeCase{"reserved funct4 0011", make_ebcast(true, true, 3, 0, 0, 0)},
-      // Matrix register numbers are bounded; the vector side takes all 32.
-      DecodeCase{"amulv a12", make_ebcast(true, false, 2, 0, 12, 0)},
   };
   expect_illegal(cases);
 }

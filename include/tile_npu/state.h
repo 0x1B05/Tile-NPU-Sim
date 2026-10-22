@@ -9,8 +9,8 @@ namespace tile_npu {
 inline constexpr std::size_t MATRIX_EXTENT = 32;
 inline constexpr std::size_t MATRIX_ELEMENTS = MATRIX_EXTENT * MATRIX_EXTENT;
 inline constexpr std::size_t VECTOR_LANES = 32;
-inline constexpr std::size_t TILE_REGISTERS = 16;
-inline constexpr std::size_t ACC_REGISTERS = 12;
+inline constexpr std::size_t TILE_REGISTERS = 32;
+inline constexpr std::size_t ACC_REGISTERS = 32;
 inline constexpr std::size_t VECTOR_REGISTERS = 32;
 inline constexpr std::size_t SCALAR_REGISTERS = 32;
 

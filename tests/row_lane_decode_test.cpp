@@ -177,9 +177,6 @@ TEST_CASE(row_lane_decode_rejects_reserved) {
       // ROW_MOVE has only funct3 000/001; LANE_MOVE stops at 010.
       DecodeCase{"row funct3 010", make_row_move(false, false, 2, 0, 0, 0)},
       DecodeCase{"lane funct3 011", make_lane_move(false, false, 3, 0, 0, 0)},
-      // Matrix register numbers are bounded per domain.
-      DecodeCase{"tinsert.row t16[0], b0", make_row_move(false, false, 0, 0, 0, 16)},
-      DecodeCase{"aextract.row v0, a12[0]", make_row_move(true, false, 1, 0, 12, 0)},
   };
   expect_illegal(cases);
 }

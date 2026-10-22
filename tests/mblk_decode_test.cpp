@@ -155,11 +155,6 @@ TEST_CASE(mblk_decode_rejects_reserved) {
       DecodeCase{"block load reserved10", 0x00008001u},
       // R2 forms require sel3 bit 0 = 0.
       DecodeCase{"block load sel3 bit0", 0x02000001u},
-      // Register numbers are bounded per domain.
-      DecodeCase{"tload t16", block(NpuDomain::tile, 0, 16)},
-      DecodeCase{"aload a12", block(NpuDomain::acc, 0, 12)},
-      DecodeCase{"tload.row t16[0]", make_mrow(false, false, 4, 0, 16)},
-      DecodeCase{"aload.row a12[0]", make_mrow(true, false, 4, 0, 12)},
       // MR reserved fields must be 0.
       DecodeCase{"row load reserved5[21:17]", 0x01020001u},
       DecodeCase{"row load reserved5[11:7]", 0x01000081u},
