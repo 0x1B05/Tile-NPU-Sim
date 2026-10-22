@@ -13,7 +13,7 @@ xmake test     # unit tests + guest images (guest images need the cross toolchai
 
 ## Running programs
 
-`sim_run` loads a flat binary at `0x80000000` into 128 MiB of RAM and starts execution there. A guest stops at `ebreak` (or `kernel.end` on the NPU side) with `a0` as the process exit code, 0 meaning success. A 16550-lite serial console is MMIO-mapped at `0x10000000`: storing a byte prints it on the host, and the status register always reads ready.
+`sim_run` loads a flat binary at `0x80000000` into 1 GiB of RAM and starts execution there. A guest stops at `ebreak` (or `kernel.end` on the NPU side) with `a0` as the process exit code, 0 meaning success. A 16550-lite serial console is MMIO-mapped at `0x10000000`: storing a byte prints it on the host, and the status register always reads ready.
 
 ```sh
 xmake run sim_run path/to/program.bin [data.bin@0xADDR ...]
@@ -64,10 +64,10 @@ scripts/qwen3/fetch_model.sh   # set HF_BASE=... for another mirror
 python3 scripts/qwen3/convert.py real external/qwen3 model.q3b --prompt "Hi"
 ```
 
-`--max-pos N` caps positions; conversion needs python3 with numpy. Run `scripts/qwen3/convert.py --help` for all options; `--verbose` reports per-tensor quantization errors and `--quiet` suppresses progress. Run the app image together with the blob, which must land at the address the guest is linked against (`BLOB_BASE` in `apps/qwen3/include/q3b.h`); the default 128 MiB RAM does not fit the real blob, hence `-m 1024`:
+`--max-pos N` caps positions; conversion needs python3 with numpy. Run `scripts/qwen3/convert.py --help` for all options; `--verbose` reports per-tensor quantization errors and `--quiet` suppresses progress. Run the app image together with the blob, which must land at the address the guest is linked against (`BLOB_BASE` in `apps/qwen3/include/q3b.h`); the default 1 GiB RAM fits the real blob:
 
 ```sh
-./build/linux/x86_64/release/sim_run -m 1024 \
+./build/linux/x86_64/release/sim_run \
     build/apps/qwen3.bin model.q3b@0x81000000
 ```
 
