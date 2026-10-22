@@ -21,8 +21,8 @@ inline ArithMode arith_mode_of(const AccConfig &) { return ArithMode::wrap; }
 
 inline ArithMode arith_mode_of(const Vec32Config &) { return ArithMode::wrap; }
 
-// div is f32-only; bitwise and shift operations are integer-only. Legality
-// comes from the shared EBIN_BY_FUNCT4 table; the op is structurally valid.
+// Bitwise and shift operations are integer-only. Legality comes from the
+// shared EBIN_BY_FUNCT4 table; the op is structurally valid.
 inline bool ebin_op_supports_dtype(EbinOp op, DType dtype) {
   const auto &info = *EBIN_BY_FUNCT4[static_cast<std::uint8_t>(op)];
   return dtype == DType::f32 ? info.f32_allowed : info.integer_allowed;
@@ -32,7 +32,6 @@ inline bool ebin_op_supports_dtype(EbinOp op, DType dtype) {
 inline float apply_ebin_f32(EbinOp op, float lhs, float rhs) {
   switch (op) {
   case EbinOp::mul: return lhs * rhs;
-  case EbinOp::div: return lhs / rhs;
   case EbinOp::add: return lhs + rhs;
   case EbinOp::sub: return lhs - rhs;
   case EbinOp::min: return std::fmin(lhs, rhs);
@@ -86,7 +85,7 @@ template <typename E> E apply_ebin_int(EbinOp op, DType dtype, ArithMode arith, 
   case EbinOp::shl: return static_cast<E>(lhs << (rhs & shamt_mask));
   case EbinOp::shr: return static_cast<E>(lhs >> (rhs & shamt_mask));
   case EbinOp::sra: return static_cast<E>(static_cast<S>(lhs) >> (rhs & shamt_mask));
-  default: unreachable("integer element with the f32-only E_BIN div");
+  default: unreachable("non-integer E_BIN op reached integer execution");
   }
 }
 

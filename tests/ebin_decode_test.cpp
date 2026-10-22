@@ -69,8 +69,6 @@ TEST_CASE(ebin_decode) {
            NpuDomain::tile, 6, 7, true, 8},
       Case{"amul a0, a1, a2", make_ebin(EbinOp::mul, NpuDomain::acc, false, 0, 1, 2), EbinOp::mul,
            NpuDomain::acc, 0, 1, false, 2},
-      Case{"adiv a3, a4, a5", make_ebin(EbinOp::div, NpuDomain::acc, false, 3, 4, 5), EbinOp::div,
-           NpuDomain::acc, 3, 4, false, 5},
       Case{"amin a6, a7, a8", make_ebin(EbinOp::min, NpuDomain::acc, false, 6, 7, 8), EbinOp::min,
            NpuDomain::acc, 6, 7, false, 8},
       Case{"amaxx a11, a10, x31", make_ebin(EbinOp::max, NpuDomain::acc, true, 11, 10, 31),
@@ -91,8 +89,8 @@ TEST_CASE(ebin_decode_rejects_reserved) {
   const std::array cases{
       DecodeCase{"tile mul has no 8-bit form",
                  make_ebin(EbinOp::mul, NpuDomain::tile, false, 0, 1, 2)},
-      DecodeCase{"tile div has no 8-bit form",
-                 make_ebin(EbinOp::div, NpuDomain::tile, false, 0, 1, 2)},
+      DecodeCase{"funct4 0011 is reserved",
+                 make_ebin(static_cast<EbinOp>(3), NpuDomain::acc, false, 0, 1, 2)},
       DecodeCase{"tile mulx is reserved as well",
                  make_ebin(EbinOp::mul, NpuDomain::tile, true, 0, 1, 2)},
       // funct4 values 6/7/14/15 are unassigned; the enum has no name for

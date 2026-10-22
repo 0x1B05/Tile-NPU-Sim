@@ -77,9 +77,9 @@ TEST_CASE(ebcast_decode) {
            .src1 = 1,
            .vec = 2,
            .by_col = false},
-      Case{.name = "adivv.bycol a11, a10, v31",
-           .word = make_ebcast(true, true, 3, 11, 10, 31),
-           .op = EbinOp::div,
+      Case{.name = "amulv.bycol a11, a10, v31",
+           .word = make_ebcast(true, true, 2, 11, 10, 31),
+           .op = EbinOp::mul,
            .matrix_domain = NpuDomain::acc,
            .vector_domain = NpuDomain::vec32,
            .dest = 11,
@@ -116,9 +116,9 @@ TEST_CASE(ebcast_decode_rejects_reserved) {
       // Unassigned funct4 codes are reserved (shared E_BIN table).
       DecodeCase{"funct4 0110", make_ebcast(false, false, 6, 0, 0, 0)},
       DecodeCase{"funct4 1111", make_ebcast(true, false, 15, 0, 0, 0)},
-      // Tile has no mul/div encodings.
+      // Tile has no mul encoding; op3 = 011 is reserved.
       DecodeCase{"tmulb", make_ebcast(false, false, 2, 0, 0, 0)},
-      DecodeCase{"tdivb", make_ebcast(false, false, 3, 0, 0, 0)},
+      DecodeCase{"reserved funct4 0011", make_ebcast(true, true, 3, 0, 0, 0)},
       // Matrix register numbers are bounded per domain; the vector side
       // takes all 32.
       DecodeCase{"taddb t16", make_ebcast(false, false, 0, 16, 0, 0)},

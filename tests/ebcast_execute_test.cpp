@@ -106,11 +106,11 @@ TEST_CASE(ebcast_acc_byrow) {
   check_eq(hex(state.a[0][33]), hex(0xfffffffbU), "5 * -1 = -5");
 }
 
-TEST_CASE(ebcast_acc_bycol_f32_div) {
+TEST_CASE(ebcast_acc_bycol_f32_mul) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
-  // adivv.bycol a0, a1, v2 (f32).
-  load_one(sim, memory, make_ebcast(true, true, 3, 0, 1, 2));
+  // amulv.bycol a0, a1, v2 (f32).
+  load_one(sim, memory, make_ebcast(true, true, 2, 0, 1, 2));
   auto &state = sim.state();
   for (auto index : {0, 1})
     acc_cfg(state, index, DType::f32, 1, 2);
@@ -119,11 +119,11 @@ TEST_CASE(ebcast_acc_bycol_f32_div) {
   state.a[1][0] = as_u32(8.0f);
   state.a[1][1] = as_u32(9.0f);
   state.v[2][0] = as_u32(2.0f);
-  state.v[2][1] = as_u32(0.0f); // 9 / 0 = +inf
+  state.v[2][1] = as_u32(0.5f);
 
-  check_eq(sim.step().status, StepStatus::retired, "adivv.bycol retires");
-  check_eq(hex(state.a[0][0]), hex(as_u32(4.0f)), "8 / 2 = 4");
-  check_eq(hex(state.a[0][1]), hex(0x7f800000u), "9 / 0 = +inf");
+  check_eq(sim.step().status, StepStatus::retired, "amulv.bycol retires");
+  check_eq(hex(state.a[0][0]), hex(as_u32(16.0f)), "8 * 2 = 16");
+  check_eq(hex(state.a[0][1]), hex(as_u32(4.5f)), "9 * 0.5 = 4.5");
 }
 
 TEST_CASE(ebcast_acc_shift_by_vector) {
@@ -185,12 +185,4 @@ TEST_CASE(ebcast_rejects_invalid) {
   state.vc[2].len = 1;
   check_eq(sim.step().status, StepStatus::invalid_configuration,
            "ebcast rejects a matrix shape mismatch");
-
-  // div is f32-only.
-  load_one(sim, memory, make_ebcast(true, false, 3, 0, 1, 2));
-  for (auto index : {0, 1})
-    acc_cfg(state, index, DType::i32, 1, 2);
-  state.vc[2].dtype = DType::i32;
-  state.vc[2].len = 1;
-  check_eq(sim.step().status, StepStatus::invalid_configuration, "adivv rejects i32");
 }

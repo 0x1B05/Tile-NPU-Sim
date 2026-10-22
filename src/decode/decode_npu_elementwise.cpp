@@ -29,7 +29,8 @@ std::optional<NpuOperand> decode_bx_src2(std::uint8_t sel3, std::uint8_t src2, N
 // [major4] [dom2] [BX] [funct4] [reserved4] [   B5   ] [   A5   ] [   D5   ] [ q ]
 // dom2: 00 Tile, 01 Acc, 11 Vec32; 10 reserved.
 // BX: 0 = same-domain B5, 1 = Scalar xS in B5.
-// funct4 = {G, op3}, checked by EBIN_BY_FUNCT4; Tile mul/div are reserved.
+// funct4 = {G, op3}, checked by EBIN_BY_FUNCT4; Tile mul and op3 = 011 are
+// reserved.
 DecodeResult decode_ebin(std::uint32_t word) {
   const auto f = encoding::NpuR3::from(word);
   const auto domain = sel3_domain(f.sel3);

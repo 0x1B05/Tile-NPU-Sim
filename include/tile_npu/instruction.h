@@ -144,7 +144,6 @@ enum class EbinOp : std::uint8_t {
   add     = 0b0000,
   sub     = 0b0001,
   mul     = 0b0010,
-  div     = 0b0011,
   min     = 0b0100,
   max     = 0b0101,
   bit_and = 0b1000,

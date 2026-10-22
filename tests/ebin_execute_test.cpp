@@ -279,8 +279,8 @@ TEST_CASE(ebin_f32_arithmetic) {
              make_ebin(EbinOp::add, NpuDomain::vec32, false, 0, 1,
                        2)); // vadd v0, v1, v2
   write_word(memory, CODE_BASE + 4,
-             make_ebin(EbinOp::div, NpuDomain::vec32, false, 3, 4,
-                       5)); // vdiv v3, v4, v5
+             make_ebin(EbinOp::mul, NpuDomain::vec32, false, 3, 4,
+                       5)); // vmul v3, v4, v5
   write_word(memory, CODE_BASE + 8,
              make_ebin(EbinOp::min, NpuDomain::vec32, false, 6, 7,
                        8)); // vmin v6, v7, v8
@@ -296,10 +296,10 @@ TEST_CASE(ebin_f32_arithmetic) {
   state.v[7][0] = 0x7fc00000u; // qNaN
   state.v[8][0] = as_u32(1.0f);
   check_eq(sim.step().status, StepStatus::retired, "vadd retires");
-  check_eq(sim.step().status, StepStatus::retired, "vdiv retires");
+  check_eq(sim.step().status, StepStatus::retired, "vmul retires");
   check_eq(sim.step().status, StepStatus::retired, "vmin retires");
   check_eq(hex(state.v[0][0]), hex(as_u32(2.0f)), "f32 add");
-  check_eq(hex(state.v[3][0]), hex(as_u32(1.5f)), "f32 div");
+  check_eq(hex(state.v[3][0]), hex(as_u32(6.0f)), "f32 mul");
   // IEEE minNum: NaN does not propagate, the number wins.
   check_eq(hex(state.v[6][0]), hex(as_u32(1.0f)), "f32 min drops NaN");
 }
@@ -337,19 +337,6 @@ TEST_CASE(ebin_f32_rejects_integer_only_ops) {
   check_eq(sim.step().status, StepStatus::invalid_configuration,
            "f32 bitwise op is a config error");
   check_eq(hex(state.v[0][0]), hex(0), "rejected op leaves v0 untouched");
-}
-
-TEST_CASE(ebin_i32_rejects_div) {
-  Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
-  load_one(sim, memory, make_ebin(EbinOp::div, NpuDomain::acc, false, 0, 1,
-                                  2)); // adiv a0, a1, a2
-  auto &state = sim.state();
-  for (auto index : {0, 1, 2})
-    acc_cfg(state, index, DType::i32, 1, 1);
-  state.a[1][0] = 6;
-  check_eq(sim.step().status, StepStatus::invalid_configuration, "integer div is a config error");
-  check_eq(hex(state.a[0][0]), hex(0), "rejected op leaves a0 untouched");
 }
 
 TEST_CASE(ebin_rejects_mismatched_configs) {
@@ -417,7 +404,7 @@ TEST_CASE(ebin_rejects_empty_shape) {
 
 TEST_CASE(ebin_legality_matrix) {
   // The ISA's dtype table restated as a sweep: f32 supports only
-  // add/sub/mul/div/min/max; integers support everything but div. The op
+  // add/sub/mul/min/max; integers support every assigned operation. The op
   // list comes from the shared EBIN_BY_FUNCT4 table so a new op joins the
   // sweep automatically, while the expected legality stays an independent
   // restatement of the manual.
@@ -441,8 +428,8 @@ TEST_CASE(ebin_legality_matrix) {
         continue; // reserved at decode time
       }
       const bool f32_legal = op == EbinOp::add || op == EbinOp::sub || op == EbinOp::mul ||
-                             op == EbinOp::div || op == EbinOp::min || op == EbinOp::max;
-      const bool legal = dtype == DType::f32 ? f32_legal : op != EbinOp::div;
+                             op == EbinOp::min || op == EbinOp::max;
+      const bool legal = dtype == DType::f32 ? f32_legal : true;
       for (const bool scalar_src2 : {false, true}) {
         Ram memory(CODE_BASE, 4);
         Simulator sim(memory);

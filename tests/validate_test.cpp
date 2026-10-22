@@ -113,6 +113,7 @@ constexpr NpuRegister V(std::uint8_t i) { return {NpuDomain::vec32, i}; }
 
 TEST_CASE(validate_rejects_bad_ebin) {
   check_illegal(EbinInstr{static_cast<EbinOp>(14), T(0), T(1), T(2)}, "unassigned funct4 code");
+  check_illegal(EbinInstr{static_cast<EbinOp>(3), A(0), A(1), A(2)}, "reserved funct4 code");
   check_illegal(EbinInstr{EbinOp::add, B(0), B(1), B(2)}, "vec8 domain");
   check_illegal(EbinInstr{EbinOp::mul, T(0), T(1), T(2)}, "tile mul");
   check_illegal(EbinInstr{EbinOp::add, T(0), A(1), T(2)}, "cross-domain src1");
@@ -135,6 +136,8 @@ TEST_CASE(validate_rejects_bad_ecmp) {
 }
 
 TEST_CASE(validate_rejects_bad_ebcast) {
+  check_illegal(BcastInstr{static_cast<EbinOp>(3), A(0), A(1), V(0), false},
+                "reserved funct4 code");
   check_illegal(BcastInstr{EbinOp::add, T(0), T(1), V(0), false}, "tile paired with vec32");
   check_illegal(BcastInstr{EbinOp::add, V(0), V(1), B(0), false}, "vector destination");
   check_illegal(BcastInstr{EbinOp::add, A(0), A(1), V(32), false}, "vector index 32");

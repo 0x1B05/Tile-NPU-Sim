@@ -25,7 +25,6 @@ inline constexpr std::array<std::optional<EbinInfo>, 16> EBIN_BY_FUNCT4 = [] {
   table[0b0000] = EbinInfo{true , true , true }; // add
   table[0b0001] = EbinInfo{true , true , true }; // sub
   table[0b0010] = EbinInfo{false, true , true }; // mul
-  table[0b0011] = EbinInfo{false, false, true }; // div
   table[0b0100] = EbinInfo{true , true , true }; // min
   table[0b0101] = EbinInfo{true , true , true }; // max
   table[0b1000] = EbinInfo{true , true , false}; // bit_and
@@ -39,7 +38,7 @@ inline constexpr std::array<std::optional<EbinInfo>, 16> EBIN_BY_FUNCT4 = [] {
 }();
 
 // E_BIN/E_BCAST op legality on a destination domain: an assigned funct4 code,
-// no Vec8 form, and no Tile mul/div.
+// no Vec8 form, and no Tile mul.
 inline constexpr bool ebin_legal(EbinOp op, NpuDomain domain) {
   const auto code = static_cast<std::uint8_t>(op);
   if (code >= EBIN_BY_FUNCT4.size() || !EBIN_BY_FUNCT4[code]) return false;
