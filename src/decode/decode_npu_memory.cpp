@@ -16,8 +16,7 @@ namespace tile_npu {
 template <MblkOp Op> DecodeResult decode_mblk(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = sel3_domain(f.sel3);
-  if ((Op == MblkOp::gather && domain == NpuDomain::acc) ||
-      f.dest >= domain_register_count(domain)) {
+  if (Op == MblkOp::gather && domain == NpuDomain::acc) {
     return DecodeError::illegal;
   }
   const NpuRegister reg{domain, f.dest};
@@ -38,9 +37,6 @@ DecodeResult decode_mblk_gather(std::uint32_t word) { return decode_mblk<MblkOp:
 template <MblkOp Op> DecodeResult decode_mblk_row(std::uint32_t word) {
   const auto f = encoding::NpuMR::from(word);
   const auto domain = paired_domains(f.sel3).matrix;
-  if (f.reg >= domain_register_count(domain)) {
-    return DecodeError::illegal;
-  }
   const NpuRegister reg{domain, f.reg};
   const auto index = decode_index(f.index, (f.sel3 & 1) != 0);
   return DecodedNpuInstr{MblkInstr{.op = Op, .reg = reg, .index = index}};
@@ -61,9 +57,6 @@ DecodeResult decode_mblk_row_store(std::uint32_t word) {
 DecodeResult decode_fill(std::uint32_t word) {
   const auto f = encoding::NpuI::from(word);
   const auto domain = static_cast<NpuDomain>(f.sel2);
-  if (f.dest >= domain_register_count(domain)) {
-    return DecodeError::illegal;
-  }
   return DecodedNpuInstr{FillInstr{
       .dest = {.domain = domain, .index = f.dest},
       .value = FillImm16{static_cast<std::uint16_t>(f.imm)},
@@ -78,9 +71,6 @@ DecodeResult decode_fill(std::uint32_t word) {
 DecodeResult decode_fillx(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = sel3_domain(f.sel3);
-  if (f.dest >= domain_register_count(domain)) {
-    return DecodeError::illegal;
-  }
   return DecodedNpuInstr{FillInstr{
       .dest = {.domain = domain, .index = f.dest},
       .value = ScalarRegister{f.src2},
@@ -90,10 +80,6 @@ DecodeResult decode_fillx(std::uint32_t word) {
 DecodeResult decode_move_copy(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = sel3_domain(f.sel3);
-  const auto count = domain_register_count(domain);
-  if (f.dest >= count || f.src2 >= count) {
-    return DecodeError::illegal;
-  }
   return DecodedNpuInstr{MoveInstr{
       .dest = {.domain = domain, .index = f.dest},
       .src = {.domain = domain, .index = f.src2},
@@ -112,9 +98,6 @@ template <RowOp Op> DecodeResult decode_row_move(std::uint32_t word) {
   const auto domains = paired_domains(f.sel3);
   constexpr bool insert = Op == RowOp::insert;
   const auto matrix_index = insert ? f.dest : f.src1;
-  if (matrix_index >= domain_register_count(domains.matrix)) {
-    return DecodeError::illegal;
-  }
   return DecodedNpuInstr{RowInstr{
       .op = Op,
       .matrix = {.domain = domains.matrix, .index = matrix_index},

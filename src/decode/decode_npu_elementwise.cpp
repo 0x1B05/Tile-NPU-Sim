@@ -5,21 +5,14 @@
 #include "op_info.h"
 
 #include <cstdint>
-#include <optional>
 
 namespace tile_npu {
 namespace {
 
 // The BX bit selects the second source: BX = 0 a same-domain register, BX = 1
-// the Scalar register xS. The register form fails on an out-of-range number.
-std::optional<NpuOperand> decode_bx_src2(std::uint8_t sel3, std::uint8_t src2, NpuDomain domain) {
-  if ((sel3 & 1) != 0) {
-    return NpuOperand{ScalarRegister{src2}};
-  }
-  if (src2 >= domain_register_count(domain)) {
-    return std::nullopt;
-  }
-  return NpuOperand{NpuRegister{domain, src2}};
+// the Scalar register xS. Every 5-bit register number is now valid.
+NpuOperand decode_bx_src2(std::uint8_t sel3, std::uint8_t src2, NpuDomain domain) {
+  return (sel3 & 1) != 0 ? NpuOperand{ScalarRegister{src2}} : NpuOperand{NpuRegister{domain, src2}};
 }
 
 } // namespace
@@ -38,19 +31,11 @@ DecodeResult decode_ebin(std::uint32_t word) {
   if (!ebin_legal(op, domain)) {
     return DecodeError::illegal;
   }
-  const auto count = domain_register_count(domain);
-  if (f.dest >= count || f.src1 >= count) {
-    return DecodeError::illegal;
-  }
-  const auto src2 = decode_bx_src2(f.sel3, f.src2, domain);
-  if (!src2) {
-    return DecodeError::illegal;
-  }
   return DecodedNpuInstr{EbinInstr{
       .op = op,
       .dest = {.domain = domain, .index = f.dest},
       .src1 = {.domain = domain, .index = f.src1},
-      .src2 = *src2,
+      .src2 = decode_bx_src2(f.sel3, f.src2, domain),
   }};
 }
 
@@ -64,8 +49,7 @@ DecodeResult decode_eun(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = sel3_domain(f.sel3);
   const auto op = static_cast<EunOp>(f.funct3);
-  const auto count = domain_register_count(domain);
-  if (!eun_legal(op, domain) || f.dest >= count || f.src2 >= count) {
+  if (!eun_legal(op, domain)) {
     return DecodeError::illegal;
   }
   return DecodedNpuInstr{EunInstr{
@@ -88,19 +72,11 @@ DecodeResult decode_ecmp(std::uint32_t word) {
     return DecodeError::illegal;
   }
   const auto op = static_cast<CmpOp>(f.funct3);
-  const auto count = domain_register_count(domain);
-  if (f.src1 >= count || f.dest >= count) {
-    return DecodeError::illegal;
-  }
-  const auto src2 = decode_bx_src2(f.sel3, f.src2, domain);
-  if (!src2) {
-    return DecodeError::illegal;
-  }
   return DecodedNpuInstr{CmpInstr{
       .op = op,
       .dest = {.domain = domain, .index = f.dest},
       .src1 = {.domain = domain, .index = f.src1},
-      .src2 = *src2,
+      .src2 = decode_bx_src2(f.sel3, f.src2, domain),
   }};
 }
 
@@ -115,10 +91,6 @@ DecodeResult decode_ebcast(std::uint32_t word) {
   constexpr auto VECTOR_DOMAIN = NpuDomain::vec32;
   const auto op = static_cast<EbinOp>(f.funct4);
   if ((f.sel3 & 0b010) == 0 || !ebin_legal(op, MATRIX_DOMAIN)) {
-    return DecodeError::illegal;
-  }
-  const auto count = domain_register_count(MATRIX_DOMAIN);
-  if (f.dest >= count || f.src1 >= count) {
     return DecodeError::illegal;
   }
   return DecodedNpuInstr{BcastInstr{
@@ -143,10 +115,6 @@ DecodeResult decode_er4(std::uint32_t word) {
   if (!er4_legal(op, domain)) {
     return DecodeError::illegal;
   }
-  const auto count = domain_register_count(domain);
-  if (f.dest >= count || f.arg >= count || f.src1 >= count || f.src2 >= count) {
-    return DecodeError::illegal;
-  }
   return DecodedNpuInstr{Er4Instr{
       .op = op,
       .dest = {.domain = domain, .index = f.dest},
@@ -169,10 +137,6 @@ DecodeResult decode_emask(std::uint32_t word) {
   const bool fill_is_scalar = (f.sel3 & 1) != 0;
   const auto op = static_cast<MaskOp>(f.funct3);
   if (!mask_legal(op, domain) || (!fill_is_scalar && f.src2 > FILL5_MAX)) {
-    return DecodeError::illegal;
-  }
-  const auto count = domain_register_count(domain);
-  if (f.dest >= count || f.src1 >= count) {
     return DecodeError::illegal;
   }
   const auto fill =
