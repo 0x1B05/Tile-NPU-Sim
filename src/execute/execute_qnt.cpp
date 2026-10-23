@@ -154,28 +154,6 @@ ExecuteResult vquant(const VquantInstr &instr, State &state) {
   return {.status = StepStatus::retired};
 }
 
-// bdequant.f32: vD[j] = f32(bS[j]) x vScale[index].
-ExecuteResult bdequant(const BdequantInstr &instr, State &state) {
-  const auto &dst_config = state.vc[instr.dest.index];
-  const auto &src_config = state.bc[instr.src.index];
-  const auto &scale_config = state.vc[instr.scale];
-  if (!valid_vector_quant_configs(src_config, dst_config, scale_config)) {
-    return config_error();
-  }
-  const auto lane = scale_lane(instr.index, state, scale_config.len);
-  if (!lane) {
-    return config_error();
-  }
-  const float scale = as_f32(state.v[instr.scale][*lane]);
-  const auto &src_reg = state.b[instr.src.index];
-  auto &dst_reg = state.v[instr.dest.index];
-  for (std::size_t j = 0; j < dst_config.len; ++j) {
-    const float element = static_cast<float>(std::bit_cast<std::int8_t>(src_reg[j]));
-    dst_reg[j] = as_u32(element * scale);
-  }
-  return {.status = StepStatus::retired};
-}
-
 } // namespace
 
 ExecuteResult execute(const TquantInstr &instr, State &state) { return tquant(instr, state); }
@@ -183,7 +161,5 @@ ExecuteResult execute(const TquantInstr &instr, State &state) { return tquant(in
 ExecuteResult execute(const TdequantInstr &instr, State &state) { return tdequant(instr, state); }
 
 ExecuteResult execute(const VquantInstr &instr, State &state) { return vquant(instr, state); }
-
-ExecuteResult execute(const BdequantInstr &instr, State &state) { return bdequant(instr, state); }
 
 } // namespace tile_npu

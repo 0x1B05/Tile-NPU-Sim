@@ -24,7 +24,6 @@ namespace {
 
 using tile_npu::AreduceInstr;
 using tile_npu::BcastInstr;
-using tile_npu::BdequantInstr;
 using tile_npu::BdotInstr;
 using tile_npu::BdotOp;
 using tile_npu::CfgCopyInstr;
@@ -281,10 +280,6 @@ TEST_CASE(validate_rejects_bad_qnt) {
                 "vquant scale index 32");
   check_illegal(VquantInstr{.dest = B(0), .src = V(1), .scale = 0, .index = ScalarRegister{32}},
                 "vquant scalar lane index 32");
-  check_illegal(BdequantInstr{.dest = V(0), .src = V(1), .scale = 0, .index = ImmediateIndex{0}},
-                "bdequant source domain");
-  check_illegal(BdequantInstr{.dest = B(0), .src = B(1), .scale = 0, .index = ImmediateIndex{0}},
-                "bdequant destination domain");
 }
 
 TEST_CASE(validate_rejects_bad_mma) {

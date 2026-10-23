@@ -293,14 +293,6 @@ struct VquantInstr {
   IndexOperand index = ImmediateIndex{};
 };
 
-// bdequant.f32: reads one selected lane of the Vec32 scale register.
-struct BdequantInstr {
-  NpuRegister dest{}; // Vec32
-  NpuRegister src{};  // Vec8
-  RegisterIndex scale = 0;
-  IndexOperand index = ImmediateIndex{};
-};
-
 enum class ConfigRegType : std::uint8_t { tc, ac, bc, vc, tm, am, bm, vm, count };
 
 // clang-format off

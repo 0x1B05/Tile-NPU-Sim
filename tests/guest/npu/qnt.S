@@ -2,11 +2,10 @@
 
 # Self-checking QNT image: programs configs and descriptors, then runs a
 # dynamic tquant (RNE + saturation, all-zero row -> scale +0.0), a tdequant
-# that consumes the tquant outputs, a vquant with an immediate scale lane and
-# a bdequant that consumes the vquant outputs, and an external-scale tquant
-# with distinct source and scale register numbers. Results are stored back
-# and compared word-wise. Ends with ebreak: a0 = 0 pass, a0 = N identifies
-# the failing check.
+# that consumes the tquant outputs, a vquant with an immediate scale lane,
+# and an external-scale tquant with distinct source and scale register
+# numbers. Results are stored back and compared word-wise. Ends with ebreak:
+# a0 = 0 pass, a0 = N identifies the failing check.
 #
 # Buffer addresses go through lla (pc-relative): the image is loaded at
 # 0x80000000, where medlow's %hi/%lo expansion would sign-extend bit 31.
@@ -120,26 +119,13 @@ _start:
     li        x5, 0x3F800000     # 1.0
     bne       x4, x5, fail
 
-    # Stage 4 - bdequant.f32 v3, b0, v2[0] (consuming stage 3) ->
-    #   {127.0, 64.0}
-    lla       x3, dstbuf6
-    CFG_REG   3, 1, 0, 0, 3, 3
-    BDEQUANT  3, 0, 2, 0
-    VSTORE    3
-    lla       x3, dstbuf6
-    lwu       x4, 0(x3)
-    li        x5, 0x42FE0000     # 127.0
-    li        a0, 4
-    bne       x4, x5, fail
-    lwu       x4, 4(x3)
-    li        x5, 0x42800000     # 64.0
-    bne       x4, x5, fail
-
-    # Stage 5 - tquant.rows.scale.q8s32 t0, a0, v3 over stage 1's input
+    # Stage 4 - tquant.rows.scale.q8s32 t0, a0, v3 over stage 1's input
     #   with scales {2.0, 1.0} -> bytes {64, -32, 0, 0} (RNE).
     #   Distinct source/scale numbers catch swapped macro operands;
     #   external scales must remain unchanged.
-    li        a0, 5
+    lla       x3, dstbuf6
+    CFG_REG   3, 1, 0, 0, 3, 3
+    li        a0, 4
     li        x5, 0x40000000     # 2.0
     VINSERT   3, 0, 5
     li        x5, 0x3F800000     # 1.0

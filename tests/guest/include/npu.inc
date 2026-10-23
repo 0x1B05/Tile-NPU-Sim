@@ -519,7 +519,7 @@
 #   [31:28] major4 = 4 (0100)  [27:26] dom2  [25] IS  [24:22] funct3
 #   [21:17] vScale5  [16:12] index5  [11:7] S5  [6:2] D5  [1:0] q = 10
 # dom2: 0 tquant (Tile dst), 1 tdequant (Acc dst), 2 vquant (Vec8 dst),
-#       3 bdequant (Vec32 dst). funct3: 0 = quant/dequant, 1 = tquant with
+#       3 reserved (Vec32 dst). funct3: 0 = quant/dequant, 1 = tquant with
 # external scale (Tile dst only). index5/IS carry the vector-form scale
 # lane and are reserved (0) for the matrix forms.
 .macro QNT dom2, is, funct3, vscale5, index5, s5, d5
@@ -544,11 +544,6 @@
 # vquant.q8s32: asm operand order bD, vScale[lane], vS.
 .macro VQUANT d5, vscale, s5, lane
     QNT 2, 0, 0, \vscale, \lane, \s5, \d5
-.endm
-
-# bdequant.f32: asm operand order vD, bS, vScale[lane].
-.macro BDEQUANT d5, s5, vscale, lane
-    QNT 3, 0, 0, \vscale, \lane, \s5, \d5
 .endm
 
 # MMA_BDOT (R4), mirroring NpuR4 in src/decode/encoding.h:

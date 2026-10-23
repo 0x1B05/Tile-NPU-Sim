@@ -10,7 +10,7 @@ namespace tile_npu::test {
 // layout mirrors encoding::NpuR4:
 //   [31:28] major4 = 0100  [27:26] dom2  [25] IS  [24:22] funct3
 //   [21:17] vScale5  [16:12] index5  [11:7] S5  [6:2] D5  [1:0] q = 10
-// funct3: 000 = quant/dequant (dom2 picks the direction), 001 = tquant with
+// funct3: 000 = quant/dequant (dom2 picks the operation), 001 = tquant with
 // external scale (Tile dst only); 010-111 reserved. index5/IS carry the
 // vector-form scale lane and are reserved (0) for the matrix forms.
 constexpr std::uint32_t make_qnt(tile_npu::NpuDomain domain, std::uint32_t funct3,

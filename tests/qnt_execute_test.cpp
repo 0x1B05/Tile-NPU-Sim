@@ -175,24 +175,6 @@ TEST_CASE(qnt_vquant) {
   check_eq(hex(state.v[2][2]), hex(as_u32(1.0f)), "lane2 keeps old scale");
 }
 
-TEST_CASE(qnt_bdequant) {
-  Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
-  // b1 = {100, -2} with vScale lane1 = 0.5 -> v3 = {50.0, -1.0}.
-  load_one(sim, memory, make_qnt(NpuDomain::vec32, 0, 3, 1, 2, 1));
-  auto &state = sim.state();
-  vec32_f32(state, 3, 2);
-  vec8_i8(state, 1, 2);
-  vec32_f32(state, 2, 2);
-  state.b[1][0] = 100;
-  state.b[1][1] = 0xfeu; // -2
-  state.v[2][1] = as_u32(0.5f);
-
-  check_eq(sim.step().status, StepStatus::retired, "bdequant.f32 retires");
-  check_eq(hex(state.v[3][0]), hex(as_u32(50.0f)), "lane0 dequantizes");
-  check_eq(hex(state.v[3][1]), hex(as_u32(-1.0f)), "lane1 dequantizes");
-}
-
 TEST_CASE(qnt_rejects_invalid) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
@@ -233,14 +215,6 @@ TEST_CASE(qnt_rejects_invalid) {
   state.scalar.write_x(5, 4);
   check_eq(sim.step().status, StepStatus::invalid_configuration,
            "vquant rejects an out-of-range scalar lane");
-
-  // bdequant requires an i8 Vec8 source.
-  load_one(sim, memory, make_qnt(NpuDomain::vec32, 0, 3, 1, 2, 0));
-  vec32_f32(state, 3, 2);
-  state.bc[1].dtype = DType::u8;
-  state.bc[1].len = 2;
-  vec32_f32(state, 2, 2);
-  check_eq(sim.step().status, StepStatus::invalid_configuration, "bdequant rejects a u8 source");
 }
 
 TEST_CASE(qnt_rounding_ignores_host_fp_mode) {

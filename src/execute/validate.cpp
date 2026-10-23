@@ -237,11 +237,6 @@ bool valid_structure(const VquantInstr &instr) {
                                                                instr.index);
 }
 
-bool valid_structure(const BdequantInstr &instr) {
-  return valid_vector_quant<NpuDomain::vec32, NpuDomain::vec8>(instr.dest, instr.src, instr.scale,
-                                                               instr.index);
-}
-
 bool valid_structure(const MmaInstr &instr) {
   return instr.op <= MmaOp::nn_acc && instr.dest.domain == NpuDomain::acc && in_range(instr.dest) &&
          instr.src_a.domain == NpuDomain::tile && in_range(instr.src_a) &&

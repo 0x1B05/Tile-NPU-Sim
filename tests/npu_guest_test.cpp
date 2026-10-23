@@ -305,10 +305,9 @@ TEST_CASE(npu_guest_reduce) {
 TEST_CASE(npu_guest_qnt) {
   // tests/guest/npu/qnt.S self-configures configs and descriptors, then
   // exercises a dynamic tquant (RNE + saturation, zero row -> scale +0.0), a
-  // tdequant, a vquant with an immediate scale lane, a bdequant and an
-  // external-scale tquant with distinct source/scale registers. Store-back
-  // checks reach ebreak with a0 = 0 on success; a failing check reports its
-  // stage in a0.
+  // tdequant, a vquant with an immediate scale lane, and an external-scale
+  // tquant with distinct source/scale registers. Store-back checks reach
+  // ebreak with a0 = 0 on success; a failing check reports its stage in a0.
   check_guest_image("qnt", 1024);
 }
 
