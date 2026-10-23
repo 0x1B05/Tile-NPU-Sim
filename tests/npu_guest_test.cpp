@@ -255,10 +255,9 @@ TEST_CASE(npu_guest_eun) {
 
 TEST_CASE(npu_guest_ecmp) {
   // tests/guest/npu/ecmp.S self-configures configs and descriptors, then
-  // exercises register/scalar comparisons on Acc (i32) and Vec32 (f32),
-  // storing the u32 masks back and checking them against expected arrays.
-  // It reaches ebreak with a0 = 0 on success; a failing check reports its
-  // stage in a0.
+  // exercises register/scalar comparisons on Vec32 (i32 and f32), storing the
+  // u32 masks back and checking them against expected arrays. It reaches
+  // ebreak with a0 = 0 on success; a failing check reports its stage in a0.
   check_guest_image("ecmp", 1024);
 }
 

@@ -1,7 +1,6 @@
 #include "execute.h"
 
 #include "config_check.h"
-#include "domain.h"
 #include "op_info.h"
 #include "operand.h"
 #include "utils/bits.h"
@@ -78,22 +77,24 @@ template <typename Configs> bool operands_valid(const CmpInstr &instr, const Con
 
 // Runs over the destination's effective region.
 ExecuteResult execute(const CmpInstr &instr, State &state) {
-  return with_domain<NpuDomain::acc, NpuDomain::vec32>(
-      state, instr.dest.domain, [&](auto &regs, const auto &configs) {
-        if (!operands_valid(instr, configs)) {
-          return config_error();
-        }
-        const auto dtype = configs[instr.src1.index].dtype;
-        auto &dst = regs[instr.dest.index];
-        const auto &dst_config = configs[instr.dest.index];
-        const auto &lhs = regs[instr.src1.index];
-        return with_src2(instr.src2, state, regs, [&](auto rhs) {
-          for_each_idx(dst_config, [&](std::size_t n) {
-            dst[n] = mask_word(compare(instr.op, dtype, lhs[n], rhs(n)));
-          });
-          return ExecuteResult{.status = StepStatus::retired};
-        });
-      });
+  if (instr.dest.domain != NpuDomain::vec32) {
+    unreachable("E_CMP requires Vec32");
+  }
+  auto &regs = state.v;
+  const auto &configs = state.vc;
+  if (!operands_valid(instr, configs)) {
+    return config_error();
+  }
+  const auto dtype = configs[instr.src1.index].dtype;
+  auto &dst = regs[instr.dest.index];
+  const auto &dst_config = configs[instr.dest.index];
+  const auto &lhs = regs[instr.src1.index];
+  return with_src2(instr.src2, state, regs, [&](auto rhs) {
+    for_each_idx(dst_config, [&](std::size_t n) {
+      dst[n] = mask_word(compare(instr.op, dtype, lhs[n], rhs(n)));
+    });
+    return ExecuteResult{.status = StepStatus::retired};
+  });
 }
 
 } // namespace tile_npu

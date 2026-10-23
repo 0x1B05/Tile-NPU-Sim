@@ -62,13 +62,13 @@ DecodeResult decode_eun(std::uint32_t word) {
 // E_CMP (R4): major4 = 0010, q = 00.
 // 31    28 27  26  25  24    22 21       17 16      12 11       7 6        2 1   0
 // [major4] [dom2] [BX] [funct3] [reserved5] [   B5   ] [   A5   ] [   M5   ] [ q ]
-// dom2: 01 Acc, 11 Vec32; 00/10 reserved. M5 is the u32 mask destination.
+// dom2: 11 Vec32; 00/01/10 reserved. M5 is the u32 mask destination.
 // BX: 0 = same-domain B5, 1 = Scalar xS in B5.
 // funct3: 000 eq, 001 ne, 010 lt, 011 ge, 100 le, 101 unord; 110/111 reserved.
 DecodeResult decode_ecmp(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domain = sel3_domain(f.sel3);
-  if (!CMP_BY_FUNCT3[f.funct3]) {
+  if (domain != NpuDomain::vec32 || !CMP_BY_FUNCT3[f.funct3]) {
     return DecodeError::illegal;
   }
   const auto op = static_cast<CmpOp>(f.funct3);

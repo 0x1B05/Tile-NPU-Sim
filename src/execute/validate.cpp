@@ -61,8 +61,7 @@ bool valid_structure(const EunInstr &instr) {
 }
 
 bool valid_structure(const CmpInstr &instr) {
-  if (!assigned_op(instr.op, CMP_BY_FUNCT3)) return false;
-  if (instr.dest.domain != NpuDomain::acc && instr.dest.domain != NpuDomain::vec32) {
+  if (!assigned_op(instr.op, CMP_BY_FUNCT3) || instr.dest.domain != NpuDomain::vec32) {
     return false;
   }
   return instr.src1.domain == instr.dest.domain && in_range(instr.dest) && in_range(instr.src1) &&

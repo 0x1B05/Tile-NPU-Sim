@@ -1,59 +1,42 @@
 #include "npu.inc"
 
 # Self-checking E_CMP image: programs configs and descriptors, then runs
-# register/scalar comparisons on Acc (i32) and Vec32 (f32), producing u32
-# masks (all-ones / zero). Every stage stores the mask back and compares it
-# against an expected array word by word (subw keeps the comparison in the
-# low 32 bits, immune to lw/li extension differences). Source registers are
-# reused across stages when a stage does not overwrite them. Ends with
-# ebreak: a0 = 0 pass, a0 = N identifies the failing check.
+# register/scalar comparisons on Vec32 (i32 and f32), producing u32 masks
+# (all-ones / zero). Every stage stores the mask back and compares it against
+# an expected array word by word (subw keeps the comparison in the low 32
+# bits, immune to lw/li extension differences). Source registers are reused
+# across stages when a stage does not overwrite them. Ends with ebreak:
+# a0 = 0 pass, a0 = N identifies the failing check.
 #
 # Buffer addresses go through lla (pc-relative): the image is loaded at
 # 0x80000000, where medlow's %hi/%lo expansion would sign-extend bit 31.
 
     .globl _start
 _start:
-    # ac0: dtype = u32 (3), rows = 1, cols = 4 (mask); am0: row = 16, col = 4
-    CFG_SETI  5, 1, 0, 3, 0
-    CFG_SETI  5, 1, 1, 1, 0
-    CFG_SETI  5, 1, 2, 4, 0
-    CFG_SETI  5, 3, 1, 16, 0
-    CFG_SETI  5, 3, 2, 4, 0
-    # ac1/ac2: dtype = i32 (2), 1x4; am1/am2 like am0
-    CFG_SETI  5, 1, 0, 2, 1
-    CFG_SETI  5, 1, 1, 1, 1
-    CFG_SETI  5, 1, 2, 4, 1
-    CFG_SETI  5, 3, 1, 16, 1
-    CFG_SETI  5, 3, 2, 4, 1
-    CFG_SETI  5, 1, 0, 2, 2
-    CFG_SETI  5, 1, 1, 1, 2
-    CFG_SETI  5, 1, 2, 4, 2
-    CFG_SETI  5, 3, 1, 16, 2
-    CFG_SETI  5, 3, 2, 4, 2
     # vc0: dtype = u32 (3), len = 4 (mask); vm0: stride = 4
     CFG_SETI  6, 1, 0, 3, 0
     CFG_SETI  6, 1, 1, 4, 0
     CFG_SETI  6, 3, 1, 4, 0
-    # vc1/vc2: dtype = f32 (4), len = 4; vm1/vm2: stride = 4
-    CFG_SETI  6, 1, 0, 4, 1
+    # vc1/vc2: dtype = i32 (2), len = 4; vm1/vm2: stride = 4
+    CFG_SETI  6, 1, 0, 2, 1
     CFG_SETI  6, 1, 1, 4, 1
     CFG_SETI  6, 3, 1, 4, 1
-    CFG_SETI  6, 1, 0, 4, 2
+    CFG_SETI  6, 1, 0, 2, 2
     CFG_SETI  6, 1, 1, 4, 2
     CFG_SETI  6, 3, 1, 4, 2
 
-    # Stage 1 - acmp.lt a0, a1, a2 (i32):
+    # Stage 1 - vcmp.lt v0, v1, v2 (i32):
     #   {-1, 5, INT32_MIN, 7} < {1, 5, 0, INT32_MIN}
     lla       x3, src_i1
-    CFG_REG   3, 0, 0, 0, 3, 1
-    ALOAD     1
+    CFG_REG   3, 1, 0, 0, 3, 1
+    VLOAD     1
     lla       x3, src_i2
-    CFG_REG   3, 0, 0, 0, 3, 2
-    ALOAD     2
-    ACMPLT    0, 1, 2
+    CFG_REG   3, 1, 0, 0, 3, 2
+    VLOAD     2
+    VCMPLT    0, 1, 2
     lla       x3, dstbuf32
-    CFG_REG   3, 0, 0, 0, 3, 0
-    ASTORE    0
+    CFG_REG   3, 1, 0, 0, 3, 0
+    VSTORE    0
     lla       x3, dstbuf32
     lla       x4, exp_lt
     li        x6, 4
@@ -67,11 +50,11 @@ _start:
     addi      x6, x6, -1
     bnez      x6, 1b
 
-    # Stage 2 - acmp.ge a0, a1, a2 (i32), reusing the stage-1 sources
-    ACMPGE    0, 1, 2
+    # Stage 2 - vcmp.ge v0, v1, v2 (i32), reusing the stage-1 sources
+    VCMPGE    0, 1, 2
     lla       x3, dstbuf32
-    CFG_REG   3, 0, 0, 0, 3, 0
-    ASTORE    0
+    CFG_REG   3, 1, 0, 0, 3, 0
+    VSTORE    0
     lla       x3, dstbuf32
     lla       x4, exp_ge
     li        x6, 4
@@ -85,12 +68,12 @@ _start:
     addi      x6, x6, -1
     bnez      x6, 2b
 
-    # Stage 3 - acmpx.eq a0, a1, x5 (scalar form; only the low 32 bits read)
+    # Stage 3 - vcmpx.eq v0, v1, x5 (scalar form; only the low 32 bits read)
     li        x5, 0xffffffff00000005
-    ACMPXEQ   0, 1, 5
+    VCMPXEQ   0, 1, 5
     lla       x3, dstbuf32
-    CFG_REG   3, 0, 0, 0, 3, 0
-    ASTORE    0
+    CFG_REG   3, 1, 0, 0, 3, 0
+    VSTORE    0
     lla       x3, dstbuf32
     lla       x4, exp_eqx
     li        x6, 4
@@ -106,6 +89,8 @@ _start:
 
     # Stage 4 - vcmp.unord v0, v1, v2 (f32):
     #   {1.5, NaN, +inf, -0} vs {1.5, +0, NaN, 1.0}
+    CFG_SETI  6, 1, 0, 4, 1
+    CFG_SETI  6, 1, 0, 4, 2
     lla       x3, src_f1
     CFG_REG   3, 1, 0, 0, 3, 1
     VLOAD     1

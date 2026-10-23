@@ -388,16 +388,16 @@
     .word ((2 << 28) | (\dom2 << 26) | (\bx << 25) | (\funct3 << 22) | (\b5 << 12) | (\a5 << 7) | (\m5 << 2))
 .endm
 
-.macro ACMPLT m5, a5, b5
-    E_CMP 1, 0, 2, \m5, \a5, \b5
+.macro VCMPLT m5, a5, b5
+    E_CMP 3, 0, 2, \m5, \a5, \b5
 .endm
 
-.macro ACMPGE m5, a5, b5
-    E_CMP 1, 0, 3, \m5, \a5, \b5
+.macro VCMPGE m5, a5, b5
+    E_CMP 3, 0, 3, \m5, \a5, \b5
 .endm
 
-.macro ACMPXEQ m5, a5, xs
-    E_CMP 1, 1, 0, \m5, \a5, \xs
+.macro VCMPXEQ m5, a5, xs
+    E_CMP 3, 1, 0, \m5, \a5, \xs
 .endm
 
 .macro VCMPUNORD m5, a5, b5
