@@ -24,5 +24,7 @@ void qwen3_embed(const int8_t *table, const float *scales, uint32_t id, float *o
                  uint32_t hidden);
 uint32_t qwen3_argmax(const float *x, uint32_t n);
 
+void qwen3_fence_mem(void);
+
 extern char *qwen3_debug_qtile;
 extern int32_t qwen3_accbuf[];

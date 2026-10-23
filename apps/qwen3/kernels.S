@@ -21,6 +21,17 @@ qwen3_debug_qtile: .skip 8
     .text
 
 # ---------------------------------------------------------------------------
+# void qwen3_fence_mem(void)
+#
+# C-callable fence.mem: scalar readers of NPU-stored memory (cache_append,
+# probe_record) call this before their loads.
+# ---------------------------------------------------------------------------
+    .globl qwen3_fence_mem
+qwen3_fence_mem:
+    FENCE_MEM
+    ret
+
+# ---------------------------------------------------------------------------
 # uint32_t qwen3_quant_act(const float *x, uint32_t k)
 #
 # Quantizes x (f32[k], zero-padded by the caller to ceil(k/1024)*1024) with a
@@ -63,6 +74,7 @@ qwen3_quant_act:
     SETIV   SEL_VM, CF_STRIDE, 4, 30
     SETIV   SEL_VM, CF_VFLAGS, 0, 30
     VSTORE  30
+    FENCE_MEM                   # the len-1 store must be visible to the lw
     lw      t2, 0(sp)           # x_scale bits reach scalars only via memory
     addi    sp, sp, 16
 
@@ -246,6 +258,7 @@ qwen3_matvec_q:
     ld      s5, 24(sp)
     ld      s6, 32(sp)
     addi    sp, sp, 48
+    FENCE_MEM                   # out (incl. k_buf/v_buf) is read by scalar code
     ret
 
 # ---------------------------------------------------------------------------
@@ -399,6 +412,7 @@ qwen3_matmul_q:
     ld      s5, 24(sp)
     ld      s6, 32(sp)
     addi    sp, sp, 48
+    FENCE_MEM                   # out (incl. k_buf/v_buf) is read by scalar code
     ret
 
 # ---------------------------------------------------------------------------
@@ -649,6 +663,7 @@ qwen3_softmax_exp:
     SETIV   SEL_VM, CF_STRIDE, 4, 4
     SETIV   SEL_VM, CF_VFLAGS, 0, 4
     VSTORE  4                             # *rcp_out = rcp(sum)
+    FENCE_MEM                   # scores and rcp are read by scalar code
     ret
 
 # ---------------------------------------------------------------------------
@@ -871,6 +886,7 @@ qwen3_argmax:
     SETIV   SEL_VM, CF_VFLAGS, 0, 5
     VBROADCAST 5, 2, 0
     VSTORE  5
+    FENCE_MEM                   # the index store must be visible to the lw
     lw      a0, 0(sp)
     addi    sp, sp, 16
     ret
