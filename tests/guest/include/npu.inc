@@ -151,11 +151,20 @@
     M_BLK 3, 0, \d5, 0
 .endm
 
+# Row load/store: the index5 row number is an immediate (plain name) or a
+# scalar register (X suffix).
 .macro TLOADR reg5, index5
     M_ROW 0, 0, 4, \index5, \reg5
 .endm
 
-# Row store with the row number in a scalar register.
+.macro TLOADRX reg5, xs
+    M_ROW 0, 1, 4, \xs, \reg5
+.endm
+
+.macro TSTORER reg5, index5
+    M_ROW 0, 0, 5, \index5, \reg5
+.endm
+
 .macro TSTORERX reg5, xs
     M_ROW 0, 1, 5, \xs, \reg5
 .endm
@@ -217,7 +226,7 @@
 .endm
 
 # cfg.copy: broadcast config cs into configs cd through cd+N.
-.macro CFGCOPY sel2, mv, cd, cs, n=0
+.macro COPY sel2, mv, cd, cs, n=0
     CFG_REG \sel2, \mv, 1, 0, \cs, \cd, \n
 .endm
 
@@ -416,15 +425,15 @@
     .word ((5 << 28) | (\ew << 26) | (\dir << 25) | (\funct4 << 21) | (\s5 << 12) | (\a5 << 7) | (\d5 << 2))
 .endm
 
-.macro AADDV_ROW d5, a5, s5
+.macro AADDV_BYROW d5, a5, s5
     E_BCAST 1, 0, 0, \d5, \a5, \s5
 .endm
 
-.macro AMULV_COL d5, a5, s5
+.macro AMULV_BYCOL d5, a5, s5
     E_BCAST 1, 1, 2, \d5, \a5, \s5
 .endm
 
-.macro AMULV_ROW d5, a5, s5
+.macro AMULV_BYROW d5, a5, s5
     E_BCAST 1, 0, 2, \d5, \a5, \s5
 .endm
 
@@ -449,7 +458,7 @@
 
 # E_MASK (R4), mirroring NpuR4 in src/decode/encoding.h:
 #   [31:28] major4 = 4  [27:26] dom2  [25] FS  [24:22] funct3
-#   [21:17] xBound  [16:12] fill5 / xFill  [11:7] A5 (S)
+#   [21:17] xBound  [16:12] fill5 / xFill  [11:7] S5
 #   [6:2] D5  [1:0] q = 00
 # funct3: 0 tail, 1 tril, 2 triu (matrix-only). FS = 0: [16:12] is a fill5
 # code; FS = 1: [16:12] names the xFill Scalar register.
@@ -562,6 +571,10 @@
 
 .macro BDOT_NT d5, a5, b5
     MMA_BDOT 6, \d5, \a5, \b5
+.endm
+
+.macro BDOT_NN d5, a5, b5
+    MMA_BDOT 4, \d5, \a5, \b5
 .endm
 
 .macro BDOT_NN_ACC d5, a5, b5

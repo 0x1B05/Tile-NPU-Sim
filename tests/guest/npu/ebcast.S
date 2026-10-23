@@ -35,7 +35,7 @@ _start:
     lla       x3, src_v
     CFG_REG   3, 1, 0, 0, 3, 0
     VLOAD     0
-    AADDV_ROW 0, 1, 0
+    AADDV_BYROW 0, 1, 0
     lla       x3, dstbuf
     CFG_REG   3, 0, 0, 0, 3, 0
     ASTORE    0
@@ -60,7 +60,7 @@ _start:
     lla       x3, src_v
     CFG_REG   3, 1, 0, 0, 3, 0
     VLOAD     0
-    AMULV_COL 0, 1, 0
+    AMULV_BYCOL 0, 1, 0
     lla       x3, dstbuf
     CFG_REG   3, 0, 0, 0, 3, 0
     ASTORE    0

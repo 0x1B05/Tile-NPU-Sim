@@ -376,8 +376,8 @@ qwen3_matmul_q:
     VLOAD   29                  # 32 weight scales
     SETIM   SEL_AC, CF_DTYPE, DT_I32, 1   # acvt flips it to f32 on success
     ACVT    1, 0                # i32 -> f32
-    AMULV_COL 1, 1, 29          # * ws[j]
-    AMULV_ROW 1, 1, 30          # * xs[t]
+    AMULV_BYCOL 1, 1, 29          # * ws[j]
+    AMULV_BYROW 1, 1, 30          # * xs[t]
     ASTORE  1
     addi    s2, s2, 1
     bltu    s2, s3, .Lmm_nblock
@@ -459,7 +459,7 @@ qwen3_rope:
     # Broadcast stride/inc first: cfg.copy copies every field, base included.
     SETIV   SEL_VM, CF_STRIDE, 4, 0
     SETIV   SEL_VM, CF_VFLAGS, 1, 0
-    CFGCOPY SEL_VM, 1, 1, 0, 6          # vm1..vm7 = vm0 stride/inc
+    COPY SEL_VM, 1, 1, 0, 6          # vm1..vm7 = vm0 stride/inc
     SETX    SEL_VM, 1, CF_BASE, 0, X_A1
     addi    t0, a1, 128
     SETX    SEL_VM, 1, CF_BASE, 1, X_T0
@@ -715,7 +715,7 @@ qwen3_silu_mul:
     SETW    SEL_VC, 1, 0, X_T6, 2
     SETIV   SEL_VM, CF_STRIDE, 4, 0
     SETIV   SEL_VM, CF_VFLAGS, 1, 0
-    CFGCOPY SEL_VM, 1, 1, 0, 1          # vm1, vm2 = vm0 stride/inc
+    COPY SEL_VM, 1, 1, 0, 1          # vm1, vm2 = vm0 stride/inc
     SETX    SEL_VM, 1, CF_BASE, 0, X_A0
     SETX    SEL_VM, 1, CF_BASE, 1, X_A1
     SETX    SEL_VM, 1, CF_BASE, 2, X_A2
@@ -746,7 +746,7 @@ qwen3_add:
     SETW    SEL_VC, 1, 0, X_T6, 2
     SETIV   SEL_VM, CF_STRIDE, 4, 0
     SETIV   SEL_VM, CF_VFLAGS, 1, 0
-    CFGCOPY SEL_VM, 1, 1, 0, 1          # vm1, vm2 = vm0 stride/inc
+    COPY SEL_VM, 1, 1, 0, 1          # vm1, vm2 = vm0 stride/inc
     SETX    SEL_VM, 1, CF_BASE, 0, X_A0
     SETX    SEL_VM, 1, CF_BASE, 1, X_A1
     SETX    SEL_VM, 1, CF_BASE, 2, X_A0
