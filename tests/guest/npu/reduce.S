@@ -47,6 +47,7 @@ _start:
     lla       x4, exp_sum
     li        x6, 2
     li        a0, 1
+    FENCE_MEM
 1:  lwu       x5, 0(x3)
     lwu       x7, 0(x4)
     subw      x5, x5, x7
@@ -70,6 +71,7 @@ _start:
     VSTORE    3
     lla       x3, dstbuf
     li        a0, 2
+    FENCE_MEM
     lwu       x5, 0(x3)
     li        x7, 2
     bne       x5, x7, fail

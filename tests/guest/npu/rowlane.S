@@ -57,6 +57,7 @@ _start:
     TEXROW    0, 0, 1
     BSTORE    0
     lla       x3, dstbuf
+    FENCE_MEM
     lwu       x4, 0(x3)
     li        x5, 0x08070605
     li        a0, 1
@@ -67,6 +68,7 @@ _start:
     lla       x3, dstbuf2
     CFG_REG   2, 0, 0, 0, 3, 0   # tm0 base = dstbuf2 (strides still 4/1)
     TSTORE    0
+    FENCE_MEM
     lwu       x4, 0(x3)
     li        x5, 0x08070605
     li        a0, 2
@@ -76,6 +78,7 @@ _start:
     BBROADCAST 1, 0, 2
     BSTORE    1
     lla       x3, dstbuf
+    FENCE_MEM
     lwu       x4, 0(x3)
     li        x5, 0x07070707
     li        a0, 3
@@ -92,6 +95,7 @@ _start:
     LANE_MOVE 0, 1, 1, 9, 6, 0   # binsert b0[x9], x6
     BSTORE    0
     lla       x3, dstbuf
+    FENCE_MEM
     lwu       x4, 0(x3)
     li        x5, 0xFF070605
     bne       x4, x5, fail
@@ -102,6 +106,7 @@ _start:
     ROW_MOVE  1, 1, 1, 9, 0, 0   # aextract.row v0, a0[x9]
     VSTORE    0
     lla       x3, dstbuf32
+    FENCE_MEM
     lwu       x4, 0(x3)
     li        x5, 3
     li        a0, 5
@@ -115,6 +120,7 @@ _start:
     lla       x3, dstbuf32
     CFG_REG   3, 0, 0, 0, 3, 0   # am0 base = dstbuf32 (strides still 8/4)
     ASTORE    0
+    FENCE_MEM
     lwu       x4, 0(x3)
     li        x5, 3
     li        a0, 6
@@ -134,11 +140,13 @@ _start:
     LANE_MOVE 1, 1, 1, 9, 6, 0   # vinsert v0[x9], x6
     VSTORE    0
     lla       x3, dstbuf32
+    FENCE_MEM
     lwu       x4, 4(x3)
     li        x5, 0xFFFFFFFF
     bne       x4, x5, fail
     VBROADCAST 1, 0, 0
     VSTORE    1
+    FENCE_MEM
     lwu       x4, 0(x3)
     li        x5, 3
     bne       x4, x5, fail

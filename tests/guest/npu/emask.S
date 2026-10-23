@@ -46,6 +46,7 @@ _start:
     lla       x4, exp_tril
     li        x6, 9
     li        a0, 1
+    FENCE_MEM
 1:  lwu       x5, 0(x3)
     lwu       x7, 0(x4)
     subw      x5, x5, x7
@@ -69,6 +70,7 @@ _start:
     lla       x4, exp_vtail
     li        x6, 4
     li        a0, 2
+    FENCE_MEM
 2:  lwu       x5, 0(x3)
     lwu       x7, 0(x4)
     subw      x5, x5, x7

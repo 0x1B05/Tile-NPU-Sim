@@ -41,6 +41,7 @@ _start:
     lla       x4, exp_lt
     li        x6, 4
     li        a0, 1
+    FENCE_MEM
 1:  lwu       x5, 0(x3)
     lwu       x7, 0(x4)
     subw      x5, x5, x7
@@ -59,6 +60,7 @@ _start:
     lla       x4, exp_ge
     li        x6, 4
     li        a0, 2
+    FENCE_MEM
 2:  lwu       x5, 0(x3)
     lwu       x7, 0(x4)
     subw      x5, x5, x7
@@ -78,6 +80,7 @@ _start:
     lla       x4, exp_eqx
     li        x6, 4
     li        a0, 3
+    FENCE_MEM
 3:  lwu       x5, 0(x3)
     lwu       x7, 0(x4)
     subw      x5, x5, x7
@@ -105,6 +108,7 @@ _start:
     lla       x4, exp_unord
     li        x6, 4
     li        a0, 4
+    FENCE_MEM
 4:  lwu       x5, 0(x3)
     lwu       x7, 0(x4)
     subw      x5, x5, x7
@@ -123,6 +127,7 @@ _start:
     lla       x4, exp_le
     li        x6, 4
     li        a0, 5
+    FENCE_MEM
 5:  lwu       x5, 0(x3)
     lwu       x7, 0(x4)
     subw      x5, x5, x7

@@ -81,6 +81,7 @@ _start:
     lla       x4, exp_mma1
     li        x6, 4
     li        a0, 1
+    FENCE_MEM
 1:  lwu       x5, 0(x3)
     lwu       x7, 0(x4)
     subw      x5, x5, x7
@@ -100,6 +101,7 @@ _start:
     lla       x4, exp_mma2
     li        x6, 4
     li        a0, 2
+    FENCE_MEM
 2:  lwu       x5, 0(x3)
     lwu       x7, 0(x4)
     subw      x5, x5, x7
@@ -115,6 +117,7 @@ _start:
     CFG_REG   3, 1, 0, 0, 3, 4
     VSTORE    4
     lla       x3, dstbuf2
+    FENCE_MEM
     lwu       x4, 0(x3)
     li        x5, 18
     li        a0, 3
@@ -129,6 +132,7 @@ _start:
     CFG_REG   3, 1, 0, 0, 3, 4
     VSTORE    4
     lla       x3, dstbuf2
+    FENCE_MEM
     lwu       x4, 0(x3)
     li        x5, 36
     li        a0, 4
