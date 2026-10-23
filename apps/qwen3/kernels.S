@@ -843,10 +843,11 @@ qwen3_embed:
 
 # ---------------------------------------------------------------------------
 # uint32_t qwen3_argmax(const float *x, uint32_t n)   n % 32 == 0
-# Greedy index of the maximum. Chunk 0 seeds the running best; every later
-# chunk's vreduce.argmax candidate replaces it only when strictly greater
-# (ties keep the smaller index). The best index reaches a0 through a one-lane
-# vstore + lw.
+# Greedy index of the maximum with the ISA argmax tie rules: a NaN candidate
+# beats a numeric best, an existing NaN best never loses, and numeric ties
+# keep the smaller index. Chunk 0 seeds the running best; later chunks fold
+# in through vcmplt + NaN masks + vselect. The best index reaches a0 through
+# a one-lane vstore + fence + lw.
 # ---------------------------------------------------------------------------
     .globl qwen3_argmax
 qwen3_argmax:
@@ -858,7 +859,7 @@ qwen3_argmax:
     LI_CWV  t6, DT_F32, 32
     SETW    SEL_VC, 1, 4, X_T6      # vc4 f32: candidate value
     LI_CWV  t6, DT_U32, 32
-    SETW    SEL_VC, 1, 5, X_T6      # vc5 u32: compare mask
+    SETW    SEL_VC, 1, 5, X_T6, 2   # vc5..vc7 u32: compare/NaN masks
     SETX    SEL_VM, 1, CF_BASE, 1, X_A0
     SETIV   SEL_VM, CF_STRIDE, 4, 1
     SETIV   SEL_VM, CF_VFLAGS, 1, 1
@@ -872,9 +873,14 @@ qwen3_argmax:
     VLOAD   1
     VREDUCE_ARGMAX 3, 4, 1                # v3 = chunk argmax (i32), v4 = max
     VADDX   3, 3, X_T4                    # global candidate index
-    VCMPLT  5, 0, 4                       # best < candidate (ordered f32)
-    VSELECT 0, 5, 4, 0
-    VSELECT 2, 5, 3, 2
+    VCMPLT    5, 0, 4                     # ordered: best < candidate
+    VCMPUNORD 6, 4, 4                     # candidate is NaN
+    VCMPUNORD 7, 0, 0                     # best is NaN
+    VNOT      7, 7
+    VAND      6, 6, 7                     # a NaN candidate beats a numeric best
+    VOR       5, 5, 6                     # an existing NaN best never loses
+    VSELECT   0, 5, 4, 0
+    VSELECT   2, 5, 3, 2
     addi    t4, t4, 32
     addi    t6, t6, -1
     bnez    t6, .Lam_loop

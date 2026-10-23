@@ -119,6 +119,9 @@
 .macro VXOR d5, a5, b5
     E_BIN 6, 10, \d5, \a5, \b5
 .endm
+.macro VAND d5, a5, b5
+    E_BIN 6, 8, \d5, \a5, \b5
+.endm
 
 # M_BLK block and gather forms (R2 format), mirroring NpuR2 in
 # src/decode/encoding.h:
@@ -393,6 +396,10 @@
 
 .macro VABS d5, s5
     E_UNARY 3, 1, \d5, \s5
+.endm
+
+.macro VNOT d5, s5
+    E_UNARY 3, 0, \d5, \s5
 .endm
 
 # E_CMP (R4), mirroring NpuR4 in src/decode/encoding.h:
