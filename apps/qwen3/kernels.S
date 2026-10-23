@@ -764,31 +764,50 @@ qwen3_add:
 # ---------------------------------------------------------------------------
 # void qwen3_embed(const int8_t *table, const float *scales, uint32_t id,
 #               float *out, uint32_t hidden)
-# out = dequant(table[id]) with the row's f32 scale, hidden % 32 == 0.
+# out = dequant(table[id]) with the row's f32 scale. The row is fetched as
+# 32x32 i8 blocks (one tload each) and dequantized straight into an Acc with
+# tdequant, then block-stored; hidden is a power of two >= 32.
 # ---------------------------------------------------------------------------
     .globl qwen3_embed
 qwen3_embed:
-    LI_CWV  t0, DT_F32, 32
-    SETW    SEL_VC, 1, 0, X_T0, 1
-    LI_CWV  t0, DT_I8, 32
-    SETW    SEL_BC, 1, 0, X_T0
+    # rows per block = min(hidden, 1024) / 32; blocks = max(hidden / 1024, 1)
+    li      t0, 1024
+    mv      t1, a4
+    bltu    a4, t0, .Lem_rows
+    mv      t1, t0
+.Lem_rows:
+    srli    t1, t1, 5               # t1 = rows in [1, 32]
+    srli    t6, a4, 10
+    bnez    t6, .Lem_cfgs
+    li      t6, 1                   # hidden < 1024: single partial block
+.Lem_cfgs:
+    li      t0, (DT_I8 << 16) | (32 << 8)
+    or      t0, t0, t1
+    SETW    SEL_TC, 0, 0, X_T0      # tc0 = i8 rows x 32
+    li      t0, (DT_F32 << 16) | (32 << 8)
+    or      t0, t0, t1
+    SETW    SEL_AC, 0, 0, X_T0      # ac0 = f32 rows x 32
+    li      t0, (DT_F32 << 8)
+    or      t0, t0, t1
+    SETW    SEL_VC, 1, 0, X_T0      # vc0 = f32 len rows (tdequant scale len)
     slli    t0, a2, 2
     add     t0, a1, t0
-    lw      t1, 0(t0)
-    VINSERT 0, 0, X_T1
+    lw      t2, 0(t0)               # t2 = scales[id]
+    VFILLX  0, X_T2                 # v0 = s_i in every lane
     mul     t0, a2, a4
     add     t0, a0, t0
-    SETX    SEL_BM, 1, CF_BASE, 0, X_T0
-    SETIV   SEL_BM, CF_STRIDE, 1, 0
-    SETIV   SEL_BM, CF_VFLAGS, 1, 0
-    SETX    SEL_VM, 1, CF_BASE, 1, X_A3
-    SETIV   SEL_VM, CF_STRIDE, 4, 1
-    SETIV   SEL_VM, CF_VFLAGS, 1, 1
-    srli    t6, a4, 5
+    SETX    SEL_TM, 0, CF_BASE, 0, X_T0
+    SETIM   SEL_TM, CF_RSTRIDE, 32, 0
+    SETIM   SEL_TM, CF_CSTRIDE, 1, 0
+    SETIM   SEL_TM, CF_FLAGS, 1, 0  # inc along rows: += rows * 32
+    SETX    SEL_AM, 0, CF_BASE, 0, X_A3
+    SETIM   SEL_AM, CF_RSTRIDE, 128, 0
+    SETIM   SEL_AM, CF_CSTRIDE, 4, 0
+    SETIM   SEL_AM, CF_FLAGS, 1, 0  # inc along rows: += rows * 128
 .Lem_loop:
-    BLOAD   0
-    BDEQUANT 1, 0, 0, 0
-    VSTORE  1
+    TLOAD   0                       # t0 = rows x 32 i8 block
+    TDEQUANT 0, 0, 0                # a0 = f32(t0) * v0
+    ASTORE  0
     addi    t6, t6, -1
     bnez    t6, .Lem_loop
     ret
