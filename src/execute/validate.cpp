@@ -202,12 +202,13 @@ bool valid_structure(const AreduceInstr &instr) {
 }
 
 bool valid_structure(const VreduceInstr &instr) {
-  return instr.op <= ReduceOp::sumsq && in_range(instr.dest) &&
-         instr.src.domain == NpuDomain::vec32 && in_range(instr.src);
+  return instr.op <= ReduceOp::sumsq && instr.dest.domain == NpuDomain::vec32 &&
+         in_range(instr.dest) && instr.src.domain == NpuDomain::vec32 && in_range(instr.src);
 }
 
 bool valid_structure(const VreduceArgmaxInstr &instr) {
-  return in_range(instr.index_dest) && in_range(instr.value_dest) &&
+  return instr.index_dest.domain == NpuDomain::vec32 && in_range(instr.index_dest) &&
+         instr.value_dest.domain == NpuDomain::vec32 && in_range(instr.value_dest) &&
          instr.src.domain == NpuDomain::vec32 && in_range(instr.src);
 }
 

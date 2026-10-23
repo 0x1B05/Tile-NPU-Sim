@@ -1,10 +1,10 @@
 #include "npu.inc"
 
 # Self-checking reduce image: programs configs and descriptors, then runs an
-# areduce.rows.sum (f32) and a vreduce.argmax (NaN candidate wins). The
-# areduce result is stored back and compared word-wise (lwu/subw); the
-# argmax scalar outputs are compared in registers. Ends with ebreak: a0 = 0
-# pass, a0 = N identifies the failing check.
+# areduce.rows.sum (f32) and a vreduce.argmax (NaN candidate wins). Both
+# results are stored back from the vector domain and compared word-wise
+# (lwu/subw). Ends with ebreak: a0 = 0 pass, a0 = N identifies the failing
+# check.
 #
 # Buffer addresses go through lla (pc-relative): the image is loaded at
 # 0x80000000, where medlow's %hi/%lo expansion would sign-extend bit 31.
@@ -25,6 +25,14 @@ _start:
     CFG_SETI  6, 1, 0, 4, 1
     CFG_SETI  6, 1, 1, 3, 1
     CFG_SETI  6, 3, 1, 4, 1
+    # vc2/vc3: dtype = i32/f32, len = 3 (vreduce.argmax vIdx/vVal)
+    CFG_SETI  6, 1, 0, 2, 2
+    CFG_SETI  6, 1, 1, 3, 2
+    CFG_SETI  6, 1, 0, 4, 3
+    CFG_SETI  6, 1, 1, 3, 3
+    # vm2/vm3: stride = 4
+    CFG_SETI  6, 3, 1, 4, 2
+    CFG_SETI  6, 3, 1, 4, 3
 
     # Stage 1 - areduce.rows.sum v0, a1 over
     #   {1.5, -2.5}, {3.0, 4.5} -> {-1.0, 7.5}
@@ -48,17 +56,30 @@ _start:
     addi      x6, x6, -1
     bnez      x6, 1b
 
-    # Stage 2 - vreduce.argmax x5, x6, v1 over {1.0, 7.0, NaN} ->
-    #   x5 = 2, x6 = 0x7FC00000 (NaN candidate wins)
+    # Stage 2 - vreduce.argmax v2, v3, v1 over {1.0, 7.0, NaN} ->
+    #   v2 = {2, 2, 2} (i32), v3 = {NaN, NaN, NaN} (NaN candidate wins)
     lla       x3, src_v
     CFG_REG   3, 1, 0, 0, 3, 1
     VLOAD     1
-    VREDUCE_ARGMAX 5, 6, 1
+    VREDUCE_ARGMAX 2, 3, 1
+    lla       x3, dstbuf
+    CFG_REG   3, 1, 0, 0, 3, 2
+    addi      x3, x3, 12
+    CFG_REG   3, 1, 0, 0, 3, 3   # vm3 base = dstbuf + 12 (vIdx and vVal side by side)
+    VSTORE    2
+    VSTORE    3
+    lla       x3, dstbuf
     li        a0, 2
+    lwu       x5, 0(x3)
     li        x7, 2
     bne       x5, x7, fail
+    lwu       x5, 4(x3)
+    bne       x5, x7, fail
+    lwu       x5, 12(x3)
     li        x7, 0x7FC00000
-    bne       x6, x7, fail
+    bne       x5, x7, fail
+    lwu       x5, 16(x3)
+    bne       x5, x7, fail
 
     li        a0, 0
     ebreak
@@ -70,4 +91,4 @@ fail:
 src_m:   .word 0x3FC00000, 0xC0200000, 0x40400000, 0x40900000
 exp_sum: .word 0xBF800000, 0x40F00000
 src_v:   .word 0x3F800000, 0x40E00000, 0x7FC00000
-dstbuf:  .space 8
+dstbuf:  .space 24

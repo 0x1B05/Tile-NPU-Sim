@@ -123,35 +123,46 @@ void load_vector(const Vec32 &reg, std::span<float> values) {
   }
 }
 
-// vreduce.*: reduces an f32 Vec32 into a Scalar destination.
-// sum/max/min/sumsq write the f32 bit pattern into the low 32 bits of xD (high bits zeroed).
+// vreduce.*: reduces an f32 Vec32 and broadcasts the f32 bit pattern into
+// every effective lane of the Vec32 destination.
 ExecuteResult vreduce(const VreduceInstr &instr, State &state) {
   const auto &src_config = state.vc[instr.src.index];
-  if (!valid_config_of(src_config, DType::f32)) {
+  const auto &dst_config = state.vc[instr.dest.index];
+  if (!valid_config_of(src_config, DType::f32) || !valid_config_of(dst_config, DType::f32)) {
     return config_error();
   }
   std::array<float, REDUCE_LEAVES> values{};
   const auto active = std::span(values).first(src_config.len);
   load_vector(state.v[instr.src.index], active);
   const auto result = as_u32(reduce_f32(instr.op, active));
-  state.scalar.write_x(instr.dest.index, static_cast<std::uint64_t>(result));
+  auto &dest = state.v[instr.dest.index];
+  for (std::size_t lane = 0; lane < dst_config.len; ++lane) {
+    dest[lane] = result;
+  }
   return {.status = StepStatus::retired};
 }
 
-// vreduce.argmax writes xIndex (i32, sign-extended) and xValue (f32 bits).
+// vreduce.argmax: the winning logical index (i32 bits) and value (f32 bits)
+// broadcast into the vIdx/vVal destinations' effective lanes.
 ExecuteResult vreduce_argmax(const VreduceArgmaxInstr &instr, State &state) {
   const auto &src_config = state.vc[instr.src.index];
-  if (!valid_config_of(src_config, DType::f32)) {
+  const auto &index_config = state.vc[instr.index_dest.index];
+  const auto &value_config = state.vc[instr.value_dest.index];
+  if (!valid_config_of(src_config, DType::f32) || !valid_config_of(index_config, DType::i32) ||
+      !valid_config_of(value_config, DType::f32)) {
     return config_error();
   }
   std::array<float, REDUCE_LEAVES> values{};
   const auto active = std::span(values).first(src_config.len);
   load_vector(state.v[instr.src.index], active);
   const auto best = reduce_argmax(active);
-  const auto index = static_cast<std::int32_t>(best.index);
-  state.scalar.write_x(instr.index_dest.index,
-                       static_cast<std::uint64_t>(static_cast<std::int64_t>(index)));
-  state.scalar.write_x(instr.value_dest.index, static_cast<std::uint64_t>(as_u32(best.value)));
+  const auto value = as_u32(best.value);
+  for (std::size_t lane = 0; lane < index_config.len; ++lane) {
+    state.v[instr.index_dest.index][lane] = best.index;
+  }
+  for (std::size_t lane = 0; lane < value_config.len; ++lane) {
+    state.v[instr.value_dest.index][lane] = value;
+  }
   return {.status = StepStatus::retired};
 }
 

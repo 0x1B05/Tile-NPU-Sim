@@ -53,7 +53,6 @@ using tile_npu::FillImm16;
 using tile_npu::FillInstr;
 using tile_npu::ImmediateIndex;
 using tile_npu::LaneBroadcastInstr;
-using tile_npu::LaneExtractInstr;
 using tile_npu::LaneInsertInstr;
 using tile_npu::MaskInstr;
 using tile_npu::MaskOp;
@@ -187,20 +186,15 @@ TEST_CASE(validate_rejects_bad_row_move) {
 }
 
 TEST_CASE(validate_rejects_bad_lane_move) {
-  check_illegal(
-      LaneExtractInstr{.dest = ScalarRegister{32}, .src = B(1), .index = ImmediateIndex{0}},
-      "extract xD index 32");
   check_illegal(LaneBroadcastInstr{.dest = B(0), .src = V(1), .index = ImmediateIndex{0}},
                 "broadcast with mismatched domains");
   check_illegal(
       LaneInsertInstr{.dest = B(0), .src = ScalarRegister{32}, .index = ImmediateIndex{0}},
       "insert xS index 32");
-  check_illegal(
-      LaneExtractInstr{.dest = ScalarRegister{0}, .src = T(1), .index = ImmediateIndex{0}},
-      "extract source domain");
-  check_illegal(
-      LaneExtractInstr{.dest = ScalarRegister{0}, .src = B(1), .index = ScalarRegister{32}},
-      "extract index xS index 32");
+  check_illegal(LaneInsertInstr{.dest = T(0), .src = ScalarRegister{0}, .index = ImmediateIndex{0}},
+                "insert destination domain");
+  check_illegal(LaneBroadcastInstr{.dest = B(0), .src = B(1), .index = ScalarRegister{32}},
+                "broadcast index xS index 32");
 }
 
 TEST_CASE(validate_rejects_bad_cfg) {
@@ -257,12 +251,12 @@ TEST_CASE(validate_rejects_bad_cvt) {
 TEST_CASE(validate_rejects_bad_reduce) {
   check_illegal(AreduceInstr{static_cast<ReduceOp>(6), V(0), A(0)}, "reserved areduce op");
   check_illegal(AreduceInstr{ReduceOp::sum, V(0), V(1)}, "areduce source domain");
-  check_illegal(VreduceInstr{static_cast<ReduceOp>(4), ScalarRegister{0}, V(1)},
-                "vreduce argmax op");
-  check_illegal(VreduceInstr{ReduceOp::sum, ScalarRegister{32}, V(0)}, "vreduce xD index 32");
-  check_illegal(VreduceInstr{ReduceOp::absmax, ScalarRegister{0}, V(0)}, "vreduce absmax op");
-  check_illegal(VreduceArgmaxInstr{ScalarRegister{0}, ScalarRegister{32}, V(0)},
-                "vreduce.argmax xValue index 32");
+  check_illegal(VreduceInstr{static_cast<ReduceOp>(4), V(0), V(1)}, "vreduce argmax op");
+  check_illegal(VreduceInstr{ReduceOp::sum, V(32), V(0)}, "vreduce vD index 32");
+  check_illegal(VreduceInstr{ReduceOp::sum, B(0), V(1)}, "vreduce destination domain");
+  check_illegal(VreduceInstr{ReduceOp::absmax, V(0), V(0)}, "vreduce absmax op");
+  check_illegal(VreduceArgmaxInstr{V(0), V(32), V(0)}, "vreduce.argmax vVal index 32");
+  check_illegal(VreduceArgmaxInstr{V(0), B(1), V(0)}, "vreduce.argmax vVal domain");
 }
 
 TEST_CASE(validate_rejects_bad_qnt) {

@@ -249,14 +249,14 @@ struct AreduceInstr {
 
 struct VreduceInstr {
   ReduceOp op = ReduceOp::sum;
-  ScalarRegister dest{};
-  NpuRegister src{}; // Vec32
+  NpuRegister dest{}; // Vec32; the result broadcasts to every effective lane
+  NpuRegister src{};  // Vec32
 };
 
 struct VreduceArgmaxInstr {
-  ScalarRegister index_dest{};
-  ScalarRegister value_dest{};
-  NpuRegister src{}; // Vec32
+  NpuRegister index_dest{}; // Vec32 i32; the winning lane index in every lane
+  NpuRegister value_dest{}; // Vec32 f32; the winning value in every lane
+  NpuRegister src{};        // Vec32
 };
 
 enum class CvtOp : std::uint8_t { cvt = 0b000, widen = 0b001 };
