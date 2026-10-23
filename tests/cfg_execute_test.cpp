@@ -92,14 +92,34 @@ TEST_CASE(cfg_seti_rejects_unsupported_field) {
   check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE), "illegal seti keeps pc");
 }
 
-TEST_CASE(cfg_setx_writes_full_scalar_value) {
+TEST_CASE(cfg_setx_writes_u48_value) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   load_one(sim, memory, cfg_reg(2, 0, 0, FIELD_BASE_ADDR, 4, 0));
-  sim.state().scalar.write_x(4, 0x8000100020003000ull);
+  sim.state().scalar.write_x(4, 0x400020003000ull);
   check_eq(sim.step().status, StepStatus::retired, "cfg.setx retires");
-  check_eq(hex(sim.state().tm[0].base_addr), hex(0x8000100020003000ull),
-           "tm0.base_addr takes the full 64-bit value");
+  check_eq(hex(sim.state().tm[0].base_addr), hex(0x400020003000ull),
+           "tm0.base_addr takes the u48 value");
+}
+
+TEST_CASE(cfg_setx_truncates_top_of_u48_space) {
+  Ram memory(CODE_BASE, 4);
+  Simulator sim(memory);
+  load_one(sim, memory, cfg_reg(2, 0, 0, FIELD_BASE_ADDR, 4, 0));
+  sim.state().scalar.write_x(4, 0xffff800020003000ull);
+  check_eq(sim.step().status, StepStatus::retired, "cfg.setx retires");
+  check_eq(hex(sim.state().tm[0].base_addr), hex(0x800020003000ull),
+           "tm0.base_addr keeps the low 48 bits");
+}
+
+TEST_CASE(cfg_setx_rejects_invalid_u48_extension) {
+  Ram memory(CODE_BASE, 4);
+  Simulator sim(memory);
+  load_one(sim, memory, cfg_reg(2, 0, 0, FIELD_BASE_ADDR, 4, 0));
+  sim.state().tm[0].base_addr = 0x1234;
+  sim.state().scalar.write_x(4, 0x8000100020003000ull);
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "invalid u48 base_addr fails");
+  check_eq(hex(sim.state().tm[0].base_addr), hex(0x1234u), "failed write preserves base_addr");
 }
 
 TEST_CASE(cfg_setx_from_x0_writes_zero) {

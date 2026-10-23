@@ -21,8 +21,6 @@ constexpr auto extent(std::uint64_t max) {
   return [max](std::uint64_t raw) { return raw >= 1 && raw <= max; };
 }
 
-constexpr bool any_value(std::uint64_t) { return true; }
-
 // Signed 32-bit fields accept exactly the sign extensions of an i32.
 constexpr bool fits_i32(std::uint64_t raw) {
   const auto value = static_cast<std::int64_t>(raw);
@@ -30,10 +28,23 @@ constexpr bool fits_i32(std::uint64_t raw) {
          value <= std::numeric_limits<std::int32_t>::max();
 }
 
+// u48 address fields accept bits 63:47 all 0 or all 1; the low 48 bits are
+// stored.
+constexpr bool fits_u48(std::uint64_t raw) {
+  const auto top = raw >> 47;
+  return top == 0 || top == 0x1ffff;
+}
+
 template <typename T, typename Accept>
 ConfigAccessStatus store_if(T &target, std::uint64_t raw, Accept accept) {
   if (!accept(raw)) return ConfigAccessStatus::invalid_value;
   target = static_cast<T>(raw);
+  return ConfigAccessStatus::success;
+}
+
+ConfigAccessStatus store_u48(std::uint64_t &target, std::uint64_t raw) {
+  if (!fits_u48(raw)) return ConfigAccessStatus::invalid_value;
+  target = raw & 0xffffffffffff;
   return ConfigAccessStatus::success;
 }
 
@@ -102,7 +113,7 @@ std::uint64_t read_field(const MatrixDescriptor &desc, ConfigField field) {
 
 ConfigAccessStatus write_field(MatrixDescriptor &desc, ConfigField field, std::uint64_t raw) {
   switch (field) {
-  case ConfigField::base_addr:        return store_if(desc.base_addr, raw, any_value);
+  case ConfigField::base_addr:        return store_u48(desc.base_addr, raw);
   case ConfigField::row_stride_bytes: return store_if(desc.row_stride_bytes, raw, fits_i32);
   case ConfigField::col_stride_bytes: return store_if(desc.col_stride_bytes, raw, fits_i32);
   case ConfigField::transform:
@@ -124,7 +135,7 @@ std::uint64_t read_field(const VectorDescriptor &desc, ConfigField field) {
 
 ConfigAccessStatus write_field(VectorDescriptor &desc, ConfigField field, std::uint64_t raw) {
   switch (field) {
-  case ConfigField::base_addr:    return store_if(desc.base_addr, raw, any_value);
+  case ConfigField::base_addr:    return store_u48(desc.base_addr, raw);
   case ConfigField::stride_bytes: return store_if(desc.stride_bytes, raw, fits_i32);
   case ConfigField::flags:
     return store_if(desc.flags, raw, below(to_raw(VectorIncMode::count)));
