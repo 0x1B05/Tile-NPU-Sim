@@ -105,10 +105,6 @@ TEST_CASE(er4_decode_rejects_reserved) {
       DecodeCase{"funct3 111", make_er4(NpuDomain::vec32, 7, 0, 0, 0, 0)},
       // sel3 bit 0 must be 0.
       DecodeCase{"sel3 bit0", make_er4(NpuDomain::acc, 0, 0, 0, 0, 0) | (1u << 25)},
-      // Register numbers are bounded per domain.
-      DecodeCase{"tselect t16", make_er4(NpuDomain::tile, 0, 16, 0, 0, 0)},
-      DecodeCase{"aselect a12 arg", make_er4(NpuDomain::acc, 0, 0, 12, 0, 0)},
-      DecodeCase{"afmadd a12 src2", make_er4(NpuDomain::acc, 1, 0, 0, 0, 12)},
   };
   expect_illegal(cases);
 }

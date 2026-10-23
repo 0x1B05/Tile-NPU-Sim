@@ -65,11 +65,11 @@ TEST_CASE(reduce_decode) {
                  .op = ReduceOp::absmax,
                  .src_domain = NpuDomain::acc,
                  .src = 3},
-      ReduceCase{.name = "areduce.rows.argmax v31, a11",
-                 .word = make_areduce(4, 31, 11),
+      ReduceCase{.name = "areduce.rows.argmax v31, a31",
+                 .word = make_areduce(4, 31, 31),
                  .op = ReduceOp::argmax,
                  .src_domain = NpuDomain::acc,
-                 .src = 11},
+                 .src = 31},
   };
   check_areduce_cases(areduce_cases);
 
@@ -124,8 +124,6 @@ TEST_CASE(reduce_decode_rejects_reserved) {
       DecodeCase{"areduce reserved10", make_areduce(0, 0, 0) | (1u << 12)},
       DecodeCase{"vreduce reserved10", make_vreduce(0, 0, 0) | (1u << 12)},
       DecodeCase{"argmax reserved5", make_vreduce_argmax(0, 0, 0) | (1u << 17)},
-      // Register numbers are bounded per domain.
-      DecodeCase{"areduce a12", make_areduce(0, 0, 12)},
   };
   expect_illegal(cases);
 }

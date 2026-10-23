@@ -67,13 +67,13 @@ TEST_CASE(ebcast_decode) {
            .src1 = 1,
            .vec = 2,
            .by_col = false},
-      Case{.name = "amulv.bycol a11, a10, v31",
-           .word = make_ebcast(true, true, 2, 11, 10, 31),
+      Case{.name = "amulv.bycol a31, a30, v31",
+           .word = make_ebcast(true, true, 2, 31, 30, 31),
            .op = EbinOp::mul,
            .matrix_domain = NpuDomain::acc,
            .vector_domain = NpuDomain::vec32,
-           .dest = 11,
-           .src1 = 10,
+           .dest = 31,
+           .src1 = 30,
            .vec = 31,
            .by_col = true},
       Case{.name = "ashlv.byrow a3, a4, v5",
@@ -100,8 +100,6 @@ TEST_CASE(ebcast_decode_rejects_reserved) {
       DecodeCase{"funct4 0110", make_ebcast(true, false, 6, 0, 0, 0)},
       DecodeCase{"funct4 1111", make_ebcast(true, false, 15, 0, 0, 0)},
       DecodeCase{"reserved funct4 0011", make_ebcast(true, true, 3, 0, 0, 0)},
-      // Matrix register numbers are bounded; the vector side takes all 32.
-      DecodeCase{"amulv a12", make_ebcast(true, false, 2, 0, 12, 0)},
   };
   expect_illegal(cases);
 }

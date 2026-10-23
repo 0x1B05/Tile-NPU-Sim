@@ -66,6 +66,13 @@ TEST_CASE(cvt_decode) {
            .dest = 11,
            .src_domain = NpuDomain::tile,
            .src = 15},
+      Case{.name = "twiden.i8.i32 a31, t31",
+           .word = make_cvt(NpuDomain::acc, 1, 31, 31),
+           .op = CvtOp::widen,
+           .dest_domain = NpuDomain::acc,
+           .dest = 31,
+           .src_domain = NpuDomain::tile,
+           .src = 31},
   };
   check_cases(cases);
 }
@@ -82,9 +89,6 @@ TEST_CASE(cvt_decode_rejects_reserved) {
       // reserved10 and bit 25 must be 0.
       DecodeCase{"reserved10", make_cvt(NpuDomain::acc, 0, 0, 0) | (1u << 12)},
       DecodeCase{"sel3 bit0", make_cvt(NpuDomain::acc, 0, 0, 0) | (1u << 25)},
-      // Register numbers are bounded per domain.
-      DecodeCase{"acvt a12", make_cvt(NpuDomain::acc, 0, 12, 0)},
-      DecodeCase{"twiden t16", make_cvt(NpuDomain::acc, 1, 0, 16)},
   };
   expect_illegal(cases);
 }

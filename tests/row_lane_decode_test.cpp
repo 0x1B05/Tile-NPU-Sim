@@ -105,11 +105,11 @@ TEST_CASE(row_move_decode) {
               .vector = 2,
               .index = 7,
               .index_is_scalar = true},
-      RowCase{.name = "ainsert.row a11[0], v0",
-              .word = make_row_move(true, false, 0, 0, 0, 11),
+      RowCase{.name = "ainsert.row a31[0], v0",
+              .word = make_row_move(true, false, 0, 0, 0, 31),
               .op = RowOp::insert,
               .matrix_domain = NpuDomain::acc,
-              .matrix = 11,
+              .matrix = 31,
               .vector_domain = NpuDomain::vec32,
               .vector = 0,
               .index = 0},
@@ -177,9 +177,6 @@ TEST_CASE(row_lane_decode_rejects_reserved) {
       // ROW_MOVE has only funct3 000/001; LANE_MOVE stops at 010.
       DecodeCase{"row funct3 010", make_row_move(false, false, 2, 0, 0, 0)},
       DecodeCase{"lane funct3 011", make_lane_move(false, false, 3, 0, 0, 0)},
-      // Matrix register numbers are bounded per domain.
-      DecodeCase{"tinsert.row t16[0], b0", make_row_move(false, false, 0, 0, 0, 16)},
-      DecodeCase{"aextract.row v0, a12[0]", make_row_move(true, false, 1, 0, 12, 0)},
   };
   expect_illegal(cases);
 }

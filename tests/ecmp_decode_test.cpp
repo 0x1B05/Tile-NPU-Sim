@@ -67,13 +67,13 @@ TEST_CASE(ecmp_decode) {
            .src1 = 0,
            .src2 = 1,
            .scalar_src2 = false},
-      Case{.name = "acmp.ne a0, a3, a11",
-           .word = make_ecmp(NpuDomain::acc, false, 1, 0, 3, 11),
+      Case{.name = "acmp.ne a0, a3, a31",
+           .word = make_ecmp(NpuDomain::acc, false, 1, 0, 3, 31),
            .op = CmpOp::ne,
            .domain = NpuDomain::acc,
            .mask = 0,
            .src1 = 3,
-           .src2 = 11,
+           .src2 = 31,
            .scalar_src2 = false},
       Case{.name = "acmp.lt a1, a2, a3",
            .word = make_ecmp(NpuDomain::acc, false, 2, 1, 2, 3),
@@ -146,10 +146,6 @@ TEST_CASE(ecmp_decode_rejects_reserved) {
       DecodeCase{"funct3 111", make_ecmp(NpuDomain::vec32, false, 7, 0, 0, 0)},
       // reserved5 must be 0.
       DecodeCase{"reserved5", make_ecmp(NpuDomain::acc, false, 0, 0, 0, 0) | (1u << 17)},
-      // Acc register numbers are bounded at 12; Vec32 takes all 32.
-      DecodeCase{"acmp a12 mask", make_ecmp(NpuDomain::acc, false, 0, 12, 0, 0)},
-      DecodeCase{"acmp a12 src1", make_ecmp(NpuDomain::acc, false, 0, 0, 12, 0)},
-      DecodeCase{"acmp a12 src2", make_ecmp(NpuDomain::acc, false, 0, 0, 0, 12)},
   };
   expect_illegal(cases);
 }

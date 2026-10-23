@@ -129,9 +129,9 @@ TEST_CASE(cfg_decode_seti) {
            ConfigField::rows, 32767},
       Case{"seti vm31 flags (vector side)", cfg_i(0x6, 3, 2, 1, 31), Case::Kind::seti,
            ConfigRegType::vm, 31, 0, ConfigField::flags, 1},
-      Case{"seti tc15 (last tile)", cfg_i(0x5, 0, 0, 1, 15), Case::Kind::seti, ConfigRegType::tc,
-           15, 0, ConfigField::dtype, 1},
-      Case{"seti ac11 (last acc)", cfg_i(0x5, 1, 0, 1, 11), Case::Kind::seti, ConfigRegType::ac, 11,
+      Case{"seti tc31 (last tile)", cfg_i(0x5, 0, 0, 1, 31), Case::Kind::seti, ConfigRegType::tc,
+           31, 0, ConfigField::dtype, 1},
+      Case{"seti ac31 (last acc)", cfg_i(0x5, 1, 0, 1, 31), Case::Kind::seti, ConfigRegType::ac, 31,
            0, ConfigField::dtype, 1},
   };
   check_cases(cases);
@@ -154,8 +154,8 @@ TEST_CASE(cfg_decode_reg) {
       // N5 is the last destination offset for the writes.
       Case{"cfg.setx vm0, flags, x6, N=2", cfg_reg(3, 1, 0, 2, 6, 0) | (2u << 12), Case::Kind::setx,
            ConfigRegType::vm, 0, 6, ConfigField::flags, 0, 2},
-      Case{"cfg.copy tm1, tm0, N=14", cfg_reg(2, 0, 1, 0, 0, 1) | (14u << 12), Case::Kind::copy,
-           ConfigRegType::tm, 1, 0, std::nullopt, 0, 14},
+      Case{"cfg.copy tm0, tm1, N=31", cfg_reg(2, 0, 1, 0, 1, 0) | (31u << 12), Case::Kind::copy,
+           ConfigRegType::tm, 0, 1, std::nullopt, 0, 31},
       Case{"cfg.setw tc2, x4, N=2", cfg_reg(0, 0, 3, 0, 4, 2) | (2u << 12), Case::Kind::setw,
            ConfigRegType::tc, 2, 4, std::nullopt, 0, 2},
       Case{"cfg.getw x5, vc0", cfg_reg(1, 1, 4, 0, 0, 5), Case::Kind::getw, ConfigRegType::vc, 5, 0,
@@ -225,30 +225,22 @@ TEST_CASE(cfg_decode_field_codes_by_register_type) {
 
 TEST_CASE(cfg_decode_rejects_reserved) {
   const std::array cases{
-      DecodeCase{"seti tc16 out of range", cfg_i(0x5, 0, 0, 0, 16)},
-      DecodeCase{"seti ac12 out of range", cfg_i(0x5, 1, 0, 0, 12)},
-      DecodeCase{"seti am12 out of range", cfg_i(0x5, 3, 0, 0, 12)},
       DecodeCase{"setx field5 high bits set", cfg_reg(0, 0, 0, 8, 4, 0)},
       DecodeCase{"copy field5 nonzero", cfg_reg(0, 0, 1, 1, 3, 7)},
       // N5 is a destination offset for writes and must be 0 for reads.
       DecodeCase{"get N5 nonzero", cfg_reg(0, 0, 2, 0, 0, 5) | (1u << 12)},
-      DecodeCase{"setx tc15 + 2", cfg_reg(0, 0, 0, 1, 4, 15) | (1u << 12)},
+      DecodeCase{"setx tc31 + 2", cfg_reg(0, 0, 0, 1, 4, 31) | (1u << 12)},
       DecodeCase{"copy vc31 + 2", cfg_reg(1, 1, 1, 0, 0, 31) | (1u << 12)},
-      DecodeCase{"copy am0 + 12", cfg_reg(3, 0, 1, 0, 0, 0) | (11u << 12) | (1u << 2)},
+      DecodeCase{"copy am31 + 2", cfg_reg(3, 0, 1, 0, 0, 31) | (1u << 12)},
       DecodeCase{"funct3 = 101 reserved", cfg_reg(0, 0, 5, 0, 0, 0)},
       DecodeCase{"funct3 = 111 reserved", cfg_reg(0, 0, 7, 0, 0, 0)},
       // setw/getw: compute configs only, field5 zero, span within the type.
       DecodeCase{"setw on tm", cfg_reg(2, 0, 3, 0, 4, 0)},
       DecodeCase{"getw on vm", cfg_reg(3, 1, 4, 0, 0, 5)},
       DecodeCase{"setw field5 nonzero", cfg_reg(0, 0, 3, 1, 4, 0)},
-      DecodeCase{"setw tc15 + 2", cfg_reg(0, 0, 3, 0, 4, 15) | (1u << 12)},
-      DecodeCase{"setw ac0 + 12", cfg_reg(1, 0, 3, 0, 4, 0) | (12u << 12)},
+      DecodeCase{"setw tc31 + 2", cfg_reg(0, 0, 3, 0, 4, 31) | (1u << 12)},
+      DecodeCase{"setw ac31 + 2", cfg_reg(1, 0, 3, 0, 4, 31) | (1u << 12)},
       DecodeCase{"getw N5 nonzero", cfg_reg(0, 0, 4, 0, 0, 5) | (1u << 12)},
-      DecodeCase{"getw tc16", cfg_reg(0, 0, 4, 0, 16, 5)},
-      DecodeCase{"setx tm16 out of range", cfg_reg(2, 0, 0, 0, 4, 16)},
-      DecodeCase{"copy tc16 dest out of range", cfg_reg(0, 0, 1, 0, 0, 16)},
-      DecodeCase{"copy tc16 src out of range", cfg_reg(0, 0, 1, 0, 16, 0)},
-      DecodeCase{"get ac12 out of range", cfg_reg(1, 0, 2, 0, 12, 5)},
       // Reserved major4 encodings report illegal.
       DecodeCase{"reserved major4 1010", (0xau << 28) | 0x2u},
   };

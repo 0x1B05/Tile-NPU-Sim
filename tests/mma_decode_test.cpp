@@ -97,6 +97,12 @@ TEST_CASE(bdot_decode) {
                .dest = 13,
                .src_a = 14,
                .src_b = 15},
+      BdotCase{.name = "bdot.nn.i8.i32 v0, b1, t31",
+               .word = make_mma(4, 0, 1, 31),
+               .op = BdotOp::nn_zero,
+               .dest = 0,
+               .src_a = 1,
+               .src_b = 31},
       BdotCase{.name = "bdot.nt.i8.i32 v16, b17, t15",
                .word = make_mma(6, 16, 17, 15),
                .op = BdotOp::nt_zero,
@@ -121,18 +127,14 @@ TEST_CASE(bdot_decode) {
 
 TEST_CASE(mma_decode_rejects_reserved) {
   constexpr std::array cases{
-      DecodeCase{"bdot.acc tB16", make_mma(5, 0, 0, 16)},
+      // bdot.acc uses a Tile right operand; with 32 Tile registers tB16 is
+      // legal, so the remaining checks cover unassigned/reserved fields.
       // mma has no nt form.
       DecodeCase{"funct3 010", make_mma(2, 0, 0, 0)},
       DecodeCase{"funct3 011", make_mma(3, 0, 0, 0)},
       // reserved3/reserved5 must be 0.
       DecodeCase{"reserved3", 0x02003106u},
       DecodeCase{"reserved5", 0x00023106u},
-      // Register numbers are bounded per domain (the vector domains fill
-      // their 5-bit field, so no out-of-range encoding exists for them).
-      DecodeCase{"mma a12", make_mma(0, 12, 0, 0)},
-      DecodeCase{"mma tA16", make_mma(0, 0, 16, 0)},
-      DecodeCase{"mma tB16", make_mma(0, 0, 0, 16)},
   };
   expect_illegal(cases);
 }
