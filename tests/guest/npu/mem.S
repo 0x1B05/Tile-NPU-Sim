@@ -50,6 +50,7 @@ _start:
     lla       x3, dstbuf
     CFG_REG   2, 0, 0, 0, 3, 0
     TSTORE    0
+    FENCE_MEM
     lw        x4, 0(x3)
     li        x5, 0x04030201  # bytes {1, 2, 3, 4}
     li        a0, 1
@@ -64,6 +65,7 @@ _start:
     lla       x3, dstbuf
     CFG_REG   2, 0, 0, 0, 3, 0
     TSTORE    0
+    FENCE_MEM
     lw        x4, 0(x3)
     li        x5, 0x04020301  # bytes {1, 3, 2, 4}
     li        a0, 2
@@ -87,6 +89,7 @@ _start:
     TCOPY     0, 2
     TSTORE    0
     lla       x3, dstbuf
+    FENCE_MEM
     lw        x4, 0(x3)
     li        x5, 0x281e140a  # bytes {10, 20, 30, 40}
     li        a0, 4
@@ -99,6 +102,7 @@ _start:
     lla       x3, gthdst
     CFG_REG   2, 0, 0, 0, 3, 2
     TSTORE    2
+    FENCE_MEM
     lw        x4, 0(x3)
     li        x5, 0x140a281e  # bytes {30, 40, 10, 20}
     li        a0, 5
@@ -118,6 +122,7 @@ _start:
     CFG_SETI  5, 2, 1, 2, 2
     CFG_SETI  5, 2, 2, 1, 2
     TSTORE    2
+    FENCE_MEM
     lw        x4, 0(x3)
     li        x5, 0x0a141e28  # bytes {40, 30, 20, 10}
     li        a0, 6

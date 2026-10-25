@@ -113,6 +113,15 @@
 .macro VMULX d5, a5, xs
     E_BIN 7, 2, \d5, \a5, \xs
 .endm
+.macro VOR d5, a5, b5
+    E_BIN 6, 9, \d5, \a5, \b5
+.endm
+.macro VXOR d5, a5, b5
+    E_BIN 6, 10, \d5, \a5, \b5
+.endm
+.macro VAND d5, a5, b5
+    E_BIN 6, 8, \d5, \a5, \b5
+.endm
 
 # M_BLK block and gather forms (R2 format), mirroring NpuR2 in
 # src/decode/encoding.h:
@@ -389,6 +398,10 @@
     E_UNARY 3, 1, \d5, \s5
 .endm
 
+.macro VNOT d5, s5
+    E_UNARY 3, 0, \d5, \s5
+.endm
+
 # E_CMP (R4), mirroring NpuR4 in src/decode/encoding.h:
 #   [31:28] major4 = 2  [27:26] dom2  [25] BX  [24:22] funct3 (cond)
 #   [21:17] reserved(0)  [16:12] B5/xS  [11:7] A5  [6:2] M5  [1:0] q = 00
@@ -451,6 +464,11 @@
     E_R4 0, 0, \m5, \d5, \a5, \b5
 .endm
 
+# select on the Vec32 domain: asm operand order D, M, A, B.
+.macro VSELECT d5, m5, a5, b5
+    E_R4 3, 0, \m5, \d5, \a5, \b5
+.endm
+
 # fmadd: asm operand order D, A, B, C; M5/C5 carries C.
 .macro VFMADD d5, a5, b5, c5
     E_R4 3, 1, \c5, \d5, \a5, \b5
@@ -504,15 +522,15 @@
     .word ((1 << 28) | (\funct3 << 22) | (\as << 7) | (\vd << 2) | 2)
 .endm
 
-# VREDUCE (R2): major4 = 2, D5 = xD; same layout otherwise.
-.macro VREDUCE funct3, xd, vs
-    .word ((2 << 28) | (\funct3 << 22) | (\vs << 7) | (\xd << 2) | 2)
+# VREDUCE (R2): major4 = 2, D5 = vD, S5 = vS; same layout as AREDUCE.
+.macro VREDUCE funct3, vd, vs
+    .word ((2 << 28) | (\funct3 << 22) | (\vs << 7) | (\vd << 2) | 2)
 .endm
 
-# vreduce.argmax (R4 two-destination variant): xVal5 in the src2 slot,
-# reserved3/reserved5 = 0, D5 = xIndex.
-.macro VREDUCE_ARGMAX xi, xv, vs
-    .word ((2 << 28) | (4 << 22) | (\xv << 12) | (\vs << 7) | (\xi << 2) | 2)
+# vreduce.argmax (R4 two-destination variant): vVal5 in the src2 slot,
+# reserved3/reserved5 = 0, D5 = vIdx.
+.macro VREDUCE_ARGMAX vidx, vval, vs
+    .word ((2 << 28) | (4 << 22) | (\vval << 12) | (\vs << 7) | (\vidx << 2) | 2)
 .endm
 
 # QNT (R4), mirroring NpuR4 in src/decode/encoding.h:

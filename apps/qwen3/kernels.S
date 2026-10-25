@@ -21,6 +21,17 @@ qwen3_debug_qtile: .skip 8
     .text
 
 # ---------------------------------------------------------------------------
+# void qwen3_fence_mem(void)
+#
+# C-callable fence.mem: scalar readers of NPU-stored memory (cache_append,
+# probe_record) call this before their loads.
+# ---------------------------------------------------------------------------
+    .globl qwen3_fence_mem
+qwen3_fence_mem:
+    FENCE_MEM
+    ret
+
+# ---------------------------------------------------------------------------
 # uint32_t qwen3_quant_act(const float *x, uint32_t k)
 #
 # Quantizes x (f32[k], zero-padded by the caller to ceil(k/1024)*1024) with a
@@ -34,6 +45,8 @@ qwen3_debug_qtile: .skip 8
 qwen3_quant_act:
     LI_CWV  t6, DT_F32, 32
     SETW    SEL_VC, 1, 0, X_T6, 2
+    LI_CWV  t6, DT_F32, 1
+    SETW    SEL_VC, 1, 30, X_T6     # vc30: len-1 store of the activation scale
 
     # activation absmax over the padded panels (v0 max, v1 chunk)
     SETX    SEL_VM, 1, CF_BASE, 1, X_A0
@@ -49,14 +62,21 @@ qwen3_quant_act:
     VMAX    0, 0, 1
     addi    t6, t6, -1
     bnez    t6, .Lqa_amax
-    VREDUCE 1, X_T0, 0          # t0 = absmax f32 bits
-
-    # v2 = broadcast(absmax) * (1/127)
-    VINSERT 2, 0, X_T0
-    VBROADCAST 2, 2, 0
+    # v2 = absmax * (1/127): the uniform scale reduces into the len-1
+    # scratch v30, broadcasts back as tquantx's external scale, and leaves
+    # the vector domain through a one-lane store.
+    VREDUCE 1, 30, 0            # v30[0] = absmax
     li      t1, 0x3C010204      # f32 bits of 1/127
-    VMULX   2, 2, X_T1
-    VEXTRACT X_T2, 2, 0         # t2 = x_scale bits
+    VMULX   30, 30, X_T1        # v30[0] = scale
+    VBROADCAST 2, 30, 0         # v2 = scale in every lane
+    addi    sp, sp, -16
+    SETX    SEL_VM, 1, CF_BASE, 30, X_SP
+    SETIV   SEL_VM, CF_STRIDE, 4, 30
+    SETIV   SEL_VM, CF_VFLAGS, 0, 30
+    VSTORE  30
+    FENCE_MEM                   # the len-1 store must be visible to the lw
+    lw      t2, 0(sp)           # x_scale bits reach scalars only via memory
+    addi    sp, sp, 16
 
     # quantize the panels into t2..t4 (32x32 i8)
     LI_CWM  t3, DT_F32, 32, 32
@@ -238,6 +258,7 @@ qwen3_matvec_q:
     ld      s5, 24(sp)
     ld      s6, 32(sp)
     addi    sp, sp, 48
+    FENCE_MEM                   # out (incl. k_buf/v_buf) is read by scalar code
     ret
 
 # ---------------------------------------------------------------------------
@@ -391,6 +412,7 @@ qwen3_matmul_q:
     ld      s5, 24(sp)
     ld      s6, 32(sp)
     addi    sp, sp, 48
+    FENCE_MEM                   # out (incl. k_buf/v_buf) is read by scalar code
     ret
 
 # ---------------------------------------------------------------------------
@@ -412,9 +434,7 @@ qwen3_rmsnorm:
     VFMADD  0, 1, 1, 0
     addi    t6, t6, -1
     bnez    t6, .Lrn_sum
-    VREDUCE 0, X_T0, 0
-    VINSERT 2, 0, X_T0
-    VBROADCAST 2, 2, 0
+    VREDUCE 0, 2, 0                       # v2 = sumsq broadcast
     VMULX   2, 2, X_A5                    # mean = sum * (1/n)
     VADDX   2, 2, X_A4                    # + eps
     VRSQRT  2, 2
@@ -551,6 +571,11 @@ qwen3_scores:
     # K chunk stream vm12: base per key, auto-inc within the key
     SETIV   SEL_VM, CF_STRIDE, 4, 12
     SETIV   SEL_VM, CF_VFLAGS, 1, 12
+    # one-lane score store: vc17/vm17 are fixed except the base per key
+    LI_CWV  t5, DT_F32, 1
+    SETW    SEL_VC, 1, 17, X_T5
+    SETIV   SEL_VM, CF_STRIDE, 4, 17
+    SETIV   SEL_VM, CF_VFLAGS, 0, 17
     VLOAD   8
     li      t5, 1
     beq     t6, t5, .Lsc_qdone
@@ -583,10 +608,11 @@ qwen3_scores:
     VLOAD   12
     VFMADD  16, 12, 11, 16
 .Lsc_dot:
-    VREDUCE 0, X_T0, 16
+    VREDUCE 0, 17, 16                   # v17[0] = dot (len-1 scratch)
     slli    t1, t4, 2
     add     t1, a3, t1
-    sw      t0, 0(t1)
+    SETX    SEL_VM, 1, CF_BASE, 17, X_T1
+    VSTORE  17                          # one-lane score store
     addi    t4, t4, 1
     bltu    t4, a4, .Lsc_key
     ret
@@ -601,6 +627,8 @@ qwen3_scores:
 qwen3_softmax_exp:
     LI_CWV  t6, DT_F32, 32
     SETW    SEL_VC, 1, 0, X_T6, 4
+    LI_CWV  t6, DT_F32, 1
+    SETW    SEL_VC, 1, 4, X_T6     # vc4: len-1 store of the rcp result
     SETIV   SEL_VM, CF_STRIDE, 4, 1
     SETIV   SEL_VM, CF_VFLAGS, 1, 1
     SETIV   SEL_VM, CF_STRIDE, 4, 3
@@ -614,14 +642,14 @@ qwen3_softmax_exp:
     VMAX    0, 0, 1
     addi    t6, t6, -1
     bnez    t6, .Lsm_max
-    VREDUCE 1, X_T0, 0                    # t0 = max f32 bits
+    VREDUCE 1, 0, 0                       # v0 = max f32 bits in every lane
     VFILL   2, 0
     SETX    SEL_VM, 1, CF_BASE, 1, X_A0   # rewind load
     SETX    SEL_VM, 1, CF_BASE, 3, X_A0   # store stream
     srli    t6, a1, 5
 .Lsm_exp:
     VLOAD   1
-    VSUBX   1, 1, X_T0
+    VSUB    1, 1, 0
     VMULX   1, 1, X_A2
     VEXP2   1, 1
     VADD    2, 2, 1
@@ -629,12 +657,13 @@ qwen3_softmax_exp:
     VSTORE  3
     addi    t6, t6, -1
     bnez    t6, .Lsm_exp
-    VREDUCE 0, X_T1, 2
-    VINSERT 4, 0, X_T1
-    VBROADCAST 4, 4, 0
+    VREDUCE 0, 4, 2                       # v4 = sum in every lane
     VRCP    4, 4
-    VEXTRACT X_T2, 4, 0
-    sw      t2, 0(a3)
+    SETX    SEL_VM, 1, CF_BASE, 4, X_A3
+    SETIV   SEL_VM, CF_STRIDE, 4, 4
+    SETIV   SEL_VM, CF_VFLAGS, 0, 4
+    VSTORE  4                             # *rcp_out = rcp(sum)
+    FENCE_MEM                   # scores and rcp are read by scalar code
     ret
 
 # ---------------------------------------------------------------------------
@@ -814,39 +843,57 @@ qwen3_embed:
 
 # ---------------------------------------------------------------------------
 # uint32_t qwen3_argmax(const float *x, uint32_t n)   n % 32 == 0
-# Greedy index of the maximum, combining per-chunk vreduce.argmax results.
+# Greedy index of the maximum with the ISA argmax rules: NaN candidates are
+# ignored, numeric ties keep the smaller index, and an all-NaN chunk contributes
+# index 0 with a NaN value. Chunk 0 seeds the running best; later chunks fold
+# in through vcmplt plus a mask that replaces an all-NaN best with the first
+# numeric candidate. The best index reaches a0 through a one-lane vstore +
+# fence + lwu.
 # ---------------------------------------------------------------------------
     .globl qwen3_argmax
 qwen3_argmax:
     addi    sp, sp, -16
-    sd      s2, 0(sp)
-    sd      s3, 8(sp)
     LI_CWV  t6, DT_F32, 32
-    SETW    SEL_VC, 1, 0, X_T6, 1
-    LI_CWV  t6, DT_F32, 2
-    SETW    SEL_VC, 1, 2, X_T6
+    SETW    SEL_VC, 1, 0, X_T6, 1   # vc0/vc1 f32: best value, chunk
+    LI_CWV  t6, DT_U32, 32
+    SETW    SEL_VC, 1, 2, X_T6, 1   # vc2/vc3 u32: best index, candidate index
+    LI_CWV  t6, DT_F32, 32
+    SETW    SEL_VC, 1, 4, X_T6      # vc4 f32: candidate value
+    LI_CWV  t6, DT_U32, 32
+    SETW    SEL_VC, 1, 5, X_T6, 2   # vc5..vc7 u32: compare/NaN masks
     SETX    SEL_VM, 1, CF_BASE, 1, X_A0
     SETIV   SEL_VM, CF_STRIDE, 4, 1
     SETIV   SEL_VM, CF_VFLAGS, 1, 1
-    li      s2, 0xFF800000                # best value bits (-inf)
-    li      s3, 0                         # best index
-    li      t4, 0                         # chunk base
+    li      t4, 32                        # next chunk base
     srli    t6, a1, 5
+    VLOAD   1
+    VREDUCE_ARGMAX 2, 0, 1                # best = chunk 0 (index 0 if all NaN)
+    addi    t6, t6, -1
+    beqz    t6, .Lam_done
 .Lam_loop:
     VLOAD   1
-    VREDUCE_ARGMAX X_T0, X_T1, 1
-    VINSERT 2, 0, X_S2
-    VINSERT 2, 1, X_T1
-    VREDUCE_ARGMAX X_T3, X_T5, 2
-    beqz    t3, .Lam_keep
-    mv      s2, t1
-    add     s3, t4, t0
-.Lam_keep:
+    VREDUCE_ARGMAX 3, 4, 1                # v3 = chunk argmax (u32), v4 = value
+    VADDX   3, 3, X_T4                    # global candidate index
+    VCMPLT    5, 0, 4                     # numeric: best < candidate
+    VCMPUNORD 6, 0, 0                     # best is NaN (all-NaN chunk)
+    VCMPUNORD 7, 4, 4                     # candidate is NaN
+    VNOT      7, 7                        # candidate is numeric
+    VAND      6, 6, 7                     # replace an all-NaN best
+    VOR       5, 5, 6                     # greater numeric, or first numeric after NaN
+    VSELECT   0, 5, 4, 0
+    VSELECT   2, 5, 3, 2
     addi    t4, t4, 32
     addi    t6, t6, -1
     bnez    t6, .Lam_loop
-    mv      a0, s3
-    ld      s2, 0(sp)
-    ld      s3, 8(sp)
+.Lam_done:
+    LI_CWV  t6, DT_U32, 1
+    SETW    SEL_VC, 1, 5, X_T6      # vc5: len-1 exit store
+    SETX    SEL_VM, 1, CF_BASE, 5, X_SP
+    SETIV   SEL_VM, CF_STRIDE, 4, 5
+    SETIV   SEL_VM, CF_VFLAGS, 0, 5
+    VBROADCAST 5, 2, 0
+    VSTORE  5
+    FENCE_MEM                   # the index store must be visible to the lwu
+    lwu     a0, 0(sp)
     addi    sp, sp, 16
     ret

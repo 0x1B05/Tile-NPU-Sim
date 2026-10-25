@@ -7,6 +7,7 @@
 static char qtile_dump[1024];
 
 void probe_record(const char *name, int index, const char *kind, const uint32_t *words, int n) {
+  qwen3_fence_mem(); // the words may come from NPU stores
   printf("PROBE %s", name);
   if (index >= 0) printf(" %d", index);
   printf(" %s %d", kind, n);

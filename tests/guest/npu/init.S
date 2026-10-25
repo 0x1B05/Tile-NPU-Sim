@@ -34,6 +34,7 @@ _start:
     TFILL     0, -3
     TSTORE    0
     lla       x3, dstbuf
+    FENCE_MEM
     lwu       x4, 0(x3)
     li        x5, 0xFDFDFDFD
     li        a0, 1
@@ -48,6 +49,7 @@ _start:
     TCOPY     0, 1
     TSTORE    0
     lla       x3, dstbuf
+    FENCE_MEM
     lwu       x4, 0(x3)
     li        x5, 0x7F7F7F7F
     li        a0, 2
@@ -64,6 +66,7 @@ _start:
     CFG_SETI  5, 3, 1, 8, 0      # am0 row_stride = 8
     CFG_SETI  5, 3, 2, 4, 0      # am0 col_stride = 4
     ASTORE    0
+    FENCE_MEM
     lwu       x4, 0(x3)
     li        a0, 3
     bne       x4, x6, fail
@@ -76,6 +79,7 @@ _start:
     CFG_REG   2, 1, 0, 0, 3, 0   # bm0 base = dstbuf3
     CFG_SETI  6, 2, 1, 1, 0      # bm0 stride = 1
     BSTORE    0
+    FENCE_MEM
     lwu       x4, 0(x3)
     li        x5, 0x5A5A5A5A
     li        a0, 4

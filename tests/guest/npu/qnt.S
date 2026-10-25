@@ -67,6 +67,7 @@ _start:
     CFG_REG   3, 1, 0, 0, 3, 0
     VSTORE    0
     lla       x3, dstbuf
+    FENCE_MEM
     lwu       x4, 0(x3)
     li        x5, 0x0000C07F     # bytes {0x7F, 0xC0, 0, 0}
     li        a0, 1
@@ -88,6 +89,7 @@ _start:
     lla       x4, exp_tdq
     li        x6, 4
     li        a0, 2
+    FENCE_MEM
 1:  lwu       x5, 0(x3)
     lwu       x7, 0(x4)
     subw      x5, x5, x7
@@ -115,6 +117,7 @@ _start:
     li        a0, 3
     bne       x4, x5, fail
     lla       x3, dstbuf5
+    FENCE_MEM
     lwu       x4, 0(x3)
     li        x5, 0x3F800000     # 1.0
     bne       x4, x5, fail
@@ -134,6 +137,7 @@ _start:
     TSTORE    0
     VSTORE    3
     lla       x3, dstbuf
+    FENCE_MEM
     lwu       x4, 0(x3)
     li        x5, 0x0000E040     # bytes {64, -32, 0, 0}
     bne       x4, x5, fail

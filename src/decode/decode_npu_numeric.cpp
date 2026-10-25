@@ -59,26 +59,27 @@ DecodeResult decode_areduce(std::uint32_t word) {
 // VREDUCE sum/max/min/sumsq (R2): major4 = 0010, q = 10.
 // 31    28 27       25 24    22 21                12 11       7 6        2 1   0
 // [major4] [reserved3] [funct3] [    reserved10    ] [   S5   ] [   D5   ] [ q ]
-// funct3: 000 sum, 001 max, 010 min, 011 sumsq. S5 is Vec32; D5 is Scalar.
+// funct3: 000 sum, 001 max, 010 min, 011 sumsq. S5 is Vec32; D5 is Vec32.
 // funct3 = 100 uses the argmax layout below; 101..111 are reserved.
 DecodeResult decode_vreduce(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   return DecodedNpuInstr{VreduceInstr{
       .op = static_cast<ReduceOp>(f.funct3),
-      .dest = {.index = f.dest},
+      .dest = {.domain = NpuDomain::vec32, .index = f.dest},
       .src = {.domain = NpuDomain::vec32, .index = f.src2},
   }};
 }
 
 // VREDUCE argmax (R4): major4 = 0010, q = 10.
 // 31    28 27       25 24    22 21       17 16      12 11       7 6        2 1   0
-// [major4] [reserved3] [funct3] [reserved5] [ xVal5  ] [   S5   ] [   D5   ] [ q ]
-// funct3 = 100. S5 is Vec32; D5/xVal5 are the Scalar xIndex/xValue destinations.
+// [major4] [reserved3] [funct3] [reserved5] [ vVal5  ] [   S5   ] [   D5   ] [ q ]
+// funct3 = 100. S5 is the Vec32 source; D5/vVal5 are the Vec32 vIdx/vVal
+// destinations.
 DecodeResult decode_vreduce_argmax(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   return DecodedNpuInstr{VreduceArgmaxInstr{
-      .index_dest = {.index = f.dest},
-      .value_dest = {.index = f.src2},
+      .index_dest = {.domain = NpuDomain::vec32, .index = f.dest},
+      .value_dest = {.domain = NpuDomain::vec32, .index = f.src2},
       .src = {.domain = NpuDomain::vec32, .index = f.src1},
   }};
 }
