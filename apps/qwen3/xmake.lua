@@ -117,14 +117,24 @@ if has_config("qwen3test") then
 			os.mkdir(app_bindir)
 			local convert = path.join(scripts_dir, "convert.py")
 			local blob = path.join(app_bindir, "tiny.q3b")
+			local prompt = path.join(app_bindir, "tiny_prompt.bin")
 			local ref = path.join(app_bindir, "tiny_ref.npz")
 			depend.on_changed(function()
-				os.vrunv(target:data("python"), { convert, "tiny", "--out", blob, "--ref", ref })
+				os.vrunv(target:data("python"), {
+					convert,
+					"tiny",
+					"--out",
+					blob,
+					"--prompt-out",
+					prompt,
+					"--ref",
+					ref,
+				})
 			end, {
 				dependfile = target:dependfile("tiny"),
 				files = os.files(path.join(scripts_dir, "*.py")),
 				changed = target:is_rebuilt(),
-				lastmtime = math.min(os.mtime(blob), os.mtime(ref)),
+				lastmtime = math.min(os.mtime(blob), os.mtime(prompt), os.mtime(ref)),
 				values = { target:data("python") },
 			})
 		end)
@@ -136,6 +146,7 @@ if has_config("qwen3test") then
 				sim_run,
 				path.join(app_bindir, "qwen3.bin"),
 				path.join(app_bindir, "tiny.q3b"),
+				path.join(app_bindir, "tiny_prompt.bin"),
 				path.join(app_bindir, "tiny_ref.npz"),
 			}, { try = true }) == 0
 		end)

@@ -5,10 +5,10 @@
 #include <stdint.h>
 
 #define BLOB_BASE 0x81000000ull
-#define Q3B_MAGIC 0x31423351u // "Q3B1" little-endian
+#define Q3B_MAGIC 0x32423351u // "Q3B2" little-endian
 
 struct q3b_header {
-  uint32_t magic; // "Q3B1"
+  uint32_t magic; // "Q3B2"
   uint32_t n_layers;
   uint32_t hidden;
   uint32_t inter;
@@ -17,9 +17,9 @@ struct q3b_header {
   uint32_t head_dim;
   uint32_t vocab;
   uint32_t max_pos;
-  uint32_t n_prompt;
   uint32_t eps_bits; // f32 rmsnorm eps
   uint32_t n_sections;
+  uint32_t reserved; // must be zero
 };
 
 struct q3b_section {

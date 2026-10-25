@@ -1,4 +1,4 @@
-"""Q3B1 blob writer and atomic output helpers."""
+"""Q3B2 blob writer and atomic output helpers."""
 
 import os
 import struct
@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-MAGIC = b"Q3B1"
+MAGIC = b"Q3B2"
 OUTPUT_MODE = 0o644
 
 
@@ -19,9 +19,8 @@ def check_output(path):
 
 
 class Blob:
-    def __init__(self, arch, n_prompt):
+    def __init__(self, arch):
         self.arch = arch  # dict of u32 arch fields
-        self.n_prompt = n_prompt
         self.sections = []  # (name, bytes)
 
     def add(self, name, data):
@@ -54,9 +53,9 @@ class Blob:
             a["head_dim"],
             a["vocab"],
             a["max_pos"],
-            self.n_prompt,
             np.frombuffer(np.float32(a["eps"]).tobytes(), "<u4")[0],
             len(self.sections),
+            0,
         )
         tmp_path = None
         try:

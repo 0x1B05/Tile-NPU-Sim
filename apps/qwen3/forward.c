@@ -131,7 +131,7 @@ static void cache_layer_sections(uint32_t layer) {
   }
 }
 
-void qwen3_init(void) {
+void qwen3_init(uint32_t n_prompt) {
   const struct q3b_header *h = q3b_header();
   model.n_layers = h->n_layers;
   model.hidden = h->hidden;
@@ -141,7 +141,7 @@ void qwen3_init(void) {
   model.head_dim = h->head_dim;
   model.vocab = h->vocab;
   model.max_pos = h->max_pos;
-  model.n_prompt = h->n_prompt;
+  model.n_prompt = n_prompt;
   model.eps_bits = h->eps_bits;
   model.q_dim = model.n_q_heads * model.head_dim;
   model.kv_dim = model.n_kv_heads * model.head_dim;

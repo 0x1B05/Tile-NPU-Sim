@@ -14,7 +14,7 @@ ordered records emitted by guest and ref.py:
   - order, duplicate records, kinds, and word counts must match;
   - generated token ids must match exactly.
 
-Usage: tiny_check.py SIM_RUN APP_BIN TINY_Q3B TINY_REF_NPZ
+Usage: tiny_check.py SIM_RUN APP_BIN TINY_Q3B TINY_PROMPT TINY_REF_NPZ
 """
 
 import math
@@ -26,9 +26,11 @@ from dataclasses import dataclass
 
 REF_PY = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ref.py")
 
-# Guest memory map (apps/qwen3/include/qwen3.h): blob at 0x81000000, KV cache and
-# stack top below 0xC0000000, so 1 GiB of RAM covers the tiny model.
+# Guest memory map (apps/qwen3/include/qwen3.h): prompt at 0x80F00000, blob at
+# 0x81000000, KV cache and stack top below 0xC0000000, so 1 GiB of RAM covers
+# the tiny model.
 MEMORY_MIB = "1024"
+PROMPT_BASE = "0x80F00000"
 BLOB_BASE = "0x81000000"
 
 FLOAT_RTOL = 1e-4
@@ -114,8 +116,15 @@ def run(cmd):
 
 
 def main():
-    sim_run, app_bin, blob, ref_npz = sys.argv[1:5]
-    guest = run([sim_run, "-m", MEMORY_MIB, app_bin, f"{blob}@{BLOB_BASE}"])
+    sim_run, app_bin, blob, prompt, ref_npz = sys.argv[1:6]
+    guest = run([
+        sim_run,
+        "-m",
+        MEMORY_MIB,
+        app_bin,
+        f"{blob}@{BLOB_BASE}",
+        f"{prompt}@{PROMPT_BASE}",
+    ])
     ref = run([sys.executable, REF_PY, ref_npz])
 
     failures = []
