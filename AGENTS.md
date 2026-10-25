@@ -58,7 +58,8 @@ xmake project -k compile_commands      # 为 clangd 生成 compile_commands.json
 | `src/main.cpp`、`src/monitor/` | CLI、镜像装载、`npu_exec` 步进循环和 sdb 命令 |
 | `tests/` | host 测试框架、译码/执行测试及 guest 源码 |
 | `apps/qwen3/`、`scripts/qwen3/` | Qwen3 guest 与权重转换、分词、NumPy 参考及对齐检查工具 |
-| `xmake/guest.lua`、`riscv_tests.lua`、`apps.lua` | guest、官方套件、Qwen3 构建与测试注册；交叉编译公共逻辑在 `xmake/modules/guestimg.lua` |
+| `xmake/guest.lua`、`riscv_tests.lua` | guest 与官方套件构建注册；交叉编译公共逻辑在 `xmake/modules/guestimg.lua` |
+| `apps/qwen3/xmake.lua` | Qwen3 app 的构建与 tiny 回归注册 |
 
 公开模型类型和 API 放在 `include/tile_npu/`；实现内部头文件按所属模块放在 `src/`。只有跨模块通用工具放入 `src/utils/`，单个文件使用的 helper 优先留在该文件的匿名命名空间。
 
@@ -99,7 +100,7 @@ xmake project -k compile_commands      # 为 clangd 生成 compile_commands.json
 - NPU 正例优先放在 `tests/guest/npu/*.S`，复用 `tests/guest/include/npu.inc` 的编码宏；`tests/npu_guest_test.cpp` 负责装载、执行与断言。复用 `run_until_stop` 的步数上限和停机诊断，或 `check_guest_image` 的自校验流程；非法编码负例放在 host 测试。
 - guest C 程序链接共享 `crt0.S`，裸 `.S` 提供自己的 `_start`，生成到构建目录的 `guest/`。标量自校验程序放在 `tests/guest/rv64im/`，按 `ebreak/a0` 约定退出。
 - 官方套件的 env 在 `tests/riscv-tests-env/`；排除项在 `xmake/riscv_tests.lua`，对应尚未建模的 Zifencei 与 trap 投递。
-- tiny Qwen3 回归以固定 seed 模型对照 NumPy 参考：整数探针与 token 精确匹配，f32 探针使用容差。配置和驱动在 `xmake/apps.lua` 与 `scripts/qwen3/tiny_check.py`。
+- tiny Qwen3 回归以固定 seed 模型对照 NumPy 参考：整数探针与 token 精确匹配，f32 探针使用容差。配置和驱动在 `apps/qwen3/xmake.lua` 与 `scripts/qwen3/tiny_check.py`。
 - 仓库内 guest 源码生成的镜像属于构建依赖；用户提供的外部镜像和下载的模型不加入构建依赖或提交。
 
 ## 代码风格与 Git

@@ -2,7 +2,8 @@
 -- <buildir>/apps/. Built explicitly (xmake build qwen3_app); running it
 -- needs a converted model blob, so it is not part of xmake test.
 
-local app_srcdir = path.join(os.projectdir(), "apps", "qwen3")
+local app_srcdir = os.scriptdir()
+local project_root = path.directory(path.directory(app_srcdir))
 local app_includedir = path.join(app_srcdir, "include")
 local buildir = get_config("buildir") or "build"
 local app_bindir = path.join(path.is_absolute(buildir) and buildir or path.join(os.projectdir(), buildir), "apps")
@@ -21,7 +22,7 @@ target("qwen3_app", function()
 		local elf = path.join(app_bindir, "qwen3.elf")
 		local bin = path.join(app_bindir, "qwen3.bin")
 		-- Shared NPU bindings live with the guest tests (see xmake/guest.lua).
-		local guest_incdir = path.join(os.projectdir(), "tests", "guest", "include")
+		local guest_incdir = path.join(project_root, "tests", "guest", "include")
 		local deps = { linkscript, path.join(guest_incdir, "npu.inc") }
 		table.join2(deps, os.files(path.join(app_includedir, "*.h")))
 		table.join2(deps, sources)
@@ -57,13 +58,28 @@ target("qwen3_app", function()
 	end)
 end)
 
+-- Generate apps/qwen3/compile_commands.json for clangd without touching the
+-- root compilation database. Run: xmake build qwen3_compile_commands
+target("qwen3_compile_commands", function()
+	set_kind("phony")
+	set_default(false)
+	on_build(function(target)
+		import("lib.detect.find_program")
+		local python = find_program("python3")
+		if not python then
+			raise("python3 is required to generate the Qwen3 compile database")
+		end
+		os.vrunv(python, { path.join(app_srcdir, "gen_compile_commands.py") })
+	end)
+end)
+
 -- Optional tiny-model alignment test (--qwen3test=y): convert.py tiny
 -- emits a fixed-seed random model, sim_run executes the guest forward on it,
 -- and scripts/qwen3/tiny_check.py compares the probe stream and generated
 -- token ids against ref.py's numpy reference. Skipped with a warning when
 -- python3 with numpy is unavailable.
 if has_config("qwen3test") then
-	local scripts_dir = path.join(os.projectdir(), "scripts", "qwen3")
+	local scripts_dir = path.join(project_root, "scripts", "qwen3")
 	target("qwen3_tiny", function()
 		set_kind("phony")
 		set_default(false)

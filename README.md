@@ -67,8 +67,7 @@ python3 scripts/qwen3/convert.py real external/qwen3 model.q3b --prompt "Hi"
 `--max-pos N` caps positions; conversion needs python3 with numpy. Run `scripts/qwen3/convert.py --help` for all options; `--verbose` reports per-tensor quantization errors and `--quiet` suppresses progress. Run the app image together with the blob, which must land at the address the guest is linked against (`BLOB_BASE` in `apps/qwen3/include/q3b.h`); the default 1 GiB RAM fits the real blob:
 
 ```sh
-./build/linux/x86_64/release/sim_run \
-    build/apps/qwen3.bin model.q3b@0x81000000
+./build/linux/x86_64/release/sim_run build/apps/qwen3.bin model.q3b@0x81000000
 ```
 
 The app prints the prompt and generated token ids over the serial console and stops after 32 new tokens or an EOS. Numerical alignment probes in `forward.c` are compiled in by default; the `QWEN3_PROBES` define at the top of the file controls them.
