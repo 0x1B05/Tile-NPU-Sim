@@ -1,6 +1,6 @@
 #pragma once
 
-// Q3B1 blob layout and lookup interface.
+// Q3B2 blob layout and lookup interface.
 
 #include <stdint.h>
 

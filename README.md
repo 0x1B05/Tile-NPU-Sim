@@ -57,25 +57,37 @@ The suite is assembled against a minimal custom env (`tests/riscv-tests-env/risc
 xmake build qwen3_app        # build/apps/qwen3.bin
 ```
 
-Running it needs a converted model blob. Fetch the pinned weights and tokenizer into `external/qwen3/`, then convert to the flat q8s32 blob (per-row symmetric int8 weights, f32 scales) with a baked-in prompt:
+Running it needs a converted model blob and a Q3P1 prompt image. Fetch the pinned weights and tokenizer into `external/qwen3/`, then convert the model to the flat q8s32 Q3B2 blob (per-row symmetric int8 weights, f32 scales). The model no longer contains a prompt:
 
 ```sh
 scripts/qwen3/fetch_model.sh   # set HF_BASE=... for another mirror
-python3 scripts/qwen3/convert.py real external/qwen3 model.q3b --prompt "Hi"
+python3 scripts/qwen3/convert.py real external/qwen3 model.q3b
 ```
 
-`--max-pos N` caps positions; conversion needs python3 with numpy. Run `scripts/qwen3/convert.py --help` for all options; `--verbose` reports per-tensor quantization errors and `--quiet` suppresses progress. Run the app image together with the blob, which must land at the address the guest is linked against (`BLOB_BASE` in `apps/qwen3/include/q3b.h`); the default 1 GiB RAM fits the real blob:
+`--max-pos N` caps positions; conversion needs python3 with numpy. Run `scripts/qwen3/convert.py --help` for all options; `--verbose` reports per-tensor quantization errors and `--quiet` suppresses progress. Tokenize a prompt into a Q3P1 image and load it with the model; the two images must land at the addresses the guest is linked against (`BLOB_BASE` in `apps/qwen3/include/q3b.h`, `PROMPT_BASE` in `apps/qwen3/include/q3p.h`):
 
 ```sh
-./build/linux/x86_64/release/sim_run build/apps/qwen3.bin model.q3b@0x81000000
+python3 scripts/qwen3/tokenize_prompt.py "你好" --out build/apps/prompt.bin
+./build/linux/x86_64/release/sim_run \
+    build/apps/qwen3.bin \
+    model.q3b@0x81000000 \
+    build/apps/prompt.bin@0x80F00000
 ```
 
-The app prints the prompt and generated token ids over the serial console and stops after 32 new tokens or an EOS. Numerical alignment probes in `forward.c` are compiled in by default; the `QWEN3_PROBES` define at the top of the file controls them.
+The same flow is available through the app runner, which tokenizes the prompt, builds a temporary Q3P1 image, and invokes `sim_run`:
+
+```sh
+xmake build qwen3_run
+xmake run qwen3_run "你好"
+```
+
+The app prints the prompt tokens and generated token ids over the serial console and stops after 32 new tokens or an EOS. Numerical alignment probes in `forward.c` are compiled in by default; the `QWEN3_PROBES` define at the top of the file controls them.
 
 A fixed-seed random tiny model exercises the same path without any download, and the opt-in regression wraps the whole chain — convert, guest forward under `sim_run`, then compare against the numpy reference `ref.py` (integer probes bit-exact, f32 probes within tolerance, generated tokens exact):
 
 ```sh
-python3 scripts/qwen3/convert.py tiny --out tiny.q3b --ref tiny_ref.npz
+python3 scripts/qwen3/convert.py tiny \
+    --out tiny.q3b --ref tiny_ref.npz --prompt-out tiny_prompt.bin
 xmake f --qwen3test=y && xmake test
 ```
 
