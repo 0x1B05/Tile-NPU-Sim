@@ -254,8 +254,8 @@ struct VreduceInstr {
 };
 
 struct VreduceArgmaxInstr {
-  NpuRegister index_dest{}; // Vec32 i32; the winning lane index in every lane
-  NpuRegister value_dest{}; // Vec32 f32; the winning value in every lane
+  NpuRegister index_dest{}; // Vec32 i32; winning lane index, 0 for all-NaN
+  NpuRegister value_dest{}; // Vec32 f32; winning value, NaN for all-NaN
   NpuRegister src{};        // Vec32
 };
 

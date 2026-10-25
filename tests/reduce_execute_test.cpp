@@ -79,12 +79,12 @@ TEST_CASE(areduce_sumsq_absmax) {
 TEST_CASE(areduce_argmax) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
-  // Row ties take the smaller index; a NaN candidate wins over a non-NaN
-  // best, and an established NaN best never loses.
+  // Row ties take the smaller index; NaN candidates are ignored, and an
+  // all-NaN row falls back to index 0.
   load_one(sim, memory, make_areduce(4, 0, 1));
   auto &state = sim.state();
-  acc_f32(state, 1, 3, 4);
-  vec_cfg(state, 0, DType::i32, 3);
+  acc_f32(state, 1, 4, 4);
+  vec_cfg(state, 0, DType::i32, 4);
   const auto nan = as_u32(std::nanf(""));
   const float row0[4] = {1.0f, 5.0f, 5.0f, 2.0f};
   const std::uint32_t row1[4] = {as_u32(1.0f), nan, as_u32(3.0f), as_u32(2.0f)};
@@ -93,12 +93,14 @@ TEST_CASE(areduce_argmax) {
     state.a[1][col] = as_u32(row0[col]);
     state.a[1][32 + col] = row1[col];
     state.a[1][64 + col] = row2[col];
+    state.a[1][96 + col] = nan;
   }
 
   check_eq(sim.step().status, StepStatus::retired, "areduce.rows.argmax retires");
   check_eq(state.v[0][0], std::uint32_t{1}, "tie takes the smaller index");
-  check_eq(state.v[0][1], std::uint32_t{1}, "NaN candidate wins");
-  check_eq(state.v[0][2], std::uint32_t{0}, "established NaN best stays");
+  check_eq(state.v[0][1], std::uint32_t{2}, "NaN candidate is ignored");
+  check_eq(state.v[0][2], std::uint32_t{3}, "leading NaN is ignored");
+  check_eq(state.v[0][3], std::uint32_t{0}, "all-NaN row falls back to index 0");
 }
 
 TEST_CASE(vreduce_reductions) {
@@ -158,7 +160,7 @@ TEST_CASE(vreduce_sumsq_rounds_each_product) {
 TEST_CASE(vreduce_argmax) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
-  // v1 = {1.0, 7.0, NaN}: the NaN candidate wins; the i32 index and the f32
+  // v1 = {1.0, 7.0, NaN}: the NaN candidate is ignored; the i32 index and f32
   // value bits broadcast into every effective lane of vIdx/vVal.
   load_one(sim, memory, make_vreduce_argmax(5, 6, 1));
   auto &state = sim.state();
@@ -170,10 +172,30 @@ TEST_CASE(vreduce_argmax) {
   state.v[1][2] = as_u32(std::nanf(""));
 
   check_eq(sim.step().status, StepStatus::retired, "vreduce.argmax retires");
-  check_eq(hex(state.v[5][0]), hex(0x2u), "NaN lane index wins");
-  check_eq(hex(state.v[5][1]), hex(0x2u), "index broadcast lane");
-  check_eq(hex(state.v[6][0]), hex(0x7fc00000u), "value keeps the NaN bits");
-  check_eq(hex(state.v[6][3]), hex(0x7fc00000u), "value broadcast lane");
+  check_eq(hex(state.v[5][0]), hex(0x1u), "NaN candidate is ignored");
+  check_eq(hex(state.v[5][1]), hex(0x1u), "index broadcast lane");
+  check_eq(hex(state.v[6][0]), hex(0x40e00000u), "numeric winner value");
+  check_eq(hex(state.v[6][3]), hex(0x40e00000u), "value broadcast lane");
+}
+
+TEST_CASE(vreduce_argmax_all_nan) {
+  Ram memory(CODE_BASE, 4);
+  Simulator sim(memory);
+  // An all-NaN source falls back to index 0 and the lane-0 NaN value bits.
+  load_one(sim, memory, make_vreduce_argmax(5, 6, 1));
+  auto &state = sim.state();
+  vec_cfg(state, 1, DType::f32, 3);
+  vec_cfg(state, 5, DType::i32, 2);
+  vec_cfg(state, 6, DType::f32, 4);
+  state.v[1][0] = as_u32(std::nanf(""));
+  state.v[1][1] = as_u32(std::nanf(""));
+  state.v[1][2] = as_u32(std::nanf(""));
+
+  check_eq(sim.step().status, StepStatus::retired, "all-NaN vreduce.argmax retires");
+  check_eq(hex(state.v[5][0]), hex(0x0u), "all-NaN fallback index");
+  check_eq(hex(state.v[5][1]), hex(0x0u), "fallback index broadcast lane");
+  check_eq(hex(state.v[6][0]), hex(0x7fc00000u), "all-NaN fallback value");
+  check_eq(hex(state.v[6][3]), hex(0x7fc00000u), "fallback value broadcast lane");
 }
 
 TEST_CASE(vreduce_sum_tree_order) {

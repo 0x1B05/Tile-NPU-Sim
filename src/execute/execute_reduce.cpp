@@ -68,13 +68,14 @@ struct ArgmaxCandidate {
   std::uint32_t index;
 };
 
-// NaN candidates win over non-NaN candidates; two NaNs keep the left
-// candidate, and numeric ties keep the smaller index.
+// NaN candidates are ignored; two NaNs keep the left candidate, and numeric
+// ties keep the smaller index. All-NaN inputs therefore keep the leftmost
+// candidate (index 0) with its NaN bits as the value.
 ArgmaxCandidate pair_argmax(ArgmaxCandidate lhs, ArgmaxCandidate rhs) {
   const bool lhs_nan = std::isnan(lhs.value);
   const bool rhs_nan = std::isnan(rhs.value);
-  if (lhs_nan) return lhs;
-  if (rhs_nan) return rhs;
+  if (lhs_nan) return rhs_nan ? lhs : rhs;
+  if (rhs_nan) return lhs;
   if (rhs.value > lhs.value) return rhs;
   if (lhs.value > rhs.value) return lhs;
   return lhs.index < rhs.index ? lhs : rhs;
@@ -143,7 +144,8 @@ ExecuteResult vreduce(const VreduceInstr &instr, State &state) {
 }
 
 // vreduce.argmax: the winning logical index (i32 bits) and value (f32 bits)
-// broadcast into the vIdx/vVal destinations' effective lanes.
+// broadcast into the vIdx/vVal destinations' effective lanes. NaN candidates
+// are ignored; an all-NaN source falls back to index 0 with NaN value bits.
 ExecuteResult vreduce_argmax(const VreduceArgmaxInstr &instr, State &state) {
   const auto &src_config = state.vc[instr.src.index];
   const auto &index_config = state.vc[instr.index_dest.index];

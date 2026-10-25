@@ -843,11 +843,12 @@ qwen3_embed:
 
 # ---------------------------------------------------------------------------
 # uint32_t qwen3_argmax(const float *x, uint32_t n)   n % 32 == 0
-# Greedy index of the maximum with the ISA argmax tie rules: a NaN candidate
-# beats a numeric best, an existing NaN best never loses, and numeric ties
-# keep the smaller index. Chunk 0 seeds the running best; later chunks fold
-# in through vcmplt + NaN masks + vselect. The best index reaches a0 through
-# a one-lane vstore + fence + lw.
+# Greedy index of the maximum with the ISA argmax rules: NaN candidates are
+# ignored, numeric ties keep the smaller index, and an all-NaN chunk contributes
+# index 0 with a NaN value. Chunk 0 seeds the running best; later chunks fold
+# in through vcmplt plus a mask that replaces an all-NaN best with the first
+# numeric candidate. The best index reaches a0 through a one-lane vstore +
+# fence + lw.
 # ---------------------------------------------------------------------------
     .globl qwen3_argmax
 qwen3_argmax:
@@ -866,19 +867,19 @@ qwen3_argmax:
     li      t4, 32                        # next chunk base
     srli    t6, a1, 5
     VLOAD   1
-    VREDUCE_ARGMAX 2, 0, 1                # best = chunk 0
+    VREDUCE_ARGMAX 2, 0, 1                # best = chunk 0 (index 0 if all NaN)
     addi    t6, t6, -1
     beqz    t6, .Lam_done
 .Lam_loop:
     VLOAD   1
-    VREDUCE_ARGMAX 3, 4, 1                # v3 = chunk argmax (i32), v4 = max
+    VREDUCE_ARGMAX 3, 4, 1                # v3 = chunk argmax (i32), v4 = value
     VADDX   3, 3, X_T4                    # global candidate index
-    VCMPLT    5, 0, 4                     # ordered: best < candidate
-    VCMPUNORD 6, 4, 4                     # candidate is NaN
-    VCMPUNORD 7, 0, 0                     # best is NaN
-    VNOT      7, 7
-    VAND      6, 6, 7                     # a NaN candidate beats a numeric best
-    VOR       5, 5, 6                     # an existing NaN best never loses
+    VCMPLT    5, 0, 4                     # numeric: best < candidate
+    VCMPUNORD 6, 0, 0                     # best is NaN (all-NaN chunk)
+    VCMPUNORD 7, 4, 4                     # candidate is NaN
+    VNOT      7, 7                        # candidate is numeric
+    VAND      6, 6, 7                     # replace an all-NaN best
+    VOR       5, 5, 6                     # greater numeric, or first numeric after NaN
     VSELECT   0, 5, 4, 0
     VSELECT   2, 5, 3, 2
     addi    t4, t4, 32

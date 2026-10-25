@@ -1,10 +1,10 @@
 #include "npu.inc"
 
 # Self-checking reduce image: programs configs and descriptors, then runs an
-# areduce.rows.sum (f32) and a vreduce.argmax (NaN candidate wins). Both
-# results are stored back from the vector domain and compared word-wise
-# (lwu/subw). Ends with ebreak: a0 = 0 pass, a0 = N identifies the failing
-# check.
+# areduce.rows.sum (f32) and vreduce.argmax cases (NaN candidates are ignored;
+# an all-NaN source falls back to index 0 / NaN value). Results are stored back
+# from the vector domain and compared word-wise (lwu/subw). Ends with ebreak:
+# a0 = 0 pass, a0 = N identifies the failing check.
 #
 # Buffer addresses go through lla (pc-relative): the image is loaded at
 # 0x80000000, where medlow's %hi/%lo expansion would sign-extend bit 31.
@@ -58,7 +58,7 @@ _start:
     bnez      x6, 1b
 
     # Stage 2 - vreduce.argmax v2, v3, v1 over {1.0, 7.0, NaN} ->
-    #   v2 = {2, 2, 2} (i32), v3 = {NaN, NaN, NaN} (NaN candidate wins)
+    #   v2 = {1, 1, 1} (i32), v3 = {7.0, 7.0, 7.0} (NaN candidate is ignored)
     lla       x3, src_v
     CFG_REG   3, 1, 0, 0, 3, 1
     VLOAD     1
@@ -73,10 +73,34 @@ _start:
     li        a0, 2
     FENCE_MEM
     lwu       x5, 0(x3)
-    li        x7, 2
+    li        x7, 1
     bne       x5, x7, fail
     lwu       x5, 4(x3)
     bne       x5, x7, fail
+    lwu       x5, 12(x3)
+    li        x7, 0x40E00000
+    bne       x5, x7, fail
+    lwu       x5, 16(x3)
+    bne       x5, x7, fail
+
+    # Stage 3 - all-NaN source falls back to index 0 and a NaN value
+    lla       x3, src_nan
+    CFG_REG   3, 1, 0, 0, 3, 1
+    VLOAD     1
+    VREDUCE_ARGMAX 2, 3, 1
+    lla       x3, dstbuf
+    CFG_REG   3, 1, 0, 0, 3, 2
+    addi      x3, x3, 12
+    CFG_REG   3, 1, 0, 0, 3, 3
+    VSTORE    2
+    VSTORE    3
+    lla       x3, dstbuf
+    li        a0, 3
+    FENCE_MEM
+    lwu       x5, 0(x3)
+    bnez      x5, fail
+    lwu       x5, 4(x3)
+    bnez      x5, fail
     lwu       x5, 12(x3)
     li        x7, 0x7FC00000
     bne       x5, x7, fail
@@ -93,4 +117,5 @@ fail:
 src_m:   .word 0x3FC00000, 0xC0200000, 0x40400000, 0x40900000
 exp_sum: .word 0xBF800000, 0x40F00000
 src_v:   .word 0x3F800000, 0x40E00000, 0x7FC00000
+src_nan: .word 0x7FC00000, 0x7FC00000, 0x7FC00000
 dstbuf:  .space 24
