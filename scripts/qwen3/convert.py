@@ -5,7 +5,7 @@ Weight matrices are quantized per output row (symmetric int8, RNE, range
 [-127, 127]) with one f32 scale per row; RMSNorm gammas stay f32. The blob
 carries a section directory so the guest locates tensors at runtime:
 
-  header: magic "Q3B2", arch dims, eps, section count   (all u32 LE)
+  header: magic "Q3B", arch dims, eps, section count   (all u32 LE)
   directory: n_sections x { name char[8], offset u32, size u32 }
   sections: 16-byte aligned tensor data
 
@@ -314,7 +314,7 @@ def build_parser():
         "--prompt-out",
         type=Path,
         metavar="PROMPT",
-        help="optional Q3P1 prompt image for the fixed tiny prompt",
+        help="optional Q3P prompt image for the fixed tiny prompt",
     )
     add_verbosity(tiny)
     return parser

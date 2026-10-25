@@ -35,7 +35,7 @@ def build_parser():
         type=Path,
         default=Path("model.q3b"),
         metavar="MODEL_Q3B",
-        help="Q3B2 model blob (default: model.q3b)",
+        help="Q3B model blob (default: model.q3b)",
     )
     parser.add_argument(
         "--tokenizer",

@@ -6,8 +6,8 @@
 
 // Guest memory map (default 1 GiB):
 //   0x80000000  this image (code + rodata + data + bss, a few MB)
-//   0x80F00000  Q3P1 runtime prompt image
-//   0x81000000  Q3B2 model blob (598 MB for Qwen3-0.6B)
+//   0x80F00000  Q3P runtime prompt image
+//   0x81000000  Q3B model blob (598 MB for Qwen3-0.6B)
 //   0xB0000000  KV cache region (256 MB budget)
 //   0xC0000000  stack top
 

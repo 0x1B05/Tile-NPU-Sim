@@ -1,4 +1,4 @@
-"""Q3P1 runtime prompt image writer and atomic output helpers."""
+"""Q3P runtime prompt image writer and atomic output helpers."""
 
 import os
 import struct
@@ -9,7 +9,7 @@ import numpy as np
 
 from blob import check_output
 
-MAGIC = b"Q3P1"
+MAGIC = b"Q3P\0"
 HEADER_SIZE = 16
 OUTPUT_MODE = 0o644
 

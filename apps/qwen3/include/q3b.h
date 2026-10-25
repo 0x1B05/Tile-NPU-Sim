@@ -1,14 +1,14 @@
 #pragma once
 
-// Q3B2 blob layout and lookup interface.
+// Q3B blob layout and lookup interface.
 
 #include <stdint.h>
 
 #define BLOB_BASE 0x81000000ull
-#define Q3B_MAGIC 0x32423351u // "Q3B2" little-endian
+#define Q3B_MAGIC 0x00423351u // "Q3B\0" little-endian
 
 struct q3b_header {
-  uint32_t magic; // "Q3B2"
+  uint32_t magic; // "Q3B"
   uint32_t n_layers;
   uint32_t hidden;
   uint32_t inter;

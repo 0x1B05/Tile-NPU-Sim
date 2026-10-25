@@ -2,7 +2,7 @@
 """Tiny Qwen3 regression: guest forward under sim_run vs the numpy reference.
 
 convert.py tiny emits a fixed-seed random model (a q3b blob plus an f32
-reference npz and a Q3P1 prompt image). This script runs the guest app on the
+reference npz and a Q3P prompt image). This script runs the guest app on the
 simulator and compares ordered records emitted by guest and ref.py:
 
   PROBE <name> [index] <kind> <count> <word>...

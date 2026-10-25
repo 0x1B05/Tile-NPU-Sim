@@ -12,6 +12,6 @@ SECTIONS
         *(COMMON)
         __bss_end = .;
     }
-    ASSERT(__bss_end <= 0x80F00000, "image overlaps the Q3P1 prompt region")
+    ASSERT(__bss_end <= 0x80F00000, "image overlaps the Q3P prompt region")
     /DISCARD/ : { *(.note*) *(.comment*) *(.eh_frame*) *(.riscv.attributes) }
 }

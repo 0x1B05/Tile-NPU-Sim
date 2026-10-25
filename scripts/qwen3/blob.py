@@ -1,4 +1,4 @@
-"""Q3B2 blob writer and atomic output helpers."""
+"""Q3B blob writer and atomic output helpers."""
 
 import os
 import struct
@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-MAGIC = b"Q3B2"
+MAGIC = b"Q3B\0"
 OUTPUT_MODE = 0o644
 
 

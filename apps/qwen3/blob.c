@@ -2,7 +2,7 @@
 
 #include "console.h"
 
-// Q3B2 blob directory access. Sections are looked up by name at startup;
+// Q3B blob directory access. Sections are looked up by name at startup;
 // the pointers stay valid for the whole run.
 
 static const struct q3b_header *const blob = (const struct q3b_header *)BLOB_BASE;

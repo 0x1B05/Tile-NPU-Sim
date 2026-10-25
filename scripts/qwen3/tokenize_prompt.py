@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tokenize prompt text into a Q3P1 runtime prompt image.
+"""Tokenize prompt text into a Q3P runtime prompt image.
 
 Usage:
   tokenize_prompt.py "prompt text" --out prompt.bin
@@ -15,7 +15,7 @@ from tokenizer import Tokenizer
 
 def build_parser():
     parser = argparse.ArgumentParser(
-        description="Tokenize a prompt into a Q3P1 image loaded at 0x80F00000.",
+        description="Tokenize a prompt into a Q3P image loaded at 0x80F00000.",
     )
     parser.add_argument("text", metavar="TEXT", help="prompt text to tokenize")
     parser.add_argument(
@@ -30,7 +30,7 @@ def build_parser():
         type=Path,
         required=True,
         metavar="OUT",
-        help="output Q3P1 prompt image",
+        help="output Q3P prompt image",
     )
     parser.add_argument(
         "--max-pos",

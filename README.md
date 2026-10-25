@@ -57,14 +57,14 @@ The suite is assembled against a minimal custom env (`tests/riscv-tests-env/risc
 xmake build qwen3_app        # build/apps/qwen3.bin
 ```
 
-Running it needs a converted model blob and a Q3P1 prompt image. Fetch the pinned weights and tokenizer into `external/qwen3/`, then convert the model to the flat q8s32 Q3B2 blob (per-row symmetric int8 weights, f32 scales). The model no longer contains a prompt:
+Running it needs a converted model blob and a Q3P prompt image. Fetch the pinned weights and tokenizer into `external/qwen3/`, then convert the model to the flat q8s32 Q3B blob (per-row symmetric int8 weights, f32 scales). The model no longer contains a prompt:
 
 ```sh
 scripts/qwen3/fetch_model.sh   # set HF_BASE=... for another mirror
 python3 scripts/qwen3/convert.py real external/qwen3 model.q3b
 ```
 
-`--max-pos N` caps positions; conversion needs python3 with numpy. Run `scripts/qwen3/convert.py --help` for all options; `--verbose` reports per-tensor quantization errors and `--quiet` suppresses progress. Tokenize a prompt into a Q3P1 image and load it with the model; the two images must land at the addresses the guest is linked against (`BLOB_BASE` in `apps/qwen3/include/q3b.h`, `PROMPT_BASE` in `apps/qwen3/include/q3p.h`):
+`--max-pos N` caps positions; conversion needs python3 with numpy. Run `scripts/qwen3/convert.py --help` for all options; `--verbose` reports per-tensor quantization errors and `--quiet` suppresses progress. Tokenize a prompt into a Q3P image and load it with the model; the two images must land at the addresses the guest is linked against (`BLOB_BASE` in `apps/qwen3/include/q3b.h`, `PROMPT_BASE` in `apps/qwen3/include/q3p.h`):
 
 ```sh
 python3 scripts/qwen3/tokenize_prompt.py "你好" --out build/apps/prompt.bin
@@ -74,14 +74,14 @@ python3 scripts/qwen3/tokenize_prompt.py "你好" --out build/apps/prompt.bin
     build/apps/prompt.bin@0x80F00000
 ```
 
-The same flow is available through the app runner, which tokenizes the prompt, builds a temporary Q3P1 image, and invokes `sim_run`:
+The same flow is available through the app runner, which tokenizes the prompt, builds a temporary Q3P image, and invokes `sim_run`:
 
 ```sh
 xmake build qwen3_run
 xmake run qwen3_run "你好"
 ```
 
-The Q3B2 magic is intentionally different from Q3B1; existing Q3B1 blobs must be regenerated.
+The model format changed; existing model blobs must be regenerated.
 
 The app prints the prompt tokens and generated token ids over the serial console and stops after 32 new tokens or an EOS. Numerical alignment probes in `forward.c` are compiled in by default; the `QWEN3_PROBES` define at the top of the file controls them.
 
