@@ -152,3 +152,45 @@ if has_config("qwen3test") then
 		end)
 	end)
 end
+
+if has_config("monitor") then
+	target("qwen3_run", function()
+		set_kind("phony")
+		set_default(false)
+		add_deps("qwen3_app", "sim_run")
+		on_run(function(target)
+			import("core.base.option")
+			import("lib.detect.find_program")
+			local args = option.get("arguments") or {}
+			local prompt = args[1]
+			if not prompt then
+				raise('usage: xmake run qwen3_run "prompt" [model.q3b]')
+			end
+			local python = find_program("python3")
+			if not python then
+				raise("python3 is required to run the Qwen3 app")
+			end
+			local app = path.join(app_bindir, "qwen3.bin")
+			local sim_run = target:dep("sim_run"):targetfile()
+			if not os.isfile(app) or not os.isfile(sim_run) then
+				raise("run `xmake build qwen3_run` before `xmake run qwen3_run`")
+			end
+			local model = args[2] or "model.q3b"
+			if not path.is_absolute(model) then
+				model = path.join(project_root, model)
+			end
+			os.execv(python, {
+				path.join(project_root, "scripts", "qwen3", "run.py"),
+				prompt,
+				"--sim-run",
+				sim_run,
+				"--app",
+				app,
+				"--model",
+				model,
+				"--tokenizer",
+				path.join(project_root, "external", "qwen3", "tokenizer.json"),
+			})
+		end)
+	end)
+end
