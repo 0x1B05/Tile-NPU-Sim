@@ -16,5 +16,5 @@
 #define STACK_TOP 0xC0000000ull
 
 void qwen3_init(uint32_t n_prompt);
-void qwen3_prefill(const uint32_t *tokens, uint32_t n);
+uint32_t qwen3_prefill(const uint32_t *tokens, uint32_t n);
 uint32_t qwen3_forward(uint32_t token, uint32_t pos, int want_logits);

@@ -286,26 +286,42 @@ uint32_t qwen3_forward(uint32_t token, uint32_t pos, int want_logits) {
   return qwen3_argmax(logits, model.vocab);
 }
 
-// Prefill for the first n prompt tokens (positions [0, n)): projections run
-// as batched MMA over 32-row token batches; rmsnorm/rope/attention/silu/add
-// keep the per-row vector kernels. Rows [bt, 32) of the quantized buffers
-// are never consumed. The numerics match the per-token path bit for bit
-// (same per-row scales, exact i32 accumulation, same epilogue order).
-void qwen3_prefill(const uint32_t *tokens, uint32_t n) {
+// Prefill for all n prompt tokens (positions [0, n)): projections run as
+// batched MMA over 32-row token batches; rmsnorm/rope/attention/silu/add keep
+// the per-row vector kernels. Only the last row is finished through the final
+// norm and lm-head. The numerics match the per-token path bit for bit (same
+// per-row scales, exact i32 accumulation, same epilogue order).
+uint32_t qwen3_prefill(const uint32_t *tokens, uint32_t n) {
+  if (n == 0) panic("empty prefill");
+  const int probing = QWEN3_PROBES && n == model.n_prompt;
   for (uint32_t base = 0; base < n; base += BATCH_ROWS) {
     const uint32_t bt = n - base < BATCH_ROWS ? n - base : BATCH_ROWS;
+    const int final_batch = base + bt == n;
+    const uint32_t last_t = bt - 1;
     for (uint32_t t = 0; t < bt; ++t)
       qwen3_embed(model.embed, model.embed_s, tokens[base + t], pf_x + t * model.hidden,
                   model.hidden);
+    if (probing && final_batch)
+      probe_record("embed", -1, "f32", (const uint32_t *)(pf_x + last_t * model.hidden), 4);
     for (uint32_t L = 0; L < model.n_layers; ++L) {
       const void **sec = model.layer_sections[L];
       for (uint32_t t = 0; t < bt; ++t)
         qwen3_rmsnorm(pf_x + t * model.hidden, sec[SEC_INLN], pf_h1 + t * model.hidden,
                       model.hidden, model.eps_bits, inv_n_bits(model.hidden));
+      if (probing && final_batch && L == 0)
+        probe_record("ln0", -1, "f32", (const uint32_t *)(pf_h1 + last_t * model.hidden), 4);
       qwen3_quant_rows(pf_h1, model.hidden, pf_xq, pf_xs);
       qwen3_matmul_q(sec[SEC_QW], sec[SEC_QWS], pf_xq, pf_xs, pf_q, model.q_dim, model.hidden);
       qwen3_matmul_q(sec[SEC_KW], sec[SEC_KWS], pf_xq, pf_xs, pf_k, model.kv_dim, model.hidden);
       qwen3_matmul_q(sec[SEC_VW], sec[SEC_VWS], pf_xq, pf_xs, pf_v, model.kv_dim, model.hidden);
+      if (probing && final_batch && L == 0) {
+        // The batched matmul does not expose the per-row i32 accumulator, so
+        // replay the last row once for the qx0/ac0/q0 probe records.
+        uint32_t probe_xs = probe_quant_act(pf_h1 + last_t * model.hidden, model.hidden, "qx0");
+        qwen3_matvec_q(sec[SEC_QW], sec[SEC_QWS], q_buf, model.q_dim, model.hidden, probe_xs);
+        probe_record("ac0", -1, "i32", (const uint32_t *)qwen3_accbuf, 8);
+        probe_record("q0", -1, "f32", (const uint32_t *)q_buf, 4);
+      }
       for (uint32_t t = 0; t < bt; ++t) {
         for (uint32_t h = 0; h < model.n_q_heads; ++h)
           qwen3_rmsnorm(pf_q + t * model.q_dim + h * model.head_dim, sec[SEC_QN],
@@ -315,32 +331,80 @@ void qwen3_prefill(const uint32_t *tokens, uint32_t n) {
           qwen3_rmsnorm(pf_k + t * model.kv_dim + h * model.head_dim, sec[SEC_KN],
                         pf_k + t * model.kv_dim + h * model.head_dim, model.head_dim,
                         model.eps_bits, inv_n_bits(model.head_dim));
+      }
+      if (probing && final_batch && L == 0)
+        probe_record("q0n", -1, "f32", (const uint32_t *)(pf_q + last_t * model.q_dim), 4);
+      for (uint32_t t = 0; t < bt; ++t) {
         const float *cos_p = model.rope_cos + (base + t) * (model.head_dim / 2);
         const float *sin_p = model.rope_sin + (base + t) * (model.head_dim / 2);
         for (uint32_t h = 0; h < model.n_q_heads; ++h)
           qwen3_rope(pf_q + t * model.q_dim + h * model.head_dim, cos_p, sin_p, model.head_dim);
         for (uint32_t h = 0; h < model.n_kv_heads; ++h)
           qwen3_rope(pf_k + t * model.kv_dim + h * model.head_dim, cos_p, sin_p, model.head_dim);
+      }
+      if (probing && final_batch && L == 0) {
+        probe_record("q0r", -1, "f32", (const uint32_t *)(pf_q + last_t * model.q_dim), 4);
+        probe_record("q1r", -1, "f32",
+                     (const uint32_t *)(pf_q + last_t * model.q_dim + model.head_dim), 4);
+      }
+      for (uint32_t t = 0; t < bt; ++t) {
         cache_append(L, base + t, pf_k + t * model.kv_dim, pf_v + t * model.kv_dim);
         attention(L, base + t, pf_q + t * model.q_dim, pf_attn + t * model.q_dim);
       }
+      if (probing && final_batch && L == 0) {
+        probe_record("attn0", -1, "f32",
+                     (const uint32_t *)(pf_attn + last_t * model.q_dim), 4);
+        probe_record("attn1", -1, "f32",
+                     (const uint32_t *)(pf_attn + last_t * model.q_dim + model.head_dim), 4);
+      }
       qwen3_quant_rows(pf_attn, model.q_dim, pf_xq, pf_xs);
       qwen3_matmul_q(sec[SEC_OW], sec[SEC_OWS], pf_xq, pf_xs, pf_h2, model.hidden, model.q_dim);
+      if (probing && final_batch && L == 0) {
+        uint32_t probe_xs =
+            probe_quant_act(pf_attn + last_t * model.q_dim, model.q_dim, "qxa");
+        qwen3_matvec_q(sec[SEC_OW], sec[SEC_OWS], h2, model.hidden, model.q_dim, probe_xs);
+        probe_record("aca", -1, "i32", (const uint32_t *)qwen3_accbuf, 8);
+        probe_record("o0", -1, "f32", (const uint32_t *)h2, 4);
+      }
       for (uint32_t t = 0; t < bt; ++t)
         qwen3_add(pf_x + t * model.hidden, pf_h2 + t * model.hidden, model.hidden);
+      if (probing && final_batch && L == 0)
+        probe_record("xr0", -1, "f32", (const uint32_t *)(pf_x + last_t * model.hidden), 4);
       for (uint32_t t = 0; t < bt; ++t)
         qwen3_rmsnorm(pf_x + t * model.hidden, sec[SEC_PTLN], pf_h1 + t * model.hidden,
                       model.hidden, model.eps_bits, inv_n_bits(model.hidden));
+      if (probing && final_batch && L == 0)
+        probe_record("ln1", -1, "f32", (const uint32_t *)(pf_h1 + last_t * model.hidden), 4);
       qwen3_quant_rows(pf_h1, model.hidden, pf_xq, pf_xs);
       qwen3_matmul_q(sec[SEC_GW], sec[SEC_GWS], pf_xq, pf_xs, pf_gate, model.inter, model.hidden);
       qwen3_matmul_q(sec[SEC_UW], sec[SEC_UWS], pf_xq, pf_xs, pf_up, model.inter, model.hidden);
+      if (probing && final_batch && L == 0) {
+        probe_record("g0", -1, "f32", (const uint32_t *)(pf_gate + last_t * model.inter), 4);
+        probe_record("u0", -1, "f32", (const uint32_t *)(pf_up + last_t * model.inter), 4);
+      }
       for (uint32_t t = 0; t < bt; ++t)
         qwen3_silu_mul(pf_gate + t * model.inter, pf_up + t * model.inter,
                        pf_gate + t * model.inter, model.inter);
+      if (probing && final_batch && L == 0)
+        probe_record("m0", -1, "f32", (const uint32_t *)(pf_gate + last_t * model.inter), 4);
       qwen3_quant_rows(pf_gate, model.inter, pf_xq, pf_xs);
       qwen3_matmul_q(sec[SEC_DW], sec[SEC_DWS], pf_xq, pf_xs, pf_h2, model.hidden, model.inter);
+      if (probing && final_batch && L == 0)
+        probe_record("d0", -1, "f32", (const uint32_t *)(pf_h2 + last_t * model.hidden), 4);
       for (uint32_t t = 0; t < bt; ++t)
         qwen3_add(pf_x + t * model.hidden, pf_h2 + t * model.hidden, model.hidden);
+      if (probing && final_batch && L == 0)
+        probe_record("x_l0", -1, "f32", (const uint32_t *)(pf_x + last_t * model.hidden), 4);
     }
   }
+
+  const uint32_t last_row = (n - 1) % BATCH_ROWS;
+  const float *last_x = pf_x + last_row * model.hidden;
+  qwen3_rmsnorm(last_x, model.fin_norm, h1, model.hidden, model.eps_bits,
+                inv_n_bits(model.hidden));
+  if (probing) probe_record("lnf", -1, "f32", (const uint32_t *)h1, 4);
+  const uint32_t xs = qwen3_quant_act(h1, model.hidden);
+  qwen3_matvec_q(model.embed, model.embed_s, logits, model.vocab, model.hidden, xs);
+  probe_logits(logits);
+  return qwen3_argmax(logits, model.vocab);
 }

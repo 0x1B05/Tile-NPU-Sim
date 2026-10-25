@@ -28,10 +28,8 @@ int main(void) {
     printf("%u ", tokens[i]);
   printf("\n");
 
-  if (n_prompt > 1) qwen3_prefill(tokens, n_prompt - 1);
-  uint32_t pos = n_prompt - 1;
-  uint32_t next = qwen3_forward(tokens[pos], pos, 1);
-  ++pos;
+  uint32_t next = qwen3_prefill(tokens, n_prompt);
+  uint32_t pos = n_prompt;
 
   printf("generated: ");
   for (uint32_t i = 0; i < MAX_NEW_TOKENS && pos < h->max_pos; ++i) {
