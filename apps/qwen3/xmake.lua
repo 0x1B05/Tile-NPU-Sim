@@ -162,6 +162,9 @@ if has_config("monitor") then
 			import("core.base.option")
 			import("lib.detect.find_program")
 			local args = option.get("arguments") or {}
+			if args[1] == "--" then
+				table.remove(args, 1)
+			end
 			local prompt = args[1]
 			if not prompt then
 				raise('usage: xmake run qwen3_run "prompt" [model.q3b]')
@@ -181,7 +184,6 @@ if has_config("monitor") then
 			end
 			os.execv(python, {
 				path.join(project_root, "scripts", "qwen3", "run.py"),
-				prompt,
 				"--sim-run",
 				sim_run,
 				"--app",
@@ -190,6 +192,8 @@ if has_config("monitor") then
 				model,
 				"--tokenizer",
 				path.join(project_root, "external", "qwen3", "tokenizer.json"),
+				"--",
+				prompt,
 			})
 		end)
 	end)
