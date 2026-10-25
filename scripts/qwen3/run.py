@@ -33,9 +33,9 @@ def build_parser():
     parser.add_argument(
         "--model",
         type=Path,
-        default=Path("model.q3b"),
+        default=Path("build/apps/qwen3/model.q3b"),
         metavar="MODEL_Q3B",
-        help="Q3B model blob (default: model.q3b)",
+        help="Q3B model blob (default: build/apps/qwen3/model.q3b)",
     )
     parser.add_argument(
         "--tokenizer",
@@ -43,6 +43,12 @@ def build_parser():
         default=Path("external/qwen3/tokenizer.json"),
         metavar="TOKENIZER_JSON",
         help="tokenizer.json (default: external/qwen3/tokenizer.json)",
+    )
+    parser.add_argument(
+        "--prompt-out",
+        type=Path,
+        metavar="PROMPT",
+        help="write the Q3P image here instead of a temporary file",
     )
     parser.add_argument(
         "--max-pos",
@@ -73,11 +79,16 @@ def main(argv=None):
         )
 
     prompt_file = None
+    remove_prompt = False
     try:
-        with tempfile.NamedTemporaryFile(
-            prefix="qwen3-prompt-", suffix=".bin", delete=False
-        ) as f:
-            prompt_file = Path(f.name)
+        if args.prompt_out is not None:
+            prompt_file = args.prompt_out
+        else:
+            with tempfile.NamedTemporaryFile(
+                prefix="qwen3-prompt-", suffix=".bin", delete=False
+            ) as f:
+                prompt_file = Path(f.name)
+            remove_prompt = True
         write_prompt(prompt_file, tokens)
         cmd = [
             str(args.sim_run),
@@ -89,7 +100,7 @@ def main(argv=None):
         ]
         return subprocess.call(cmd)
     finally:
-        if prompt_file is not None:
+        if remove_prompt and prompt_file is not None:
             prompt_file.unlink(missing_ok=True)
 
 

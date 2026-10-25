@@ -1,12 +1,13 @@
 -- The Qwen3 inference app: apps/qwen3 cross-compiled to a flat binary in
--- <buildir>/apps/. Built explicitly (xmake build qwen3_app); running it
+-- <buildir>/apps/qwen3/. Built explicitly (xmake build qwen3_app); running it
 -- needs a converted model blob, so it is not part of xmake test.
 
 local app_srcdir = os.scriptdir()
 local project_root = path.directory(path.directory(app_srcdir))
 local app_includedir = path.join(app_srcdir, "include")
 local buildir = get_config("buildir") or "build"
-local app_bindir = path.join(path.is_absolute(buildir) and buildir or path.join(os.projectdir(), buildir), "apps")
+local base = path.absolute(buildir, os.projectdir())
+local app_bindir = path.join(base, "apps", "qwen3")
 
 target("qwen3_app", function()
 	set_kind("phony")
@@ -178,7 +179,7 @@ if has_config("monitor") then
 			if not os.isfile(app) or not os.isfile(sim_run) then
 				raise("run `xmake build qwen3_run` before `xmake run qwen3_run`")
 			end
-			local model = args[2] or "model.q3b"
+			local model = args[2] or path.join(app_bindir, "model.q3b")
 			if not path.is_absolute(model) then
 				model = path.join(project_root, model)
 			end
@@ -190,6 +191,8 @@ if has_config("monitor") then
 				app,
 				"--model",
 				model,
+				"--prompt-out",
+				path.join(app_bindir, "prompt.bin"),
 				"--tokenizer",
 				path.join(project_root, "external", "qwen3", "tokenizer.json"),
 				"--",

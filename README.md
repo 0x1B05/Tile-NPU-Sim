@@ -54,27 +54,27 @@ The suite is assembled against a minimal custom env (`tests/riscv-tests-env/risc
 `apps/qwen3/` runs Qwen3-0.6B inference on the simulator (bare-metal rv64im, NPU kernels in `kernels.S`):
 
 ```sh
-xmake build qwen3_app        # build/apps/qwen3.bin
+xmake build qwen3_app        # build/apps/qwen3/qwen3.bin
 ```
 
 Running it needs a converted model blob and a Q3P prompt image. Fetch the pinned weights and tokenizer into `external/qwen3/`, then convert the model to the flat q8s32 Q3B blob (per-row symmetric int8 weights, f32 scales). The model no longer contains a prompt:
 
 ```sh
 scripts/qwen3/fetch_model.sh   # set HF_BASE=... for another mirror
-python3 scripts/qwen3/convert.py real external/qwen3 model.q3b
+python3 scripts/qwen3/convert.py real external/qwen3 build/apps/qwen3/model.q3b
 ```
 
 `--max-pos N` caps positions; conversion needs python3 with numpy. Run `scripts/qwen3/convert.py --help` for all options; `--verbose` reports per-tensor quantization errors and `--quiet` suppresses progress. Tokenize a prompt into a Q3P image and load it with the model; the two images must land at the addresses the guest is linked against (`BLOB_BASE` in `apps/qwen3/include/q3b.h`, `PROMPT_BASE` in `apps/qwen3/include/q3p.h`):
 
 ```sh
-python3 scripts/qwen3/tokenize_prompt.py "你好" --out build/apps/prompt.bin
+python3 scripts/qwen3/tokenize_prompt.py "你好" --out build/apps/qwen3/prompt.bin
 ./build/linux/x86_64/release/sim_run \
-    build/apps/qwen3.bin \
-    model.q3b@0x81000000 \
-    build/apps/prompt.bin@0x80F00000
+    build/apps/qwen3/qwen3.bin \
+    build/apps/qwen3/model.q3b@0x81000000 \
+    build/apps/qwen3/prompt.bin@0x80F00000
 ```
 
-The same flow is available through the app runner, which tokenizes the prompt, builds a temporary Q3P image, and invokes `sim_run`:
+The same flow is available through the app runner, which tokenizes the prompt, writes `build/apps/qwen3/prompt.bin`, and invokes `sim_run`:
 
 ```sh
 xmake build qwen3_run
@@ -89,7 +89,9 @@ A fixed-seed random tiny model exercises the same path without any download, and
 
 ```sh
 python3 scripts/qwen3/convert.py tiny \
-    --out tiny.q3b --ref tiny_ref.npz --prompt-out tiny_prompt.bin
+    --out build/apps/qwen3/tiny.q3b \
+    --ref build/apps/qwen3/tiny_ref.npz \
+    --prompt-out build/apps/qwen3/tiny_prompt.bin
 xmake f --qwen3test=y && xmake test
 ```
 
