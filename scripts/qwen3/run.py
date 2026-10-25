@@ -2,11 +2,15 @@
 """Tokenize a prompt and run the Qwen3 guest under sim_run."""
 
 import argparse
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 from prompt import encode_prompt, write_prompt
+from tokenizer import Tokenizer
+
+EOS_IDS = {151643, 151645}
 
 
 def build_parser():
@@ -64,9 +68,34 @@ def build_parser():
     return parser
 
 
+def generated_ids(output):
+    match = re.search(r"^generated:\s*(.*)$", output, re.MULTILINE)
+    if not match:
+        return None
+    try:
+        return [int(token) for token in match.group(1).split()]
+    except ValueError:
+        return None
+
+
+def run_guest(cmd):
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, bufsize=0)
+    assert proc.stdout is not None
+    chunks = []
+    while True:
+        chunk = proc.stdout.read(4096)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        sys.stdout.buffer.write(chunk)
+        sys.stdout.buffer.flush()
+    return proc.wait(), b"".join(chunks).decode(errors="replace")
+
+
 def main(argv=None):
     args = build_parser().parse_args(argv)
-    tokens = encode_prompt(args.text, args.tokenizer, args.max_pos)
+    tokenizer = Tokenizer(str(args.tokenizer))
+    tokens = encode_prompt(args.text, args.tokenizer, args.max_pos, tokenizer=tokenizer)
     write_prompt(args.prompt_out, tokens)
     cmd = [
         str(args.sim_run),
@@ -76,7 +105,14 @@ def main(argv=None):
         f"{args.model}@0x81000000",
         f"{args.prompt_out}@0x80F00000",
     ]
-    return subprocess.call(cmd)
+    rc, output = run_guest(cmd)
+    if rc != 0:
+        return rc
+    ids = generated_ids(output)
+    if ids is not None:
+        text = tokenizer.decode([token for token in ids if token not in EOS_IDS])
+        print(f"generated text: {text}")
+    return rc
 
 
 if __name__ == "__main__":

@@ -74,14 +74,12 @@ python3 scripts/qwen3/tokenize_prompt.py "你好" --out build/apps/qwen3/prompt.
     build/apps/qwen3/prompt.bin@0x80F00000
 ```
 
-The same flow is available through the app runner, which tokenizes the prompt, writes `build/apps/qwen3/prompt.bin`, and invokes `sim_run`:
+The same flow is available through the app runner, which tokenizes the prompt, writes `build/apps/qwen3/prompt.bin`, invokes `sim_run`, and decodes the generated token ids into text:
 
 ```sh
 xmake build qwen3_run
 xmake run qwen3_run "你好"
 ```
-
-The model format changed; existing model blobs must be regenerated.
 
 The app prints the prompt tokens and generated token ids over the serial console and stops after 32 new tokens or an EOS. Numerical alignment probes in `forward.c` are compiled in by default; the `QWEN3_PROBES` define at the top of the file controls them.
 

@@ -179,6 +179,15 @@ if has_config("monitor") then
 				raise("run `xmake build qwen3_run` before `xmake run qwen3_run`")
 			end
 			local model = path.absolute(args[2] or path.join(app_bindir, "model.q3b"), project_root)
+			if not os.isfile(model) then
+				raise(
+					"model blob not found: "
+						.. model
+						.. "; run `python3 scripts/qwen3/convert.py real external/qwen3 "
+						.. model
+						.. "` or pass an existing model as the second argument"
+				)
+			end
 			os.execv(python, {
 				path.join(project_root, "scripts", "qwen3", "run.py"),
 				"--sim-run",
