@@ -25,8 +25,8 @@ _start:
     CFG_SETI  6, 1, 0, 4, 1
     CFG_SETI  6, 1, 1, 3, 1
     CFG_SETI  6, 3, 1, 4, 1
-    # vc2/vc3: dtype = i32/f32, len = 3 (vreduce.argmax vIdx/vVal)
-    CFG_SETI  6, 1, 0, 2, 2
+    # vc2/vc3: dtype = u32/f32, len = 3 (vreduce.argmax vIdx/vVal)
+    CFG_SETI  6, 1, 0, 3, 2
     CFG_SETI  6, 1, 1, 3, 2
     CFG_SETI  6, 1, 0, 4, 3
     CFG_SETI  6, 1, 1, 3, 3
@@ -58,7 +58,7 @@ _start:
     bnez      x6, 1b
 
     # Stage 2 - vreduce.argmax v2, v3, v1 over {1.0, 7.0, NaN} ->
-    #   v2 = {1, 1, 1} (i32), v3 = {7.0, 7.0, 7.0} (NaN candidate is ignored)
+    #   v2 = {1, 1, 1} (u32), v3 = {7.0, 7.0, 7.0} (NaN candidate is ignored)
     lla       x3, src_v
     CFG_REG   3, 1, 0, 0, 3, 1
     VLOAD     1

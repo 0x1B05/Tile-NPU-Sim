@@ -848,15 +848,15 @@ qwen3_embed:
 # index 0 with a NaN value. Chunk 0 seeds the running best; later chunks fold
 # in through vcmplt plus a mask that replaces an all-NaN best with the first
 # numeric candidate. The best index reaches a0 through a one-lane vstore +
-# fence + lw.
+# fence + lwu.
 # ---------------------------------------------------------------------------
     .globl qwen3_argmax
 qwen3_argmax:
     addi    sp, sp, -16
     LI_CWV  t6, DT_F32, 32
     SETW    SEL_VC, 1, 0, X_T6, 1   # vc0/vc1 f32: best value, chunk
-    LI_CWV  t6, DT_I32, 32
-    SETW    SEL_VC, 1, 2, X_T6, 1   # vc2/vc3 i32: best index, candidate index
+    LI_CWV  t6, DT_U32, 32
+    SETW    SEL_VC, 1, 2, X_T6, 1   # vc2/vc3 u32: best index, candidate index
     LI_CWV  t6, DT_F32, 32
     SETW    SEL_VC, 1, 4, X_T6      # vc4 f32: candidate value
     LI_CWV  t6, DT_U32, 32
@@ -872,7 +872,7 @@ qwen3_argmax:
     beqz    t6, .Lam_done
 .Lam_loop:
     VLOAD   1
-    VREDUCE_ARGMAX 3, 4, 1                # v3 = chunk argmax (i32), v4 = value
+    VREDUCE_ARGMAX 3, 4, 1                # v3 = chunk argmax (u32), v4 = value
     VADDX   3, 3, X_T4                    # global candidate index
     VCMPLT    5, 0, 4                     # numeric: best < candidate
     VCMPUNORD 6, 0, 0                     # best is NaN (all-NaN chunk)
@@ -886,14 +886,14 @@ qwen3_argmax:
     addi    t6, t6, -1
     bnez    t6, .Lam_loop
 .Lam_done:
-    LI_CWV  t6, DT_I32, 1
+    LI_CWV  t6, DT_U32, 1
     SETW    SEL_VC, 1, 5, X_T6      # vc5: len-1 exit store
     SETX    SEL_VM, 1, CF_BASE, 5, X_SP
     SETIV   SEL_VM, CF_STRIDE, 4, 5
     SETIV   SEL_VM, CF_VFLAGS, 0, 5
     VBROADCAST 5, 2, 0
     VSTORE  5
-    FENCE_MEM                   # the index store must be visible to the lw
-    lw      a0, 0(sp)
+    FENCE_MEM                   # the index store must be visible to the lwu
+    lwu     a0, 0(sp)
     addi    sp, sp, 16
     ret

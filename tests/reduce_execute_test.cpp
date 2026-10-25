@@ -84,7 +84,7 @@ TEST_CASE(areduce_argmax) {
   load_one(sim, memory, make_areduce(4, 0, 1));
   auto &state = sim.state();
   acc_f32(state, 1, 4, 4);
-  vec_cfg(state, 0, DType::i32, 4);
+  vec_cfg(state, 0, DType::u32, 4);
   const auto nan = as_u32(std::nanf(""));
   const float row0[4] = {1.0f, 5.0f, 5.0f, 2.0f};
   const std::uint32_t row1[4] = {as_u32(1.0f), nan, as_u32(3.0f), as_u32(2.0f)};
@@ -160,12 +160,12 @@ TEST_CASE(vreduce_sumsq_rounds_each_product) {
 TEST_CASE(vreduce_argmax) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
-  // v1 = {1.0, 7.0, NaN}: the NaN candidate is ignored; the i32 index and f32
+  // v1 = {1.0, 7.0, NaN}: the NaN candidate is ignored; the u32 index and f32
   // value bits broadcast into every effective lane of vIdx/vVal.
   load_one(sim, memory, make_vreduce_argmax(5, 6, 1));
   auto &state = sim.state();
   vec_cfg(state, 1, DType::f32, 3);
-  vec_cfg(state, 5, DType::i32, 2);
+  vec_cfg(state, 5, DType::u32, 2);
   vec_cfg(state, 6, DType::f32, 4);
   state.v[1][0] = as_u32(1.0f);
   state.v[1][1] = as_u32(7.0f);
@@ -185,7 +185,7 @@ TEST_CASE(vreduce_argmax_all_nan) {
   load_one(sim, memory, make_vreduce_argmax(5, 6, 1));
   auto &state = sim.state();
   vec_cfg(state, 1, DType::f32, 3);
-  vec_cfg(state, 5, DType::i32, 2);
+  vec_cfg(state, 5, DType::u32, 2);
   vec_cfg(state, 6, DType::f32, 4);
   state.v[1][0] = as_u32(std::nanf(""));
   state.v[1][1] = as_u32(std::nanf(""));
@@ -371,12 +371,18 @@ TEST_CASE(reduce_rejects_invalid) {
   check_eq(sim.step().status, StepStatus::invalid_configuration,
            "areduce rejects a length mismatch");
 
-  // argmax requires an i32 destination; the other reductions require f32.
+  // argmax requires a u32 destination; the other reductions require f32.
   load_one(sim, memory, make_areduce(4, 0, 1));
   acc_f32(state, 1, 2, 2);
   vec_cfg(state, 0, DType::f32, 2);
   check_eq(sim.step().status, StepStatus::invalid_configuration,
            "areduce.rows.argmax rejects an f32 destination");
+
+  load_one(sim, memory, make_areduce(4, 0, 1));
+  acc_f32(state, 1, 2, 2);
+  vec_cfg(state, 0, DType::i32, 2);
+  check_eq(sim.step().status, StepStatus::invalid_configuration,
+           "areduce.rows.argmax rejects an i32 destination");
 
   load_one(sim, memory, make_areduce(0, 0, 1));
   acc_f32(state, 1, 2, 2);
@@ -396,7 +402,7 @@ TEST_CASE(reduce_rejects_invalid) {
   check_eq(sim.step().status, StepStatus::invalid_configuration,
            "vreduce rejects an i32 destination");
 
-  // vreduce.argmax requires vIdx i32 / vVal f32 and an f32 source.
+  // vreduce.argmax requires vIdx u32 / vVal f32 and an f32 source.
   load_one(sim, memory, make_vreduce_argmax(5, 6, 1));
   vec_cfg(state, 1, DType::f32, 3);
   vec_cfg(state, 5, DType::f32, 3);
@@ -407,6 +413,13 @@ TEST_CASE(reduce_rejects_invalid) {
   load_one(sim, memory, make_vreduce_argmax(5, 6, 1));
   vec_cfg(state, 1, DType::f32, 3);
   vec_cfg(state, 5, DType::i32, 3);
+  vec_cfg(state, 6, DType::f32, 3);
+  check_eq(sim.step().status, StepStatus::invalid_configuration,
+           "vreduce.argmax rejects an i32 vIdx");
+
+  load_one(sim, memory, make_vreduce_argmax(5, 6, 1));
+  vec_cfg(state, 1, DType::f32, 3);
+  vec_cfg(state, 5, DType::u32, 3);
   vec_cfg(state, 6, DType::i32, 3);
   check_eq(sim.step().status, StepStatus::invalid_configuration,
            "vreduce.argmax rejects an i32 vVal");

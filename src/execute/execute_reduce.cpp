@@ -90,11 +90,11 @@ ArgmaxCandidate reduce_argmax(std::span<const float> values) {
 }
 
 // areduce.rows.*: row-wise reductions of an f32 Acc into a Vec32 whose length
-// equals the source row count (i32 destination for argmax).
+// equals the source row count (u32 destination for argmax).
 ExecuteResult areduce(const AreduceInstr &instr, State &state) {
   const auto &src_config = state.ac[instr.src.index];
   const auto &dst_config = state.vc[instr.dest.index];
-  const auto dst_dtype = instr.op == ReduceOp::argmax ? DType::i32 : DType::f32;
+  const auto dst_dtype = instr.op == ReduceOp::argmax ? DType::u32 : DType::f32;
   if (!valid_config_of(src_config, DType::f32) || !valid_config_of(dst_config, dst_dtype) ||
       dst_config.len != src_config.rows) {
     return config_error();
@@ -143,14 +143,14 @@ ExecuteResult vreduce(const VreduceInstr &instr, State &state) {
   return {.status = StepStatus::retired};
 }
 
-// vreduce.argmax: the winning logical index (i32 bits) and value (f32 bits)
+// vreduce.argmax: the winning logical index (u32 bits) and value (f32 bits)
 // broadcast into the vIdx/vVal destinations' effective lanes. NaN candidates
 // are ignored; an all-NaN source falls back to index 0 with NaN value bits.
 ExecuteResult vreduce_argmax(const VreduceArgmaxInstr &instr, State &state) {
   const auto &src_config = state.vc[instr.src.index];
   const auto &index_config = state.vc[instr.index_dest.index];
   const auto &value_config = state.vc[instr.value_dest.index];
-  if (!valid_config_of(src_config, DType::f32) || !valid_config_of(index_config, DType::i32) ||
+  if (!valid_config_of(src_config, DType::f32) || !valid_config_of(index_config, DType::u32) ||
       !valid_config_of(value_config, DType::f32)) {
     return config_error();
   }
