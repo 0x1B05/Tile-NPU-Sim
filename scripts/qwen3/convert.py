@@ -279,7 +279,7 @@ def build_parser():
         "model_dir",
         type=Path,
         metavar="MODEL_DIR",
-        help="directory containing config.json, model.safetensors, and tokenizer.json",
+        help="directory containing config.json and model.safetensors",
     )
     real.add_argument("out", type=Path, metavar="OUT", help="output .q3b blob")
     real.add_argument(

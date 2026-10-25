@@ -81,6 +81,8 @@ xmake build qwen3_run
 xmake run qwen3_run "你好"
 ```
 
+The Q3B2 magic is intentionally different from Q3B1; existing Q3B1 blobs must be regenerated.
+
 The app prints the prompt tokens and generated token ids over the serial console and stops after 32 new tokens or an EOS. Numerical alignment probes in `forward.c` are compiled in by default; the `QWEN3_PROBES` define at the top of the file controls them.
 
 A fixed-seed random tiny model exercises the same path without any download, and the opt-in regression wraps the whole chain — convert, guest forward under `sim_run`, then compare against the numpy reference `ref.py` (integer probes bit-exact, f32 probes within tolerance, generated tokens exact):
