@@ -1,6 +1,7 @@
 #include "qwen3.h"
 
 #include "console.h"
+#include "probe.h"
 #include "q3b.h"
 #include "q3p.h"
 
@@ -29,6 +30,9 @@ int main(void) {
   printf("\n");
 
   uint32_t next = qwen3_prefill(tokens, n_prompt);
+#if QWEN3_PROBES
+  qwen3_probe_last_prompt(tokens[n_prompt - 1], n_prompt - 1);
+#endif
   uint32_t pos = n_prompt;
 
   printf("generated: ");

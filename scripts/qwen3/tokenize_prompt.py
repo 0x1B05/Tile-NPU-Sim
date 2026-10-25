@@ -9,8 +9,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from prompt import write_prompt
-from tokenizer import Tokenizer
+from prompt import encode_prompt, write_prompt
 
 
 def build_parser():
@@ -43,16 +42,7 @@ def build_parser():
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
-    if not args.text:
-        raise ValueError("prompt is empty")
-    if args.max_pos is not None and args.max_pos <= 0:
-        raise ValueError("--max-pos must be positive")
-    tokenizer = Tokenizer(str(args.tokenizer))
-    tokens = tokenizer.encode(args.text)
-    if args.max_pos is not None and len(tokens) > args.max_pos:
-        raise ValueError(
-            f"prompt has {len(tokens)} tokens, context capacity is {args.max_pos}"
-        )
+    tokens = encode_prompt(args.text, args.tokenizer, args.max_pos)
     size = write_prompt(args.out, tokens)
     print(f"wrote {args.out} ({len(tokens)} tokens, {size} bytes)")
     return 0

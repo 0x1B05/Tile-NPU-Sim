@@ -115,7 +115,6 @@ if has_config("qwen3test") then
 				return
 			end
 			import("core.project.depend")
-			os.mkdir(app_bindir)
 			local convert = path.join(scripts_dir, "convert.py")
 			local blob = path.join(app_bindir, "tiny.q3b")
 			local prompt = path.join(app_bindir, "tiny_prompt.bin")
@@ -168,7 +167,7 @@ if has_config("monitor") then
 			end
 			local prompt = args[1]
 			if not prompt then
-				raise('usage: xmake run qwen3_run "prompt" [model.q3b]')
+				raise('usage: xmake run qwen3_run "prompt" [model]')
 			end
 			local python = find_program("python3")
 			if not python then
@@ -179,10 +178,7 @@ if has_config("monitor") then
 			if not os.isfile(app) or not os.isfile(sim_run) then
 				raise("run `xmake build qwen3_run` before `xmake run qwen3_run`")
 			end
-			local model = args[2] or path.join(app_bindir, "model.q3b")
-			if not path.is_absolute(model) then
-				model = path.join(project_root, model)
-			end
+			local model = path.absolute(args[2] or path.join(app_bindir, "model.q3b"), project_root)
 			os.execv(python, {
 				path.join(project_root, "scripts", "qwen3", "run.py"),
 				"--sim-run",

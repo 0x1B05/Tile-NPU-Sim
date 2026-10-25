@@ -14,6 +14,21 @@ HEADER_SIZE = 16
 OUTPUT_MODE = 0o644
 
 
+def encode_prompt(text, tokenizer_path, max_pos=None):
+    from tokenizer import Tokenizer
+
+    if not text:
+        raise ValueError("prompt is empty")
+    if max_pos is not None and max_pos <= 0:
+        raise ValueError("--max-pos must be positive")
+    tokens = Tokenizer(str(tokenizer_path)).encode(text)
+    if max_pos is not None and len(tokens) > max_pos:
+        raise ValueError(
+            f"prompt has {len(tokens)} tokens, context capacity is {max_pos}"
+        )
+    return tokens
+
+
 def prompt_bytes(tokens):
     tokens = list(tokens)
     if not tokens:

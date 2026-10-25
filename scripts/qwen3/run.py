@@ -4,11 +4,9 @@
 import argparse
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
-from prompt import write_prompt
-from tokenizer import Tokenizer
+from prompt import encode_prompt, write_prompt
 
 
 def build_parser():
@@ -47,8 +45,9 @@ def build_parser():
     parser.add_argument(
         "--prompt-out",
         type=Path,
+        default=Path("build/apps/qwen3/prompt.bin"),
         metavar="PROMPT",
-        help="write the Q3P image here instead of a temporary file",
+        help="Q3P image path (default: build/apps/qwen3/prompt.bin)",
     )
     parser.add_argument(
         "--max-pos",
@@ -67,41 +66,17 @@ def build_parser():
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
-    if not args.text:
-        raise ValueError("prompt is empty")
-    if args.max_pos is not None and args.max_pos <= 0:
-        raise ValueError("--max-pos must be positive")
-    tokenizer = Tokenizer(str(args.tokenizer))
-    tokens = tokenizer.encode(args.text)
-    if args.max_pos is not None and len(tokens) > args.max_pos:
-        raise ValueError(
-            f"prompt has {len(tokens)} tokens, context capacity is {args.max_pos}"
-        )
-
-    prompt_file = None
-    remove_prompt = False
-    try:
-        if args.prompt_out is not None:
-            prompt_file = args.prompt_out
-        else:
-            with tempfile.NamedTemporaryFile(
-                prefix="qwen3-prompt-", suffix=".bin", delete=False
-            ) as f:
-                prompt_file = Path(f.name)
-            remove_prompt = True
-        write_prompt(prompt_file, tokens)
-        cmd = [
-            str(args.sim_run),
-            "-m",
-            str(args.memory_mib),
-            str(args.app),
-            f"{args.model}@0x81000000",
-            f"{prompt_file}@0x80F00000",
-        ]
-        return subprocess.call(cmd)
-    finally:
-        if remove_prompt and prompt_file is not None:
-            prompt_file.unlink(missing_ok=True)
+    tokens = encode_prompt(args.text, args.tokenizer, args.max_pos)
+    write_prompt(args.prompt_out, tokens)
+    cmd = [
+        str(args.sim_run),
+        "-m",
+        str(args.memory_mib),
+        str(args.app),
+        f"{args.model}@0x81000000",
+        f"{args.prompt_out}@0x80F00000",
+    ]
+    return subprocess.call(cmd)
 
 
 if __name__ == "__main__":

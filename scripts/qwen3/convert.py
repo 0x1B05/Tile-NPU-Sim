@@ -102,14 +102,12 @@ def convert_real(model_dir, max_pos):
     except KeyError as exc:
         raise ValueError(f"{config_path}: missing key {exc.args[0]!r}") from exc
 
-    vocab = arch["vocab"]
-
     st = SafeTensors(weights_path)
     LOGGER.info(
         "model: %d layers, hidden=%d, vocab=%d",
         arch["n_layers"],
         arch["hidden"],
-        vocab,
+        arch["vocab"],
     )
 
     blob = Blob(arch)
