@@ -7,8 +7,9 @@ The simulator core is the `tile_npu_sim` static library with a single-step API; 
 ## Build and test
 
 ```sh
-xmake          # tile_npu_sim + sim_run
-xmake test     # unit tests + guest images (guest images need the cross toolchain below)
+xmake                    # tile_npu_sim + sim_run
+xmake test               # unit tests + guest images (guest images need the cross toolchain below)
+xmake f --native=y       # optional host-specific -march=native code generation
 ```
 
 ## Running programs

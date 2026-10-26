@@ -16,11 +16,62 @@ constexpr std::int32_t i8_product(std::uint8_t lhs, std::uint8_t rhs) {
          static_cast<std::int32_t>(std::bit_cast<std::int8_t>(rhs));
 }
 
+constexpr std::int32_t i8_value(std::uint8_t value) {
+  return static_cast<std::int32_t>(std::bit_cast<std::int8_t>(value));
+}
+
 constexpr bool is_accumulate(MmaOp op) { return op == MmaOp::nn_acc; }
 
 constexpr bool is_nt(BdotOp op) { return op == BdotOp::nt_zero || op == BdotOp::nt_acc; }
 
 constexpr bool is_accumulate(BdotOp op) { return op == BdotOp::nn_acc || op == BdotOp::nt_acc; }
+
+// Matches the manual's K-outer accumulation order: the j direction of both
+// the right operand and the destination is contiguous, so the inner loop
+// vectorizes while wrap32 addition keeps the result exact.
+template <std::size_t M, std::size_t N, std::size_t K>
+void mma_kernel(const Tile &lhs, const Tile &rhs, Acc &dst, bool accumulate) {
+  if (!accumulate) {
+    for (std::size_t i = 0; i < M; ++i) {
+      for (std::size_t j = 0; j < N; ++j) {
+        dst[i * MATRIX_EXTENT + j] = 0;
+      }
+    }
+  }
+  for (std::size_t k = 0; k < K; ++k) {
+    for (std::size_t i = 0; i < M; ++i) {
+      const auto lhs_value = i8_value(lhs[i * MATRIX_EXTENT + k]);
+      auto *dst_row = dst.data() + i * MATRIX_EXTENT;
+      const auto *rhs_row = rhs.data() + k * MATRIX_EXTENT;
+      for (std::size_t j = 0; j < N; ++j) {
+        dst_row[j] += static_cast<std::uint32_t>(lhs_value * i8_value(rhs_row[j]));
+      }
+    }
+  }
+}
+
+// The validated shape may be smaller than the physical extent; keep the
+// generic path runtime-sized while the common full tile uses fixed bounds.
+void mma_generic(const Tile &lhs, const Tile &rhs, Acc &dst, std::size_t m_size, std::size_t n_size,
+                 std::size_t k_size, bool accumulate) {
+  if (!accumulate) {
+    for (std::size_t i = 0; i < m_size; ++i) {
+      for (std::size_t j = 0; j < n_size; ++j) {
+        dst[i * MATRIX_EXTENT + j] = 0;
+      }
+    }
+  }
+  for (std::size_t k = 0; k < k_size; ++k) {
+    for (std::size_t i = 0; i < m_size; ++i) {
+      const auto lhs_value = i8_value(lhs[i * MATRIX_EXTENT + k]);
+      auto *dst_row = dst.data() + i * MATRIX_EXTENT;
+      const auto *rhs_row = rhs.data() + k * MATRIX_EXTENT;
+      for (std::size_t j = 0; j < n_size; ++j) {
+        dst_row[j] += static_cast<std::uint32_t>(lhs_value * i8_value(rhs_row[j]));
+      }
+    }
+  }
+}
 
 // mma.nn.{zero,acc}.i8.i32: D = A x B with B stored K x N; acc adds the
 // i32 partial into the existing value.
@@ -32,25 +83,21 @@ ExecuteResult mma(const MmaInstr &instr, State &state) {
       !valid_config_of(rhs_config, DType::i8)) {
     return config_error();
   }
-  const auto m_size = lhs_config.rows;
-  const auto n_size = rhs_config.cols;
-  const auto k_size = lhs_config.cols;
+  const auto m_size = std::size_t{lhs_config.rows};
+  const auto n_size = std::size_t{rhs_config.cols};
+  const auto k_size = std::size_t{lhs_config.cols};
   if (dst_config.rows != m_size || dst_config.cols != n_size || rhs_config.rows != k_size) {
     return config_error();
   }
-  auto dst = matrix_view(state.a[instr.dest.index]);
-  auto lhs = matrix_view(std::as_const(state.t[instr.src_a.index]));
-  auto rhs = matrix_view(std::as_const(state.t[instr.src_b.index]));
-  for (std::size_t i = 0; i < m_size; ++i) {
-    for (std::size_t j = 0; j < n_size; ++j) {
-      std::int32_t partial = 0;
-      for (std::size_t k = 0; k < k_size; ++k) {
-        partial += i8_product(lhs.at(i, k), rhs.at(k, j));
-      }
-      auto &cell = dst.at(i, j);
-      cell = is_accumulate(instr.op) ? cell + std::bit_cast<std::uint32_t>(partial)
-                                     : std::bit_cast<std::uint32_t>(partial);
-    }
+
+  const auto &lhs = state.t[instr.src_a.index];
+  const auto &rhs = state.t[instr.src_b.index];
+  auto &dst = state.a[instr.dest.index];
+  const bool accumulate = is_accumulate(instr.op);
+  if (m_size == MATRIX_EXTENT && n_size == MATRIX_EXTENT && k_size == MATRIX_EXTENT) {
+    mma_kernel<MATRIX_EXTENT, MATRIX_EXTENT, MATRIX_EXTENT>(lhs, rhs, dst, accumulate);
+  } else {
+    mma_generic(lhs, rhs, dst, m_size, n_size, k_size, accumulate);
   }
   return {.status = StepStatus::retired};
 }

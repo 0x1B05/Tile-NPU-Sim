@@ -32,6 +32,16 @@ option("qwen3test", function()
 	set_description("Run the tiny Qwen3 guest/numpy alignment test (needs python3 with numpy)")
 end)
 
+option("native", function()
+	set_default(false)
+	set_showmenu(true)
+	set_description("Build with -march=native for host-specific ISA extensions")
+end)
+
+if has_config("native") then
+	add_cxflags("-march=native", { tools = { "gcc", "gxx", "clang", "clangxx" } })
+end
+
 target("tile_npu_sim", function()
 	set_kind("static")
 	add_files("src/*.cpp|main.cpp", "src/decode/*.cpp", "src/execute/*.cpp", "src/platform/*.cpp")
