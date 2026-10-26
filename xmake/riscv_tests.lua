@@ -1,7 +1,7 @@
--- Official riscv-tests suite, opt-in (--rvtests=y, fetched by
+-- Official riscv-tests image artifacts, opt-in (--rvtests=y, fetched by
 -- scripts/fetch_riscv_tests.sh). Each rv64ui/rv64um test is assembled
--- against our minimal env (tests/riscv-tests-env) and reported as its own
--- sim_run test. Excluded: fence_i (Zifencei, not modeled) and ma_data
+-- against our minimal env (tests/riscv-tests-env); tests/run.py executes the
+-- resulting images. Excluded: fence_i (Zifencei, not modeled) and ma_data
 -- (requires trap delivery, which the simulator does not implement).
 
 if has_config("rvtests") then
@@ -34,12 +34,8 @@ if has_config("rvtests") then
 		set_values("linkscript", path.join(os.projectdir(), "tests", "guest", "link.ld"))
 		set_values("passlist", table.unpack(rvtests))
 		-- Validation lives in on_config because raise() is not available in
-		-- description scope. The suite runs through sim_run; without the
-		-- runner it would be silently skipped, so reject the combination.
+		-- description scope.
 		on_config(function(target)
-			if not has_config("monitor") then
-				raise("--rvtests=y requires the runner; configure with --monitor=y")
-			end
 			if #(target:values("passlist") or {}) == 0 then
 				raise(
 					"no rv64ui/rv64um sources under external/riscv-tests; " .. "run scripts/fetch_riscv_tests.sh first"
@@ -86,16 +82,6 @@ if has_config("rvtests") then
 		end)
 	end)
 
-	-- Images attach to the test target, keeping the runner binary free of
-	-- the cross toolchain (see xmake/guest.lua).
-	target("sim_tests", function()
-		add_deps("riscv_tests")
-	end)
-
-	target("sim_run", function()
-		for _, name in ipairs(rvtests) do
-			local bin = path.join(rvtests_bindir, name:gsub("/", "-") .. ".bin")
-			add_tests("riscv-tests/" .. name:gsub("/", "-"), { runargs = { bin } })
-		end
-	end)
+	-- The images are consumed by tests/run.py; no test target or sim_run
+	-- registration is attached here.
 end
