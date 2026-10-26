@@ -6,8 +6,17 @@ A functional simulator for the [Tile-NPU ISA](https://github.com/0x1B05/Tile-NPU
 
 ```sh
 xmake                    # tile_npu_sim + sim_run
-xmake test               # unit tests + guest images (guest images need the cross toolchain below)
+xmake test               # host unit tests only (no cross toolchain)
 xmake f --native=y       # optional host-specific -march=native code generation
+```
+
+Integration suites are driven by `tests/run.py`:
+
+```sh
+python3 tests/run.py guest --build       # guest images + sim_guest_tests
+python3 tests/run.py riscv-tests --build # official rv64ui/rv64um suite
+python3 tests/run.py qwen3 --build       # tiny Qwen3 regression
+python3 tests/run.py all --build
 ```
 
 ## Running programs
@@ -35,7 +44,7 @@ The runner is an xmake option; `xmake f --monitor=n` builds the library only.
 
 ## Guest tests
 
-Guest programs under `tests/guest/` are C or assembly sources cross-compiled with a RISC-V toolchain (`riscv64-linux-gnu-` by default; override the prefix with `xmake f --riscv_cross=<prefix>`) and linked into flat binaries against a minimal `crt0.S`. Self-checking programs run through `sim_run` as individual `xmake test` cases. Images attach to the `sim_tests` target, so the `sim_run` binary itself never needs the cross toolchain; before a filtered rerun like `xmake test 'sim_run/guest/factorial'`, build the images first with `xmake build guest_images` or a full `xmake test`.
+Guest programs under `tests/guest/` are C or assembly sources cross-compiled with a RISC-V toolchain (`riscv64-linux-gnu-` by default; override the prefix with `xmake f --riscv_cross=<prefix>`) and linked into flat binaries against a minimal `crt0.S`. `xmake build guest_images` only produces the images; it does not register tests. `python3 tests/run.py guest --build` builds the images and `sim_guest_tests`, then runs the in-process guest checks and the `rv64im` self-checking images. Use `--filter` to select a test or image by name.
 
 ## riscv-tests conformance
 
@@ -43,10 +52,10 @@ The official [riscv-tests](https://github.com/riscv-software-src/riscv-tests) su
 
 ```sh
 scripts/fetch_riscv_tests.sh      # clone the pinned commit into external/
-xmake f --rvtests=y && xmake test
+python3 tests/run.py riscv-tests --build
 ```
 
-The suite is assembled against a minimal custom env (`tests/riscv-tests-env/riscv_test.h`) that reports pass/fail through the runner's `ebreak`/`a0` convention; `fence_i` and `ma_data` are excluded (Zifencei and trap delivery are not modeled).
+The suite is assembled against a minimal custom env (`tests/riscv-tests-env/riscv_test.h`) that reports pass/fail through the runner's `ebreak`/`a0` convention; `fence_i` and `ma_data` are excluded (Zifencei and trap delivery are not modeled). The runner executes the generated images through `sim_run`; missing external sources or images are reported by the runner instead of affecting `xmake f`.
 
 ## Qwen3 inference guest
 
@@ -97,11 +106,7 @@ python3 scripts/qwen3/bench.py "你好" \
 A fixed-seed random tiny model exercises the same path without any download, and the opt-in regression wraps the whole chain — convert, guest forward under `sim_run`, then compare against the numpy reference `ref.py` (snapshot records compared with the numpy reference, generated tokens exact):
 
 ```sh
-python3 scripts/qwen3/convert.py tiny \
-    --out build/apps/qwen3/tiny.q3b \
-    --ref build/apps/qwen3/tiny_ref.npz \
-    --prompt-out build/apps/qwen3/tiny_prompt.bin
-xmake f --qwen3test=y && xmake test
+python3 tests/run.py qwen3 --build
 ```
 
-The regression requires `--monitor=y` and is skipped with a warning when python3 with numpy is unavailable.
+The runner builds `qwen3_snapshot_app`, generates the tiny model/prompt/reference, runs it under `sim_run`, and compares the snapshot records and generated tokens against the NumPy reference. It reports a clear error when `sim_run`, Python, or NumPy is unavailable.
