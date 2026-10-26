@@ -6,8 +6,10 @@
 #include <iostream>
 #include <string_view>
 
+#include "support/guest_image.h"
+
 int main(int argc, char **argv) {
-  // Usage: sim_tests [--list] [--filter SUBSTR]
+  // Usage: <test-binary> [--list] [--filter SUBSTR] [--guest-dir DIR]
   std::string_view filter;
   bool list_only = false;
   for (int i = 1; i < argc; ++i) {
@@ -16,8 +18,10 @@ int main(int argc, char **argv) {
       list_only = true;
     } else if (arg == "--filter" && i + 1 < argc) {
       filter = argv[++i];
+    } else if (arg == "--guest-dir" && i + 1 < argc) {
+      tile_npu::test::set_guest_image_dir(argv[++i]);
     } else {
-      std::cerr << "usage: " << argv[0] << " [--list] [--filter SUBSTR]\n";
+      std::cerr << "usage: " << argv[0] << " [--list] [--filter SUBSTR] [--guest-dir DIR]\n";
       return 2;
     }
   }

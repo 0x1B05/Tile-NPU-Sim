@@ -1,7 +1,7 @@
--- Guest test images: in-repo C/.S sources under tests/guest/ cross-compiled
+-- Guest image artifacts: in-repo C/.S sources under tests/guest/ cross-compiled
 -- to flat binaries in <buildir>/guest/. C programs link the shared crt0;
 -- bare .S images provide their own _start. Images are build products of
--- in-repo sources, never committed.
+-- in-repo sources, never committed. tests/run.py consumes the outputs.
 
 local guest_srcdir = path.join(os.projectdir(), "tests", "guest")
 -- Anchor at the project root: path.absolute alone would resolve against the
@@ -52,22 +52,3 @@ target("guest_images", function()
 		end
 	end)
 end)
-
-target("sim_tests", function()
-	add_deps("guest_images")
-	add_defines('GUEST_IMAGE_DIR="' .. guest_bindir .. '"')
-end)
-
-if has_config("monitor") then
-	target("sim_run", function()
-		-- Each self-checking guest image runs as a separate xmake test.
-		for _, ext in ipairs({ "*.c", "*.S" }) do
-			for _, src in ipairs(os.files(path.join(guest_srcdir, "rv64im", ext))) do
-				add_tests(
-					"guest/" .. path.basename(src),
-					{ runargs = { path.join(guest_bindir, path.basename(src) .. ".bin") } }
-				)
-			end
-		end
-	end)
-end

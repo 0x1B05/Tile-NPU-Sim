@@ -69,8 +69,16 @@ target("sim_tests", function()
 	add_tests("core")
 end)
 
--- Guest images and the optional conformance suite attach themselves to the
--- sim_tests / sim_run targets defined above.
+target("sim_guest_tests", function()
+	set_kind("binary")
+	set_default(false)
+	add_deps("tile_npu_sim")
+	add_files("tests/main.cpp", "tests/guest/npu_guest_test.cpp")
+	add_includedirs("src", "tests")
+end)
+
+-- Guest images and the optional conformance suite are separate build-only
+-- targets; test execution is owned by tests/run.py.
 includes("xmake/guest.lua")
 includes("xmake/riscv_tests.lua")
 for _, appfile in ipairs(os.files("apps/*/xmake.lua")) do

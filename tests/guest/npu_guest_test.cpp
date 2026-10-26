@@ -14,6 +14,7 @@
 #include "monitor/format.h"
 #include "monitor/monitor.h"
 #include "support/execute_helpers.h"
+#include "support/guest_image.h"
 #include "utils/endian.h"
 
 using namespace tile_npu::test;
@@ -22,7 +23,9 @@ namespace {
 constexpr std::uint64_t IMAGE_BASE = 0x80000000;
 
 void load_image(tile_npu::Ram &memory, std::string_view name) {
-  const std::string path = std::string(GUEST_IMAGE_DIR) + "/" + std::string(name) + ".bin";
+  const auto &directory = guest_image_dir();
+  check(!directory.empty(), "guest image directory not set (pass --guest-dir)");
+  const std::string path = directory + "/" + std::string(name) + ".bin";
   std::ifstream in(path, std::ios::binary);
   check(in.good(), "open guest image " + path);
   const std::vector<char> bytes{std::istreambuf_iterator<char>(in),
