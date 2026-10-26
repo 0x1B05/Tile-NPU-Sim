@@ -63,6 +63,101 @@ bool for_each_block_element(const MatrixDescView &desc, std::size_t rows, std::s
   return true;
 }
 
+// Visits the contiguous source runs of a block. The transpose form's runs are
+// source rows, which become columns of the destination register. Returns false
+// when either end of a run overflows.
+template <typename Fn>
+bool for_each_block_run(const MatrixDescView &desc, std::size_t rows, std::size_t cols,
+                        bool transpose, Fn &&fn) {
+  if (transpose) {
+    for (std::size_t src_row = 0; src_row < cols; ++src_row) {
+      const auto start = desc.matrix_element_addr(src_row, 0);
+      const auto end = desc.matrix_element_addr(src_row, rows - 1);
+      if (!start || !end) {
+        return false;
+      }
+      fn(*start, rows, src_row);
+    }
+  } else {
+    for (std::size_t row = 0; row < rows; ++row) {
+      const auto start = desc.matrix_element_addr(row, 0);
+      const auto end = desc.matrix_element_addr(row, cols - 1);
+      if (!start || !end) {
+        return false;
+      }
+      fn(*start, cols, row);
+    }
+  }
+  return true;
+}
+
+// Fast path for a block whose columns are contiguous in memory. Runs are
+// probed as a whole; a run rejected by the address space falls back to the
+// per-element path so the exact fault address is preserved. Returns nullopt
+// for that fallback and config_error for an address overflow.
+template <typename Reg>
+std::optional<ExecuteResult>
+try_contiguous_block(const MblkInstr &instr, ExecContext &ctx, const MatrixDescView &desc, Reg &reg,
+                     std::size_t rows, std::size_t cols, bool transpose) {
+  using Element = typename Reg::value_type;
+  const bool store = is_store(instr.op);
+  // The ISA defines stores in destination row-major order; a transposed store
+  // would write source-row runs instead, which differs when addresses alias.
+  if (transpose && store) {
+    return std::nullopt;
+  }
+
+  bool contained = true;
+  if (!for_each_block_run(desc, rows, cols, transpose,
+                          [&](std::uint64_t address, std::size_t length, std::size_t) {
+                            if (!ctx.memory.contains(address, length * sizeof(Element))) {
+                              contained = false;
+                            }
+                          })) {
+    return config_error();
+  }
+  if (!contained) {
+    return std::nullopt;
+  }
+
+  auto view = matrix_view(reg);
+  if (transpose) {
+    // Transposed stores use the per-element order; only loads reach here.
+    std::array<Element, MATRIX_EXTENT> buffer{};
+    for (std::size_t src_row = 0; src_row < cols; ++src_row) {
+      const auto address = desc.matrix_element_addr(src_row, 0);
+      if (!address) {
+        unreachable("block run overflowed after range prevalidation");
+      }
+      if (!ctx.memory.read(*address,
+                           std::as_writable_bytes(std::span<Element>(buffer.data(), rows)))) {
+        unreachable("AddressSpace::read failed after range prevalidation");
+      }
+      for (std::size_t row = 0; row < rows; ++row) {
+        view.at(row, src_row) = buffer[row];
+      }
+    }
+  } else {
+    for (std::size_t row = 0; row < rows; ++row) {
+      const auto address = desc.matrix_element_addr(row, 0);
+      if (!address) {
+        unreachable("block run overflowed after range prevalidation");
+      }
+      Element *data = &view.at(row, 0);
+      if (store) {
+        if (!ctx.memory.write(*address, std::as_bytes(std::span<const Element>(data, cols)))) {
+          unreachable("AddressSpace::write failed after range prevalidation");
+        }
+      } else {
+        if (!ctx.memory.read(*address, std::as_writable_bytes(std::span<Element>(data, cols)))) {
+          unreachable("AddressSpace::read failed after range prevalidation");
+        }
+      }
+    }
+  }
+  return ExecuteResult{.status = StepStatus::retired};
+}
+
 // Every access runs in two phases: all addresses are computed first, then
 // the transfer happens.
 template <std::size_t Max, typename Next>
@@ -160,6 +255,21 @@ template <NpuDomain Domain> ExecuteResult block_access(const MblkInstr &instr, E
   const bool transpose = desc.descriptor().transform;
   using Element = typename std::remove_reference_t<decltype(reg)>::value_type;
   const auto fault_status = is_store(instr.op) ? StepStatus::store_fault : StepStatus::load_fault;
+
+  // A contiguous run per row is the common case and avoids the per-element
+  // address-space calls. Multi-byte elements only take this path on a
+  // little-endian host because the raw bytes are copied directly.
+  if constexpr (sizeof(Element) == 1 || std::endian::native == std::endian::little) {
+    if (desc.descriptor().col_stride_bytes == static_cast<std::int32_t>(sizeof(Element))) {
+      const auto fast = try_contiguous_block(instr, ctx, desc, reg, rows, cols, transpose);
+      if (fast) {
+        if (fast->status == StepStatus::retired) {
+          desc.commit_base(*next_base);
+        }
+        return *fast;
+      }
+    }
+  }
 
   // Probe every element before changing the register or memory, preserving
   // the atomic transfer contract without materializing the address array.

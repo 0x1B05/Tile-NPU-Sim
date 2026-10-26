@@ -175,6 +175,44 @@ TEST_CASE(mblk_tstore_block) {
            "store does not modify the source register");
 }
 
+TEST_CASE(mblk_acc_block_load_store) {
+  constexpr std::uint8_t raw[16] = {
+      0x44, 0x33, 0x22, 0x11, // 0x11223344
+      0x88, 0x77, 0x66, 0x55, // 0x55667788
+      0xdd, 0xcc, 0xbb, 0xaa, // 0xaabbccdd
+      0x04, 0x03, 0x02, 0x01, // 0x01020304
+  };
+  constexpr std::array<std::uint8_t, 16> expected = {
+      0x44, 0x33, 0x22, 0x11, 0x88, 0x77, 0x66, 0x55,
+      0xdd, 0xcc, 0xbb, 0xaa, 0x04, 0x03, 0x02, 0x01,
+  };
+
+  MblkRun load(block(NpuDomain::acc, 0, 0)); // aload a0
+  auto &state = load.sim.state();
+  config_acc_2x2(state, 0);
+  stride_desc(state.am[0], DATA, 8, 4);
+  poke(load.memory, DATA, raw);
+
+  check_eq(load.sim.step().status, StepStatus::retired, "aload retires");
+  check_eq(hex(state.a[0][tile_index(0, 0)]), hex(0x11223344u), "a0(0,0)");
+  check_eq(hex(state.a[0][tile_index(0, 1)]), hex(0x55667788u), "a0(0,1)");
+  check_eq(hex(state.a[0][tile_index(1, 0)]), hex(0xaabbccddu), "a0(1,0)");
+  check_eq(hex(state.a[0][tile_index(1, 1)]), hex(0x01020304u), "a0(1,1)");
+
+  MblkRun store(block(NpuDomain::acc, 1, 1)); // astore a1
+  auto &store_state = store.sim.state();
+  config_acc_2x2(store_state, 1);
+  stride_desc(store_state.am[1], DATA, 8, 4);
+  store_state.a[1][tile_index(0, 0)] = 0x11223344u;
+  store_state.a[1][tile_index(0, 1)] = 0x55667788u;
+  store_state.a[1][tile_index(1, 0)] = 0xaabbccddu;
+  store_state.a[1][tile_index(1, 1)] = 0x01020304u;
+
+  check_eq(store.sim.step().status, StepStatus::retired, "astore retires");
+  const auto bytes = peek<16>(store.memory, DATA);
+  check(bytes == expected, "memory holds the stored 2x2 i32 block");
+}
+
 TEST_CASE(mblk_tstore_transpose) {
   MblkRun run(block(NpuDomain::tile, 1, 1)); // tstore t1
   auto &state = run.sim.state();
