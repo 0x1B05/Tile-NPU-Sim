@@ -337,7 +337,7 @@ qwen3_quant_rows:
 # sum_c xq[t,c] * W[j,c] for t in [0,rows), computing one up-to-32-row token
 # chunk. xq is [rows, k] i8 row-major (qwen3_quant_rows output), xs its rows
 # row scales. Per 32-column block of out: t1 holds one [k][n] weight tile from
-# the [k/32][n/32][32][32] layout and mma.nn accumulates the k/32 chunks in
+# the [k/32][n/32][32][32] layout and mma.nt accumulates the k/32 chunks in
 # acc a0, then acc -> f32, * ws (bycol), * xs (byrow), stored via am8
 # (auto-advances one block per store). Full groups of eight nblocks keep
 # accelerators a0..a7 and reuse one xq tile across the group.
@@ -405,7 +405,7 @@ qwen3_matmul_q:
     .irp G,0,1,2,3,4,5,6,7
     SETX    SEL_TM, 0, CF_BASE, 1, X_T4
     TLOAD   1
-    MMA_NN_ZERO \G, 0, 1
+    MMA_NT_ZERO \G, 0, 1
     addi    t4, t4, 1024
     .endr
     add     t0, t0, t3
@@ -417,7 +417,7 @@ qwen3_matmul_q:
     .irp G,0,1,2,3,4,5,6,7
     SETX    SEL_TM, 0, CF_BASE, 1, X_T4
     TLOAD   1
-    MMA_NN_ACC \G, 0, 1
+    MMA_NT_ACC \G, 0, 1
     addi    t4, t4, 1024
     .endr
     add     t0, t0, t3
@@ -445,7 +445,7 @@ qwen3_matmul_q:
     SETX    SEL_TM, 0, CF_BASE, 1, X_T0
     TLOAD   0
     TLOAD   1
-    MMA_NN_ZERO 0, 0, 1
+    MMA_NT_ZERO 0, 0, 1
     add     t0, t0, t1
     li      s5, 1
 .Lmm_tail_kloop:
@@ -453,7 +453,7 @@ qwen3_matmul_q:
     SETX    SEL_TM, 0, CF_BASE, 1, X_T0
     TLOAD   0
     TLOAD   1
-    MMA_NN_ACC 0, 0, 1
+    MMA_NT_ACC 0, 0, 1
     add     t0, t0, t1
     addi    s5, s5, 1
     j       .Lmm_tail_kloop

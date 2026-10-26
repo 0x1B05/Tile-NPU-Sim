@@ -48,48 +48,48 @@ void poke_rhs_nt(tile_npu::State &state, std::size_t index) {
 
 } // namespace
 
-TEST_CASE(mma_nn_zero) {
+TEST_CASE(mma_nt_zero) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
-  // {{1,2,3},{4,-5,6}} x {{7,8},{-9,10},{11,-12}} =
-  //   {{22, -8}, {139, -90}}; i8 operands sign-extend before the i32 product.
-  load_one(sim, memory, make_mma(0, 0, 1, 2));
+  // {{1,2,3},{4,-5,6}} x {{7,8,9},{10,11,12}}^T =
+  //   {{50, 68}, {42, 57}}; i8 operands sign-extend before the i32 product.
+  load_one(sim, memory, make_mma(2, 0, 1, 2));
   auto &state = sim.state();
   acc_i32(state, 0, 2, 2);
   tile_i8(state, 1, 2, 3);
-  tile_i8(state, 2, 3, 2);
+  tile_i8(state, 2, 2, 3);
   poke_lhs(state, 1);
-  poke_rhs_nn(state, 2);
+  poke_rhs_nt(state, 2);
 
-  check_eq(sim.step().status, StepStatus::retired, "mma.nn.zero retires");
-  check_eq(state.a[0][0], std::uint32_t{22}, "D[0,0]");
-  check_eq(hex(state.a[0][1]), hex(0xfffffff8u), "D[0,1] = -8");
-  check_eq(state.a[0][32], std::uint32_t{139}, "D[1,0]");
-  check_eq(hex(state.a[0][33]), hex(0xffffffa6u), "D[1,1] = -90");
+  check_eq(sim.step().status, StepStatus::retired, "mma.nt.zero retires");
+  check_eq(state.a[0][0], std::uint32_t{50}, "D[0,0]");
+  check_eq(state.a[0][1], std::uint32_t{68}, "D[0,1]");
+  check_eq(state.a[0][32], std::uint32_t{42}, "D[1,0]");
+  check_eq(state.a[0][33], std::uint32_t{57}, "D[1,1]");
 }
 
-TEST_CASE(mma_nn_acc) {
+TEST_CASE(mma_nt_acc) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
-  // Same product as mma_nn_zero accumulated onto {INT32_MAX, 2, 3, 4}:
-  // D[0,0] wraps to 0x80000015 (wrap32), the rest add normally.
-  load_one(sim, memory, make_mma(1, 0, 1, 2));
+  // Same product as mma_nt_zero accumulated onto {INT32_MAX, 2, 3, 4}:
+  // D[0,0] wraps to 0x80000031 (wrap32), the rest add normally.
+  load_one(sim, memory, make_mma(3, 0, 1, 2));
   auto &state = sim.state();
   acc_i32(state, 0, 2, 2);
   tile_i8(state, 1, 2, 3);
-  tile_i8(state, 2, 3, 2);
+  tile_i8(state, 2, 2, 3);
   poke_lhs(state, 1);
-  poke_rhs_nn(state, 2);
+  poke_rhs_nt(state, 2);
   state.a[0][0] = 0x7fffffffu;
   state.a[0][1] = 2;
   state.a[0][32] = 3;
   state.a[0][33] = 4;
 
-  check_eq(sim.step().status, StepStatus::retired, "mma.nn.acc retires");
-  check_eq(hex(state.a[0][0]), hex(0x80000015u), "D[0,0] wraps");
-  check_eq(hex(state.a[0][1]), hex(0xfffffffau), "D[0,1] = 2 + -8");
-  check_eq(state.a[0][32], std::uint32_t{142}, "D[1,0] = 3 + 139");
-  check_eq(hex(state.a[0][33]), hex(0xffffffaau), "D[1,1] = 4 + -90");
+  check_eq(sim.step().status, StepStatus::retired, "mma.nt.acc retires");
+  check_eq(hex(state.a[0][0]), hex(0x80000031u), "D[0,0] wraps");
+  check_eq(state.a[0][1], std::uint32_t{70}, "D[0,1] = 2 + 68");
+  check_eq(state.a[0][32], std::uint32_t{45}, "D[1,0] = 3 + 42");
+  check_eq(state.a[0][33], std::uint32_t{61}, "D[1,1] = 4 + 57");
 }
 
 TEST_CASE(bdot_nn_nt) {
@@ -165,36 +165,36 @@ TEST_CASE(mma_rejects_invalid) {
   auto &state = sim.state();
 
   // The left Tile must be i8.
-  load_one(sim, memory, make_mma(0, 0, 1, 2));
+  load_one(sim, memory, make_mma(2, 0, 1, 2));
   acc_i32(state, 0, 2, 2);
   state.tc[1].dtype = DType::u8;
   state.tc[1].rows = 2;
   state.tc[1].cols = 3;
-  tile_i8(state, 2, 3, 2);
+  tile_i8(state, 2, 2, 3);
   state.a[0][0] = 0xeeeeeeeeu;
   check_eq(sim.step().status, StepStatus::invalid_configuration, "mma rejects a u8 left operand");
   check_eq(hex(state.a[0][0]), hex(0xeeeeeeeeu), "non-mutating");
 
   // The Acc destination must be i32.
-  load_one(sim, memory, make_mma(0, 0, 1, 2));
+  load_one(sim, memory, make_mma(2, 0, 1, 2));
   acc_i32(state, 0, 2, 2);
   state.ac[0].dtype = DType::f32;
   tile_i8(state, 1, 2, 3);
-  tile_i8(state, 2, 3, 2);
+  tile_i8(state, 2, 2, 3);
   check_eq(sim.step().status, StepStatus::invalid_configuration, "mma rejects an f32 destination");
 
-  // nn requires cols(tA) == rows(tB).
-  load_one(sim, memory, make_mma(0, 0, 1, 2));
+  // nt requires cols(tA) == cols(tB).
+  load_one(sim, memory, make_mma(2, 0, 1, 2));
   acc_i32(state, 0, 2, 2);
   tile_i8(state, 1, 2, 3);
   tile_i8(state, 2, 2, 2);
-  check_eq(sim.step().status, StepStatus::invalid_configuration, "mma.nn rejects a K mismatch");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "mma.nt rejects a K mismatch");
 
   // The destination shape must be M x N.
-  load_one(sim, memory, make_mma(0, 0, 1, 2));
+  load_one(sim, memory, make_mma(2, 0, 1, 2));
   acc_i32(state, 0, 2, 3);
   tile_i8(state, 1, 2, 3);
-  tile_i8(state, 2, 3, 2);
+  tile_i8(state, 2, 2, 3);
   check_eq(sim.step().status, StepStatus::invalid_configuration,
            "mma rejects a destination shape mismatch");
 

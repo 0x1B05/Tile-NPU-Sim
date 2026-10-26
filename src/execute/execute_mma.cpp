@@ -20,32 +20,25 @@ constexpr std::int32_t i8_value(std::uint8_t value) {
   return static_cast<std::int32_t>(std::bit_cast<std::int8_t>(value));
 }
 
-constexpr bool is_accumulate(MmaOp op) { return op == MmaOp::nn_acc; }
+constexpr bool is_accumulate(MmaOp op) { return op == MmaOp::nt_acc; }
 
 constexpr bool is_nt(BdotOp op) { return op == BdotOp::nt_zero || op == BdotOp::nt_acc; }
 
 constexpr bool is_accumulate(BdotOp op) { return op == BdotOp::nn_acc || op == BdotOp::nt_acc; }
 
-// Matches the manual's K-outer accumulation order: the j direction of both
-// the right operand and the destination is contiguous, so the inner loop
-// vectorizes while wrap32 addition keeps the result exact.
+// The right operand is stored N x K: row j is contiguous in K, so the inner
+// loop accumulates one output element with wrap32 addition.
 template <std::size_t M, std::size_t N, std::size_t K>
 void mma_kernel(const Tile &lhs, const Tile &rhs, Acc &dst, bool accumulate) {
-  if (!accumulate) {
-    for (std::size_t i = 0; i < M; ++i) {
-      for (std::size_t j = 0; j < N; ++j) {
-        dst[i * MATRIX_EXTENT + j] = 0;
+  for (std::size_t i = 0; i < M; ++i) {
+    const auto *lhs_row = lhs.data() + i * MATRIX_EXTENT;
+    for (std::size_t j = 0; j < N; ++j) {
+      const auto *rhs_row = rhs.data() + j * MATRIX_EXTENT;
+      std::uint32_t sum = accumulate ? dst[i * MATRIX_EXTENT + j] : 0;
+      for (std::size_t k = 0; k < K; ++k) {
+        sum += static_cast<std::uint32_t>(i8_value(lhs_row[k]) * i8_value(rhs_row[k]));
       }
-    }
-  }
-  for (std::size_t k = 0; k < K; ++k) {
-    for (std::size_t i = 0; i < M; ++i) {
-      const auto lhs_value = i8_value(lhs[i * MATRIX_EXTENT + k]);
-      auto *dst_row = dst.data() + i * MATRIX_EXTENT;
-      const auto *rhs_row = rhs.data() + k * MATRIX_EXTENT;
-      for (std::size_t j = 0; j < N; ++j) {
-        dst_row[j] += static_cast<std::uint32_t>(lhs_value * i8_value(rhs_row[j]));
-      }
+      dst[i * MATRIX_EXTENT + j] = sum;
     }
   }
 }
@@ -54,26 +47,20 @@ void mma_kernel(const Tile &lhs, const Tile &rhs, Acc &dst, bool accumulate) {
 // generic path runtime-sized while the common full tile uses fixed bounds.
 void mma_generic(const Tile &lhs, const Tile &rhs, Acc &dst, std::size_t m_size, std::size_t n_size,
                  std::size_t k_size, bool accumulate) {
-  if (!accumulate) {
-    for (std::size_t i = 0; i < m_size; ++i) {
-      for (std::size_t j = 0; j < n_size; ++j) {
-        dst[i * MATRIX_EXTENT + j] = 0;
+  for (std::size_t i = 0; i < m_size; ++i) {
+    const auto *lhs_row = lhs.data() + i * MATRIX_EXTENT;
+    for (std::size_t j = 0; j < n_size; ++j) {
+      const auto *rhs_row = rhs.data() + j * MATRIX_EXTENT;
+      std::uint32_t sum = accumulate ? dst[i * MATRIX_EXTENT + j] : 0;
+      for (std::size_t k = 0; k < k_size; ++k) {
+        sum += static_cast<std::uint32_t>(i8_value(lhs_row[k]) * i8_value(rhs_row[k]));
       }
-    }
-  }
-  for (std::size_t k = 0; k < k_size; ++k) {
-    for (std::size_t i = 0; i < m_size; ++i) {
-      const auto lhs_value = i8_value(lhs[i * MATRIX_EXTENT + k]);
-      auto *dst_row = dst.data() + i * MATRIX_EXTENT;
-      const auto *rhs_row = rhs.data() + k * MATRIX_EXTENT;
-      for (std::size_t j = 0; j < n_size; ++j) {
-        dst_row[j] += static_cast<std::uint32_t>(lhs_value * i8_value(rhs_row[j]));
-      }
+      dst[i * MATRIX_EXTENT + j] = sum;
     }
   }
 }
 
-// mma.nn.{zero,acc}.i8.i32: D = A x B with B stored K x N; acc adds the
+// mma.nt.{zero,acc}.i8.i32: D = A x B^T with B stored N x K; acc adds the
 // i32 partial into the existing value.
 ExecuteResult mma(const MmaInstr &instr, State &state) {
   const auto &dst_config = state.ac[instr.dest.index];
@@ -84,9 +71,9 @@ ExecuteResult mma(const MmaInstr &instr, State &state) {
     return config_error();
   }
   const auto m_size = std::size_t{lhs_config.rows};
-  const auto n_size = std::size_t{rhs_config.cols};
+  const auto n_size = std::size_t{rhs_config.rows};
   const auto k_size = std::size_t{lhs_config.cols};
-  if (dst_config.rows != m_size || dst_config.cols != n_size || rhs_config.rows != k_size) {
+  if (dst_config.rows != m_size || dst_config.cols != n_size || rhs_config.cols != k_size) {
     return config_error();
   }
 

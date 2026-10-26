@@ -144,7 +144,7 @@ DecodeResult decode_qnt(std::uint32_t word) {
 // MMA_BDOT (R4): major4 = 0000, q = 10.
 // 31    28 27       25 24    22 21       17 16      12 11       7 6        2 1   0
 // [major4] [reserved3] [funct3] [reserved5] [   B5   ] [   A5   ] [   D5   ] [ q ]
-// funct3 = {mma/bdot, nn/nt, zero/acc}; nt is bdot-only, so 010/011 are reserved.
+// funct3 = {mma/bdot, nn/nt, zero/acc}; mma uses nt only, so 000/001 are reserved.
 DecodeResult decode_mma_bdot(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto make_mma = [&](MmaOp op) -> DecodeResult {
@@ -165,8 +165,8 @@ DecodeResult decode_mma_bdot(std::uint32_t word) {
   };
 
   switch (f.funct3) {
-  case 0b000: return make_mma(MmaOp::nn_zero);
-  case 0b001: return make_mma(MmaOp::nn_acc);
+  case 0b010: return make_mma(MmaOp::nt_zero);
+  case 0b011: return make_mma(MmaOp::nt_acc);
   case 0b100: return make_bdot(BdotOp::nn_zero);
   case 0b101: return make_bdot(BdotOp::nn_acc);
   case 0b110: return make_bdot(BdotOp::nt_zero);

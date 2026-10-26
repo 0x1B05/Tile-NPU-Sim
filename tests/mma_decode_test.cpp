@@ -73,15 +73,15 @@ TEST_CASE(mma_decode) {
   constexpr std::array cases{
       // Anchor word computed by hand from the encoding figure: the asm
       // operand order is aD, tA, tB.
-      MmaCase{.name = "mma.nn.zero.i8.i32 a1, t2, t3",
-              .word = 0x00003106u,
-              .op = MmaOp::nn_zero,
+      MmaCase{.name = "mma.nt.zero.i8.i32 a1, t2, t3",
+              .word = 0x00803106u,
+              .op = MmaOp::nt_zero,
               .dest = 1,
               .src_a = 2,
               .src_b = 3},
-      MmaCase{.name = "mma.nn.acc.i8.i32 a4, t5, t6",
-              .word = make_mma(1, 4, 5, 6),
-              .op = MmaOp::nn_acc,
+      MmaCase{.name = "mma.nt.acc.i8.i32 a4, t5, t6",
+              .word = make_mma(3, 4, 5, 6),
+              .op = MmaOp::nt_acc,
               .dest = 4,
               .src_a = 5,
               .src_b = 6},
@@ -129,9 +129,9 @@ TEST_CASE(mma_decode_rejects_reserved) {
   constexpr std::array cases{
       // bdot.acc uses a Tile right operand; with 32 Tile registers tB16 is
       // legal, so the remaining checks cover unassigned/reserved fields.
-      // mma has no nt form.
-      DecodeCase{"funct3 010", make_mma(2, 0, 0, 0)},
-      DecodeCase{"funct3 011", make_mma(3, 0, 0, 0)},
+      // mma has no nn form.
+      DecodeCase{"funct3 000", make_mma(0, 0, 0, 0)},
+      DecodeCase{"funct3 001", make_mma(1, 0, 0, 0)},
       // reserved3/reserved5 must be 0.
       DecodeCase{"reserved3", 0x02003106u},
       DecodeCase{"reserved5", 0x00023106u},

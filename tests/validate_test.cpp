@@ -279,11 +279,11 @@ TEST_CASE(validate_rejects_bad_qnt) {
 TEST_CASE(validate_rejects_bad_mma) {
   check_illegal(MmaInstr{.op = static_cast<MmaOp>(2), .dest = A(0), .src_a = T(0), .src_b = T(1)},
                 "unassigned mma op");
-  check_illegal(MmaInstr{.op = MmaOp::nn_zero, .dest = V(0), .src_a = T(0), .src_b = T(1)},
+  check_illegal(MmaInstr{.op = MmaOp::nt_zero, .dest = V(0), .src_a = T(0), .src_b = T(1)},
                 "mma destination domain");
-  check_illegal(MmaInstr{.op = MmaOp::nn_zero, .dest = A(32), .src_a = T(0), .src_b = T(1)},
+  check_illegal(MmaInstr{.op = MmaOp::nt_zero, .dest = A(32), .src_a = T(0), .src_b = T(1)},
                 "mma destination index");
-  check_illegal(MmaInstr{.op = MmaOp::nn_zero, .dest = A(0), .src_a = T(0), .src_b = A(1)},
+  check_illegal(MmaInstr{.op = MmaOp::nt_zero, .dest = A(0), .src_a = T(0), .src_b = A(1)},
                 "mma src_b domain");
 }
 

@@ -239,7 +239,7 @@ bool valid_structure(const VquantInstr &instr) {
 }
 
 bool valid_structure(const MmaInstr &instr) {
-  return instr.op <= MmaOp::nn_acc && instr.dest.domain == NpuDomain::acc && in_range(instr.dest) &&
+  return instr.op <= MmaOp::nt_acc && instr.dest.domain == NpuDomain::acc && in_range(instr.dest) &&
          instr.src_a.domain == NpuDomain::tile && in_range(instr.src_a) &&
          instr.src_b.domain == NpuDomain::tile && in_range(instr.src_b);
 }

@@ -1,11 +1,11 @@
 #include "npu.inc"
 
 # Self-checking MMA_BDOT image: programs configs and descriptors, loads a
-# shared left Tile, a right Tile, the nt bytes both as is (for bdot.nt) and
-# through a transpose tload, and a Vec8, then runs mma.nn.zero, mma.nn.acc
-# on the transposed Tile (accumulating onto the first result),
-# bdot.nt and bdot.nt.acc (accumulating onto the bdot result). Results are stored back and compared word-wise. Ends with ebreak:
-# a0 = 0 pass, a0 = N identifies the failing check.
+# shared 2x3 left Tile, a 2x3 right Tile in N x K order, and a Vec8, then runs
+# mma.nt.zero, mma.nt.acc (accumulating onto the first result), bdot.nt and
+# bdot.nt.acc (accumulating onto the bdot result). Results are stored back and
+# compared word-wise. Ends with ebreak: a0 = 0 pass, a0 = N identifies the
+# failing check.
 #
 # Buffer addresses go through lla (pc-relative): the image is loaded at
 # 0x80000000, where medlow's %hi/%lo expansion would sign-extend bit 31.
@@ -18,27 +18,12 @@ _start:
     CFG_SETI  5, 0, 2, 3, 0
     CFG_SETI  5, 2, 1, 3, 0
     CFG_SETI  5, 2, 2, 1, 0
-    # tc1: i8, 3x2; tm1: row_stride = 2, col_stride = 1
-    CFG_SETI  5, 0, 0, 0, 1
-    CFG_SETI  5, 0, 1, 3, 1
-    CFG_SETI  5, 0, 2, 2, 1
-    CFG_SETI  5, 2, 1, 2, 1
-    CFG_SETI  5, 2, 2, 1, 1
     # tc2: i8, 2x3; tm2: row_stride = 3, col_stride = 1
     CFG_SETI  5, 0, 0, 0, 2
     CFG_SETI  5, 0, 1, 2, 2
     CFG_SETI  5, 0, 2, 3, 2
     CFG_SETI  5, 2, 1, 3, 2
     CFG_SETI  5, 2, 2, 1, 2
-    # tc3: i8, 3x2; tm3 views the same 2x3 bytes (row_stride = 3,
-    # col_stride = 1) with transform = transpose, so t3 holds the 3x2
-    # transpose.
-    CFG_SETI  5, 0, 0, 0, 3
-    CFG_SETI  5, 0, 1, 3, 3
-    CFG_SETI  5, 0, 2, 2, 3
-    CFG_SETI  5, 2, 1, 3, 3
-    CFG_SETI  5, 2, 2, 1, 3
-    CFG_SETI  5, 2, 3, 1, 3
     # ac2: dtype = i32 (2), 2x2; am2: row_stride = 8, col_stride = 4
     CFG_SETI  5, 1, 0, 2, 2
     CFG_SETI  5, 1, 1, 2, 2
@@ -54,26 +39,20 @@ _start:
     CFG_SETI  6, 1, 1, 2, 4
     CFG_SETI  6, 3, 1, 4, 4
 
-    # Load the operands: t0 = {{1,2,3},{4,-5,6}}, t1 = {{7,8},{-9,10},{11,-12}},
+    # Load the operands: t0 = {{1,2,3},{4,-5,6}},
     # t2 = {{7,8,9},{10,11,12}}, b0 = {1,-2,3}.
     lla       x3, src_a
     CFG_REG   2, 0, 0, 0, 3, 0
     TLOAD     0
-    lla       x3, src_b_nn
-    CFG_REG   2, 0, 0, 0, 3, 1
-    TLOAD     1
     lla       x3, src_b_nt
     CFG_REG   2, 0, 0, 0, 3, 2
     TLOAD     2
-    lla       x3, src_b_nt
-    CFG_REG   2, 0, 0, 0, 3, 3
-    TLOAD     3                         # t3 = {{7,10},{8,11},{9,12}}
     lla       x3, src_v
     CFG_REG   2, 1, 0, 0, 3, 0
     BLOAD     0
 
-    # Stage 1 - mma.nn.zero.i8.i32 a2, t0, t1 -> {{22, -8}, {139, -90}}
-    MMA_NN_ZERO 2, 0, 1
+    # Stage 1 - mma.nt.zero.i8.i32 a2, t0, t2 -> {{50, 68}, {42, 57}}
+    MMA_NT_ZERO 2, 0, 2
     lla       x3, dstbuf
     CFG_REG   3, 0, 0, 0, 3, 2
     ASTORE    2
@@ -91,9 +70,9 @@ _start:
     addi      x6, x6, -1
     bnez      x6, 1b
 
-    # Stage 2 - mma.nn.acc.i8.i32 a2, t0, t3 (t3 = t2 transposed) accumulates
-    # {{50,68},{42,57}} onto stage 1 -> {{72, 60}, {181, -33}}
-    MMA_NN_ACC 2, 0, 3
+    # Stage 2 - mma.nt.acc.i8.i32 a2, t0, t2 accumulates
+    # the same product onto stage 1 -> {{100, 136}, {84, 114}}
+    MMA_NT_ACC 2, 0, 2
     lla       x3, dstbuf
     CFG_REG   3, 0, 0, 0, 3, 2
     ASTORE    2
@@ -150,13 +129,11 @@ fail:
     .balign 4
 src_a:    .byte 1, 2, 3, 4, 0xFB, 6
     .balign 4
-src_b_nn: .byte 7, 8, 0xF7, 10, 11, 0xF4
-    .balign 4
 src_b_nt: .byte 7, 8, 9, 10, 11, 12
     .balign 4
 src_v:    .byte 1, 0xFE, 3
     .balign 4
-exp_mma1: .word 22, 0xFFFFFFF8, 139, 0xFFFFFFA6
-exp_mma2: .word 72, 60, 181, 0xFFFFFFDF
+exp_mma1: .word 50, 68, 42, 57
+exp_mma2: .word 100, 136, 84, 114
 dstbuf:   .space 16
 dstbuf2:  .space 8

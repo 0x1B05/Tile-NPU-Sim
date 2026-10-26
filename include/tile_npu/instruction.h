@@ -114,12 +114,12 @@ struct LaneBroadcastInstr {
 };
 
 enum class MmaOp : std::uint8_t {
-  nn_zero,
-  nn_acc,
+  nt_zero,
+  nt_acc,
 };
 
 struct MmaInstr {
-  MmaOp op = MmaOp::nn_zero;
+  MmaOp op = MmaOp::nt_zero;
   NpuRegister dest{};  // Acc.
   NpuRegister src_a{}; // Tile.
   NpuRegister src_b{}; // Tile.
