@@ -124,10 +124,10 @@ qwen3_quant_act:
 #                  uint32_t n, uint32_t k, uint32_t xs_bits)
 #
 # out[j] = xs * w_scales[j] * sum_k quant(x)[k] * W[j,k]
-# W is [n, k] i8 row-major with per-row f32 scales. quant(x) is the tile
-# panels t2..t4 left resident by qwen3_quant_act; nothing between the two calls
-# may clobber them. Cross-tile accumulation runs in an i32 memory buffer
-# (qwen3_accbuf). n % 32 == 0, 32 | k, k <= 3072.
+# W is stored as [k/32][n/32][32][32] tiles in [k][n] order, with per-row f32
+# scales. quant(x) is the tile panels t2..t4 left resident by qwen3_quant_act;
+# nothing between the two calls may clobber them. Cross-tile accumulation runs
+# in an i32 memory buffer (qwen3_accbuf). n % 32 == 0, 32 | k, k <= 3072.
 # ---------------------------------------------------------------------------
     .text
     .globl qwen3_matvec_q
@@ -151,12 +151,12 @@ qwen3_matvec_q:
     SETW    SEL_VC, 1, 6, X_T0
     SETW    SEL_VC, 1, 8, X_T0
 
-    # phase B configs: weight tile t1 (tm1 row_stride = k, inc along cols)
+    # phase B configs: one [k][n] weight tile in t1 (tile row_stride = 32)
     LI_CWM  t0, DT_I8, 32, 32
     SETW    SEL_TC, 0, 1, X_T0
-    SETX    SEL_TM, 0, CF_RSTRIDE, 1, X_A5
+    SETIM   SEL_TM, CF_RSTRIDE, 32, 1
     SETIM   SEL_TM, CF_CSTRIDE, 1, 1
-    SETIM   SEL_TM, CF_FLAGS, 2, 1        # inc along cols: += 32 * 1
+    SETIM   SEL_TM, CF_FLAGS, 0, 1
     LI_CWV  t0, DT_I8, 32
     SETW    SEL_BC, 1, 0, X_T0, 31
     la      t0, qwen3_accbuf
@@ -204,17 +204,18 @@ qwen3_matvec_q:
     srli    s3, a4, 5           # n/32 blocks
     li      s2, 0
 .Lmv_nblock:
-    # tm1 base = w + nb*32*k + panel*1024
-    mul     t0, s2, a5
-    slli    t0, t0, 5
-    slli    t1, s5, 10
-    add     t0, t0, t1
+    # tm1 base = w + (panel*32*nblocks + nb)*1024; advance one kblock per
+    # loaded tile, since the tiled layout is [kblock][nblock][32][32].
+    mul     t0, s5, s3
+    slli    t0, t0, 15
     add     t0, a0, t0
-    SETX    SEL_TM, 0, CF_BASE, 1, X_T0
-    la      t0, qwen3_accbuf
-    slli    t1, s2, 7
+    slli    t1, s2, 10
     add     t0, t0, t1
-    SETX    SEL_VM, 1, CF_BASE, 4, X_T0
+    slli    t1, s3, 10
+    la      t2, qwen3_accbuf
+    slli    t3, s2, 7
+    add     t2, t2, t3
+    SETX    SEL_VM, 1, CF_BASE, 4, X_T2
     beqz    s5, .Lmv_fresh
     VLOAD   4                   # continue accumulation across panels
     j       .Lmv_inner
@@ -224,8 +225,10 @@ qwen3_matvec_q:
     .irp R,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
     li      t5, \R
     bgeu    t5, t4, .Lmv_inner_done
+    SETX    SEL_TM, 0, CF_BASE, 1, X_T0
     TLOAD   1
-    BDOT_NT_ACC 4, \R, 1
+    BDOT_NN_ACC 4, \R, 1
+    add     t0, t0, t1
     .endr
 .Lmv_inner_done:
     VSTORE  4
@@ -262,22 +265,25 @@ qwen3_matvec_q:
     ret
 
 # ---------------------------------------------------------------------------
-# void qwen3_quant_rows(const float *x, uint32_t k, int8_t *xq, float *xs)
+# void qwen3_quant_rows(const float *x, uint32_t k, int8_t *xq, float *xs,
+#                       uint32_t rows)
 #
-# Batched sibling of qwen3_quant_act: x is [32, k] f32 row-major (rows are
-# tokens, zero or garbage padding rows are quantized but never consumed).
-# Pass 1 folds per-row absmax over the k/32 chunks (areduce.absmax + vmax)
-# and stores xs = absmax * (1/127) as 32 f32 scales; pass 2 quantizes each
-# 32x32 chunk with the per-row external scales into xq, [32, k] i8 row-major.
-# Rows whose absmax is 0 quantize to 0 (NaN quotient rule).
+# Chunked sibling of qwen3_quant_act: x is [rows, k] f32 row-major (rows are
+# tokens, up to 32). Pass 1 folds per-row absmax over the k/32 chunks
+# (areduce.absmax + vmax) and stores xs = absmax * (1/127) as rows f32 scales;
+# pass 2 quantizes each rows x 32 chunk with the per-row external scales into
+# xq, [rows, k] i8 row-major. Rows whose absmax is 0 quantize to 0 (NaN
+# quotient rule).
 # ---------------------------------------------------------------------------
     .text
     .globl qwen3_quant_rows
 qwen3_quant_rows:
     LI_CWV  t6, DT_F32, 32
     SETW    SEL_VC, 1, 0, X_T6, 1
+    SETX    SEL_VC, 1, CF_LEN, 0, X_A4, 1
     LI_CWM  t6, DT_F32, 32, 32
     SETW    SEL_AC, 0, 0, X_T6
+    SETX    SEL_AC, 0, CF_ROWS, 0, X_A4
     SETX    SEL_AM, 0, CF_BASE, 0, X_A0
     slli    t0, a1, 2
     SETX    SEL_AM, 0, CF_RSTRIDE, 0, X_T0
@@ -307,6 +313,7 @@ qwen3_quant_rows:
     # pass 2: quantize chunks to xq (t0, tm0 inc along cols: += 32 * 1)
     LI_CWM  t6, DT_I8, 32, 32
     SETW    SEL_TC, 0, 0, X_T6
+    SETX    SEL_TC, 0, CF_ROWS, 0, X_A4
     SETX    SEL_AM, 0, CF_BASE, 0, X_A0   # rewind x
     SETX    SEL_TM, 0, CF_BASE, 0, X_A2
     SETX    SEL_TM, 0, CF_RSTRIDE, 0, X_A1
@@ -323,16 +330,18 @@ qwen3_quant_rows:
 
 # ---------------------------------------------------------------------------
 # void qwen3_matmul_q(const int8_t *w, const float *w_scales, const int8_t *xq,
-#                  const float *xs, float *out, uint32_t n, uint32_t k)
+#                  const float *xs, float *out, uint32_t n, uint32_t k,
+#                  uint32_t rows)
 #
-# Batched sibling of qwen3_matvec_q: out[t,j] = xs[t] * w_scales[j] *
-# sum_c xq[t,c] * W[j,c] for t in [0,32), computing one 32-row token batch.
-# xq is [32, k] i8 row-major (qwen3_quant_rows output), xs its 32 row scales.
-# Per 32-column block of out: t1 holds the weight chunk transposed (tm1
-# transform = transpose, so t1 is [32 of k, 32 of n]) and mma.nn accumulates
-# the k/32 chunks in acc a0,
-# then acc -> f32, * ws (bycol), * xs (byrow), stored via am0 (auto-advances
-# one block per store). n % 32 == 0, 32 | k, k <= 3072.
+# Chunked sibling of qwen3_matvec_q: out[t,j] = xs[t] * w_scales[j] *
+# sum_c xq[t,c] * W[j,c] for t in [0,rows), computing one up-to-32-row token
+# chunk. xq is [rows, k] i8 row-major (qwen3_quant_rows output), xs its rows
+# row scales. Per 32-column block of out: t1 holds one [k][n] weight tile from
+# the [k/32][n/32][32][32] layout and mma.nn accumulates the k/32 chunks in
+# acc a0, then acc -> f32, * ws (bycol), * xs (byrow), stored via am8
+# (auto-advances one block per store). Full groups of eight nblocks keep
+# accelerators a0..a7 and reuse one xq tile across the group.
+# n % 32 == 0, 32 | k, k <= 3072.
 # ---------------------------------------------------------------------------
     .text
     .globl qwen3_matmul_q
@@ -343,27 +352,31 @@ qwen3_matmul_q:
     sd      s4, 16(sp)
     sd      s5, 24(sp)
     sd      s6, 32(sp)
+    sd      s7, 40(sp)
 
     mv      s6, a2              # xq base
+    mv      s7, a0              # weight base
 
     LI_CWM  t0, DT_I8, 32, 32
     SETW    SEL_TC, 0, 0, X_T0, 1
+    SETX    SEL_TC, 0, CF_ROWS, 0, X_A7
     SETX    SEL_TM, 0, CF_RSTRIDE, 0, X_A6
     SETIM   SEL_TM, CF_CSTRIDE, 1, 0
     SETIM   SEL_TM, CF_FLAGS, 2, 0      # inc along cols: += 32 * 1
-    SETX    SEL_TM, 0, CF_RSTRIDE, 1, X_A6
+    SETIM   SEL_TM, CF_RSTRIDE, 32, 1
     SETIM   SEL_TM, CF_CSTRIDE, 1, 1
-    SETIM   SEL_TM, CF_FLAGS, 2, 1
-    SETIM   SEL_TM, CF_LAYOUT, 1, 1     # transform = transpose: t1 = W chunk^T
+    SETIM   SEL_TM, CF_FLAGS, 0, 1
     LI_CWM  t0, DT_I32, 32, 32
-    SETW    SEL_AC, 0, 0, X_T0, 1
-    SETX    SEL_AM, 0, CF_BASE, 1, X_A4
+    SETW    SEL_AC, 0, 0, X_T0, 8
+    SETX    SEL_AC, 0, CF_ROWS, 0, X_A7, 8
+    SETX    SEL_AM, 0, CF_BASE, 8, X_A4
     slli    t0, a5, 2
-    SETX    SEL_AM, 0, CF_RSTRIDE, 1, X_T0
-    SETIM   SEL_AM, CF_CSTRIDE, 4, 1
-    SETIM   SEL_AM, CF_FLAGS, 2, 1      # inc along cols: += 32 * 4
+    SETX    SEL_AM, 0, CF_RSTRIDE, 8, X_T0
+    SETIM   SEL_AM, CF_CSTRIDE, 4, 8
+    SETIM   SEL_AM, CF_FLAGS, 2, 8      # inc along cols: += 32 * 4
     LI_CWV  s3, DT_F32, 32
     SETW    SEL_VC, 1, 29, X_S3, 1    # vc29 (ws stream), vc30 (xs)
+    SETX    SEL_VC, 1, CF_LEN, 30, X_A7
     SETX    SEL_VM, 1, CF_BASE, 29, X_A1
     SETIV   SEL_VM, CF_STRIDE, 4, 29
     SETIV   SEL_VM, CF_VFLAGS, 1, 29    # ws stream, one block per load
@@ -374,43 +387,92 @@ qwen3_matmul_q:
 
     srli    s3, a5, 5           # n/32 blocks
     srli    s4, a6, 5           # k/32 chunks
-    li      s2, 0
-.Lmm_nblock:
-    # tm1 base = w + nb*32*k; tm0 rewinds to xq
-    mul     t0, s2, a6
-    slli    t0, t0, 5
-    add     t0, a0, t0
-    SETX    SEL_TM, 0, CF_BASE, 1, X_T0
+    li      s2, 0               # first nblock of the group
+    li      t0, 32
+    bne     a7, t0, .Lmm_nblock  # grouping only pays off for a full xq tile
+.Lmm_group:
+    sub     t0, s3, s2
+    li      t1, 8
+    bltu    t0, t1, .Lmm_nblock    # fewer than eight blocks remain
+
+    # Full group: load xq once per k chunk and keep eight accumulators.
     SETX    SEL_TM, 0, CF_BASE, 0, X_S6
+    slli    t0, s2, 10
+    add     t0, s7, t0              # first weight tile of this group
+    slli    t3, s3, 10              # next kblock stride
+    TLOAD   0
+    mv      t4, t0
+    .irp G,0,1,2,3,4,5,6,7
+    SETX    SEL_TM, 0, CF_BASE, 1, X_T4
+    TLOAD   1
+    MMA_NN_ZERO \G, 0, 1
+    addi    t4, t4, 1024
+    .endr
+    add     t0, t0, t3
+    li      s5, 1
+.Lmm_group_kloop:
+    bgeu    s5, s4, .Lmm_group_epi
+    TLOAD   0
+    mv      t4, t0
+    .irp G,0,1,2,3,4,5,6,7
+    SETX    SEL_TM, 0, CF_BASE, 1, X_T4
+    TLOAD   1
+    MMA_NN_ACC \G, 0, 1
+    addi    t4, t4, 1024
+    .endr
+    add     t0, t0, t3
+    addi    s5, s5, 1
+    j       .Lmm_group_kloop
+.Lmm_group_epi:
+    .irp G,0,1,2,3,4,5,6,7
+    VLOAD   29
+    SETIM   SEL_AC, CF_DTYPE, DT_I32, 8
+    ACVT    8, \G
+    AMULV_BYCOL 8, 8, 29
+    AMULV_BYROW 8, 8, 30
+    ASTORE  8
+    .endr
+    addi    s2, s2, 8
+    bltu    s2, s3, .Lmm_group
+    j       .Lmm_done
+
+.Lmm_nblock:
+    # Tail: fewer than eight output blocks remain.
+    SETX    SEL_TM, 0, CF_BASE, 0, X_S6
+    slli    t0, s2, 10
+    add     t0, s7, t0
+    slli    t1, s3, 10
+    SETX    SEL_TM, 0, CF_BASE, 1, X_T0
     TLOAD   0
     TLOAD   1
     MMA_NN_ZERO 0, 0, 1
+    add     t0, t0, t1
     li      s5, 1
-.Lmm_kloop:
-    bgeu    s5, s4, .Lmm_epi
+.Lmm_tail_kloop:
+    bgeu    s5, s4, .Lmm_tail_epi
+    SETX    SEL_TM, 0, CF_BASE, 1, X_T0
     TLOAD   0
     TLOAD   1
     MMA_NN_ACC 0, 0, 1
+    add     t0, t0, t1
     addi    s5, s5, 1
-    j       .Lmm_kloop
-.Lmm_epi:
-    VLOAD   29                  # 32 weight scales
-    SETIM   SEL_AC, CF_DTYPE, DT_I32, 1   # acvt flips it to f32 on success
-    ACVT    1, 0                # i32 -> f32
-    AMULV_BYCOL 1, 1, 29          # * ws[j]
-    AMULV_BYROW 1, 1, 30          # * xs[t]
-    ASTORE  1
+    j       .Lmm_tail_kloop
+.Lmm_tail_epi:
+    VLOAD   29
+    SETIM   SEL_AC, CF_DTYPE, DT_I32, 8
+    ACVT    8, 0
+    AMULV_BYCOL 8, 8, 29
+    AMULV_BYROW 8, 8, 30
+    ASTORE  8
     addi    s2, s2, 1
     bltu    s2, s3, .Lmm_nblock
-
-    # Restore tm1 to transform = normal: the other kernels reuse tm1 for
-    # plain weight loads and leave transform at its reset value.
-    SETIM   SEL_TM, CF_LAYOUT, 0, 1
+.Lmm_done:
     ld      s2, 0(sp)
     ld      s3, 8(sp)
     ld      s4, 16(sp)
     ld      s5, 24(sp)
     ld      s6, 32(sp)
+    ld      s7, 40(sp)
     addi    sp, sp, 48
     FENCE_MEM                   # out (incl. k_buf/v_buf) is read by scalar code
     ret
@@ -792,53 +854,47 @@ qwen3_add:
 
 # ---------------------------------------------------------------------------
 # void qwen3_embed(const int8_t *table, const float *scales, uint32_t id,
-#               float *out, uint32_t hidden)
-# out = dequant(table[id]) with the row's f32 scale. The row is fetched as
-# 32x32 i8 blocks (one tload each) and dequantized straight into an Acc with
-# tdequant, then block-stored; hidden is a power of two >= 32.
+#               float *out, uint32_t hidden, uint32_t vocab)
+# out = dequant(table[id]) with the row's f32 scale. The table is stored as
+# [k/32][n/32][32][32] tiles in [k][n] order: each kblock contributes one
+# strided 32-byte run from the tile containing id.
 # ---------------------------------------------------------------------------
     .globl qwen3_embed
 qwen3_embed:
-    # rows per block = min(hidden, 1024) / 32; blocks = max(hidden / 1024, 1)
-    li      t0, 1024
-    mv      t1, a4
-    bltu    a4, t0, .Lem_rows
-    mv      t1, t0
-.Lem_rows:
-    srli    t1, t1, 5               # t1 = rows in [1, 32]
-    srli    t6, a4, 10
-    bnez    t6, .Lem_cfgs
-    li      t6, 1                   # hidden < 1024: single partial block
-.Lem_cfgs:
-    li      t0, (DT_I8 << 16) | (32 << 8)
-    or      t0, t0, t1
-    SETW    SEL_TC, 0, 0, X_T0      # tc0 = i8 rows x 32
-    li      t0, (DT_F32 << 16) | (32 << 8)
-    or      t0, t0, t1
-    SETW    SEL_AC, 0, 0, X_T0      # ac0 = f32 rows x 32
-    li      t0, (DT_F32 << 8)
-    or      t0, t0, t1
-    SETW    SEL_VC, 1, 0, X_T0      # vc0 = f32 len rows (tdequant scale len)
+    srli    t3, a5, 5               # nblocks = vocab / 32
+    srli    t4, a4, 5               # kblocks = hidden / 32
+    srli    t0, a2, 5               # id / 32
+    andi    t1, a2, 31              # id % 32
+    slli    t5, t0, 10
+    add     t5, a0, t5
+    add     t5, t5, t1              # first tile row + n_inner
+    slli    t6, t3, 10              # stride to the next kblock
     slli    t0, a2, 2
     add     t0, a1, t0
     lw      t2, 0(t0)               # t2 = scales[id]
+
+    li      t0, (DT_I8 << 16) | (32 << 8) | 1
+    SETW    SEL_TC, 0, 0, X_T0      # tc0 = i8 1 x 32
+    li      t0, (DT_F32 << 16) | (32 << 8) | 1
+    SETW    SEL_AC, 0, 0, X_T0      # ac0 = f32 1 x 32
+    li      t0, (DT_F32 << 8) | 1
+    SETW    SEL_VC, 1, 0, X_T0      # vc0 = f32 len 1 (tdequant scale len)
     VFILLX  0, X_T2                 # v0 = s_i in every lane
-    mul     t0, a2, a4
-    add     t0, a0, t0
-    SETX    SEL_TM, 0, CF_BASE, 0, X_T0
-    SETIM   SEL_TM, CF_RSTRIDE, 32, 0
-    SETIM   SEL_TM, CF_CSTRIDE, 1, 0
-    SETIM   SEL_TM, CF_FLAGS, 1, 0  # inc along rows: += rows * 32
+    SETIM   SEL_TM, CF_RSTRIDE, 0, 0
+    SETIM   SEL_TM, CF_CSTRIDE, 32, 0
+    SETIM   SEL_TM, CF_FLAGS, 0, 0
     SETX    SEL_AM, 0, CF_BASE, 0, X_A3
-    SETIM   SEL_AM, CF_RSTRIDE, 128, 0
+    SETIM   SEL_AM, CF_RSTRIDE, 0, 0
     SETIM   SEL_AM, CF_CSTRIDE, 4, 0
-    SETIM   SEL_AM, CF_FLAGS, 1, 0  # inc along rows: += rows * 128
+    SETIM   SEL_AM, CF_FLAGS, 2, 0  # inc along cols: += 32 * 4
 .Lem_loop:
-    TLOAD   0                       # t0 = rows x 32 i8 block
+    SETX    SEL_TM, 0, CF_BASE, 0, X_T5
+    TLOAD   0                       # t0 = 1 x 32 i8 strided run
     TDEQUANT 0, 0, 0                # a0 = f32(t0) * v0
     ASTORE  0
-    addi    t6, t6, -1
-    bnez    t6, .Lem_loop
+    add     t5, t5, t6
+    addi    t4, t4, -1
+    bnez    t4, .Lem_loop
     ret
 
 # ---------------------------------------------------------------------------

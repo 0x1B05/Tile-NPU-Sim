@@ -2,8 +2,10 @@
 """Convert Qwen3 weights into the flat q8s32 blob consumed by apps/qwen3.
 
 Weight matrices are quantized per output row (symmetric int8, RNE, range
-[-127, 127]) with one f32 scale per row; RMSNorm gammas stay f32. The blob
-carries a section directory so the guest locates tensors at runtime:
+[-127, 127]) with one f32 scale per row; RMSNorm gammas stay f32. Quantized
+matrices are stored as 32x32 tiles in [k/32][n/32][32][32] order, with each
+tile in [k][n] order. The blob carries a section directory so the guest
+locates tensors at runtime:
 
   header: magic "Q3B", arch dims, eps, section count   (all u32 LE)
   directory: n_sections x { name char[8], offset u32, size u32 }
@@ -41,6 +43,14 @@ def quant_error(w, q, s):
     num = np.abs(w - deq).mean()
     den = np.abs(w).mean()
     return num / den if den > 0 else 0.0
+
+
+def tile_weights(q):
+    """Pack [n, k] int8 weights as [k/32][n/32][32][32] in [k][n] order."""
+    n, k = q.shape
+    if n % 32 or k % 32:
+        raise ValueError(f"tiled weights need dimensions divisible by 32, got {q.shape}")
+    return q.reshape(n // 32, 32, k // 32, 32).transpose(2, 0, 3, 1).tobytes()
 
 
 # ---- rope ----------------------------------------------------------------
@@ -121,7 +131,7 @@ def convert_real(model_dir, max_pos):
     error = quant_error(embed, q, s)
     quant_errors.append(error)
     LOGGER.debug("embed %s rel-err %.4f", embed.shape, error)
-    blob.add("embed", q.tobytes())
+    blob.add("embed", tile_weights(q))
     blob.add("embed_s", s.tobytes())
     del embed, q, s
 
@@ -141,7 +151,7 @@ def convert_real(model_dir, max_pos):
                 error = quant_error(w, q, s)
                 quant_errors.append(error)
                 LOGGER.debug("%s %s rel-err %.4f", name, w.shape, error)
-                blob.add(sec, q.tobytes())
+                blob.add(sec, tile_weights(q))
                 blob.add(sec + "s", s.tobytes())
 
     norm = st.get("model.norm.weight")
@@ -194,7 +204,7 @@ def convert_tiny():
         else:
             q, s = quantize_rows(w)
             LOGGER.debug("%s %s rel-err %.4f", sec, w.shape, quant_error(w, q, s))
-            blob.add(sec, q.tobytes())
+            blob.add(sec, tile_weights(q))
             blob.add("embed_s" if sec == "embed" else sec + "s", s.tobytes())
             # the reference consumes the same dequantized weights as the guest
             ref[sec] = q.astype(np.float32) * s[:, None]

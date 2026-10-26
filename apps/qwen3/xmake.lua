@@ -46,6 +46,9 @@ target("qwen3_app", function()
 				"-o",
 				elf,
 			}
+			if has_config("qwen3probes") == false then
+				table.insert(args, "-DQWEN3_PROBES=0")
+			end
 			table.join2(args, sources)
 			os.vrunv(gcc, args)
 			os.vrunv(objcopy, { "-O", "binary", elf, bin })
@@ -54,7 +57,7 @@ target("qwen3_app", function()
 			files = deps,
 			changed = target:is_rebuilt(),
 			lastmtime = math.min(os.mtime(elf), os.mtime(bin)),
-			values = { gcc, "-march=rv64im -mabi=lp64 -O2" },
+			values = { gcc, "-march=rv64im -mabi=lp64 -O2", has_config("qwen3probes") ~= false },
 		})
 	end)
 end)
@@ -89,6 +92,12 @@ if has_config("qwen3test") then
 			add_deps("sim_run")
 		end
 		on_load(function(target)
+			if has_config("qwen3probes") == false then
+				print("warning: --qwen3test=y needs probes; skipping the tiny Qwen3 test")
+				target:set("tests", {})
+				target:data_set("skip", true)
+				return
+			end
 			import("lib.detect.find_program")
 			local python = find_program("python3")
 			local log = os.tmpfile()
