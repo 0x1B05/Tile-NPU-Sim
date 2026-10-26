@@ -82,7 +82,20 @@ xmake build qwen3_run
 xmake run qwen3_run "你好"
 ```
 
-The app prints the prompt tokens and generated token ids over the serial console and stops after 32 new tokens or an EOS. Numerical alignment probes in `forward.c` are compiled in by default; the `QWEN3_PROBES` define at the top of the file controls them.
+The app prints the prompt tokens and generated token ids over the serial console and stops after 32 new tokens or an EOS. Numerical alignment probes in `forward.c` are compiled in by default; configure with `xmake f --qwen3probes=n` to omit them for benchmarking.
+
+Measure prefill, TTFT, and decode time from the serial stream:
+
+```sh
+xmake f --qwen3probes=n
+xmake build qwen3_app
+python3 scripts/qwen3/bench.py "你好" \
+    --sim-run build/linux/x86_64/release/sim_run \
+    --app build/apps/qwen3/qwen3.bin \
+    --runs 3
+```
+
+`bench.py` reports load, prefill, end-to-end TTFT, compute-only TTFT, decode time, ms/token, and tokens/s. It timestamps the serial bytes directly, so it does not need simulator instrumentation. Use `--prompt-image` for an existing Q3P image and `--json` to save per-run metrics. The no-probe build skips the tiny alignment regression with a warning.
 
 A fixed-seed random tiny model exercises the same path without any download, and the opt-in regression wraps the whole chain — convert, guest forward under `sim_run`, then compare against the numpy reference `ref.py` (integer probes bit-exact, f32 probes within tolerance, generated tokens exact):
 
