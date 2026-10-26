@@ -7,9 +7,9 @@
 uint32_t qwen3_quant_act(const float *x, uint32_t k);
 void qwen3_matvec_q(const int8_t *w, const float *w_scales, float *out, uint32_t n, uint32_t k,
                     uint32_t xs_bits);
-void qwen3_quant_rows(const float *x, uint32_t k, int8_t *xq, float *xs);
+void qwen3_quant_rows(const float *x, uint32_t k, int8_t *xq, float *xs, uint32_t rows);
 void qwen3_matmul_q(const int8_t *w, const float *w_scales, const int8_t *xq, const float *xs,
-                    float *out, uint32_t n, uint32_t k);
+                    float *out, uint32_t n, uint32_t k, uint32_t rows);
 void qwen3_rmsnorm(float *x, const float *gamma, float *out, uint32_t n, uint32_t eps_bits,
                    uint32_t inv_n_bits);
 void qwen3_rope(float *x, const float *cos_h, const float *sin_h, uint32_t hd);

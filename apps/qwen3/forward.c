@@ -297,10 +297,10 @@ void qwen3_probe_last_prompt(uint32_t token, uint32_t pos) {
 #endif
 
 // Prefill for all n prompt tokens (positions [0, n)): projections run as
-// batched MMA over 32-row token batches; rmsnorm/rope/attention/silu/add keep
-// the per-row vector kernels. Only the last row is finished through the final
-// norm and lm-head. The numerics match the per-token path bit for bit (same
-// per-row scales, exact i32 accumulation, same epilogue order).
+// batched MMA over up-to-32-row token chunks; rmsnorm/rope/attention/silu/add
+// keep the per-row vector kernels. Only the last row is finished through the
+// final norm and lm-head. The numerics match the per-token path bit for bit
+// (same per-row scales, exact i32 accumulation, same epilogue order).
 uint32_t qwen3_prefill(const uint32_t *tokens, uint32_t n) {
   if (n == 0) panic("empty prefill");
   for (uint32_t base = 0; base < n; base += PREFILL_CHUNK_ROWS) {
@@ -313,10 +313,13 @@ uint32_t qwen3_prefill(const uint32_t *tokens, uint32_t n) {
       for (uint32_t t = 0; t < chunk_rows; ++t)
         qwen3_rmsnorm(pf_x + t * model.hidden, sec[SEC_INLN], pf_h1 + t * model.hidden,
                       model.hidden, model.eps_bits, inv_n_bits(model.hidden));
-      qwen3_quant_rows(pf_h1, model.hidden, pf_xq, pf_xs);
-      qwen3_matmul_q(sec[SEC_QW], sec[SEC_QWS], pf_xq, pf_xs, pf_q, model.q_dim, model.hidden);
-      qwen3_matmul_q(sec[SEC_KW], sec[SEC_KWS], pf_xq, pf_xs, pf_k, model.kv_dim, model.hidden);
-      qwen3_matmul_q(sec[SEC_VW], sec[SEC_VWS], pf_xq, pf_xs, pf_v, model.kv_dim, model.hidden);
+      qwen3_quant_rows(pf_h1, model.hidden, pf_xq, pf_xs, chunk_rows);
+      qwen3_matmul_q(sec[SEC_QW], sec[SEC_QWS], pf_xq, pf_xs, pf_q, model.q_dim, model.hidden,
+                     chunk_rows);
+      qwen3_matmul_q(sec[SEC_KW], sec[SEC_KWS], pf_xq, pf_xs, pf_k, model.kv_dim, model.hidden,
+                     chunk_rows);
+      qwen3_matmul_q(sec[SEC_VW], sec[SEC_VWS], pf_xq, pf_xs, pf_v, model.kv_dim, model.hidden,
+                     chunk_rows);
       for (uint32_t t = 0; t < chunk_rows; ++t) {
         for (uint32_t h = 0; h < model.n_q_heads; ++h)
           qwen3_rmsnorm(pf_q + t * model.q_dim + h * model.head_dim, sec[SEC_QN],
@@ -335,21 +338,25 @@ uint32_t qwen3_prefill(const uint32_t *tokens, uint32_t n) {
         cache_append(L, base + t, pf_k + t * model.kv_dim, pf_v + t * model.kv_dim);
         attention(L, base + t, pf_q + t * model.q_dim, pf_attn + t * model.q_dim, 0);
       }
-      qwen3_quant_rows(pf_attn, model.q_dim, pf_xq, pf_xs);
-      qwen3_matmul_q(sec[SEC_OW], sec[SEC_OWS], pf_xq, pf_xs, pf_h2, model.hidden, model.q_dim);
+      qwen3_quant_rows(pf_attn, model.q_dim, pf_xq, pf_xs, chunk_rows);
+      qwen3_matmul_q(sec[SEC_OW], sec[SEC_OWS], pf_xq, pf_xs, pf_h2, model.hidden, model.q_dim,
+                     chunk_rows);
       for (uint32_t t = 0; t < chunk_rows; ++t)
         qwen3_add(pf_x + t * model.hidden, pf_h2 + t * model.hidden, model.hidden);
       for (uint32_t t = 0; t < chunk_rows; ++t)
         qwen3_rmsnorm(pf_x + t * model.hidden, sec[SEC_PTLN], pf_h1 + t * model.hidden,
                       model.hidden, model.eps_bits, inv_n_bits(model.hidden));
-      qwen3_quant_rows(pf_h1, model.hidden, pf_xq, pf_xs);
-      qwen3_matmul_q(sec[SEC_GW], sec[SEC_GWS], pf_xq, pf_xs, pf_gate, model.inter, model.hidden);
-      qwen3_matmul_q(sec[SEC_UW], sec[SEC_UWS], pf_xq, pf_xs, pf_up, model.inter, model.hidden);
+      qwen3_quant_rows(pf_h1, model.hidden, pf_xq, pf_xs, chunk_rows);
+      qwen3_matmul_q(sec[SEC_GW], sec[SEC_GWS], pf_xq, pf_xs, pf_gate, model.inter, model.hidden,
+                     chunk_rows);
+      qwen3_matmul_q(sec[SEC_UW], sec[SEC_UWS], pf_xq, pf_xs, pf_up, model.inter, model.hidden,
+                     chunk_rows);
       for (uint32_t t = 0; t < chunk_rows; ++t)
         qwen3_silu_mul(pf_gate + t * model.inter, pf_up + t * model.inter,
                        pf_gate + t * model.inter, model.inter);
-      qwen3_quant_rows(pf_gate, model.inter, pf_xq, pf_xs);
-      qwen3_matmul_q(sec[SEC_DW], sec[SEC_DWS], pf_xq, pf_xs, pf_h2, model.hidden, model.inter);
+      qwen3_quant_rows(pf_gate, model.inter, pf_xq, pf_xs, chunk_rows);
+      qwen3_matmul_q(sec[SEC_DW], sec[SEC_DWS], pf_xq, pf_xs, pf_h2, model.hidden, model.inter,
+                     chunk_rows);
       for (uint32_t t = 0; t < chunk_rows; ++t)
         qwen3_add(pf_x + t * model.hidden, pf_h2 + t * model.hidden, model.hidden);
     }

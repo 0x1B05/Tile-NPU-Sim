@@ -262,22 +262,25 @@ qwen3_matvec_q:
     ret
 
 # ---------------------------------------------------------------------------
-# void qwen3_quant_rows(const float *x, uint32_t k, int8_t *xq, float *xs)
+# void qwen3_quant_rows(const float *x, uint32_t k, int8_t *xq, float *xs,
+#                       uint32_t rows)
 #
-# Batched sibling of qwen3_quant_act: x is [32, k] f32 row-major (rows are
-# tokens, zero or garbage padding rows are quantized but never consumed).
-# Pass 1 folds per-row absmax over the k/32 chunks (areduce.absmax + vmax)
-# and stores xs = absmax * (1/127) as 32 f32 scales; pass 2 quantizes each
-# 32x32 chunk with the per-row external scales into xq, [32, k] i8 row-major.
-# Rows whose absmax is 0 quantize to 0 (NaN quotient rule).
+# Chunked sibling of qwen3_quant_act: x is [rows, k] f32 row-major (rows are
+# tokens, up to 32). Pass 1 folds per-row absmax over the k/32 chunks
+# (areduce.absmax + vmax) and stores xs = absmax * (1/127) as rows f32 scales;
+# pass 2 quantizes each rows x 32 chunk with the per-row external scales into
+# xq, [rows, k] i8 row-major. Rows whose absmax is 0 quantize to 0 (NaN
+# quotient rule).
 # ---------------------------------------------------------------------------
     .text
     .globl qwen3_quant_rows
 qwen3_quant_rows:
     LI_CWV  t6, DT_F32, 32
     SETW    SEL_VC, 1, 0, X_T6, 1
+    SETX    SEL_VC, 1, CF_LEN, 0, X_A4, 1
     LI_CWM  t6, DT_F32, 32, 32
     SETW    SEL_AC, 0, 0, X_T6
+    SETX    SEL_AC, 0, CF_ROWS, 0, X_A4
     SETX    SEL_AM, 0, CF_BASE, 0, X_A0
     slli    t0, a1, 2
     SETX    SEL_AM, 0, CF_RSTRIDE, 0, X_T0
@@ -307,6 +310,7 @@ qwen3_quant_rows:
     # pass 2: quantize chunks to xq (t0, tm0 inc along cols: += 32 * 1)
     LI_CWM  t6, DT_I8, 32, 32
     SETW    SEL_TC, 0, 0, X_T6
+    SETX    SEL_TC, 0, CF_ROWS, 0, X_A4
     SETX    SEL_AM, 0, CF_BASE, 0, X_A0   # rewind x
     SETX    SEL_TM, 0, CF_BASE, 0, X_A2
     SETX    SEL_TM, 0, CF_RSTRIDE, 0, X_A1
@@ -323,16 +327,17 @@ qwen3_quant_rows:
 
 # ---------------------------------------------------------------------------
 # void qwen3_matmul_q(const int8_t *w, const float *w_scales, const int8_t *xq,
-#                  const float *xs, float *out, uint32_t n, uint32_t k)
+#                  const float *xs, float *out, uint32_t n, uint32_t k,
+#                  uint32_t rows)
 #
-# Batched sibling of qwen3_matvec_q: out[t,j] = xs[t] * w_scales[j] *
-# sum_c xq[t,c] * W[j,c] for t in [0,32), computing one 32-row token batch.
-# xq is [32, k] i8 row-major (qwen3_quant_rows output), xs its 32 row scales.
-# Per 32-column block of out: t1 holds the weight chunk transposed (tm1
-# transform = transpose, so t1 is [32 of k, 32 of n]) and mma.nn accumulates
-# the k/32 chunks in acc a0,
-# then acc -> f32, * ws (bycol), * xs (byrow), stored via am0 (auto-advances
-# one block per store). n % 32 == 0, 32 | k, k <= 3072.
+# Chunked sibling of qwen3_matvec_q: out[t,j] = xs[t] * w_scales[j] *
+# sum_c xq[t,c] * W[j,c] for t in [0,rows), computing one up-to-32-row token
+# chunk. xq is [rows, k] i8 row-major (qwen3_quant_rows output), xs its rows
+# row scales. Per 32-column block of out: t1 holds the weight chunk transposed
+# (tm1 transform = transpose, so t1 is [32 of k, 32 of n]) and mma.nn
+# accumulates the k/32 chunks in acc a0, then acc -> f32, * ws (bycol),
+# * xs (byrow), stored via am0 (auto-advances one block per store).
+# n % 32 == 0, 32 | k, k <= 3072.
 # ---------------------------------------------------------------------------
     .text
     .globl qwen3_matmul_q
@@ -348,6 +353,7 @@ qwen3_matmul_q:
 
     LI_CWM  t0, DT_I8, 32, 32
     SETW    SEL_TC, 0, 0, X_T0, 1
+    SETX    SEL_TC, 0, CF_ROWS, 0, X_A7
     SETX    SEL_TM, 0, CF_RSTRIDE, 0, X_A6
     SETIM   SEL_TM, CF_CSTRIDE, 1, 0
     SETIM   SEL_TM, CF_FLAGS, 2, 0      # inc along cols: += 32 * 1
@@ -357,6 +363,7 @@ qwen3_matmul_q:
     SETIM   SEL_TM, CF_LAYOUT, 1, 1     # transform = transpose: t1 = W chunk^T
     LI_CWM  t0, DT_I32, 32, 32
     SETW    SEL_AC, 0, 0, X_T0, 1
+    SETX    SEL_AC, 0, CF_ROWS, 0, X_A7, 1
     SETX    SEL_AM, 0, CF_BASE, 1, X_A4
     slli    t0, a5, 2
     SETX    SEL_AM, 0, CF_RSTRIDE, 1, X_T0
@@ -364,6 +371,7 @@ qwen3_matmul_q:
     SETIM   SEL_AM, CF_FLAGS, 2, 1      # inc along cols: += 32 * 4
     LI_CWV  s3, DT_F32, 32
     SETW    SEL_VC, 1, 29, X_S3, 1    # vc29 (ws stream), vc30 (xs)
+    SETX    SEL_VC, 1, CF_LEN, 30, X_A7
     SETX    SEL_VM, 1, CF_BASE, 29, X_A1
     SETIV   SEL_VM, CF_STRIDE, 4, 29
     SETIV   SEL_VM, CF_VFLAGS, 1, 29    # ws stream, one block per load
