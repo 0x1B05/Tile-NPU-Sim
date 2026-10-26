@@ -24,7 +24,7 @@ qwen3_debug_qtile: .skip 8
 # void qwen3_fence_mem(void)
 #
 # C-callable fence.mem: scalar readers of NPU-stored memory (cache_append,
-# probe_record) call this before their loads.
+# snapshot readers) call this before their loads.
 # ---------------------------------------------------------------------------
     .globl qwen3_fence_mem
 qwen3_fence_mem:

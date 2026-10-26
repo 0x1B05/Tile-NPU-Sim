@@ -1,20 +1,11 @@
 #!/usr/bin/env python3
-"""Tiny Qwen3 regression: guest forward under sim_run vs the numpy reference.
+"""Tiny Qwen3 regression: guest snapshot and generated tokens vs NumPy.
 
-convert.py tiny emits a fixed-seed random model (a q3b blob plus an f32
-reference npz and a Q3P prompt image). This script runs the guest app on the
-simulator and compares ordered records emitted by guest and ref.py:
+The snapshot guest writes named f32 records into a fixed RAM region. sim_run
+dumps that region after the run, and this script compares the records and
+generated token ids with ref.py.
 
-  PROBE <name> [index] <kind> <count> <word>...
-
-  - f32 records are compared by value with a relative tolerance; summation
-    order and the approx instructions diverge in the last ulps;
-  - i8/i32 records (packed q8 activations, i32 accumulators) must match
-    bit-exactly;
-  - order, duplicate records, kinds, and word counts must match;
-  - generated token ids must match exactly.
-
-Usage: tiny_check.py SIM_RUN APP_BIN TINY_Q3B TINY_PROMPT TINY_REF_NPZ
+Usage: tiny_check.py SIM_RUN APP_BIN TINY_Q3B TINY_PROMPT TINY_REF_NPZ SNAPSHOT_BIN
 """
 
 import math
@@ -22,78 +13,61 @@ import os
 import struct
 import subprocess
 import sys
-from dataclasses import dataclass
+from pathlib import Path
+
+import numpy as np
 
 REF_PY = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ref.py")
 
-# Guest memory map (apps/qwen3/include/qwen3.h): prompt at 0x80F00000, blob at
-# 0x81000000, KV cache and stack top below 0xC0000000, so 1 GiB of RAM covers
-# the tiny model.
 MEMORY_MIB = "1024"
 PROMPT_BASE = "0x80F00000"
 BLOB_BASE = "0x81000000"
-
+SNAPSHOT_BASE = 0x80B00000
+SNAPSHOT_SIZE = 4 << 20
+SNAPSHOT_MAGIC = 0x00504E53
+SNAPSHOT_KINDS = {
+    0: ("<f4", "f32"),
+    1: ("i1", "i8"),
+    2: ("<i4", "i32"),
+}
 FLOAT_RTOL = 1e-4
 FLOAT_ATOL = 1e-6
-PROBE_KINDS = {"f32", "i8", "i32"}
 
 
-@dataclass(frozen=True)
-class ProbeRecord:
-    name: str
-    index: int | None
-    kind: str
-    words: list[int]
+def parse_snapshot(path):
+    data = path.read_bytes()
+    if len(data) < 16:
+        raise ValueError(f"{path}: truncated snapshot header")
+    magic, version, used, records = struct.unpack_from("<IIII", data, 0)
+    if magic != SNAPSHOT_MAGIC:
+        raise ValueError(f"{path}: bad snapshot magic")
+    if version != 1:
+        raise ValueError(f"{path}: unsupported snapshot version {version}")
+    if used > len(data):
+        raise ValueError(f"{path}: snapshot used {used} > file {len(data)}")
 
-
-def f32(bits):
-    return struct.unpack("<f", struct.pack("<I", bits))[0]
-
-
-def parse_probes(text):
-    """Parse the explicit PROBE record protocol."""
-    records = []
-    for lineno, line in enumerate(text.splitlines(), 1):
-        if not line.startswith("PROBE "):
-            continue
-        fields = line.split()
-        if len(fields) < 5:
-            raise ValueError(f"line {lineno}: malformed PROBE record")
-        name = fields[1]
-        pos = 2
-        index = None
-        if fields[pos] not in PROBE_KINDS:
-            try:
-                index = int(fields[pos])
-            except ValueError as exc:
-                raise ValueError(f"line {lineno}: invalid probe index") from exc
-            pos += 1
-        if pos + 2 > len(fields):
-            raise ValueError(f"line {lineno}: missing probe kind or count")
-        kind = fields[pos]
-        pos += 1
-        if kind not in PROBE_KINDS:
-            raise ValueError(f"line {lineno}: invalid probe kind {kind!r}")
-        try:
-            count = int(fields[pos])
-        except ValueError as exc:
-            raise ValueError(f"line {lineno}: invalid probe count") from exc
-        pos += 1
-        raw_words = fields[pos:]
-        if len(raw_words) != count:
-            raise ValueError(
-                f"line {lineno}: PROBE count {count} but {len(raw_words)} words"
-            )
-        words = []
-        for raw in raw_words:
-            if len(raw) != 8:
-                raise ValueError(f"line {lineno}: invalid probe word {raw!r}")
-            try:
-                words.append(int(raw, 16))
-            except ValueError as exc:
-                raise ValueError(f"line {lineno}: invalid probe word {raw!r}") from exc
-        records.append(ProbeRecord(name, index, kind, words))
-    return records
+    out = []
+    offset = 16
+    for _ in range(records):
+        offset = (offset + 15) & ~15
+        if offset + 32 > used:
+            raise ValueError(f"{path}: truncated snapshot record")
+        name, kind, count, nbytes, _, _, _ = struct.unpack_from(
+            "<8sIIIIII", data, offset
+        )
+        if kind not in SNAPSHOT_KINDS:
+            raise ValueError(f"{path}: bad snapshot kind {kind}")
+        dtype, kind_name = SNAPSHOT_KINDS[kind]
+        payload = data[offset + 32 : offset + 32 + nbytes]
+        if len(payload) != nbytes:
+            raise ValueError(f"{path}: truncated snapshot payload")
+        values = np.frombuffer(payload, dtype=dtype, count=count).copy()
+        if values.nbytes != nbytes:
+            raise ValueError(f"{path}: snapshot size mismatch for {name!r}")
+        label = name.split(b"\0", 1)[0].decode()
+        out.append((label, kind_name, values))
+        offset += 32 + nbytes
+    return out
 
 
 def generated_ids(text, prefix):
@@ -116,75 +90,57 @@ def run(cmd):
 
 
 def main():
-    sim_run, app_bin, blob, prompt, ref_npz = sys.argv[1:6]
+    sim_run, app_bin, blob, prompt, ref_npz, snapshot_bin = sys.argv[1:7]
+    snapshot_path = Path(snapshot_bin)
+    ref_snapshot = str(snapshot_path.with_suffix(".ref.npz"))
+
     guest = run([
         sim_run,
         "-m",
         MEMORY_MIB,
+        "--dump-range",
+        f"{snapshot_path}@{SNAPSHOT_BASE:#x}:{SNAPSHOT_SIZE:#x}",
         app_bin,
         f"{blob}@{BLOB_BASE}",
         f"{prompt}@{PROMPT_BASE}",
     ])
-    ref = run([sys.executable, REF_PY, ref_npz])
+    ref_text = run([sys.executable, REF_PY, ref_npz, "32", ref_snapshot])
 
     failures = []
     try:
-        guest_probes = parse_probes(guest)
-        ref_probes = parse_probes(ref)
-    except ValueError as exc:
+        guest_records = parse_snapshot(snapshot_path)
+    except (OSError, ValueError) as exc:
         sys.exit(f"tiny_check: {exc}")
+    ref_arrays = np.load(ref_snapshot)
+    ref_names = list(ref_arrays.keys())
+    guest_names = [name for name, _, _ in guest_records]
 
-    for label, records in (("guest", guest_probes), ("ref", ref_probes)):
-        seen = set()
-        for record in records:
-            key = (record.name, record.index)
-            if key in seen:
-                failures.append(f"{label}: duplicate probe {key}")
-            seen.add(key)
-
-    if len(guest_probes) != len(ref_probes):
-        failures.append(
-            f"probe count: guest {len(guest_probes)} vs ref {len(ref_probes)}"
-        )
-    if guest_probes and ref_probes:
-        guest_names = [(r.name, r.index) for r in guest_probes]
-        ref_names = [(r.name, r.index) for r in ref_probes]
-        if guest_names != ref_names:
-            failures.append(
-                f"probe order: guest {guest_names} vs ref {ref_names}"
-            )
+    if guest_names != ref_names:
+        failures.append(f"snapshot records: guest {guest_names} vs ref {ref_names}")
 
     worst_rel, worst_where = 0.0, ""
-    for i, (g, r) in enumerate(zip(guest_probes, ref_probes)):
-        label = f"{g.name}[{g.index}]" if g.index is not None else g.name
-        if g.name != r.name or g.index != r.index:
+    for name, kind, values in guest_records:
+        if name not in ref_arrays:
+            continue
+        expected = np.asarray(ref_arrays[name], dtype=np.float32).reshape(-1)
+        if values.size != expected.size:
             failures.append(
-                f"record {i}: guest {g.name}/{g.index} vs ref {r.name}/{r.index}"
+                f"{name}: {values.size} guest elements vs {expected.size} ref"
             )
             continue
-        if g.kind != r.kind:
-            failures.append(f"{label}: kind {g.kind} vs {r.kind}")
+        if kind != "f32":
+            if not np.array_equal(values, expected):
+                failures.append(f"{name}: integer values differ")
             continue
-        if len(g.words) != len(r.words):
-            failures.append(
-                f"{label}: {len(g.words)} guest words vs {len(r.words)} ref"
-            )
-            continue
-        if g.kind != "f32":
-            if g.words != r.words:
-                diff = [j for j, (a, b) in enumerate(zip(g.words, r.words)) if a != b]
-                failures.append(f"{label}: integer words differ at {diff[:4]}")
-            continue
-        for j, (gw, rw) in enumerate(zip(g.words, r.words)):
-            a, b = f32(gw), f32(rw)
-            if not math.isclose(a, b, rel_tol=FLOAT_RTOL, abs_tol=FLOAT_ATOL):
-                failures.append(f"{label}[{j}]: guest {a!r} vs ref {b!r}")
-            rel = abs(a - b) / max(abs(b), 1e-30)
+        for i, (a, b) in enumerate(zip(values, expected)):
+            if not math.isclose(float(a), float(b), rel_tol=FLOAT_RTOL, abs_tol=FLOAT_ATOL):
+                failures.append(f"{name}[{i}]: guest {a!r} vs ref {b!r}")
+            rel = abs(float(a) - float(b)) / max(abs(float(b)), 1e-30)
             if rel > worst_rel:
-                worst_rel, worst_where = rel, f"{label}[{j}]"
+                worst_rel, worst_where = rel, f"{name}[{i}]"
 
     g_ids = generated_ids(guest, "generated: ")
-    r_ids = generated_ids(ref, "ref generated: ")
+    r_ids = generated_ids(ref_text, "ref generated: ")
     if g_ids is None or r_ids is None:
         failures.append(f"generated ids missing: guest {g_ids} vs ref {r_ids}")
         r_ids = r_ids or []
@@ -192,11 +148,11 @@ def main():
         failures.append(f"generated ids differ: guest {g_ids} vs ref {r_ids}")
 
     if failures:
-        for f in failures:
-            print(f"MISMATCH: {f}")
+        for failure in failures:
+            print(f"MISMATCH: {failure}")
         sys.exit(f"tiny_check: FAIL ({len(failures)} mismatch(es))")
     print(
-        f"tiny_check: PASS ({len(ref_probes)} probes, worst float rel err "
+        f"tiny_check: PASS ({len(ref_names)} snapshots, worst float rel err "
         f"{worst_rel:.3g} at {worst_where}, {len(r_ids)} generated tokens)"
     )
 

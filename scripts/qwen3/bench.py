@@ -5,8 +5,7 @@ The guest prints one prompt line, runs prefill, then prints "generated:" and
 one space-separated token per decode step. This script timestamps the serial
 bytes as they arrive, so no simulator instrumentation is needed.
 
-Run with a no-probe build for accurate numbers:
-  xmake f --qwen3probes=n && xmake build qwen3_app
+Use the normal qwen3_app build; the snapshot-only guest is not used here.
 """
 
 import argparse
@@ -24,11 +23,6 @@ from tokenizer import Tokenizer
 
 BLOB_BASE = "0x81000000"
 PROMPT_BASE = "0x80F00000"
-PROBES_WARNING = (
-    "warning: PROBE records detected; prefill/TTFT include "
-    "qwen3_probe_last_prompt. Rebuild with `xmake f --qwen3probes=n`."
-)
-
 
 @dataclass(frozen=True)
 class RunMetrics:
@@ -43,7 +37,6 @@ class RunMetrics:
     total_s: float
     prompt_tokens: int
     output_tokens: int
-    probes: bool
 
     def as_dict(self):
         return asdict(self)
@@ -61,7 +54,6 @@ def run_once(cmd):
     tokens = []
     mode = "lines"
     in_token = False
-    probes = False
     prompt_count = None
     t_prompt = None
     t_generated = None
@@ -81,9 +73,7 @@ def run_once(cmd):
                 t_generated = now
                 continue
             if byte == 0x0A:
-                if line.startswith(b"PROBE "):
-                    probes = True
-                elif line.startswith(b"prompt tokens:"):
+                if line.startswith(b"prompt tokens:"):
                     t_prompt = now
                     prompt_count = len(line.split()) - 2
                 line.clear()
@@ -129,7 +119,6 @@ def run_once(cmd):
         total_s=end - start,
         prompt_tokens=prompt_count,
         output_tokens=len(tokens),
-        probes=probes,
     )
 
 
@@ -169,10 +158,6 @@ def build_parser():
     parser = argparse.ArgumentParser(
         description="Measure Qwen3 prefill, TTFT, and decode time from the guest serial stream.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=(
-            "Use a no-probe build for accurate timings:\n"
-            "  xmake f --qwen3probes=n && xmake build qwen3_app"
-        ),
     )
     parser.add_argument("text", nargs="?", help="prompt text (or use --prompt-image)")
     parser.add_argument("--prompt-image", type=Path, help="existing Q3P prompt image")
@@ -223,8 +208,6 @@ def main(argv=None):
         run_once(cmd)
 
     runs = [run_once(cmd) for _ in range(args.runs)]
-    if any(run.probes for run in runs):
-        print(PROBES_WARNING, file=sys.stderr)
 
     print(f"prompt tokens: {runs[0].prompt_tokens}")
     print(f"runs: {args.runs} (warmup {args.warmup})")

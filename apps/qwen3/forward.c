@@ -3,8 +3,8 @@
 #include "console.h"
 #include "dims.h"
 #include "kernels.h"
-#include "probe.h"
 #include "q3b.h"
+#include "snapshot.h"
 
 // Qwen3 forward pass orchestration. Architecture dims come from the blob
 // header at runtime; weight pointers are cached per layer at init.
@@ -83,19 +83,6 @@ static char *const kv_region = (char *)KV_REGION_BASE;
 static char *kv_k_ptr(uint32_t layer) { return kv_region + layer * 2 * model.kv_stride; }
 
 static char *kv_v_ptr(uint32_t layer) { return kv_region + (layer * 2 + 1) * model.kv_stride; }
-
-// qwen3_quant_act with the packed-tile dump hooked around it; active only on
-// the probed pass's layer 0. The tag tells the q/k/v and o-projection
-// quantization sites apart.
-static uint32_t quant_act(const float *x, uint32_t k, const char *tag, int active) {
-  return active ? probe_quant_act(x, k, tag) : qwen3_quant_act(x, k);
-}
-
-// PROBE sites all sit in qwen3_forward_impl(), gated on its `probing` local.
-#define PROBE(name, kind, data, count)                                                             \
-  do {                                                                                             \
-    if (probing) probe_record(name, -1, kind, (const uint32_t *)(data), count);                    \
-  } while (0)
 
 static uint32_t inv_n_bits(uint32_t n) {
   // n is a power of two: 1/n = 2^-ctz(n) in f32.
@@ -187,7 +174,7 @@ static void cache_append(uint32_t layer, uint32_t pos, const float *k, const flo
   }
 }
 
-static void attention(uint32_t layer, uint32_t pos, const float *q, float *attn, int probe) {
+static void attention(uint32_t layer, uint32_t pos, const float *q, float *attn) {
   const uint32_t group = model.n_q_heads / model.n_kv_heads;
   const uint32_t n_keys = pos + 1;
   const uint32_t n_padded = (n_keys + 31) & ~31u;
@@ -201,43 +188,48 @@ static void attention(uint32_t layer, uint32_t pos, const float *q, float *attn,
     for (uint32_t i = n_keys; i < n_padded; ++i) {
       ((uint32_t *)scores)[i] = 0xFF800000u;
     }
-    if (probe && attention_probe_enabled(layer, h, pos, model.n_prompt))
-      probe_record("sc", (int)h, "f32", (const uint32_t *)scores, 6);
     qwen3_softmax_exp(scores, n_padded, model.scale_log2e_bits, rcp_word);
-    // pb_h appends the softmax rcp as a 7th word (ref.py prints it inline)
-    if (probe && attention_probe_enabled(layer, h, pos, model.n_prompt)) {
-      uint32_t words[7];
-      __builtin_memcpy(words, scores, 6 * sizeof(uint32_t));
-      words[6] = rcp_word[0];
-      probe_record("pb", (int)h, "f32", words, 7);
-    }
     qwen3_pv(vb, model.kv_dim * 4, scores, attn + h * model.head_dim, n_keys, model.head_dim,
              rcp_word[0]);
   }
 }
 
+#if QWEN3_SNAPSHOT
+static int snapshot_enabled = 0;
+
+static void snapshot_capture_layer0(void) {
+  snapshot_add("l0_x", SNAPSHOT_F32, x_buf, model.hidden);
+  snapshot_add("l0_q", SNAPSHOT_F32, q_buf, model.q_dim);
+  snapshot_add("l0_k", SNAPSHOT_F32, k_buf, model.kv_dim);
+  snapshot_add("l0_v", SNAPSHOT_F32, v_buf, model.kv_dim);
+  snapshot_add("l0_attn", SNAPSHOT_F32, attn_buf, model.q_dim);
+  snapshot_add("l0_h1", SNAPSHOT_F32, h1, model.hidden);
+  snapshot_add("l0_gate", SNAPSHOT_F32, gate_buf, model.inter);
+  snapshot_add("l0_up", SNAPSHOT_F32, up_buf, model.inter);
+  snapshot_add("l0_h2", SNAPSHOT_F32, h2, model.hidden);
+}
+
+static void snapshot_capture_final(void) {
+  snapshot_add("fin_h1", SNAPSHOT_F32, h1, model.hidden);
+  snapshot_add("logits", SNAPSHOT_F32, logits, model.vocab);
+}
+#endif
+
 static uint32_t qwen3_forward_impl(uint32_t token, uint32_t pos, int want_logits, int update_cache) {
-  // probes fire on the last prompt token's logits-producing pass
-  const int probing = QWEN3_PROBES && want_logits && pos == model.n_prompt - 1;
   uint32_t xs;
   qwen3_embed(model.embed, model.embed_s, token, x_buf, model.hidden, model.vocab);
-  PROBE("embed", "f32", x_buf, 4);
   for (uint32_t L = 0; L < model.n_layers; ++L) {
     const void **sec = model.layer_sections[L];
     qwen3_rmsnorm(x_buf, sec[SEC_INLN], h1, model.hidden, model.eps_bits, inv_n_bits(model.hidden));
-    if (L == 0) PROBE("ln0", "f32", h1, 4);
     // q/k/v share one activation quantization; the tiles stay resident
-    xs = quant_act(h1, model.hidden, "qx0", probing && L == 0);
+    xs = qwen3_quant_act(h1, model.hidden);
     qwen3_matvec_q(sec[SEC_QW], sec[SEC_QWS], q_buf, model.q_dim, model.hidden, xs);
-    if (L == 0) PROBE("ac0", "i32", qwen3_accbuf, 8);
-    if (L == 0) PROBE("q0", "f32", q_buf, 4);
     qwen3_matvec_q(sec[SEC_KW], sec[SEC_KWS], k_buf, model.kv_dim, model.hidden, xs);
     qwen3_matvec_q(sec[SEC_VW], sec[SEC_VWS], v_buf, model.kv_dim, model.hidden, xs);
     for (uint32_t h = 0; h < model.n_q_heads; ++h) {
       qwen3_rmsnorm(q_buf + h * model.head_dim, sec[SEC_QN], q_buf + h * model.head_dim,
                     model.head_dim, model.eps_bits, inv_n_bits(model.head_dim));
     }
-    if (L == 0) PROBE("q0n", "f32", q_buf, 4);
     for (uint32_t h = 0; h < model.n_kv_heads; ++h) {
       qwen3_rmsnorm(k_buf + h * model.head_dim, sec[SEC_KN], k_buf + h * model.head_dim,
                     model.head_dim, model.eps_bits, inv_n_bits(model.head_dim));
@@ -247,43 +239,34 @@ static uint32_t qwen3_forward_impl(uint32_t token, uint32_t pos, int want_logits
     for (uint32_t h = 0; h < model.n_q_heads; ++h) {
       qwen3_rope(q_buf + h * model.head_dim, cos_p, sin_p, model.head_dim);
     }
-    if (L == 0) PROBE("q0r", "f32", q_buf, 4);
-    if (L == 0) PROBE("q1r", "f32", q_buf + model.head_dim, 4);
     for (uint32_t h = 0; h < model.n_kv_heads; ++h) {
       qwen3_rope(k_buf + h * model.head_dim, cos_p, sin_p, model.head_dim);
     }
     if (update_cache) cache_append(L, pos, k_buf, v_buf);
-    attention(L, pos, q_buf, attn_buf, probing);
-    if (L == 0) PROBE("attn0", "f32", attn_buf, 4);
-    if (L == 0) PROBE("attn1", "f32", attn_buf + model.head_dim, 4);
-    xs = quant_act(attn_buf, model.q_dim, "qxa", probing && L == 0);
+    attention(L, pos, q_buf, attn_buf);
+    xs = qwen3_quant_act(attn_buf, model.q_dim);
     qwen3_matvec_q(sec[SEC_OW], sec[SEC_OWS], h2, model.hidden, model.q_dim, xs);
-    if (L == 0) PROBE("aca", "i32", qwen3_accbuf, 8);
-    if (L == 0) PROBE("o0", "f32", h2, 4);
     qwen3_add(x_buf, h2, model.hidden);
-    if (L == 0) PROBE("xr0", "f32", x_buf, 4);
     qwen3_rmsnorm(x_buf, sec[SEC_PTLN], h1, model.hidden, model.eps_bits, inv_n_bits(model.hidden));
-    if (L == 0) PROBE("ln1", "f32", h1, 4);
     // gate/up share one activation quantization
     xs = qwen3_quant_act(h1, model.hidden);
     qwen3_matvec_q(sec[SEC_GW], sec[SEC_GWS], gate_buf, model.inter, model.hidden, xs);
     qwen3_matvec_q(sec[SEC_UW], sec[SEC_UWS], up_buf, model.inter, model.hidden, xs);
-    if (L == 0) PROBE("g0", "f32", gate_buf, 4);
-    if (L == 0) PROBE("u0", "f32", up_buf, 4);
     qwen3_silu_mul(gate_buf, up_buf, gate_buf, model.inter);
-    if (L == 0) PROBE("m0", "f32", gate_buf, 4);
     xs = qwen3_quant_act(gate_buf, model.inter);
     qwen3_matvec_q(sec[SEC_DW], sec[SEC_DWS], h2, model.hidden, model.inter, xs);
-    if (L == 0) PROBE("d0", "f32", h2, 4);
     qwen3_add(x_buf, h2, model.hidden);
-    if (L == 0) PROBE("x_l0", "f32", x_buf, 4);
+#if QWEN3_SNAPSHOT
+    if (L == 0 && snapshot_enabled) snapshot_capture_layer0();
+#endif
   }
   if (!want_logits) return 0;
   qwen3_rmsnorm(x_buf, model.fin_norm, h1, model.hidden, model.eps_bits, inv_n_bits(model.hidden));
-  PROBE("lnf", "f32", h1, 4);
   xs = qwen3_quant_act(h1, model.hidden);
   qwen3_matvec_q(model.embed, model.embed_s, logits, model.vocab, model.hidden, xs);
-  probe_logits(logits);
+#if QWEN3_SNAPSHOT
+  if (snapshot_enabled) snapshot_capture_final();
+#endif
   return qwen3_argmax(logits, model.vocab);
 }
 
@@ -291,9 +274,11 @@ uint32_t qwen3_forward(uint32_t token, uint32_t pos, int want_logits) {
   return qwen3_forward_impl(token, pos, want_logits, 1);
 }
 
-#if QWEN3_PROBES
-void qwen3_probe_last_prompt(uint32_t token, uint32_t pos) {
+#if QWEN3_SNAPSHOT
+void qwen3_snapshot_last_prompt(uint32_t token, uint32_t pos) {
+  snapshot_enabled = 1;
   (void)qwen3_forward_impl(token, pos, 1, 0);
+  snapshot_enabled = 0;
 }
 #endif
 
@@ -337,7 +322,7 @@ uint32_t qwen3_prefill(const uint32_t *tokens, uint32_t n) {
         for (uint32_t h = 0; h < model.n_kv_heads; ++h)
           qwen3_rope(pf_k + t * model.kv_dim + h * model.head_dim, cos_p, sin_p, model.head_dim);
         cache_append(L, base + t, pf_k + t * model.kv_dim, pf_v + t * model.kv_dim);
-        attention(L, base + t, pf_q + t * model.q_dim, pf_attn + t * model.q_dim, 0);
+        attention(L, base + t, pf_q + t * model.q_dim, pf_attn + t * model.q_dim);
       }
       qwen3_quant_rows(pf_attn, model.q_dim, pf_xq, pf_xs, chunk_rows);
       qwen3_matmul_q(sec[SEC_OW], sec[SEC_OWS], pf_xq, pf_xs, pf_h2, model.hidden, model.q_dim,

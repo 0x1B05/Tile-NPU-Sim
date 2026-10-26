@@ -28,10 +28,17 @@ struct Image {
   std::uint64_t address;
 };
 
+struct DumpRange {
+  std::string path;
+  std::uint64_t address;
+  std::size_t size;
+};
+
 struct Options {
   bool interactive = false;
   std::size_t memory_mib = DEFAULT_MEMORY_MIB;
   std::uint64_t step_limit = UNLIMITED_STEPS;
+  std::optional<DumpRange> dump_range;
   std::vector<Image> images;
 };
 
@@ -41,8 +48,9 @@ struct Options {
 std::optional<StepResult> npu_exec(Simulator &sim, std::uint64_t step_limit);
 
 // An image argument is "path" (loaded at the entry address) or
-// "path@0xADDR" (loaded at ADDR).
+// "path@0xADDR" (loaded at ADDR). A dump range is "path@0xADDR:0xSIZE".
 bool parse_image(std::string_view arg, Image &image);
+bool parse_dump_range(std::string_view arg, DumpRange &range);
 
 // Loads all images into one memory, then runs to a stop or, with
 // options.interactive, enters the sdb shell. Returns the process exit code.

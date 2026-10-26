@@ -1,9 +1,9 @@
 #include "qwen3.h"
 
 #include "console.h"
-#include "probe.h"
 #include "q3b.h"
 #include "q3p.h"
+#include "snapshot.h"
 
 #define MAX_NEW_TOKENS 32
 #define EOS_IM_END 151645u
@@ -30,8 +30,9 @@ int main(void) {
   printf("\n");
 
   uint32_t next = qwen3_prefill(tokens, n_prompt);
-#if QWEN3_PROBES
-  qwen3_probe_last_prompt(tokens[n_prompt - 1], n_prompt - 1);
+#if QWEN3_SNAPSHOT
+  snapshot_reset();
+  qwen3_snapshot_last_prompt(tokens[n_prompt - 1], n_prompt - 1);
 #endif
   uint32_t pos = n_prompt;
 

@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <optional>
 #include <span>
 #include <string>
@@ -46,6 +47,16 @@ bool load_image(const Image &image, Ram &memory) {
   return true;
 }
 
+bool write_dump(const Ram &memory, const DumpRange &range) {
+  std::vector<std::byte> bytes(range.size);
+  if (!memory.read(range.address, std::span<std::byte>(bytes))) return false;
+  std::ofstream out(range.path, std::ios::binary);
+  if (!out) return false;
+  out.write(reinterpret_cast<const char *>(bytes.data()),
+            static_cast<std::streamsize>(bytes.size()));
+  return out.good();
+}
+
 } // namespace
 
 bool parse_image(std::string_view arg, Image &image) {
@@ -54,6 +65,22 @@ bool parse_image(std::string_view arg, Image &image) {
   image.address = MEMORY_BASE;
   if (at == std::string_view::npos) return true;
   return parse_u64(arg.substr(at + 1), image.address);
+}
+
+bool parse_dump_range(std::string_view arg, DumpRange &range) {
+  const auto at = arg.rfind('@');
+  if (at == std::string_view::npos) return false;
+  const auto colon = arg.find(':', at + 1);
+  if (colon == std::string_view::npos) return false;
+  std::uint64_t size = 0;
+  if (!parse_u64(arg.substr(at + 1, colon - at - 1), range.address) ||
+      !parse_u64(arg.substr(colon + 1), size) ||
+      size > std::numeric_limits<std::size_t>::max()) {
+    return false;
+  }
+  range.path = std::string(arg.substr(0, at));
+  range.size = static_cast<std::size_t>(size);
+  return !range.path.empty() && range.size != 0;
 }
 
 std::optional<StepResult> npu_exec(Simulator &sim, std::uint64_t step_limit) {
@@ -86,6 +113,10 @@ int run_images(const Options &options) {
 
   // A guest stops at ebreak or kernel.end with a0 as the process exit code.
   const auto halt_result = npu_exec(sim, options.step_limit);
+  if (options.dump_range && !write_dump(ram, *options.dump_range)) {
+    std::cerr << "cannot dump memory range to " << options.dump_range->path << '\n';
+    return 1;
+  }
   if (!halt_result) {
     std::cerr << "step limit reached\n";
     return 1;

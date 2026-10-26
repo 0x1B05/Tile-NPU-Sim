@@ -38,12 +38,6 @@ option("native", function()
 	set_description("Build with -march=native for host-specific ISA extensions")
 end)
 
-option("qwen3probes", function()
-	set_default(true)
-	set_showmenu(true)
-	set_description("Compile Qwen3 numerical probes (disable for benchmarking)")
-end)
-
 if has_config("native") then
 	add_cxflags("-march=native", { tools = { "gcc", "gxx", "clang", "clangxx" } })
 end
