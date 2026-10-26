@@ -1,8 +1,6 @@
 # Tile-NPU functional simulator
 
-A functional simulator for the Tile-NPU ISA: a single-hart, in-order model that executes 32-bit RV64IM scalar instructions together with the full NPU instruction set (elementwise arithmetic and comparison, broadcast, mask, type conversion, reductions, quantization, matrix multiply and dot, configuration, block/row/gather memory access, initialization and lane movement, synchronization).
-
-The simulator core is the `tile_npu_sim` static library with a single-step API; `sim_run` is the runner and interactive debugger built on it. The ISA manual lives in the sibling repository at `../Tile-NPU-ISA`. Internal architecture notes and development conventions are documented in `AGENTS.md`.
+A functional simulator for the [Tile-NPU ISA](https://github.com/0x1B05/Tile-NPU-ISA): a single-hart, in-order model that executes 32-bit RV64IM scalar instructions together with the NPU instruction set.
 
 ## Build and test
 
