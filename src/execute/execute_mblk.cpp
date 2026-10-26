@@ -45,22 +45,66 @@ bool transform_legal(const MblkInstr &instr, const MatrixDescriptor &desc) {
   return desc.transform == 0 || full_tile_block;
 }
 
-// Visits a matrix block in row-major order, swapping coordinates for the
-// transpose form. Returns false when an address overflows.
-template <typename Fn>
-bool for_each_block_element(const MatrixDescView &desc, std::size_t rows, std::size_t cols,
-                            bool transpose, Fn &&fn) {
-  for (std::size_t row = 0; row < rows; ++row) {
-    for (std::size_t col = 0; col < cols; ++col) {
-      const auto address =
-          transpose ? desc.matrix_element_addr(col, row) : desc.matrix_element_addr(row, col);
-      if (!address) {
-        return false;
+// Visits every element once to probe the address space, then visits it again
+// to transfer. Address overflow is a configuration error and wins over a fault
+// on an earlier element; otherwise the first fault address is reported.
+template <typename Element, typename Visit>
+ExecuteResult probe_and_transfer(AddressSpace &memory, Visit &&visit, bool store) {
+  bool overflow = false;
+  std::optional<std::uint64_t> fault_address;
+  visit([&](std::optional<std::uint64_t> address, Element &) {
+    if (!address) {
+      overflow = true;
+    } else if (!fault_address && !memory.contains(*address, sizeof(Element))) {
+      fault_address = *address;
+    }
+  });
+  if (overflow) {
+    return config_error();
+  }
+  if (fault_address) {
+    return access_fault(store ? StepStatus::store_fault : StepStatus::load_fault, *fault_address);
+  }
+
+  visit([&](std::optional<std::uint64_t> address, Element &element) {
+    if (!address) {
+      unreachable("address overflowed after range prevalidation");
+    }
+    if (store) {
+      store_element(memory, *address, element);
+    } else {
+      load_element(memory, *address, element);
+    }
+  });
+  return {.status = StepStatus::retired};
+}
+
+// Gathers indexed rows and zero-fills the rows beyond the index length. The
+// vector form is the special case of one column per row.
+template <typename Element, typename RowAddress, typename ColumnAddress, typename ElementAt>
+ExecuteResult gather_access(AddressSpace &memory, std::size_t rows, std::size_t cols,
+                            std::size_t indexed_rows, RowAddress row_address,
+                            ColumnAddress column_address, ElementAt element_at) {
+  const auto visit = [&](auto &&fn) {
+    for (std::size_t row = 0; row < indexed_rows; ++row) {
+      const auto row_base = row_address(row);
+      for (std::size_t col = 0; col < cols; ++col) {
+        const auto address =
+            row_base ? column_address(*row_base, col) : std::optional<std::uint64_t>{};
+        fn(address, element_at(row, col));
       }
-      fn(*address, row, col);
+    }
+  };
+  const auto result = probe_and_transfer<Element>(memory, visit, false);
+  if (result.status != StepStatus::retired) {
+    return result;
+  }
+  for (std::size_t row = indexed_rows; row < rows; ++row) {
+    for (std::size_t col = 0; col < cols; ++col) {
+      element_at(row, col) = 0;
     }
   }
-  return true;
+  return result;
 }
 
 // Visits the contiguous source runs of a block. The transpose form's runs are
@@ -158,76 +202,6 @@ try_contiguous_block(const MblkInstr &instr, ExecContext &ctx, const MatrixDescV
   return ExecuteResult{.status = StepStatus::retired};
 }
 
-// Every access runs in two phases: all addresses are computed first, then
-// the transfer happens.
-template <std::size_t Max, typename Next>
-std::optional<std::array<std::uint64_t, Max>> collect_addresses(std::size_t count, Next next) {
-  std::array<std::uint64_t, Max> addrs{};
-  for (std::size_t n = 0; n < count; ++n) {
-    const auto addr = next(n);
-    if (!addr) {
-      return std::nullopt;
-    }
-    addrs[n] = *addr;
-  }
-  return addrs;
-}
-
-// A load prevalidates the full range, then fills the destination register.
-template <typename Reg, typename At>
-ExecuteResult load_elements(const AddressSpace &memory, Reg &reg,
-                            std::span<const std::uint64_t> addrs, At at) {
-  using Element = typename Reg::value_type;
-  for (const auto addr : addrs) {
-    if (!memory.contains(addr, sizeof(Element))) {
-      return access_fault(StepStatus::load_fault, addr);
-    }
-  }
-  for (std::size_t n = 0; n < addrs.size(); ++n) {
-    load_element(memory, addrs[n], at(reg, n));
-  }
-  return {.status = StepStatus::retired};
-}
-
-// A store reads the source register in place; the whole range is probed
-// before the first write to avoid partial stores.
-template <typename Reg, typename At>
-ExecuteResult store_elements(AddressSpace &memory, const Reg &reg,
-                             std::span<const std::uint64_t> addrs, At at) {
-  using Element = typename Reg::value_type;
-  for (const auto addr : addrs) {
-    if (!memory.contains(addr, sizeof(Element))) {
-      return access_fault(StepStatus::store_fault, addr);
-    }
-  }
-  for (std::size_t n = 0; n < addrs.size(); ++n) {
-    store_element(memory, addrs[n], at(reg, n));
-  }
-  return {.status = StepStatus::retired};
-}
-
-// The element accessor for a matrix transfer: position n is the logical
-// coordinate (n / cols, n % cols), read through the row-major view.
-template <typename Config> auto matrix_accessor(const Config &config) {
-  const auto cols = std::size_t{config.cols};
-  return [cols](auto &storage, std::size_t n) -> decltype(auto) {
-    return matrix_view(storage).at(n / cols, n % cols);
-  };
-}
-
-// The element accessor for a matrix row transfer: position n is column n in
-// the selected row.
-auto matrix_row_accessor(std::size_t row) {
-  return [row](auto &storage, std::size_t n) -> decltype(auto) {
-    return matrix_view(storage).at(row, n);
-  };
-}
-
-// The element accessor for a vector transfer: position n is lane n.
-auto vector_accessor() {
-  return [](auto &storage, std::size_t n) -> decltype(auto) { return storage[n]; };
-}
-
 // The gather index vector must use a valid Vec32 configuration with i32 elements.
 bool valid_gather_index(const Vec32Config &config) { return valid_config_of(config, DType::i32); }
 
@@ -254,7 +228,6 @@ template <NpuDomain Domain> ExecuteResult block_access(const MblkInstr &instr, E
 
   const bool transpose = desc.descriptor().transform;
   using Element = typename std::remove_reference_t<decltype(reg)>::value_type;
-  const auto fault_status = is_store(instr.op) ? StepStatus::store_fault : StepStatus::load_fault;
 
   // A contiguous run per row is the common case and avoids the per-element
   // address-space calls. Multi-byte elements only take this path on a
@@ -271,41 +244,22 @@ template <NpuDomain Domain> ExecuteResult block_access(const MblkInstr &instr, E
     }
   }
 
-  // Probe every element before changing the register or memory, preserving
-  // the atomic transfer contract without materializing the address array.
-  // Keep scanning after the first fault so a later address-overflow still
-  // wins as a configuration error, matching the original probe order.
-  std::optional<std::uint64_t> fault_address;
-  const auto probe = [&](std::uint64_t address, std::size_t, std::size_t) {
-    if (!fault_address && !ctx.memory.contains(address, sizeof(Element))) {
-      fault_address = address;
+  auto view = matrix_view(reg);
+  const auto visit = [&](auto &&fn) {
+    for (std::size_t row = 0; row < rows; ++row) {
+      for (std::size_t col = 0; col < cols; ++col) {
+        const auto address =
+            transpose ? desc.matrix_element_addr(col, row) : desc.matrix_element_addr(row, col);
+        fn(address, view.at(row, col));
+      }
     }
   };
-  if (!for_each_block_element(desc, rows, cols, transpose, probe)) {
-    return config_error();
-  }
-  if (fault_address) {
-    return access_fault(fault_status, *fault_address);
-  }
-
-  auto view = matrix_view(reg);
-  if (is_store(instr.op)) {
-    const auto store = [&](std::uint64_t address, std::size_t row, std::size_t col) {
-      store_element(ctx.memory, address, view.at(row, col));
-    };
-    if (!for_each_block_element(desc, rows, cols, transpose, store)) {
-      unreachable("block address overflowed after range prevalidation");
-    }
-  } else {
-    const auto load = [&](std::uint64_t address, std::size_t row, std::size_t col) {
-      load_element(ctx.memory, address, view.at(row, col));
-    };
-    if (!for_each_block_element(desc, rows, cols, transpose, load)) {
-      unreachable("block address overflowed after range prevalidation");
-    }
+  const auto result = probe_and_transfer<Element>(ctx.memory, visit, is_store(instr.op));
+  if (result.status != StepStatus::retired) {
+    return result;
   }
   desc.commit_base(*next_base);
-  return {.status = StepStatus::retired};
+  return result;
 }
 
 template <NpuDomain Domain> ExecuteResult row_access(const MblkInstr &instr, ExecContext &ctx) {
@@ -330,16 +284,14 @@ template <NpuDomain Domain> ExecuteResult row_access(const MblkInstr &instr, Exe
     return config_error();
   }
 
-  const auto addrs = collect_addresses<MATRIX_EXTENT>(
-      cols, [&](std::size_t j) { return desc.matrix_element_addr(0, j); });
-  if (!addrs) {
-    return config_error();
-  }
-
-  const std::span<const std::uint64_t> range(addrs->data(), cols);
-  const auto at = matrix_row_accessor(row);
-  const auto result = is_store(instr.op) ? store_elements(ctx.memory, reg, range, at)
-                                         : load_elements(ctx.memory, reg, range, at);
+  using Element = typename std::remove_reference_t<decltype(reg)>::value_type;
+  auto view = matrix_view(reg);
+  const auto visit = [&](auto &&fn) {
+    for (std::size_t col = 0; col < cols; ++col) {
+      fn(desc.matrix_element_addr(0, col), view.at(row, col));
+    }
+  };
+  const auto result = probe_and_transfer<Element>(ctx.memory, visit, is_store(instr.op));
   if (result.status != StepStatus::retired) {
     return result;
   }
@@ -367,40 +319,24 @@ ExecuteResult gather_tile_access(const MblkInstr &instr, ExecContext &ctx) {
   const auto cols = std::size_t{config.cols};
   const auto indexed_rows = std::min(rows, std::size_t{index_config.len});
   const auto &index_reg = ctx.state.v[instr.gather_src];
-  std::array<std::uint64_t, MATRIX_ELEMENTS> addrs{};
-  for (std::size_t i = 0; i < indexed_rows; ++i) {
-    const auto row_base = desc.gather_row_base(gather_index(index_reg, i));
-    if (!row_base) {
-      return config_error();
-    }
-    for (std::size_t j = 0; j < cols; ++j) {
-      const auto addr = desc.gather_matrix_addr(*row_base, j);
-      if (!addr) {
-        return config_error();
-      }
-      addrs[i * cols + j] = *addr;
-    }
-  }
-
   auto &reg = ctx.state.t[index];
-  const std::span<const std::uint64_t> range(addrs.data(), indexed_rows * cols);
-  const auto at = matrix_accessor(config);
-  const auto result = load_elements(ctx.memory, reg, range, at);
-  if (result.status != StepStatus::retired) {
-    return result;
-  }
-  auto dst = matrix_view(reg);
-  for (std::size_t i = indexed_rows; i < rows; ++i) {
-    for (std::size_t j = 0; j < cols; ++j) {
-      dst.at(i, j) = 0;
-    }
-  }
-  return {.status = StepStatus::retired};
+  auto view = matrix_view(reg);
+  const auto row_address = [&](std::size_t row) {
+    return desc.gather_row_base(gather_index(index_reg, row));
+  };
+  const auto column_address = [&](std::uint64_t row_base, std::size_t col) {
+    return desc.gather_matrix_addr(row_base, col);
+  };
+  const auto element = [&](std::size_t row, std::size_t col) -> Tile::value_type & {
+    return view.at(row, col);
+  };
+  return gather_access<Tile::value_type>(ctx.memory, rows, cols, indexed_rows, row_address,
+                                         column_address, element);
 }
 
-template <typename Reg, typename At>
+template <typename Reg>
 ExecuteResult gather_vector_access(const MblkInstr &instr, ExecContext &ctx, VectorDescView &desc,
-                                   std::size_t len, Reg &reg, At at) {
+                                   std::size_t len, Reg &reg) {
   const auto &index_config = ctx.state.vc[instr.gather_src];
   if (!valid_gather_index(index_config)) {
     return config_error();
@@ -410,39 +346,32 @@ ExecuteResult gather_vector_access(const MblkInstr &instr, ExecContext &ctx, Vec
   // descriptor increment is performed for gather.
   const auto indexed = std::min(len, std::size_t{index_config.len});
   const auto &index_reg = ctx.state.v[instr.gather_src];
-  const auto addrs = collect_addresses<VECTOR_LANES>(
-      indexed, [&](std::size_t j) { return desc.gather_vector_addr(gather_index(index_reg, j)); });
-  if (!addrs) {
-    return config_error();
-  }
-
-  const std::span<const std::uint64_t> range(addrs->data(), indexed);
-  const auto result = load_elements(ctx.memory, reg, range, at);
-  if (result.status != StepStatus::retired) {
-    return result;
-  }
-  for (std::size_t j = indexed; j < len; ++j) {
-    reg[j] = 0;
-  }
-  return {.status = StepStatus::retired};
+  using Element = typename Reg::value_type;
+  const auto row_address = [&](std::size_t lane) {
+    return desc.gather_vector_addr(gather_index(index_reg, lane));
+  };
+  const auto column_address = [](std::uint64_t address, std::size_t) {
+    return std::optional<std::uint64_t>{address};
+  };
+  const auto element = [&](std::size_t lane, std::size_t) -> Element & { return reg[lane]; };
+  return gather_access<Element>(ctx.memory, len, 1, indexed, row_address, column_address, element);
 }
 
-template <typename Reg, typename At>
+template <typename Reg>
 ExecuteResult strided_vector_access(const MblkInstr &instr, ExecContext &ctx, VectorDescView &desc,
-                                    std::size_t len, Reg &reg, At at) {
+                                    std::size_t len, Reg &reg) {
   const auto next_base = desc.incremented_base(len);
   if (!next_base) {
     return config_error();
   }
-  const auto addrs = collect_addresses<VECTOR_LANES>(
-      len, [&](std::size_t j) { return desc.vector_element_addr(j); });
-  if (!addrs) {
-    return config_error();
-  }
 
-  const std::span<const std::uint64_t> range(addrs->data(), len);
-  const auto result = is_store(instr.op) ? store_elements(ctx.memory, reg, range, at)
-                                         : load_elements(ctx.memory, reg, range, at);
+  using Element = typename Reg::value_type;
+  const auto visit = [&](auto &&fn) {
+    for (std::size_t lane = 0; lane < len; ++lane) {
+      fn(desc.vector_element_addr(lane), reg[lane]);
+    }
+  };
+  const auto result = probe_and_transfer<Element>(ctx.memory, visit, is_store(instr.op));
   if (result.status != StepStatus::retired) {
     return result;
   }
@@ -461,12 +390,11 @@ template <NpuDomain Domain> ExecuteResult vector_access(const MblkInstr &instr, 
     return config_error();
   }
   const auto len = std::size_t{config.len};
-  const auto at = vector_accessor();
 
   if (instr.op == MblkOp::gather) {
-    return gather_vector_access(instr, ctx, desc, len, reg, at);
+    return gather_vector_access(instr, ctx, desc, len, reg);
   }
-  return strided_vector_access(instr, ctx, desc, len, reg, at);
+  return strided_vector_access(instr, ctx, desc, len, reg);
 }
 
 } // namespace
