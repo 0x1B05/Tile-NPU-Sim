@@ -3,10 +3,12 @@
 #include "config_check.h"
 #include "domain.h"
 #include "elementwise_op.h"
+#include "fp_env.h"
 #include "operand.h"
 #include "utils/common.h"
 
 #include <cstddef>
+#include <optional>
 #include <variant>
 
 namespace tile_npu {
@@ -39,6 +41,10 @@ ExecuteResult execute(const EbinInstr &instr, State &state) {
         }
         const auto &config = configs[instr.dest.index];
         const auto arith = arith_mode_of(config);
+        std::optional<FpEnvGuard> fp_env;
+        if (config.dtype == DType::f32) {
+          fp_env.emplace();
+        }
         auto &dst = regs[instr.dest.index];
         const auto &lhs = regs[instr.src1.index];
         return with_src2(instr.src2, state, regs, [&](auto rhs) {

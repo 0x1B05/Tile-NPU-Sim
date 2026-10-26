@@ -2,6 +2,7 @@
 
 #include "config_check.h"
 #include "domain.h"
+#include "fp_env.h"
 #include "matrix_view.h"
 #include "utils/bits.h"
 
@@ -29,6 +30,7 @@ template <NpuDomain Domain> ExecuteResult convert(const CvtInstr &instr, State &
       dst_config.dtype != DType::i32 || !configs_match(dst_config, src_config)) {
     return config_error();
   }
+  const FpEnvGuard fp_env;
   auto &dst = regs[instr.dest.index];
   const auto &src = regs[instr.src.index];
   for_each_idx(dst_config, [&](std::size_t n) { dst[n] = i32_to_f32_bits(src[n]); });

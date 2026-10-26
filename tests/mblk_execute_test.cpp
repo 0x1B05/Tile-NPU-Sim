@@ -103,6 +103,45 @@ TEST_CASE(mblk_tload_block_walks_strides) {
   check_eq(hex(state.tm[0].base_addr), hex(DATA), "descriptor without increment keeps base_addr");
 }
 
+TEST_CASE(mblk_tload_block_non_square) {
+  MblkRun run(block(NpuDomain::tile, 0, 0)); // tload t0
+  auto &state = run.sim.state();
+  state.tc[0].dtype = DType::i8;
+  state.tc[0].rows = 2;
+  state.tc[0].cols = 3;
+  stride_desc(state.tm[0], DATA, 4, 1);
+  poke(run.memory, DATA, {1, 2, 3, 0, 4, 5, 6, 0, 7, 8});
+  state.t[0][tile_index(0, 3)] = 0x5a; // sentinel outside the valid 2x3
+
+  check_eq(run.sim.step().status, StepStatus::retired, "non-square tload retires");
+  // addr(i, j) = DATA + i*4 + j*1.
+  check_eq(state.t[0][tile_index(0, 0)], std::uint8_t{1}, "t0(0,0)");
+  check_eq(state.t[0][tile_index(0, 1)], std::uint8_t{2}, "t0(0,1)");
+  check_eq(state.t[0][tile_index(0, 2)], std::uint8_t{3}, "t0(0,2)");
+  check_eq(state.t[0][tile_index(1, 0)], std::uint8_t{4}, "t0(1,0)");
+  check_eq(state.t[0][tile_index(1, 1)], std::uint8_t{5}, "t0(1,1)");
+  check_eq(state.t[0][tile_index(1, 2)], std::uint8_t{6}, "t0(1,2)");
+  check_eq(state.t[0][tile_index(0, 3)], std::uint8_t{0x5a},
+           "element outside the valid shape is untouched");
+
+  MblkRun transposed(block(NpuDomain::tile, 0, 0)); // tload t0, transform=transpose
+  auto &transposed_state = transposed.sim.state();
+  transposed_state.tc[0].dtype = DType::i8;
+  transposed_state.tc[0].rows = 2;
+  transposed_state.tc[0].cols = 3;
+  stride_desc(transposed_state.tm[0], DATA, 4, 1);
+  transposed_state.tm[0].transform = 1;
+  poke(transposed.memory, DATA, {1, 2, 3, 0, 4, 5, 6, 0, 7, 8});
+
+  check_eq(transposed.sim.step().status, StepStatus::retired, "non-square transpose retires");
+  check_eq(transposed_state.t[0][tile_index(0, 0)], std::uint8_t{1}, "t0(0,0)");
+  check_eq(transposed_state.t[0][tile_index(0, 1)], std::uint8_t{4}, "t0(0,1)");
+  check_eq(transposed_state.t[0][tile_index(0, 2)], std::uint8_t{7}, "t0(0,2)");
+  check_eq(transposed_state.t[0][tile_index(1, 0)], std::uint8_t{2}, "t0(1,0)");
+  check_eq(transposed_state.t[0][tile_index(1, 1)], std::uint8_t{5}, "t0(1,1)");
+  check_eq(transposed_state.t[0][tile_index(1, 2)], std::uint8_t{8}, "t0(1,2)");
+}
+
 TEST_CASE(mblk_tload_transpose) {
   MblkRun run(block(NpuDomain::tile, 0, 0)); // tload t0
   auto &state = run.sim.state();
@@ -134,6 +173,44 @@ TEST_CASE(mblk_tstore_block) {
   check(bytes == expected, "memory holds the stored 2x2 block");
   check_eq(state.t[1][tile_index(0, 0)], std::uint8_t{9},
            "store does not modify the source register");
+}
+
+TEST_CASE(mblk_acc_block_load_store) {
+  constexpr std::uint8_t raw[16] = {
+      0x44, 0x33, 0x22, 0x11, // 0x11223344
+      0x88, 0x77, 0x66, 0x55, // 0x55667788
+      0xdd, 0xcc, 0xbb, 0xaa, // 0xaabbccdd
+      0x04, 0x03, 0x02, 0x01, // 0x01020304
+  };
+  constexpr std::array<std::uint8_t, 16> expected = {
+      0x44, 0x33, 0x22, 0x11, 0x88, 0x77, 0x66, 0x55,
+      0xdd, 0xcc, 0xbb, 0xaa, 0x04, 0x03, 0x02, 0x01,
+  };
+
+  MblkRun load(block(NpuDomain::acc, 0, 0)); // aload a0
+  auto &state = load.sim.state();
+  config_acc_2x2(state, 0);
+  stride_desc(state.am[0], DATA, 8, 4);
+  poke(load.memory, DATA, raw);
+
+  check_eq(load.sim.step().status, StepStatus::retired, "aload retires");
+  check_eq(hex(state.a[0][tile_index(0, 0)]), hex(0x11223344u), "a0(0,0)");
+  check_eq(hex(state.a[0][tile_index(0, 1)]), hex(0x55667788u), "a0(0,1)");
+  check_eq(hex(state.a[0][tile_index(1, 0)]), hex(0xaabbccddu), "a0(1,0)");
+  check_eq(hex(state.a[0][tile_index(1, 1)]), hex(0x01020304u), "a0(1,1)");
+
+  MblkRun store(block(NpuDomain::acc, 1, 1)); // astore a1
+  auto &store_state = store.sim.state();
+  config_acc_2x2(store_state, 1);
+  stride_desc(store_state.am[1], DATA, 8, 4);
+  store_state.a[1][tile_index(0, 0)] = 0x11223344u;
+  store_state.a[1][tile_index(0, 1)] = 0x55667788u;
+  store_state.a[1][tile_index(1, 0)] = 0xaabbccddu;
+  store_state.a[1][tile_index(1, 1)] = 0x01020304u;
+
+  check_eq(store.sim.step().status, StepStatus::retired, "astore retires");
+  const auto bytes = peek<16>(store.memory, DATA);
+  check(bytes == expected, "memory holds the stored 2x2 i32 block");
 }
 
 TEST_CASE(mblk_tstore_transpose) {

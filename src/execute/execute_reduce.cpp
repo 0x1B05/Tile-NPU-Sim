@@ -1,6 +1,7 @@
 #include "execute.h"
 
 #include "config_check.h"
+#include "fp_env.h"
 #include "matrix_view.h"
 #include "reduce_util.h"
 #include "utils/bits.h"
@@ -99,6 +100,7 @@ ExecuteResult areduce(const AreduceInstr &instr, State &state) {
       dst_config.len != src_config.rows) {
     return config_error();
   }
+  const FpEnvGuard fp_env;
   auto src = matrix_view(std::as_const(state.a[instr.src.index]));
   auto &dst_reg = state.v[instr.dest.index];
   std::array<float, REDUCE_LEAVES> values{};
@@ -132,6 +134,7 @@ ExecuteResult vreduce(const VreduceInstr &instr, State &state) {
   if (!valid_config_of(src_config, DType::f32) || !valid_config_of(dst_config, DType::f32)) {
     return config_error();
   }
+  const FpEnvGuard fp_env;
   std::array<float, REDUCE_LEAVES> values{};
   const auto active = std::span(values).first(src_config.len);
   load_vector(state.v[instr.src.index], active);
@@ -154,6 +157,7 @@ ExecuteResult vreduce_argmax(const VreduceArgmaxInstr &instr, State &state) {
       !valid_config_of(value_config, DType::f32)) {
     return config_error();
   }
+  const FpEnvGuard fp_env;
   std::array<float, REDUCE_LEAVES> values{};
   const auto active = std::span(values).first(src_config.len);
   load_vector(state.v[instr.src.index], active);

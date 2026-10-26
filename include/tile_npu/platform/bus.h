@@ -12,36 +12,29 @@ namespace tile_npu {
 
 // The platform bus: an address range claimed by a device routes to it (first
 // claim wins, so devices must not overlap), everything else to main memory.
-// A new device joins by registering here; the bus itself stays unchanged.
+// A new device joins by registering its window here; the bus itself stays
+// unchanged.
 class SystemBus final : public AddressSpace {
 public:
-  SystemBus(AddressSpace &main, std::initializer_list<AddressSpace *> devices)
-      : main_(main), devices_(devices) {}
+  struct Device {
+    AddressSpace *space;
+    std::uint64_t base;
+    std::size_t size;
+  };
 
-  bool contains(std::uint64_t address, std::size_t size) const override {
-    return route(address, size) != nullptr || main_.contains(address, size);
-  }
+  SystemBus(AddressSpace &main, std::initializer_list<Device> devices);
 
-  bool read(std::uint64_t address, std::span<std::byte> bytes) const override {
-    const auto *device = route(address, bytes.size());
-    return device ? device->read(address, bytes) : main_.read(address, bytes);
-  }
-
-  bool write(std::uint64_t address, std::span<const std::byte> bytes) override {
-    auto *device = route(address, bytes.size());
-    return device ? device->write(address, bytes) : main_.write(address, bytes);
-  }
+  bool contains(std::uint64_t address, std::size_t size) const override;
+  bool read(std::uint64_t address, std::span<std::byte> bytes) const override;
+  bool write(std::uint64_t address, std::span<const std::byte> bytes) override;
 
 private:
-  AddressSpace *route(std::uint64_t address, std::size_t size) const {
-    for (auto *device : devices_) {
-      if (device->contains(address, size)) return device;
-    }
-    return nullptr;
-  }
+  // Device windows are fixed at registration, so routing only needs integer
+  // range checks instead of a virtual contains() call for every access.
+  AddressSpace *route(std::uint64_t address, std::size_t size) const;
 
   AddressSpace &main_;
-  std::vector<AddressSpace *> devices_;
+  std::vector<Device> devices_;
 };
 
 } // namespace tile_npu
