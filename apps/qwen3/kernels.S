@@ -338,8 +338,10 @@ qwen3_quant_rows:
 # chunk. xq is [rows, k] i8 row-major (qwen3_quant_rows output), xs its rows
 # row scales. Per 32-column block of out: t1 holds one [k][n] weight tile from
 # the [k/32][n/32][32][32] layout and mma.nn accumulates the k/32 chunks in
-# acc a0, then acc -> f32, * ws (bycol), * xs (byrow), stored via am0
-# (auto-advances one block per store). n % 32 == 0, 32 | k, k <= 3072.
+# acc a0, then acc -> f32, * ws (bycol), * xs (byrow), stored via am8
+# (auto-advances one block per store). Full groups of eight nblocks keep
+# accelerators a0..a7 and reuse one xq tile across the group.
+# n % 32 == 0, 32 | k, k <= 3072.
 # ---------------------------------------------------------------------------
     .text
     .globl qwen3_matmul_q
@@ -350,8 +352,10 @@ qwen3_matmul_q:
     sd      s4, 16(sp)
     sd      s5, 24(sp)
     sd      s6, 32(sp)
+    sd      s7, 40(sp)
 
     mv      s6, a2              # xq base
+    mv      s7, a0              # weight base
 
     LI_CWM  t0, DT_I8, 32, 32
     SETW    SEL_TC, 0, 0, X_T0, 1
@@ -363,13 +367,13 @@ qwen3_matmul_q:
     SETIM   SEL_TM, CF_CSTRIDE, 1, 1
     SETIM   SEL_TM, CF_FLAGS, 0, 1
     LI_CWM  t0, DT_I32, 32, 32
-    SETW    SEL_AC, 0, 0, X_T0, 1
-    SETX    SEL_AC, 0, CF_ROWS, 0, X_A7, 1
-    SETX    SEL_AM, 0, CF_BASE, 1, X_A4
+    SETW    SEL_AC, 0, 0, X_T0, 8
+    SETX    SEL_AC, 0, CF_ROWS, 0, X_A7, 8
+    SETX    SEL_AM, 0, CF_BASE, 8, X_A4
     slli    t0, a5, 2
-    SETX    SEL_AM, 0, CF_RSTRIDE, 1, X_T0
-    SETIM   SEL_AM, CF_CSTRIDE, 4, 1
-    SETIM   SEL_AM, CF_FLAGS, 2, 1      # inc along cols: += 32 * 4
+    SETX    SEL_AM, 0, CF_RSTRIDE, 8, X_T0
+    SETIM   SEL_AM, CF_CSTRIDE, 4, 8
+    SETIM   SEL_AM, CF_FLAGS, 2, 8      # inc along cols: += 32 * 4
     LI_CWV  s3, DT_F32, 32
     SETW    SEL_VC, 1, 29, X_S3, 1    # vc29 (ws stream), vc30 (xs)
     SETX    SEL_VC, 1, CF_LEN, 30, X_A7
@@ -383,13 +387,60 @@ qwen3_matmul_q:
 
     srli    s3, a5, 5           # n/32 blocks
     srli    s4, a6, 5           # k/32 chunks
-    li      s2, 0
-.Lmm_nblock:
-    # tm0 rewinds to xq; tm1 starts at w + nb*1024 and advances one kblock
-    # (nblocks * 1024 bytes) per accumulated chunk.
+    li      s2, 0               # first nblock of the group
+    li      t0, 32
+    bne     a7, t0, .Lmm_nblock  # grouping only pays off for a full xq tile
+.Lmm_group:
+    sub     t0, s3, s2
+    li      t1, 8
+    bltu    t0, t1, .Lmm_nblock    # fewer than eight blocks remain
+
+    # Full group: load xq once per k chunk and keep eight accumulators.
     SETX    SEL_TM, 0, CF_BASE, 0, X_S6
     slli    t0, s2, 10
-    add     t0, a0, t0
+    add     t0, s7, t0              # first weight tile of this group
+    slli    t3, s3, 10              # next kblock stride
+    TLOAD   0
+    mv      t4, t0
+    .irp G,0,1,2,3,4,5,6,7
+    SETX    SEL_TM, 0, CF_BASE, 1, X_T4
+    TLOAD   1
+    MMA_NN_ZERO \G, 0, 1
+    addi    t4, t4, 1024
+    .endr
+    add     t0, t0, t3
+    li      s5, 1
+.Lmm_group_kloop:
+    bgeu    s5, s4, .Lmm_group_epi
+    TLOAD   0
+    mv      t4, t0
+    .irp G,0,1,2,3,4,5,6,7
+    SETX    SEL_TM, 0, CF_BASE, 1, X_T4
+    TLOAD   1
+    MMA_NN_ACC \G, 0, 1
+    addi    t4, t4, 1024
+    .endr
+    add     t0, t0, t3
+    addi    s5, s5, 1
+    j       .Lmm_group_kloop
+.Lmm_group_epi:
+    .irp G,0,1,2,3,4,5,6,7
+    VLOAD   29
+    SETIM   SEL_AC, CF_DTYPE, DT_I32, 8
+    ACVT    8, \G
+    AMULV_BYCOL 8, 8, 29
+    AMULV_BYROW 8, 8, 30
+    ASTORE  8
+    .endr
+    addi    s2, s2, 8
+    bltu    s2, s3, .Lmm_group
+    j       .Lmm_done
+
+.Lmm_nblock:
+    # Tail: fewer than eight output blocks remain.
+    SETX    SEL_TM, 0, CF_BASE, 0, X_S6
+    slli    t0, s2, 10
+    add     t0, s7, t0
     slli    t1, s3, 10
     SETX    SEL_TM, 0, CF_BASE, 1, X_T0
     TLOAD   0
@@ -397,30 +448,31 @@ qwen3_matmul_q:
     MMA_NN_ZERO 0, 0, 1
     add     t0, t0, t1
     li      s5, 1
-.Lmm_kloop:
-    bgeu    s5, s4, .Lmm_epi
+.Lmm_tail_kloop:
+    bgeu    s5, s4, .Lmm_tail_epi
     SETX    SEL_TM, 0, CF_BASE, 1, X_T0
     TLOAD   0
     TLOAD   1
     MMA_NN_ACC 0, 0, 1
     add     t0, t0, t1
     addi    s5, s5, 1
-    j       .Lmm_kloop
-.Lmm_epi:
-    VLOAD   29                  # 32 weight scales
-    SETIM   SEL_AC, CF_DTYPE, DT_I32, 1   # acvt flips it to f32 on success
-    ACVT    1, 0                # i32 -> f32
-    AMULV_BYCOL 1, 1, 29          # * ws[j]
-    AMULV_BYROW 1, 1, 30          # * xs[t]
-    ASTORE  1
+    j       .Lmm_tail_kloop
+.Lmm_tail_epi:
+    VLOAD   29
+    SETIM   SEL_AC, CF_DTYPE, DT_I32, 8
+    ACVT    8, 0
+    AMULV_BYCOL 8, 8, 29
+    AMULV_BYROW 8, 8, 30
+    ASTORE  8
     addi    s2, s2, 1
     bltu    s2, s3, .Lmm_nblock
-
+.Lmm_done:
     ld      s2, 0(sp)
     ld      s3, 8(sp)
     ld      s4, 16(sp)
     ld      s5, 24(sp)
     ld      s6, 32(sp)
+    ld      s7, 40(sp)
     addi    sp, sp, 48
     FENCE_MEM                   # out (incl. k_buf/v_buf) is read by scalar code
     ret
