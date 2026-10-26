@@ -1,12 +1,13 @@
 -- The Qwen3 inference app: apps/qwen3 cross-compiled to a flat binary in
--- <buildir>/apps/. Built explicitly (xmake build qwen3_app); running it
+-- <buildir>/apps/qwen3/. Built explicitly (xmake build qwen3_app); running it
 -- needs a converted model blob, so it is not part of xmake test.
 
 local app_srcdir = os.scriptdir()
 local project_root = path.directory(path.directory(app_srcdir))
 local app_includedir = path.join(app_srcdir, "include")
 local buildir = get_config("buildir") or "build"
-local app_bindir = path.join(path.is_absolute(buildir) and buildir or path.join(os.projectdir(), buildir), "apps")
+local base = path.absolute(buildir, os.projectdir())
+local app_bindir = path.join(base, "apps", "qwen3")
 
 target("qwen3_app", function()
 	set_kind("phony")
@@ -114,17 +115,26 @@ if has_config("qwen3test") then
 				return
 			end
 			import("core.project.depend")
-			os.mkdir(app_bindir)
 			local convert = path.join(scripts_dir, "convert.py")
 			local blob = path.join(app_bindir, "tiny.q3b")
+			local prompt = path.join(app_bindir, "tiny_prompt.bin")
 			local ref = path.join(app_bindir, "tiny_ref.npz")
 			depend.on_changed(function()
-				os.vrunv(target:data("python"), { convert, "tiny", "--out", blob, "--ref", ref })
+				os.vrunv(target:data("python"), {
+					convert,
+					"tiny",
+					"--out",
+					blob,
+					"--prompt-out",
+					prompt,
+					"--ref",
+					ref,
+				})
 			end, {
 				dependfile = target:dependfile("tiny"),
 				files = os.files(path.join(scripts_dir, "*.py")),
 				changed = target:is_rebuilt(),
-				lastmtime = math.min(os.mtime(blob), os.mtime(ref)),
+				lastmtime = math.min(os.mtime(blob), os.mtime(prompt), os.mtime(ref)),
 				values = { target:data("python") },
 			})
 		end)
@@ -136,8 +146,63 @@ if has_config("qwen3test") then
 				sim_run,
 				path.join(app_bindir, "qwen3.bin"),
 				path.join(app_bindir, "tiny.q3b"),
+				path.join(app_bindir, "tiny_prompt.bin"),
 				path.join(app_bindir, "tiny_ref.npz"),
 			}, { try = true }) == 0
+		end)
+	end)
+end
+
+if has_config("monitor") then
+	target("qwen3_run", function()
+		set_kind("phony")
+		set_default(false)
+		add_deps("qwen3_app", "sim_run")
+		on_run(function(target)
+			import("core.base.option")
+			import("lib.detect.find_program")
+			local args = option.get("arguments") or {}
+			if args[1] == "--" then
+				table.remove(args, 1)
+			end
+			local prompt = args[1]
+			if not prompt then
+				raise('usage: xmake run qwen3_run "prompt" [model]')
+			end
+			local python = find_program("python3")
+			if not python then
+				raise("python3 is required to run the Qwen3 app")
+			end
+			local app = path.join(app_bindir, "qwen3.bin")
+			local sim_run = target:dep("sim_run"):targetfile()
+			if not os.isfile(app) or not os.isfile(sim_run) then
+				raise("run `xmake build qwen3_run` before `xmake run qwen3_run`")
+			end
+			local model = path.absolute(args[2] or path.join(app_bindir, "model.q3b"), project_root)
+			if not os.isfile(model) then
+				raise(
+					"model blob not found: "
+						.. model
+						.. "; run `python3 scripts/qwen3/convert.py real external/qwen3 "
+						.. model
+						.. "` or pass an existing model as the second argument"
+				)
+			end
+			os.execv(python, {
+				path.join(project_root, "scripts", "qwen3", "run.py"),
+				"--sim-run",
+				sim_run,
+				"--app",
+				app,
+				"--model",
+				model,
+				"--prompt-out",
+				path.join(app_bindir, "prompt.bin"),
+				"--tokenizer",
+				path.join(project_root, "external", "qwen3", "tokenizer.json"),
+				"--",
+				prompt,
+			})
 		end)
 	end)
 end

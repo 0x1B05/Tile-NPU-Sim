@@ -91,7 +91,7 @@ static uint32_t quant_act(const float *x, uint32_t k, const char *tag, int activ
   return active ? probe_quant_act(x, k, tag) : qwen3_quant_act(x, k);
 }
 
-// PROBE sites all sit in qwen3_forward(), gated on its `probing` local.
+// PROBE sites all sit in qwen3_forward_impl(), gated on its `probing` local.
 #define PROBE(name, kind, data, count)                                                             \
   do {                                                                                             \
     if (probing) probe_record(name, -1, kind, (const uint32_t *)(data), count);                    \
@@ -131,7 +131,7 @@ static void cache_layer_sections(uint32_t layer) {
   }
 }
 
-void qwen3_init(void) {
+void qwen3_init(uint32_t n_prompt) {
   const struct q3b_header *h = q3b_header();
   model.n_layers = h->n_layers;
   model.hidden = h->hidden;
@@ -141,7 +141,7 @@ void qwen3_init(void) {
   model.head_dim = h->head_dim;
   model.vocab = h->vocab;
   model.max_pos = h->max_pos;
-  model.n_prompt = h->n_prompt;
+  model.n_prompt = n_prompt;
   model.eps_bits = h->eps_bits;
   model.q_dim = model.n_q_heads * model.head_dim;
   model.kv_dim = model.n_kv_heads * model.head_dim;
@@ -186,7 +186,7 @@ static void cache_append(uint32_t layer, uint32_t pos, const float *k, const flo
   }
 }
 
-static void attention(uint32_t layer, uint32_t pos, const float *q, float *attn) {
+static void attention(uint32_t layer, uint32_t pos, const float *q, float *attn, int probe) {
   const uint32_t group = model.n_q_heads / model.n_kv_heads;
   const uint32_t n_keys = pos + 1;
   const uint32_t n_padded = (n_keys + 31) & ~31u;
@@ -200,11 +200,11 @@ static void attention(uint32_t layer, uint32_t pos, const float *q, float *attn)
     for (uint32_t i = n_keys; i < n_padded; ++i) {
       ((uint32_t *)scores)[i] = 0xFF800000u;
     }
-    if (attention_probe_enabled(layer, h, pos, model.n_prompt))
+    if (probe && attention_probe_enabled(layer, h, pos, model.n_prompt))
       probe_record("sc", (int)h, "f32", (const uint32_t *)scores, 6);
     qwen3_softmax_exp(scores, n_padded, model.scale_log2e_bits, rcp_word);
     // pb_h appends the softmax rcp as a 7th word (ref.py prints it inline)
-    if (attention_probe_enabled(layer, h, pos, model.n_prompt)) {
+    if (probe && attention_probe_enabled(layer, h, pos, model.n_prompt)) {
       uint32_t words[7];
       __builtin_memcpy(words, scores, 6 * sizeof(uint32_t));
       words[6] = rcp_word[0];
@@ -215,7 +215,7 @@ static void attention(uint32_t layer, uint32_t pos, const float *q, float *attn)
   }
 }
 
-uint32_t qwen3_forward(uint32_t token, uint32_t pos, int want_logits) {
+static uint32_t qwen3_forward_impl(uint32_t token, uint32_t pos, int want_logits, int update_cache) {
   // probes fire on the last prompt token's logits-producing pass
   const int probing = QWEN3_PROBES && want_logits && pos == model.n_prompt - 1;
   uint32_t xs;
@@ -251,8 +251,8 @@ uint32_t qwen3_forward(uint32_t token, uint32_t pos, int want_logits) {
     for (uint32_t h = 0; h < model.n_kv_heads; ++h) {
       qwen3_rope(k_buf + h * model.head_dim, cos_p, sin_p, model.head_dim);
     }
-    cache_append(L, pos, k_buf, v_buf);
-    attention(L, pos, q_buf, attn_buf);
+    if (update_cache) cache_append(L, pos, k_buf, v_buf);
+    attention(L, pos, q_buf, attn_buf, probing);
     if (L == 0) PROBE("attn0", "f32", attn_buf, 4);
     if (L == 0) PROBE("attn1", "f32", attn_buf + model.head_dim, 4);
     xs = quant_act(attn_buf, model.q_dim, "qxa", probing && L == 0);
@@ -286,12 +286,23 @@ uint32_t qwen3_forward(uint32_t token, uint32_t pos, int want_logits) {
   return qwen3_argmax(logits, model.vocab);
 }
 
-// Prefill for the first n prompt tokens (positions [0, n)): projections run
-// as batched MMA over 32-row token batches; rmsnorm/rope/attention/silu/add
-// keep the per-row vector kernels. Rows [bt, 32) of the quantized buffers
-// are never consumed. The numerics match the per-token path bit for bit
-// (same per-row scales, exact i32 accumulation, same epilogue order).
-void qwen3_prefill(const uint32_t *tokens, uint32_t n) {
+uint32_t qwen3_forward(uint32_t token, uint32_t pos, int want_logits) {
+  return qwen3_forward_impl(token, pos, want_logits, 1);
+}
+
+#if QWEN3_PROBES
+void qwen3_probe_last_prompt(uint32_t token, uint32_t pos) {
+  (void)qwen3_forward_impl(token, pos, 1, 0);
+}
+#endif
+
+// Prefill for all n prompt tokens (positions [0, n)): projections run as
+// batched MMA over 32-row token batches; rmsnorm/rope/attention/silu/add keep
+// the per-row vector kernels. Only the last row is finished through the final
+// norm and lm-head. The numerics match the per-token path bit for bit (same
+// per-row scales, exact i32 accumulation, same epilogue order).
+uint32_t qwen3_prefill(const uint32_t *tokens, uint32_t n) {
+  if (n == 0) panic("empty prefill");
   for (uint32_t base = 0; base < n; base += BATCH_ROWS) {
     const uint32_t bt = n - base < BATCH_ROWS ? n - base : BATCH_ROWS;
     for (uint32_t t = 0; t < bt; ++t)
@@ -322,7 +333,7 @@ void qwen3_prefill(const uint32_t *tokens, uint32_t n) {
         for (uint32_t h = 0; h < model.n_kv_heads; ++h)
           qwen3_rope(pf_k + t * model.kv_dim + h * model.head_dim, cos_p, sin_p, model.head_dim);
         cache_append(L, base + t, pf_k + t * model.kv_dim, pf_v + t * model.kv_dim);
-        attention(L, base + t, pf_q + t * model.q_dim, pf_attn + t * model.q_dim);
+        attention(L, base + t, pf_q + t * model.q_dim, pf_attn + t * model.q_dim, 0);
       }
       qwen3_quant_rows(pf_attn, model.q_dim, pf_xq, pf_xs);
       qwen3_matmul_q(sec[SEC_OW], sec[SEC_OWS], pf_xq, pf_xs, pf_h2, model.hidden, model.q_dim);
@@ -343,4 +354,12 @@ void qwen3_prefill(const uint32_t *tokens, uint32_t n) {
         qwen3_add(pf_x + t * model.hidden, pf_h2 + t * model.hidden, model.hidden);
     }
   }
+
+  const uint32_t last_row = (n - 1) % BATCH_ROWS;
+  const float *last_x = pf_x + last_row * model.hidden;
+  qwen3_rmsnorm(last_x, model.fin_norm, h1, model.hidden, model.eps_bits,
+                inv_n_bits(model.hidden));
+  const uint32_t xs = qwen3_quant_act(h1, model.hidden);
+  qwen3_matvec_q(model.embed, model.embed_s, logits, model.vocab, model.hidden, xs);
+  return qwen3_argmax(logits, model.vocab);
 }

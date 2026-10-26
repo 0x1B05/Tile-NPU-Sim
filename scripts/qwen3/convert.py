@@ -5,13 +5,13 @@ Weight matrices are quantized per output row (symmetric int8, RNE, range
 [-127, 127]) with one f32 scale per row; RMSNorm gammas stay f32. The blob
 carries a section directory so the guest locates tensors at runtime:
 
-  header: magic "Q3B1", arch dims, eps, section count   (all u32 LE)
+  header: magic "Q3B", arch dims, eps, section count   (all u32 LE)
   directory: n_sections x { name char[8], offset u32, size u32 }
   sections: 16-byte aligned tensor data
 
 Commands:
-  convert.py real MODEL_DIR OUT --prompt "..."
-  convert.py tiny --out OUT --ref REF
+  convert.py real MODEL_DIR OUT
+  convert.py tiny --out OUT --ref REF [--prompt-out PROMPT]
 
 Run `convert.py --help` or `convert.py real --help` for details.
 """
@@ -26,9 +26,9 @@ import numpy as np
 
 # These tools are run as scripts, so sibling modules are top-level imports.
 from blob import Blob, check_output, write_npz
+from prompt import write_prompt
 from quant import quantize_rows
 from safetensors import SafeTensors
-from tokenizer import Tokenizer
 
 LOGGER = logging.getLogger("qwen3.convert")
 
@@ -76,17 +76,7 @@ LAYER_TENSORS = [
 # ---- model conversion -----------------------------------------------------
 
 
-def load_prompt_ids(model_dir, prompt):
-    if not prompt:
-        raise ValueError("prompt is empty")
-    tokenizer_path = model_dir / "tokenizer.json"
-    if not tokenizer_path.is_file():
-        raise ValueError(f"tokenizer not found: {tokenizer_path}")
-    tokenizer = Tokenizer(str(tokenizer_path))
-    return tokenizer.encode(prompt)
-
-
-def convert_real(model_dir, prompt_ids, max_pos):
+def convert_real(model_dir, max_pos):
     config_path = model_dir / "config.json"
     weights_path = model_dir / "model.safetensors"
     if not config_path.is_file():
@@ -112,27 +102,15 @@ def convert_real(model_dir, prompt_ids, max_pos):
     except KeyError as exc:
         raise ValueError(f"{config_path}: missing key {exc.args[0]!r}") from exc
 
-    if not prompt_ids:
-        raise ValueError("prompt is empty")
-    if len(prompt_ids) > max_pos:
-        raise ValueError(
-            f"prompt has {len(prompt_ids)} tokens, context capacity is {max_pos}"
-        )
-    vocab = arch["vocab"]
-    bad = next((i for i in prompt_ids if not 0 <= i < vocab), None)
-    if bad is not None:
-        raise ValueError(f"prompt token id {bad} out of range [0, {vocab})")
-
     st = SafeTensors(weights_path)
     LOGGER.info(
         "model: %d layers, hidden=%d, vocab=%d",
         arch["n_layers"],
         arch["hidden"],
-        vocab,
+        arch["vocab"],
     )
 
-    blob = Blob(arch, len(prompt_ids))
-    blob.add("tokens", np.asarray(prompt_ids, "<u4").tobytes())
+    blob = Blob(arch)
     cos, sin = rope_tables(max_pos, arch["head_dim"], rope_theta)
     blob.add("rope_cos", cos.tobytes())
     blob.add("rope_sin", sin.tobytes())
@@ -202,8 +180,7 @@ def convert_tiny():
         return 1.0 + 0.1 * rng.standard_normal(n, dtype=np.float32)
 
     prompt_ids = [1, 5, 9, 42, 100, 7]
-    blob = Blob(arch, len(prompt_ids))
-    blob.add("tokens", np.asarray(prompt_ids, "<u4").tobytes())
+    blob = Blob(arch)
     cos, sin = rope_tables(arch["max_pos"], arch["head_dim"], 1000000.0)
     blob.add("rope_cos", cos.tobytes())
     blob.add("rope_sin", sin.tobytes())
@@ -300,15 +277,9 @@ def build_parser():
         "model_dir",
         type=Path,
         metavar="MODEL_DIR",
-        help="directory containing config.json, model.safetensors, and tokenizer.json",
+        help="directory containing config.json and model.safetensors",
     )
     real.add_argument("out", type=Path, metavar="OUT", help="output .q3b blob")
-    real.add_argument(
-        "--prompt",
-        required=True,
-        metavar="TEXT",
-        help="prompt text to bake in",
-    )
     real.add_argument(
         "--max-pos",
         type=positive_int,
@@ -337,15 +308,19 @@ def build_parser():
         metavar="REF",
         help="output .npz reference",
     )
+    tiny.add_argument(
+        "--prompt-out",
+        type=Path,
+        metavar="PROMPT",
+        help="optional Q3P prompt image for the fixed tiny prompt",
+    )
     add_verbosity(tiny)
     return parser
 
 
 def run_real(args):
-    prompt_ids = load_prompt_ids(args.model_dir, args.prompt)
-    LOGGER.info("prompt: %d tokens", len(prompt_ids))
     check_output(args.out)
-    blob = convert_real(args.model_dir, prompt_ids, args.max_pos)
+    blob = convert_real(args.model_dir, args.max_pos)
     size = blob.write(args.out)
     LOGGER.info("blob: %.1f MB -> %s", size / 1e6, args.out)
     return 0
@@ -359,6 +334,11 @@ def run_tiny(args):
     blob, ref = convert_tiny()
     size = blob.write(args.out)
     write_npz(args.ref, ref)
+    if args.prompt_out is not None:
+        if args.prompt_out.resolve() in (args.out.resolve(), args.ref.resolve()):
+            raise ValueError("--prompt-out must differ from --out and --ref")
+        prompt_size = write_prompt(args.prompt_out, ref["tokens"])
+        LOGGER.info("tiny prompt: %d bytes -> %s", prompt_size, args.prompt_out)
     LOGGER.info("tiny blob: %d bytes -> %s, reference -> %s", size, args.out, args.ref)
     return 0
 
