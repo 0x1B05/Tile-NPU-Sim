@@ -3,10 +3,12 @@
 #include "config_check.h"
 #include "domain.h"
 #include "elementwise_op.h"
+#include "fp_env.h"
 #include "matrix_view.h"
 #include "utils/common.h"
 
 #include <cstddef>
+#include <optional>
 #include <utility>
 
 namespace tile_npu {
@@ -32,6 +34,10 @@ ExecuteResult execute(const BcastInstr &instr, State &state) {
     return config_error();
   }
 
+  std::optional<FpEnvGuard> fp_env;
+  if (dst_config.dtype == DType::f32) {
+    fp_env.emplace();
+  }
   auto dst = matrix_view(matrix_regs[instr.dest.index]);
   auto src = matrix_view(std::as_const(matrix_regs[instr.src1.index]));
   const auto &vec_reg = vector_regs[instr.vector.index];

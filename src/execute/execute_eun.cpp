@@ -2,12 +2,14 @@
 
 #include "config_check.h"
 #include "domain.h"
+#include "fp_env.h"
 #include "utils/bits.h"
 #include "utils/common.h"
 
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 
 namespace tile_npu {
 namespace {
@@ -68,6 +70,10 @@ ExecuteResult execute(const EunInstr &instr, State &state) {
             !configs_match(dst_config, src_config) ||
             !op_supports_dtype(instr.op, dst_config.dtype)) {
           return config_error();
+        }
+        std::optional<FpEnvGuard> fp_env;
+        if (dst_config.dtype == DType::f32) {
+          fp_env.emplace();
         }
         auto &dst = regs[instr.dest.index];
         const auto &src = regs[instr.src.index];

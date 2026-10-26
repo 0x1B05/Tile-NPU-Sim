@@ -1,6 +1,7 @@
 #include "execute.h"
 
 #include "config_check.h"
+#include "fp_env.h"
 #include "op_info.h"
 #include "operand.h"
 #include "utils/bits.h"
@@ -9,6 +10,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <variant>
 
 namespace tile_npu {
@@ -86,6 +88,10 @@ ExecuteResult execute(const CmpInstr &instr, State &state) {
     return config_error();
   }
   const auto dtype = configs[instr.src1.index].dtype;
+  std::optional<FpEnvGuard> fp_env;
+  if (dtype == DType::f32) {
+    fp_env.emplace();
+  }
   auto &dst = regs[instr.dest.index];
   const auto &dst_config = configs[instr.dest.index];
   const auto &lhs = regs[instr.src1.index];

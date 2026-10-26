@@ -1,6 +1,7 @@
 #include "execute.h"
 
 #include "config_check.h"
+#include "fp_env.h"
 #include "matrix_view.h"
 #include "operand.h"
 #include "reduce_util.h"
@@ -86,6 +87,7 @@ ExecuteResult tquant(const TquantInstr &instr, State &state) {
   if (!valid_matrix_quant_configs(dst_config, src_config, scale_config)) {
     return config_error();
   }
+  const FpEnvGuard fp_env;
   const bool external_scale = instr.scale_source == QntScaleSource::provided;
   auto dst = matrix_view(state.t[instr.dest.index]);
   auto src = matrix_view(std::as_const(state.a[instr.src.index]));
@@ -113,6 +115,7 @@ ExecuteResult tdequant(const TdequantInstr &instr, State &state) {
   if (!valid_matrix_quant_configs(src_config, dst_config, scale_config)) {
     return config_error();
   }
+  const FpEnvGuard fp_env;
   auto dst = matrix_view(state.a[instr.dest.index]);
   auto src = matrix_view(std::as_const(state.t[instr.src.index]));
   const auto &scale_reg = state.v[instr.scale];
@@ -135,6 +138,7 @@ ExecuteResult vquant(const VquantInstr &instr, State &state) {
   if (!valid_vector_quant_configs(dst_config, src_config, scale_config)) {
     return config_error();
   }
+  const FpEnvGuard fp_env;
   const auto lane = scale_lane(instr.index, state, scale_config.len);
   if (!lane) {
     return config_error();
