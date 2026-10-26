@@ -1,6 +1,6 @@
 # XMake build state
-/.xmake/
-/build/
+.xmake/
+build/
 compile_commands.json
 
 # Downloaded dependencies
