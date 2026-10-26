@@ -165,39 +165,33 @@ try_contiguous_block(const MblkInstr &instr, ExecContext &ctx, const MatrixDescV
   }
 
   auto view = matrix_view(reg);
-  if (transpose) {
-    // Transposed stores use the per-element order; only loads reach here.
-    std::array<Element, MATRIX_EXTENT> buffer{};
-    for (std::size_t src_row = 0; src_row < cols; ++src_row) {
-      const auto address = desc.matrix_element_addr(src_row, 0);
-      if (!address) {
-        unreachable("block run overflowed after range prevalidation");
-      }
-      if (!ctx.memory.read(*address,
-                           std::as_writable_bytes(std::span<Element>(buffer.data(), rows)))) {
+  std::array<Element, MATRIX_EXTENT> buffer;
+  const auto transfer = [&](std::uint64_t address, std::size_t length, std::size_t run) {
+    if (transpose) {
+      // Transposed stores use the per-element order; only loads reach here.
+      if (!ctx.memory.read(address,
+                           std::as_writable_bytes(std::span<Element>(buffer.data(), length)))) {
         unreachable("AddressSpace::read failed after range prevalidation");
       }
-      for (std::size_t row = 0; row < rows; ++row) {
-        view.at(row, src_row) = buffer[row];
+      for (std::size_t row = 0; row < length; ++row) {
+        view.at(row, run) = buffer[row];
+      }
+      return;
+    }
+
+    Element *data = &view.at(run, 0);
+    if (store) {
+      if (!ctx.memory.write(address, std::as_bytes(std::span<const Element>(data, length)))) {
+        unreachable("AddressSpace::write failed after range prevalidation");
+      }
+    } else {
+      if (!ctx.memory.read(address, std::as_writable_bytes(std::span<Element>(data, length)))) {
+        unreachable("AddressSpace::read failed after range prevalidation");
       }
     }
-  } else {
-    for (std::size_t row = 0; row < rows; ++row) {
-      const auto address = desc.matrix_element_addr(row, 0);
-      if (!address) {
-        unreachable("block run overflowed after range prevalidation");
-      }
-      Element *data = &view.at(row, 0);
-      if (store) {
-        if (!ctx.memory.write(*address, std::as_bytes(std::span<const Element>(data, cols)))) {
-          unreachable("AddressSpace::write failed after range prevalidation");
-        }
-      } else {
-        if (!ctx.memory.read(*address, std::as_writable_bytes(std::span<Element>(data, cols)))) {
-          unreachable("AddressSpace::read failed after range prevalidation");
-        }
-      }
-    }
+  };
+  if (!for_each_block_run(desc, rows, cols, transpose, transfer)) {
+    unreachable("block run overflowed after range prevalidation");
   }
   return ExecuteResult{.status = StepStatus::retired};
 }
