@@ -3,8 +3,8 @@
 
 Weight matrices are quantized per output row (symmetric int8, RNE, range
 [-127, 127]) with one f32 scale per row; RMSNorm gammas stay f32. Quantized
-matrices are stored as 32x32 tiles in [k/32][n/32][32][32] order, with each
-tile in [k][n] order. The blob carries a section directory so the guest
+matrices are stored as 32x32 tiles in [n/32][k/32][32][32] order, with each
+tile in [n][k] order. The blob carries a section directory so the guest
 locates tensors at runtime:
 
   header: magic "Q3B", arch dims, eps, section count   (all u32 LE)
@@ -46,11 +46,11 @@ def quant_error(w, q, s):
 
 
 def tile_weights(q):
-    """Pack [n, k] int8 weights as [k/32][n/32][32][32] in [k][n] order."""
+    """Pack [n, k] int8 weights as [n/32][k/32][32][32] in [n][k] order."""
     n, k = q.shape
     if n % 32 or k % 32:
         raise ValueError(f"tiled weights need dimensions divisible by 32, got {q.shape}")
-    return q.reshape(n // 32, 32, k // 32, 32).transpose(2, 0, 3, 1).tobytes()
+    return q.reshape(n // 32, 32, k // 32, 32).transpose(0, 2, 1, 3).tobytes()
 
 
 # ---- rope ----------------------------------------------------------------

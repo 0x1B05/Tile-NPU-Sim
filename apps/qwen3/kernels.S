@@ -124,7 +124,7 @@ qwen3_quant_act:
 #                  uint32_t n, uint32_t k, uint32_t xs_bits)
 #
 # out[j] = xs * w_scales[j] * sum_k quant(x)[k] * W[j,k]
-# W is stored as [k/32][n/32][32][32] tiles in [k][n] order, with per-row f32
+# W is stored as [n/32][k/32][32][32] tiles in [n][k] order, with per-row f32
 # scales. quant(x) is the tile panels t2..t4 left resident by qwen3_quant_act;
 # nothing between the two calls may clobber them. Cross-tile accumulation runs
 # in an i32 memory buffer (qwen3_accbuf). n % 32 == 0, 32 | k, k <= 3072.
@@ -151,7 +151,7 @@ qwen3_matvec_q:
     SETW    SEL_VC, 1, 6, X_T0
     SETW    SEL_VC, 1, 8, X_T0
 
-    # phase B configs: one [k][n] weight tile in t1 (tile row_stride = 32)
+    # phase B configs: one [n][k] weight tile in t1 (tile row_stride = 32)
     LI_CWM  t0, DT_I8, 32, 32
     SETW    SEL_TC, 0, 1, X_T0
     SETIM   SEL_TM, CF_RSTRIDE, 32, 1
@@ -204,14 +204,15 @@ qwen3_matvec_q:
     srli    s3, a4, 5           # n/32 blocks
     li      s2, 0
 .Lmv_nblock:
-    # tm1 base = w + (panel*32*nblocks + nb)*1024; advance one kblock per
-    # loaded tile, since the tiled layout is [kblock][nblock][32][32].
-    mul     t0, s5, s3
-    slli    t0, t0, 15
+    # tm1 base = w + (nb*kblocks + panel*32)*1024; advance one kblock per
+    # loaded tile, since the tiled layout is [nblock][kblock][32][32].
+    srli    t0, a5, 5
+    mul     t0, s2, t0
+    slli    t0, t0, 10
     add     t0, a0, t0
-    slli    t1, s2, 10
+    slli    t1, s5, 15
     add     t0, t0, t1
-    slli    t1, s3, 10
+    li      t1, 1024
     la      t2, qwen3_accbuf
     slli    t3, s2, 7
     add     t2, t2, t3
@@ -227,7 +228,7 @@ qwen3_matvec_q:
     bgeu    t5, t4, .Lmv_inner_done
     SETX    SEL_TM, 0, CF_BASE, 1, X_T0
     TLOAD   1
-    BDOT_NN_ACC 4, \R, 1
+    BDOT_NT_ACC 4, \R, 1
     add     t0, t0, t1
     .endr
 .Lmv_inner_done:
@@ -336,8 +337,8 @@ qwen3_quant_rows:
 # Chunked sibling of qwen3_matvec_q: out[t,j] = xs[t] * w_scales[j] *
 # sum_c xq[t,c] * W[j,c] for t in [0,rows), computing one up-to-32-row token
 # chunk. xq is [rows, k] i8 row-major (qwen3_quant_rows output), xs its rows
-# row scales. Per 32-column block of out: t1 holds one [k][n] weight tile from
-# the [k/32][n/32][32][32] layout and mma.nt accumulates the k/32 chunks in
+# row scales. Per 32-column block of out: t1 holds one [n][k] weight tile from
+# the [n/32][k/32][32][32] layout and mma.nt accumulates the k/32 chunks in
 # acc a0, then acc -> f32, * ws (bycol), * xs (byrow), stored via am8
 # (auto-advances one block per store). Full groups of eight nblocks keep
 # accelerators a0..a7 and reuse one xq tile across the group.
@@ -397,18 +398,19 @@ qwen3_matmul_q:
 
     # Full group: load xq once per k chunk and keep eight accumulators.
     SETX    SEL_TM, 0, CF_BASE, 0, X_S6
-    slli    t0, s2, 10
-    add     t0, s7, t0              # first weight tile of this group
-    slli    t3, s3, 10              # next kblock stride
+    mul     t0, s2, s4
+    slli    t0, t0, 10
+    add     t0, s7, t0              # first weight tile of this nblock group
+    slli    t3, s4, 10              # next nblock stride within this kblock
     TLOAD   0
     mv      t4, t0
     .irp G,0,1,2,3,4,5,6,7
     SETX    SEL_TM, 0, CF_BASE, 1, X_T4
     TLOAD   1
     MMA_NT_ZERO \G, 0, 1
-    addi    t4, t4, 1024
+    add     t4, t4, t3
     .endr
-    add     t0, t0, t3
+    addi    t0, t0, 1024            # next kblock for the group base
     li      s5, 1
 .Lmm_group_kloop:
     bgeu    s5, s4, .Lmm_group_epi
@@ -418,9 +420,9 @@ qwen3_matmul_q:
     SETX    SEL_TM, 0, CF_BASE, 1, X_T4
     TLOAD   1
     MMA_NT_ACC \G, 0, 1
-    addi    t4, t4, 1024
+    add     t4, t4, t3
     .endr
-    add     t0, t0, t3
+    addi    t0, t0, 1024
     addi    s5, s5, 1
     j       .Lmm_group_kloop
 .Lmm_group_epi:
@@ -439,9 +441,10 @@ qwen3_matmul_q:
 .Lmm_nblock:
     # Tail: fewer than eight output blocks remain.
     SETX    SEL_TM, 0, CF_BASE, 0, X_S6
-    slli    t0, s2, 10
+    mul     t0, s2, s4
+    slli    t0, t0, 10
     add     t0, s7, t0
-    slli    t1, s3, 10
+    li      t1, 1024
     SETX    SEL_TM, 0, CF_BASE, 1, X_T0
     TLOAD   0
     TLOAD   1
@@ -856,19 +859,20 @@ qwen3_add:
 # void qwen3_embed(const int8_t *table, const float *scales, uint32_t id,
 #               float *out, uint32_t hidden, uint32_t vocab)
 # out = dequant(table[id]) with the row's f32 scale. The table is stored as
-# [k/32][n/32][32][32] tiles in [k][n] order: each kblock contributes one
-# strided 32-byte run from the tile containing id.
+# [n/32][k/32][32][32] tiles in [n][k] order: the id row is contiguous across
+# the kblocks of its nblock.
 # ---------------------------------------------------------------------------
     .globl qwen3_embed
 qwen3_embed:
-    srli    t3, a5, 5               # nblocks = vocab / 32
     srli    t4, a4, 5               # kblocks = hidden / 32
     srli    t0, a2, 5               # id / 32
     andi    t1, a2, 31              # id % 32
-    slli    t5, t0, 10
+    slli    t1, t1, 5               # n_inner * 32
+    mul     t5, t0, t4              # nblock * kblocks
+    slli    t5, t5, 10
     add     t5, a0, t5
-    add     t5, t5, t1              # first tile row + n_inner
-    slli    t6, t3, 10              # stride to the next kblock
+    add     t5, t5, t1              # first kblock row for id
+    li      t6, 1024                # stride to the next kblock
     slli    t0, a2, 2
     add     t0, a1, t0
     lw      t2, 0(t0)               # t2 = scales[id]
@@ -881,7 +885,7 @@ qwen3_embed:
     SETW    SEL_VC, 1, 0, X_T0      # vc0 = f32 len 1 (tdequant scale len)
     VFILLX  0, X_T2                 # v0 = s_i in every lane
     SETIM   SEL_TM, CF_RSTRIDE, 0, 0
-    SETIM   SEL_TM, CF_CSTRIDE, 32, 0
+    SETIM   SEL_TM, CF_CSTRIDE, 1, 0
     SETIM   SEL_TM, CF_FLAGS, 0, 0
     SETX    SEL_AM, 0, CF_BASE, 0, X_A3
     SETIM   SEL_AM, CF_RSTRIDE, 0, 0
@@ -889,7 +893,7 @@ qwen3_embed:
     SETIM   SEL_AM, CF_FLAGS, 2, 0  # inc along cols: += 32 * 4
 .Lem_loop:
     SETX    SEL_TM, 0, CF_BASE, 0, X_T5
-    TLOAD   0                       # t0 = 1 x 32 i8 strided run
+    TLOAD   0                       # t0 = 1 x 32 i8 contiguous run
     TDEQUANT 0, 0, 0                # a0 = f32(t0) * v0
     ASTORE  0
     add     t5, t5, t6

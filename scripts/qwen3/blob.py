@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 
 MAGIC = b"Q3B\0"
-LAYOUT_TILED = 1
+LAYOUT_TILED = 2
 OUTPUT_MODE = 0o644
 
 
