@@ -103,6 +103,45 @@ TEST_CASE(mblk_tload_block_walks_strides) {
   check_eq(hex(state.tm[0].base_addr), hex(DATA), "descriptor without increment keeps base_addr");
 }
 
+TEST_CASE(mblk_tload_block_non_square) {
+  MblkRun run(block(NpuDomain::tile, 0, 0)); // tload t0
+  auto &state = run.sim.state();
+  state.tc[0].dtype = DType::i8;
+  state.tc[0].rows = 2;
+  state.tc[0].cols = 3;
+  stride_desc(state.tm[0], DATA, 4, 1);
+  poke(run.memory, DATA, {1, 2, 3, 0, 4, 5, 6, 0, 7, 8});
+  state.t[0][tile_index(0, 3)] = 0x5a; // sentinel outside the valid 2x3
+
+  check_eq(run.sim.step().status, StepStatus::retired, "non-square tload retires");
+  // addr(i, j) = DATA + i*4 + j*1.
+  check_eq(state.t[0][tile_index(0, 0)], std::uint8_t{1}, "t0(0,0)");
+  check_eq(state.t[0][tile_index(0, 1)], std::uint8_t{2}, "t0(0,1)");
+  check_eq(state.t[0][tile_index(0, 2)], std::uint8_t{3}, "t0(0,2)");
+  check_eq(state.t[0][tile_index(1, 0)], std::uint8_t{4}, "t0(1,0)");
+  check_eq(state.t[0][tile_index(1, 1)], std::uint8_t{5}, "t0(1,1)");
+  check_eq(state.t[0][tile_index(1, 2)], std::uint8_t{6}, "t0(1,2)");
+  check_eq(state.t[0][tile_index(0, 3)], std::uint8_t{0x5a},
+           "element outside the valid shape is untouched");
+
+  MblkRun transposed(block(NpuDomain::tile, 0, 0)); // tload t0, transform=transpose
+  auto &transposed_state = transposed.sim.state();
+  transposed_state.tc[0].dtype = DType::i8;
+  transposed_state.tc[0].rows = 2;
+  transposed_state.tc[0].cols = 3;
+  stride_desc(transposed_state.tm[0], DATA, 4, 1);
+  transposed_state.tm[0].transform = 1;
+  poke(transposed.memory, DATA, {1, 2, 3, 0, 4, 5, 6, 0, 7, 8});
+
+  check_eq(transposed.sim.step().status, StepStatus::retired, "non-square transpose retires");
+  check_eq(transposed_state.t[0][tile_index(0, 0)], std::uint8_t{1}, "t0(0,0)");
+  check_eq(transposed_state.t[0][tile_index(0, 1)], std::uint8_t{4}, "t0(0,1)");
+  check_eq(transposed_state.t[0][tile_index(0, 2)], std::uint8_t{7}, "t0(0,2)");
+  check_eq(transposed_state.t[0][tile_index(1, 0)], std::uint8_t{2}, "t0(1,0)");
+  check_eq(transposed_state.t[0][tile_index(1, 1)], std::uint8_t{5}, "t0(1,1)");
+  check_eq(transposed_state.t[0][tile_index(1, 2)], std::uint8_t{8}, "t0(1,2)");
+}
+
 TEST_CASE(mblk_tload_transpose) {
   MblkRun run(block(NpuDomain::tile, 0, 0)); // tload t0
   auto &state = run.sim.state();

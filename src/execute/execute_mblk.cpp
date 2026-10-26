@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <type_traits>
 
 namespace tile_npu {
 namespace {
@@ -42,6 +43,24 @@ bool transform_legal(const MblkInstr &instr, const MatrixDescriptor &desc) {
   const bool full_tile_block = instr.reg.domain == NpuDomain::tile &&
                                (instr.op == MblkOp::load || instr.op == MblkOp::store);
   return desc.transform == 0 || full_tile_block;
+}
+
+// Visits a matrix block in row-major order, swapping coordinates for the
+// transpose form. Returns false when an address overflows.
+template <typename Fn>
+bool for_each_block_element(const MatrixDescView &desc, std::size_t rows, std::size_t cols,
+                            bool transpose, Fn &&fn) {
+  for (std::size_t row = 0; row < rows; ++row) {
+    for (std::size_t col = 0; col < cols; ++col) {
+      const auto address =
+          transpose ? desc.matrix_element_addr(col, row) : desc.matrix_element_addr(row, col);
+      if (!address) {
+        return false;
+      }
+      fn(*address, row, col);
+    }
+  }
+  return true;
 }
 
 // Every access runs in two phases: all addresses are computed first, then
@@ -138,26 +157,45 @@ template <NpuDomain Domain> ExecuteResult block_access(const MblkInstr &instr, E
     return config_error();
   }
 
-  // A transpose block transfer swaps the coordinates handed to the
-  // descriptor.
-  const bool transpose = desc.descriptor().transform != 0;
-  const auto addrs = collect_addresses<MATRIX_ELEMENTS>(rows * cols, [&](std::size_t n) {
-    return transpose ? desc.matrix_element_addr(n % cols, n / cols)
-                     : desc.matrix_element_addr(n / cols, n % cols);
-  });
-  if (!addrs) {
+  const bool transpose = desc.descriptor().transform;
+  using Element = typename std::remove_reference_t<decltype(reg)>::value_type;
+  const auto fault_status = is_store(instr.op) ? StepStatus::store_fault : StepStatus::load_fault;
+
+  // Probe every element before changing the register or memory, preserving
+  // the atomic transfer contract without materializing the address array.
+  // Keep scanning after the first fault so a later address-overflow still
+  // wins as a configuration error, matching the original probe order.
+  std::optional<std::uint64_t> fault_address;
+  const auto probe = [&](std::uint64_t address, std::size_t, std::size_t) {
+    if (!fault_address && !ctx.memory.contains(address, sizeof(Element))) {
+      fault_address = address;
+    }
+  };
+  if (!for_each_block_element(desc, rows, cols, transpose, probe)) {
     return config_error();
   }
+  if (fault_address) {
+    return access_fault(fault_status, *fault_address);
+  }
 
-  const std::span<const std::uint64_t> range(addrs->data(), rows * cols);
-  const auto at = matrix_accessor(config);
-  const auto result = is_store(instr.op) ? store_elements(ctx.memory, reg, range, at)
-                                         : load_elements(ctx.memory, reg, range, at);
-  if (result.status != StepStatus::retired) {
-    return result;
+  auto view = matrix_view(reg);
+  if (is_store(instr.op)) {
+    const auto store = [&](std::uint64_t address, std::size_t row, std::size_t col) {
+      store_element(ctx.memory, address, view.at(row, col));
+    };
+    if (!for_each_block_element(desc, rows, cols, transpose, store)) {
+      unreachable("block address overflowed after range prevalidation");
+    }
+  } else {
+    const auto load = [&](std::uint64_t address, std::size_t row, std::size_t col) {
+      load_element(ctx.memory, address, view.at(row, col));
+    };
+    if (!for_each_block_element(desc, rows, cols, transpose, load)) {
+      unreachable("block address overflowed after range prevalidation");
+    }
   }
   desc.commit_base(*next_base);
-  return result;
+  return {.status = StepStatus::retired};
 }
 
 template <NpuDomain Domain> ExecuteResult row_access(const MblkInstr &instr, ExecContext &ctx) {
