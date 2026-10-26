@@ -133,6 +133,7 @@ static void cache_layer_sections(uint32_t layer) {
 
 void qwen3_init(uint32_t n_prompt) {
   const struct q3b_header *h = q3b_header();
+  if (h->layout != Q3B_LAYOUT_TILED) panic("unsupported Q3B layout: %u", h->layout);
   model.n_layers = h->n_layers;
   model.hidden = h->hidden;
   model.inter = h->inter;
@@ -219,7 +220,7 @@ static uint32_t qwen3_forward_impl(uint32_t token, uint32_t pos, int want_logits
   // probes fire on the last prompt token's logits-producing pass
   const int probing = QWEN3_PROBES && want_logits && pos == model.n_prompt - 1;
   uint32_t xs;
-  qwen3_embed(model.embed, model.embed_s, token, x_buf, model.hidden);
+  qwen3_embed(model.embed, model.embed_s, token, x_buf, model.hidden, model.vocab);
   PROBE("embed", "f32", x_buf, 4);
   for (uint32_t L = 0; L < model.n_layers; ++L) {
     const void **sec = model.layer_sections[L];
@@ -307,7 +308,7 @@ uint32_t qwen3_prefill(const uint32_t *tokens, uint32_t n) {
     const uint32_t chunk_rows = n - base < PREFILL_CHUNK_ROWS ? n - base : PREFILL_CHUNK_ROWS;
     for (uint32_t t = 0; t < chunk_rows; ++t)
       qwen3_embed(model.embed, model.embed_s, tokens[base + t], pf_x + t * model.hidden,
-                  model.hidden);
+                  model.hidden, model.vocab);
     for (uint32_t L = 0; L < model.n_layers; ++L) {
       const void **sec = model.layer_sections[L];
       for (uint32_t t = 0; t < chunk_rows; ++t)

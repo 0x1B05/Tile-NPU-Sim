@@ -21,7 +21,7 @@ void qwen3_pv(const char *v_base, uint32_t row_stride, const float *probs, float
 void qwen3_silu_mul(float *gate, const float *up, float *out, uint32_t n);
 void qwen3_add(float *dst, const float *src, uint32_t n);
 void qwen3_embed(const int8_t *table, const float *scales, uint32_t id, float *out,
-                 uint32_t hidden);
+                 uint32_t hidden, uint32_t vocab);
 uint32_t qwen3_argmax(const float *x, uint32_t n);
 
 void qwen3_fence_mem(void);

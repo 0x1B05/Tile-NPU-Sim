@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 
 MAGIC = b"Q3B\0"
+LAYOUT_TILED = 1
 OUTPUT_MODE = 0o644
 
 
@@ -55,7 +56,7 @@ class Blob:
             a["max_pos"],
             np.frombuffer(np.float32(a["eps"]).tobytes(), "<u4")[0],
             len(self.sections),
-            0,
+            LAYOUT_TILED,
         )
         tmp_path = None
         try:

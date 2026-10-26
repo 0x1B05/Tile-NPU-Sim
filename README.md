@@ -58,7 +58,7 @@ The suite is assembled against a minimal custom env (`tests/riscv-tests-env/risc
 xmake build qwen3_app        # build/apps/qwen3/qwen3.bin
 ```
 
-Running it needs a converted model blob and a Q3P prompt image. Fetch the pinned weights and tokenizer into `external/qwen3/`, then convert the model to the flat q8s32 Q3B blob (per-row symmetric int8 weights, f32 scales). The model no longer contains a prompt:
+Running it needs a converted model blob and a Q3P prompt image. Fetch the pinned weights and tokenizer into `external/qwen3/`, then convert the model to the flat q8s32 Q3B blob (per-row symmetric int8 weights, f32 scales, 32x32 tiled weights):
 
 ```sh
 scripts/qwen3/fetch_model.sh   # set HF_BASE=... for another mirror
