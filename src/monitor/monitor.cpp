@@ -1,8 +1,8 @@
 #include "monitor.h"
 
+#include "format.h"
 #include "parse.h"
 #include "sdb.h"
-#include "format.h"
 
 #include "tile_npu/platform/bus.h"
 #include "tile_npu/platform/ram.h"
@@ -70,7 +70,8 @@ int run_images(const Options &options) {
     if (!load_image(image, ram)) return 1;
   }
   tile_npu::SerialConsole serial(std::cout);
-  tile_npu::SystemBus bus(ram, {&serial});
+  tile_npu::SystemBus bus(
+      ram, {{&serial, tile_npu::SerialConsole::BASE, tile_npu::SerialConsole::SIZE}});
   tile_npu::Simulator sim(bus);
   sim.reset(MEMORY_BASE);
 
