@@ -63,7 +63,7 @@ scripts/fetch_riscv_tests.sh      # clone the pinned commit into external/
 python3 tests/run.py riscv-tests --build
 ```
 
-The suite is assembled against a minimal custom env (`tests/riscv-tests-env/riscv_test.h`) that reports pass/fail through the runner's `ebreak`/`a0` convention; `fence_i` and `ma_data` are excluded (Zifencei and trap delivery are not modeled). The runner executes the generated images through `sim`; missing external sources or images are reported by the runner instead of affecting `xmake f`.
+The suite is assembled against a minimal custom env (`tests/guest/riscv-tests-env/riscv_test.h`) that reports pass/fail through the runner's `ebreak`/`a0` convention; `fence_i` and `ma_data` are excluded (Zifencei and trap delivery are not modeled). The runner executes the generated images through `sim`; missing external sources or images are reported by the runner instead of affecting `xmake f`.
 
 ## Qwen3 inference guest
 

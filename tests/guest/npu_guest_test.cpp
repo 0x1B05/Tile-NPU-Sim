@@ -1,5 +1,7 @@
+#include "tile_npu/platform/ram.h"
 #include "tile_npu/simulator.h"
 
+#include "framework.h"
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -11,10 +13,9 @@
 #include <string_view>
 #include <vector>
 
+#include "guest/guest_image.h"
 #include "monitor/format.h"
 #include "monitor/monitor.h"
-#include "support/execute_helpers.h"
-#include "support/guest_image.h"
 #include "utils/endian.h"
 
 using namespace tile_npu::test;

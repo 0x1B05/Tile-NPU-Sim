@@ -1,6 +1,6 @@
 -- Official riscv-tests image artifacts, fetched by
 -- scripts/fetch_riscv_tests.sh. Each rv64ui/rv64um test is assembled against
--- our minimal env (tests/riscv-tests-env); tests/run.py executes the resulting
+-- our minimal env (tests/guest/riscv-tests-env); tests/run.py executes the resulting
 -- images. Excluded: fence_i (Zifencei, not modeled) and ma_data (requires trap
 -- delivery, which the simulator does not implement).
 --
@@ -32,7 +32,7 @@ target("riscv_tests", function()
 	set_default(false)
 	set_values("rvtests_srcdir", rvtests_srcdir)
 	set_values("rvtests_bindir", rvtests_bindir)
-	set_values("envdir", path.join(os.projectdir(), "tests", "riscv-tests-env"))
+	set_values("envdir", path.join(os.projectdir(), "tests", "guest", "riscv-tests-env"))
 	set_values("linkscript", path.join(os.projectdir(), "tests", "guest", "link.ld"))
 	set_values("passlist", table.unpack(rvtests))
 	on_build(function(target)

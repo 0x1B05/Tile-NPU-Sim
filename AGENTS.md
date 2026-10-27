@@ -62,7 +62,7 @@ xmake project -k compile_commands      # 为 clangd 生成 compile_commands.json
 | `src/rv64_util.h` | RV64 W 指令写回等 RV64 字运算工具 |
 | `src/utils/` | 通用内部工具：位模式、小端转换、variant visitor 与 `unreachable`；十六进制格式化位于 `src/monitor/format.h` |
 | `src/main.cpp`、`src/monitor/` | CLI、镜像装载、`npu_exec` 步进循环和 sdb 命令 |
-| `tests/` | host 测试框架、`sim_guest_tests` 的 guest driver 及 guest 源码 |
+| `tests/` | `units/` host 用例与入口、`guest/` guest driver 与 guest 源码、`include/` 测试头文件 |
 | `tests/run.py` | host/guest/riscv-tests/Qwen3 suite runner；xmake 不注册这些外部测试 |
 | `apps/qwen3/`、`scripts/qwen3/` | Qwen3 guest、Q3B/Q3P 输入、权重转换、分词、NumPy 参考、运行与对齐检查工具 |
 | `xmake/guest.lua`、`riscv_tests.lua` | guest 与官方套件镜像的 build-only target；交叉编译公共逻辑在 `xmake/modules/guestimg.lua` |
@@ -102,11 +102,11 @@ xmake project -k compile_commands      # 为 clangd 生成 compile_commands.json
 
 测试放置与运行约定：
 
-- `tests/framework.h` 提供 `TEST_CASE` 与 `check_eq`；`sim_tests --list` 列出 host 用例，`sim_guest_tests --list` 列出 guest 用例，二者都支持 `--filter SUBSTR`。公共执行 fixture 在 `tests/support/execute_helpers.h`，各指令族的编码构造器在 `tests/support/<族>_helpers.h`。
+- `tests/include/framework.h` 提供 `TEST_CASE`、`check_eq` 与 `i8_bits`；`tests/units/main.cpp` 是 host 入口，`tests/guest/main.cpp` 是 guest 入口。`sim_tests --list` 列出 host 用例，`sim_guest_tests --list` 列出 guest 用例，二者都支持 `--filter SUBSTR`；只有 guest 入口接受 `--guest-dir`。host 执行 fixture 在 `tests/include/units/execute_helpers.h`，各指令族的编码构造器在 `tests/include/units/<族>_helpers.h`；guest 图片加载接口在 `tests/include/guest/guest_image.h`。
 - host 译码测试直接内联机器码常量，行尾标注汇编；指令字和地址的断言用 `hex()` 包装。
-- NPU 正例优先放在 `tests/guest/npu/*.S`，复用 `tests/guest/include/npu.inc` 的编码宏；`tests/guest/npu_guest_test.cpp` 负责装载、执行与断言，镜像目录通过 `--guest-dir` 传入。复用 `run_until_stop` 的步数上限和停机诊断，或 `check_guest_image` 的自校验流程；非法编码负例放在 host 测试。
+- NPU 正例优先放在 `tests/guest/npu/*.S`，复用 `tests/guest/include/npu.inc` 的编码宏；`tests/guest/npu_guest_test.cpp` 负责装载、执行与断言，镜像目录通过 `--guest-dir` 传入。复用 `run_until_stop` 的步数上限和停机诊断，或 `check_guest_image` 的自校验流程；非法编码负例放在 `tests/units`。
 - guest C 程序链接共享 `crt0.S`，裸 `.S` 提供自己的 `_start`，生成到构建目录的 `guest/`。标量自校验程序放在 `tests/guest/rv64im/`，按 `ebreak/a0` 约定退出。
-- 官方套件的 env 在 `tests/riscv-tests-env/`；排除项在 `xmake/riscv_tests.lua`，对应尚未建模的 Zifencei 与 trap 投递。镜像由 `xmake build riscv_tests` 生成，由 `tests/run.py riscv-tests` 执行。
+- 官方套件的 env 在 `tests/guest/riscv-tests-env/`；排除项在 `xmake/riscv_tests.lua`，对应尚未建模的 Zifencei 与 trap 投递。镜像由 `xmake build riscv_tests` 生成，由 `tests/run.py riscv-tests` 执行。
 - tiny Qwen3 回归以固定 seed 模型对照 NumPy 参考：整数探针与 token 精确匹配，f32 探针使用容差。Q3B 模型与 Q3P prompt 分别加载；构建由 `apps/qwen3/xmake.lua` 提供，运行与比较由 `tests/run.py qwen3` 驱动。
 - 仓库内 guest 源码生成的镜像属于构建依赖；用户提供的外部镜像和下载的模型不加入构建依赖或提交。
 
@@ -117,7 +117,7 @@ xmake project -k compile_commands      # 为 clangd 生成 compile_commands.json
 - 沿用 `#pragma once`、`snake_case`、`enum class` 和 `constexpr`；常量用 `ALL_CAPS`。
 - 操作码合法性用元数据表或显式枚举分支判断。校验和执行分派的 `switch` 显式写出 `default`，分别拒绝非法输入或报告已验证输入违反不变式；数据域查询保留约定的无效值返回。新增枚举时同步检查所有相关分支，带 `default` 的分支不能依赖普通 `-Wswitch` 提醒遗漏。
 - 使用仓库 `.clang-format`，要求 clang-format >= 14。提交前只格式化本次修改的 C++ 文件，例如 `clang-format -i src/decode/decode_npu.cpp`；不对 Markdown、YAML 或汇编源码运行它。
-- `tests/riscv-tests-env/riscv_test.h` 的宏体是 GNU as 汇编，保留其 `/* clang-format off */` 保护。对齐的译码表、位段表和元数据表用 `// clang-format off/on` 保持排版。
+- `tests/guest/riscv-tests-env/riscv_test.h` 的宏体是 GNU as 汇编，保留其 `/* clang-format off */` 保护。对齐的译码表、位段表和元数据表用 `// clang-format off/on` 保持排版。
 - 指令位段通过 `encoding::field<Hi,Lo>` 与格式解析器提取，避免重复魔数位移。译码位图按 Rivet 的具体字段命名 (如 `dom2`、`IS`、`BX`)，与实际位段对齐。
 - 主分支为 `main`，开发使用特性分支；提交遵循英文 Conventional Commits：`<type>(<scope>): <imperative summary>`，摘要简短、不以句号结尾。
 - 不提交构建产物和下载内容：`.xmake/`、`build/`、`.cache/`、`compile_commands.json`、`external/` 已忽略。推送远端需用户明确要求。
