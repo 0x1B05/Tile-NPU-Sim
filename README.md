@@ -5,10 +5,15 @@ A functional simulator for the [Tile-NPU ISA](https://github.com/0x1B05/Tile-NPU
 ## Build and test
 
 ```sh
-xmake                    # tile_npu_sim + sim_run
+xmake                    # build the sim binary
 xmake test               # host unit tests only (no cross toolchain)
+xmake f --sdb=y          # optional interactive sdb build
 xmake f --native=y       # optional host-specific -march=native code generation
 ```
+
+`sim` is the default binary target. Its internal static library,
+`sim_core`, is not a public build target; the host tests link it
+directly. SDB is off by default and only changes the `sim` build.
 
 Integration suites are driven by `tests/run.py`:
 
@@ -21,16 +26,18 @@ python3 tests/run.py all --build
 
 ## Running programs
 
-`sim_run` loads a flat binary at `0x80000000` into 1 GiB of RAM and starts execution there. A guest stops at `ebreak` (or `kernel.end` on the NPU side) with `a0` as the process exit code, 0 meaning success. A 16550-lite serial console is MMIO-mapped at `0x10000000`: storing a byte prints it on the host, and the status register always reads ready.
+`sim` loads a flat binary at `0x80000000` into 1 GiB of RAM and starts execution there. A guest stops at `ebreak` (or `kernel.end` on the NPU side) with `a0` as the process exit code, 0 meaning success. A 16550-lite serial console is MMIO-mapped at `0x10000000`: storing a byte prints it on the host, and the status register always reads ready.
 
 ```sh
-xmake run sim_run path/to/program.bin [data.bin@0xADDR ...]
+xmake run sim path/to/program.bin [data.bin@0xADDR ...]
 ```
 
-Additional `path@0xADDR` images are loaded into the same memory before execution. `-m, --memory MiB` sets the RAM size, `-s, --steps N` caps the number of retired instructions (-1 for unlimited), and `-i, --interactive` opens the sdb shell:
+Additional `path@0xADDR` images are loaded into the same memory before execution. `-m, --memory MiB` sets the RAM size and `-s, --steps N` caps the number of retired instructions (-1 for unlimited). The interactive `-i, --interactive` option is available only when SDB is enabled at build time:
 
 ```sh
-xmake run sim_run -i path/to/program.bin
+xmake f --sdb=y
+xmake
+xmake run sim -i path/to/program.bin
 ```
 
 ```
@@ -40,7 +47,7 @@ xmake run sim_run -i path/to/program.bin
 (sdb) c           # continue until the program stops
 ```
 
-The runner is an xmake option; `xmake f --monitor=n` builds the library only.
+The runner is always built as `sim`; the internal core library is only a dependency.
 
 ## Guest tests
 
@@ -55,7 +62,7 @@ scripts/fetch_riscv_tests.sh      # clone the pinned commit into external/
 python3 tests/run.py riscv-tests --build
 ```
 
-The suite is assembled against a minimal custom env (`tests/riscv-tests-env/riscv_test.h`) that reports pass/fail through the runner's `ebreak`/`a0` convention; `fence_i` and `ma_data` are excluded (Zifencei and trap delivery are not modeled). The runner executes the generated images through `sim_run`; missing external sources or images are reported by the runner instead of affecting `xmake f`.
+The suite is assembled against a minimal custom env (`tests/riscv-tests-env/riscv_test.h`) that reports pass/fail through the runner's `ebreak`/`a0` convention; `fence_i` and `ma_data` are excluded (Zifencei and trap delivery are not modeled). The runner executes the generated images through `sim`; missing external sources or images are reported by the runner instead of affecting `xmake f`.
 
 ## Qwen3 inference guest
 
@@ -76,13 +83,13 @@ python3 scripts/qwen3/convert.py real external/qwen3 build/apps/qwen3/model.q3b
 
 ```sh
 python3 scripts/qwen3/tokenize_prompt.py "你好" --out build/apps/qwen3/prompt.bin
-./build/linux/x86_64/release/sim_run \
+./build/linux/x86_64/release/sim \
     build/apps/qwen3/qwen3.bin \
     build/apps/qwen3/model.q3b@0x81000000 \
     build/apps/qwen3/prompt.bin@0x80F00000
 ```
 
-The same flow is available through the app runner, which tokenizes the prompt, writes `build/apps/qwen3/prompt.bin`, invokes `sim_run`, and decodes the generated token ids into text:
+The same flow is available through the app runner, which tokenizes the prompt, writes `build/apps/qwen3/prompt.bin`, invokes `sim`, and decodes the generated token ids into text:
 
 ```sh
 xmake build qwen3_run
@@ -96,17 +103,17 @@ Measure prefill, TTFT, and decode time from the serial stream:
 ```sh
 xmake build qwen3_app
 python3 scripts/qwen3/bench.py "你好" \
-    --sim-run build/linux/x86_64/release/sim_run \
+    --sim-run build/linux/x86_64/release/sim \
     --app build/apps/qwen3/qwen3.bin \
     --runs 3
 ```
 
 `bench.py` reports load, prefill, end-to-end TTFT, compute-only TTFT, decode time, ms/token, and tokens/s. It timestamps the serial bytes directly, so it does not need simulator instrumentation. Use `--prompt-image` for an existing Q3P image and `--json` to save per-run metrics.
 
-A fixed-seed random tiny model exercises the same path without any download, and the opt-in regression wraps the whole chain — convert, guest forward under `sim_run`, then compare against the numpy reference `ref.py` (snapshot records compared with the numpy reference, generated tokens exact):
+A fixed-seed random tiny model exercises the same path without any download, and the opt-in regression wraps the whole chain — convert, guest forward under `sim`, then compare against the numpy reference `ref.py` (snapshot records compared with the numpy reference, generated tokens exact):
 
 ```sh
 python3 tests/run.py qwen3 --build
 ```
 
-The runner builds `qwen3_snapshot_app`, generates the tiny model/prompt/reference, runs it under `sim_run`, and compares the snapshot records and generated tokens against the NumPy reference. It reports a clear error when `sim_run`, Python, or NumPy is unavailable.
+The runner builds `qwen3_snapshot_app`, generates the tiny model/prompt/reference, runs it under `sim`, and compares the snapshot records and generated tokens against the NumPy reference. It reports a clear error when `sim`, Python, or NumPy is unavailable.

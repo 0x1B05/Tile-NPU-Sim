@@ -2,7 +2,7 @@
 
 ## 项目与职责
 
-本仓库为 C++20 功能模拟器：单 hart、按程序序同步执行 RV64IM 标量与 NPU 指令。核心为 `tile_npu_sim` 静态库，`sim_run` 提供程序运行和交互调试，命令行由 CLI11 解析。使用方法与 Qwen3 模型准备流程见 `README.md`；本文件维护开发约定和模块边界。
+本仓库为 C++20 功能模拟器：单 hart、按程序序同步执行 RV64IM 标量与 NPU 指令。核心为内部静态库 `sim_core`；默认 target `sim` 是用于程序运行和调试的二进制，命令行由 CLI11 解析。使用方法与 Qwen3 模型准备流程见 `README.md`；本文件维护开发约定和模块边界。
 
 ISA 手册位于相邻仓库 `../Tile-NPU-ISA/`，指令语义以 `tile-npu-isa.typ` 为准；`rivet/*.yaml` 定义编码图的位段，`编码设计规则.md` 记录指令空间与字段布局设计。
 
@@ -14,23 +14,23 @@ ISA 手册位于相邻仓库 `../Tile-NPU-ISA/`，指令语义以 `tile-npu-isa.
 在本目录执行：
 
 ```bash
-xmake                                  # 构建静态库与 sim_run
+xmake                                  # 构建默认 sim 二进制
 xmake test                             # 只运行 host 单元测试，不需要交叉工具链
 python3 tests/run.py guest --build     # 构建并运行 guest 测试
 python3 tests/run.py riscv-tests --build
 python3 tests/run.py qwen3 --build
 python3 tests/run.py all --build
-xmake run sim_run program.bin          # 默认运行程序
-xmake run sim_run -i program.bin       # 进入交互 sdb
-xmake f --monitor=n                    # 关闭 runner，随后 xmake 只构建库
+xmake run sim program.bin          # 默认运行程序
+xmake f --sdb=y && xmake                    # 构建带 sdb 的二进制
+xmake run sim -i program.bin       # 进入交互 sdb
 xmake project -k compile_commands      # 为 clangd 生成 compile_commands.json
 ```
 
 - 修改后至少运行 `xmake test`。`sim_tests/core` 只包含 host 用例；guest 测试在独立二进制 `sim_guest_tests` 中，由 `tests/run.py` 调用。
 - 构建选项在 `xmake.lua`，使用 `xmake f --xxx=y/n`；编译器缓存位于仓库内 `.cache/ccache`。
 - 宿主构建启用 `set_warnings("all", "error")`，所有已启用的警告都按错误处理。
-- guest 镜像需要 RISC-V 交叉工具链，默认前缀 `riscv64-linux-gnu-`，可用 `xmake f --riscv_cross=<prefix>` 覆盖；构建 `sim_run` 和 `sim_tests` 本身不需要交叉工具链。
-- Qwen3 模型 Q3B 只保存权重和架构参数；prompt 通过 `scripts/qwen3/tokenize_prompt.py` 生成 Q3P 镜像，并随 `sim_run` 加载到 `0x80F00000`。`xmake build qwen3_run && xmake run qwen3_run "prompt"` 会完成分词、临时镜像和模拟器调用。
+- guest 镜像需要 RISC-V 交叉工具链，默认前缀 `riscv64-linux-gnu-`，可用 `xmake f --riscv_cross=<prefix>` 覆盖；构建 `sim` 和 `sim_tests` 本身不需要交叉工具链。
+- Qwen3 模型 Q3B 只保存权重和架构参数；prompt 通过 `scripts/qwen3/tokenize_prompt.py` 生成 Q3P 镜像，并随 `sim` 加载到 `0x80F00000`。`xmake build qwen3_run && xmake run qwen3_run "prompt"` 会完成分词、临时镜像和模拟器调用。
 - Qwen3 tiny 回归由 `tests/run.py qwen3` 驱动，使用 `qwen3_snapshot_app`；模型、prompt 和 NumPy 参考由脚本生成。
 - `tests/run.py` 负责 suite 选择、过滤、构建缺失 artifact 和结果汇总；xmake 只负责生成 `sim_tests`、`sim_guest_tests`、`guest_images` 及可选 app/image artifact。
 
