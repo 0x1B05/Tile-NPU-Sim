@@ -288,14 +288,26 @@ TEST_CASE(validate_rejects_bad_mma) {
 }
 
 TEST_CASE(validate_rejects_bad_bdot) {
-  check_illegal(BdotInstr{.op = static_cast<BdotOp>(4), .dest = V(0), .src_a = B(0), .src_b = T(1)},
+  check_illegal(BdotInstr{.op = static_cast<BdotOp>(2), .dest = V(0), .src_a = B(0), .src_b = T(1)},
                 "unassigned bdot op");
-  check_illegal(BdotInstr{.op = BdotOp::nn_zero, .dest = A(0), .src_a = B(0), .src_b = T(1)},
+  check_illegal(BdotInstr{.op = BdotOp::nt_zero, .dest = A(0), .src_a = B(0), .src_b = T(1)},
                 "bdot destination domain");
-  check_illegal(BdotInstr{.op = BdotOp::nn_zero, .dest = V(0), .src_a = T(0), .src_b = T(1)},
+  check_illegal(BdotInstr{.op = BdotOp::nt_zero, .dest = V(0), .src_a = T(0), .src_b = T(1)},
                 "bdot src_a domain");
-  check_illegal(BdotInstr{.op = BdotOp::nn_zero, .dest = V(0), .src_a = B(0), .src_b = A(1)},
+  check_illegal(BdotInstr{.op = BdotOp::nt_zero, .dest = V(0), .src_a = B(0), .src_b = A(1)},
                 "bdot src_b domain");
+  check_illegal(BdotInstr{.op = BdotOp::nt_zero,
+                          .dest = V(0),
+                          .src_a = B(0),
+                          .src_b = T(1),
+                          .src_a_row = std::uint8_t{0}},
+                "Tile row source must name a Tile");
+  check_illegal(BdotInstr{.op = BdotOp::nt_zero,
+                          .dest = V(0),
+                          .src_a = T(0),
+                          .src_b = T(1),
+                          .src_a_row = std::uint8_t{32}},
+                "bdot Tile row 32");
 }
 
 TEST_CASE(validate_rejects_bad_sys) {

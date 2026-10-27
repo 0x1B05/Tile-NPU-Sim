@@ -3,6 +3,7 @@
 #include "tile_npu/state.h"
 
 #include <cstdint>
+#include <optional>
 #include <variant>
 
 namespace tile_npu {
@@ -126,17 +127,16 @@ struct MmaInstr {
 };
 
 enum class BdotOp : std::uint8_t {
-  nn_zero,
-  nn_acc,
   nt_zero,
   nt_acc,
 };
 
 struct BdotInstr {
-  BdotOp op = BdotOp::nn_zero;
-  NpuRegister dest{};  // Vec32.
-  NpuRegister src_a{}; // Vec8.
-  NpuRegister src_b{}; // Tile.
+  BdotOp op = BdotOp::nt_zero;
+  NpuRegister dest{};                    // Vec32.
+  NpuRegister src_a{};                   // Vec8, or the Tile whose row is read.
+  NpuRegister src_b{};                   // Tile.
+  std::optional<std::uint8_t> src_a_row; // Tile row when set; Vec8 input otherwise.
 };
 
 enum class EbinOp : std::uint8_t {

@@ -3,9 +3,10 @@
 # Self-checking MMA_BDOT image: programs configs and descriptors, loads a
 # shared 2x3 left Tile, a 2x3 right Tile in N x K order, and a Vec8, then runs
 # mma.nt.zero, mma.nt.acc (accumulating onto the first result), bdot.nt and
-# bdot.nt.acc (accumulating onto the bdot result). Results are stored back and
-# compared word-wise. Ends with ebreak: a0 = 0 pass, a0 = N identifies the
-# failing check.
+# bdot.nt.acc (accumulating onto the bdot result), followed by the Tile-row
+# bdot.nt and bdot.nt.acc forms over the same left Tile. Results are
+# stored back and compared word-wise. Ends with ebreak: a0 = 0 pass, a0 = N
+# identifies the failing check.
 #
 # Buffer addresses go through lla (pc-relative): the image is loaded at
 # 0x80000000, where medlow's %hi/%lo expansion would sign-extend bit 31.
@@ -118,6 +119,38 @@ _start:
     bne       x4, x5, fail
     lwu       x4, 4(x3)
     li        x5, 48
+    bne       x4, x5, fail
+
+    # Stage 5 - bdot.nt.i8.i32 v4, t0[1], t2 reads {4, -5, 6}
+    # and overwrites v4 with {42, 57}.
+    BDOT_NT_ROW 4, 0, 1, 2
+    lla       x3, dstbuf2
+    CFG_REG   3, 1, 0, 0, 3, 4
+    VSTORE    4
+    lla       x3, dstbuf2
+    FENCE_MEM
+    lwu       x4, 0(x3)
+    li        x5, 42
+    li        a0, 5
+    bne       x4, x5, fail
+    lwu       x4, 4(x3)
+    li        x5, 57
+    bne       x4, x5, fail
+
+    # Stage 6 - bdot.nt.acc.i8.i32 v4, t0[0], t2 adds
+    # {50, 68} from row 0 -> {92, 125}.
+    BDOT_NT_ROW_ACC 4, 0, 0, 2
+    lla       x3, dstbuf2
+    CFG_REG   3, 1, 0, 0, 3, 4
+    VSTORE    4
+    lla       x3, dstbuf2
+    FENCE_MEM
+    lwu       x4, 0(x3)
+    li        x5, 92
+    li        a0, 6
+    bne       x4, x5, fail
+    lwu       x4, 4(x3)
+    li        x5, 125
     bne       x4, x5, fail
 
     li        a0, 0

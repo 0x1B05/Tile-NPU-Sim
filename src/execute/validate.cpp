@@ -245,9 +245,15 @@ bool valid_structure(const MmaInstr &instr) {
 }
 
 bool valid_structure(const BdotInstr &instr) {
-  return instr.op <= BdotOp::nt_acc && instr.dest.domain == NpuDomain::vec32 &&
-         in_range(instr.dest) && instr.src_a.domain == NpuDomain::vec8 && in_range(instr.src_a) &&
-         instr.src_b.domain == NpuDomain::tile && in_range(instr.src_b);
+  if (instr.op > BdotOp::nt_acc || instr.dest.domain != NpuDomain::vec32 || !in_range(instr.dest) ||
+      instr.src_b.domain != NpuDomain::tile || !in_range(instr.src_b)) {
+    return false;
+  }
+  if (instr.src_a_row.has_value()) {
+    return *instr.src_a_row < MATRIX_EXTENT && instr.src_a.domain == NpuDomain::tile &&
+           in_range(instr.src_a);
+  }
+  return instr.src_a.domain == NpuDomain::vec8 && in_range(instr.src_a);
 }
 
 bool valid_structure(const SysInstr &instr) { return instr.op <= SysOp::kernel_end; }

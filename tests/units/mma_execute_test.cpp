@@ -33,13 +33,6 @@ void poke_lhs(tile_npu::State &state, std::size_t index) {
     state.t[index][(k / 3) * 32 + (k % 3)] = data[k];
 }
 
-// The nn right operand: 3x2 i8 {{7, 8}, {-9, 10}, {11, -12}}.
-void poke_rhs_nn(tile_npu::State &state, std::size_t index) {
-  const std::uint8_t data[6] = {7, 8, 0xf7, 10, 11, 0xf4};
-  for (std::size_t k = 0; k < 6; ++k)
-    state.t[index][(k / 2) * 32 + (k % 2)] = data[k];
-}
-
 // The nt right operand: 2x3 i8 {{7, 8, 9}, {10, 11, 12}}.
 void poke_rhs_nt(tile_npu::State &state, std::size_t index) {
   for (std::size_t k = 0; k < 6; ++k)
@@ -92,71 +85,76 @@ TEST_CASE(mma_nt_acc) {
   check_eq(state.a[0][33], std::uint32_t{61}, "D[1,1] = 4 + 57");
 }
 
-TEST_CASE(bdot_nn_nt) {
-  Ram memory(CODE_BASE, 8);
+TEST_CASE(bdot_nt) {
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
-  // bA = {1, -2, 3}; nn over the 3x2 right Tile gives column dots
-  // {58, -48}, nt over the 2x3 right Tile gives row dots {18, 24}.
-  write_word(memory, CODE_BASE, make_mma(4, 0, 1, 2));
-  write_word(memory, CODE_BASE + 4, make_mma(6, 3, 1, 4));
-  sim.reset(CODE_BASE);
+  // bA = {1, -2, 3}; over the 2x3 right Tile this gives row dots {18, 24}.
+  load_one(sim, memory, make_mma(6, 3, 1, 4));
   auto &state = sim.state();
-  state.vc[0].dtype = DType::i32;
-  state.vc[0].len = 2;
   state.vc[3].dtype = DType::i32;
   state.vc[3].len = 2;
   state.bc[1].dtype = DType::i8;
   state.bc[1].len = 3;
-  tile_i8(state, 2, 3, 2);
   tile_i8(state, 4, 2, 3);
   state.b[1][0] = 1;
   state.b[1][1] = 0xfeu; // -2
   state.b[1][2] = 3;
-  poke_rhs_nn(state, 2);
   poke_rhs_nt(state, 4);
 
-  check_eq(sim.step().status, StepStatus::retired, "bdot.nn retires");
-  check_eq(state.v[0][0], std::uint32_t{58}, "vD[0]");
-  check_eq(hex(state.v[0][1]), hex(0xffffffd0u), "vD[1] = -48");
   check_eq(sim.step().status, StepStatus::retired, "bdot.nt retires");
   check_eq(state.v[3][0], std::uint32_t{18}, "vD[0]");
   check_eq(state.v[3][1], std::uint32_t{24}, "vD[1]");
 }
 
 TEST_CASE(bdot_acc) {
-  Ram memory(CODE_BASE, 8);
+  Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
-  // Same operands as bdot_nn_nt; the acc forms add into the old lanes.
-  write_word(memory, CODE_BASE, make_mma(5, 0, 1, 2));
-  write_word(memory, CODE_BASE + 4, make_mma(7, 3, 1, 4));
-  sim.reset(CODE_BASE);
+  // Same operands as bdot_nt; the acc form adds into the old lanes.
+  load_one(sim, memory, make_mma(7, 3, 1, 4));
   auto &state = sim.state();
-  state.vc[0].dtype = DType::i32;
-  state.vc[0].len = 2;
   state.vc[3].dtype = DType::i32;
   state.vc[3].len = 2;
   state.bc[1].dtype = DType::i8;
   state.bc[1].len = 3;
-  tile_i8(state, 2, 3, 2);
   tile_i8(state, 4, 2, 3);
   state.b[1][0] = 1;
   state.b[1][1] = 0xfeu; // -2
   state.b[1][2] = 3;
-  poke_rhs_nn(state, 2);
   poke_rhs_nt(state, 4);
-  state.v[0][0] = 100;
-  state.v[0][1] = 0x7fffffffu; // wraps on overflow
-  state.v[0][2] = 0x5a5a5a5au; // outside len, kept
   state.v[3][0] = 0xfffffff6u; // -10
   state.v[3][1] = 0;
+  state.v[3][2] = 0x5a5a5a5au; // outside len, kept
 
-  check_eq(sim.step().status, StepStatus::retired, "bdot.nn.acc retires");
-  check_eq(state.v[0][0], std::uint32_t{158}, "vD[0] = 100 + 58");
-  check_eq(hex(state.v[0][1]), hex(0x7fffffcfu), "vD[1] wraps: INT32_MAX - 48");
-  check_eq(hex(state.v[0][2]), hex(0x5a5a5a5au), "lane past len kept");
   check_eq(sim.step().status, StepStatus::retired, "bdot.nt.acc retires");
   check_eq(state.v[3][0], std::uint32_t{8}, "vD[0] = -10 + 18");
   check_eq(state.v[3][1], std::uint32_t{24}, "vD[1] = 0 + 24");
+  check_eq(hex(state.v[3][2]), hex(0x5a5a5a5au), "lane past len kept");
+}
+
+TEST_CASE(bdot_nt_tile_row) {
+  Ram memory(CODE_BASE, 8);
+  Simulator sim(memory);
+  // A = {{1,2,3},{4,-5,6}}, B = {{7,8,9},{10,11,12}} in N x K order.
+  // Row 1 dots to {42, 57}; the acc form then adds row 0's {50, 68}.
+  write_word(memory, CODE_BASE, make_mma(6, 0, 1, 2, true, 1));
+  write_word(memory, CODE_BASE + 4, make_mma(7, 0, 1, 2, true, 0));
+  sim.reset(CODE_BASE);
+  auto &state = sim.state();
+  state.vc[0].dtype = DType::i32;
+  state.vc[0].len = 2;
+  tile_i8(state, 1, 2, 3);
+  tile_i8(state, 2, 2, 3);
+  poke_lhs(state, 1);
+  poke_rhs_nt(state, 2);
+  state.v[0][0] = 0x5a5a5a5au;
+  state.v[0][1] = 0x5a5a5a5au;
+
+  check_eq(sim.step().status, StepStatus::retired, "bdot.nt retires");
+  check_eq(state.v[0][0], std::uint32_t{42}, "vD[0] from Tile row 1");
+  check_eq(state.v[0][1], std::uint32_t{57}, "vD[1] from Tile row 1");
+  check_eq(sim.step().status, StepStatus::retired, "bdot.nt.acc retires");
+  check_eq(state.v[0][0], std::uint32_t{92}, "vD[0] = 42 + 50");
+  check_eq(state.v[0][1], std::uint32_t{125}, "vD[1] = 57 + 68");
 }
 
 TEST_CASE(mma_rejects_invalid) {
@@ -198,15 +196,15 @@ TEST_CASE(mma_rejects_invalid) {
   check_eq(sim.step().status, StepStatus::invalid_configuration,
            "mma rejects a destination shape mismatch");
 
-  // bdot requires len(bA) == K.
-  load_one(sim, memory, make_mma(4, 0, 1, 2));
+  // bdot.nt requires len(bA) == K.
+  load_one(sim, memory, make_mma(6, 0, 1, 2));
   state.vc[0].dtype = DType::i32;
   state.vc[0].len = 2;
   state.bc[1].dtype = DType::i8;
   state.bc[1].len = 2;
-  tile_i8(state, 2, 3, 2);
+  tile_i8(state, 2, 2, 3);
   check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "bdot rejects a vector length mismatch");
+           "bdot.nt rejects a vector length mismatch");
 
   // bdot.nt requires len(vD) == rows(tB).
   load_one(sim, memory, make_mma(6, 0, 1, 2));
@@ -217,4 +215,22 @@ TEST_CASE(mma_rejects_invalid) {
   tile_i8(state, 2, 2, 3);
   check_eq(sim.step().status, StepStatus::invalid_configuration,
            "bdot.nt rejects a destination length mismatch");
+
+  // The Tile-row A source requires the selected row to be within rows(tA).
+  load_one(sim, memory, make_mma(6, 0, 1, 2, true, 2));
+  state.vc[0].dtype = DType::i32;
+  state.vc[0].len = 2;
+  tile_i8(state, 1, 2, 3);
+  tile_i8(state, 2, 2, 3);
+  check_eq(sim.step().status, StepStatus::invalid_configuration,
+           "bdot.nt rejects an out-of-range Tile row");
+
+  // The selected Tile row must have K columns.
+  load_one(sim, memory, make_mma(6, 0, 1, 2, true, 0));
+  state.vc[0].dtype = DType::i32;
+  state.vc[0].len = 2;
+  tile_i8(state, 1, 2, 2);
+  tile_i8(state, 2, 2, 3);
+  check_eq(sim.step().status, StepStatus::invalid_configuration,
+           "bdot.nt rejects a Tile-row K mismatch");
 }
