@@ -1,9 +1,9 @@
 #include "npu.inc"
 
 # Self-checking QNT image: programs configs and descriptors, then runs a
-# dynamic tquant (RNE + saturation, all-zero row -> scale +0.0), a tdequant
-# that consumes the tquant outputs, a vquant with an immediate scale lane,
-# and an external-scale tquant with distinct source and scale register
+# dynamic aquant (RNE + saturation, all-zero row -> scale +0.0), a tdequant
+# that consumes the aquant outputs, a vquant with an immediate scale lane,
+# and an external-scale aquant with distinct source and scale register
 # numbers. Results are stored back and compared word-wise. Ends with ebreak:
 # a0 = 0 pass, a0 = N identifies the failing check.
 #
@@ -52,14 +52,14 @@ _start:
     CFG_SETI  6, 0, 1, 2, 0
     CFG_SETI  6, 2, 1, 1, 0
 
-    # Stage 1 - tquant.rows.q8s32 t0, v0, a0 over
+    # Stage 1 - aquant.rows.q8s32 t0, v0, a0 over
     #   {127.0, -63.5}, {0.0, 0.0} -> t0 bytes {0x7F, 0xC0, 0, 0},
     #   v0 = {1.0, +0.0} (RNE(-63.5) = -64; the zero row divides by +0.0,
     #   giving NaN quotients that quantize to 0).
     lla       x3, src_m
     CFG_REG   3, 0, 0, 0, 3, 0
     ALOAD     0
-    TQUANT    0, 0, 0
+    AQUANT    0, 0, 0
     lla       x3, dstbuf
     CFG_REG   2, 0, 0, 0, 3, 0
     TSTORE    0
@@ -122,7 +122,7 @@ _start:
     li        x5, 0x3F800000     # 1.0
     bne       x4, x5, fail
 
-    # Stage 4 - tquant.rows.scale.q8s32 t0, a0, v3 over stage 1's input
+    # Stage 4 - aquant.rows.scale.q8s32 t0, a0, v3 over stage 1's input
     #   with scales {2.0, 1.0} -> bytes {64, -32, 0, 0} (RNE).
     #   Distinct source/scale numbers catch swapped macro operands;
     #   external scales must remain unchanged.
@@ -133,7 +133,7 @@ _start:
     VINSERT   3, 0, 5
     li        x5, 0x3F800000     # 1.0
     VINSERT   3, 1, 5
-    TQUANTX   0, 0, 3
+    AQUANTX   0, 0, 3
     TSTORE    0
     VSTORE    3
     lla       x3, dstbuf

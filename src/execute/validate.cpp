@@ -224,7 +224,7 @@ bool valid_vector_quant(const NpuRegister &dest, const NpuRegister &src, Registe
   return valid_matrix_quant<DestDomain, SrcDomain>(dest, src, scale) && index_in_range(index);
 }
 
-bool valid_structure(const TquantInstr &instr) {
+bool valid_structure(const AquantInstr &instr) {
   return instr.scale_source <= QntScaleSource::provided &&
          valid_matrix_quant<NpuDomain::tile, NpuDomain::acc>(instr.dest, instr.src, instr.scale);
 }

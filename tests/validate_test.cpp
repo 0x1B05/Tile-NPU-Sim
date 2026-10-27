@@ -22,6 +22,7 @@ using namespace tile_npu::test;
 
 namespace {
 
+using tile_npu::AquantInstr;
 using tile_npu::AreduceInstr;
 using tile_npu::BcastInstr;
 using tile_npu::BdotInstr;
@@ -74,7 +75,6 @@ using tile_npu::StepStatus;
 using tile_npu::SysInstr;
 using tile_npu::SysOp;
 using tile_npu::TdequantInstr;
-using tile_npu::TquantInstr;
 using tile_npu::VquantInstr;
 using tile_npu::VreduceArgmaxInstr;
 using tile_npu::VreduceInstr;
@@ -260,12 +260,12 @@ TEST_CASE(validate_rejects_bad_reduce) {
 }
 
 TEST_CASE(validate_rejects_bad_qnt) {
-  check_illegal(TquantInstr{.dest = T(0), .src = A(0), .scale = 32}, "tquant scale index 32");
-  check_illegal(TquantInstr{.dest = A(0), .src = T(0), .scale = 0}, "tquant destination domain");
+  check_illegal(AquantInstr{.dest = T(0), .src = A(0), .scale = 32}, "aquant scale index 32");
+  check_illegal(AquantInstr{.dest = A(0), .src = T(0), .scale = 0}, "aquant destination domain");
   check_illegal(
-      TquantInstr{
+      AquantInstr{
           .dest = T(0), .src = A(0), .scale = 0, .scale_source = static_cast<QntScaleSource>(2)},
-      "tquant scale source");
+      "aquant scale source");
   check_illegal(TdequantInstr{.dest = T(0), .src = A(0), .scale = 0},
                 "tdequant destination domain");
   check_illegal(VquantInstr{.dest = B(0), .src = B(1), .scale = 0, .index = ImmediateIndex{0}},

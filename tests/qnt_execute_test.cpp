@@ -42,7 +42,7 @@ void vec32_f32(tile_npu::State &state, std::size_t index, std::uint8_t len) {
 
 } // namespace
 
-TEST_CASE(qnt_tquant_dynamic) {
+TEST_CASE(qnt_aquant_dynamic) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // 2x2 f32 source: row0 {127.0, -63.5} -> amax 127.0, scale 1.0,
@@ -58,7 +58,7 @@ TEST_CASE(qnt_tquant_dynamic) {
   state.a[1][32] = as_u32(0.0f);
   state.a[1][33] = as_u32(-0.0f);
 
-  check_eq(sim.step().status, StepStatus::retired, "tquant.rows.q8s32 retires");
+  check_eq(sim.step().status, StepStatus::retired, "aquant.rows.q8s32 retires");
   check_eq(hex(state.t[0][0]), hex(0x7fu), "row0 col0 saturates at 127");
   check_eq(hex(state.t[0][1]), hex(0xc0u), "row0 col1 rounds to -64");
   check_eq(hex(state.t[0][32]), hex(0x00u), "row1 col0 NaN quotient -> 0");
@@ -67,7 +67,7 @@ TEST_CASE(qnt_tquant_dynamic) {
   check_eq(hex(state.v[0][1]), hex(0x00000000u), "row1 scale is +0.0");
 }
 
-TEST_CASE(qnt_tquant_nan_absmax) {
+TEST_CASE(qnt_aquant_nan_absmax) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // A NaN-only row uses the same absmax tree as areduce.rows.absmax: NaN
@@ -79,12 +79,12 @@ TEST_CASE(qnt_tquant_nan_absmax) {
   vec32_f32(state, 0, 1);
   state.a[1][0] = as_u32(std::nanf(""));
 
-  check_eq(sim.step().status, StepStatus::retired, "tquant NaN row retires");
+  check_eq(sim.step().status, StepStatus::retired, "aquant NaN row retires");
   check_eq(hex(state.t[0][0]), hex(0x00u), "NaN quotient quantizes to 0");
   check_eq(hex(state.v[0][0]), hex(0x00000000u), "NaN absmax yields a +0 scale");
 }
 
-TEST_CASE(qnt_tquant_single_negative) {
+TEST_CASE(qnt_aquant_single_negative) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // A single negative element uses the absmax tree leaf mapping: amax = 3,
@@ -96,12 +96,12 @@ TEST_CASE(qnt_tquant_single_negative) {
   vec32_f32(state, 0, 1);
   state.a[1][0] = as_u32(-3.0f);
 
-  check_eq(sim.step().status, StepStatus::retired, "tquant single negative retires");
+  check_eq(sim.step().status, StepStatus::retired, "aquant single negative retires");
   check_eq(hex(state.t[0][0]), hex(0x81u), "single negative quantizes to -127");
   check_eq(hex(state.v[0][0]), hex(as_u32(3.0f / 127.0f)), "single negative absmax scale");
 }
 
-TEST_CASE(qnt_tquant_external_scale) {
+TEST_CASE(qnt_aquant_external_scale) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // 1x3 f32 source {64.0, -33.0, 10.0} with external scale 0.5:
@@ -117,7 +117,7 @@ TEST_CASE(qnt_tquant_external_scale) {
   state.a[1][2] = as_u32(10.0f);
   state.v[0][0] = as_u32(0.5f);
 
-  check_eq(sim.step().status, StepStatus::retired, "tquant.rows.scale.q8s32 retires");
+  check_eq(sim.step().status, StepStatus::retired, "aquant.rows.scale.q8s32 retires");
   check_eq(hex(state.t[0][0]), hex(0x7fu), "col0 saturates at 127");
   check_eq(hex(state.t[0][1]), hex(0xbeu), "col1 is -66");
   check_eq(hex(state.t[0][2]), hex(0x14u), "col2 is 20");
@@ -188,7 +188,7 @@ TEST_CASE(qnt_rejects_invalid) {
   acc_f32(state, 1, 2, 2);
   vec32_f32(state, 0, 2);
   state.t[0][0] = 0xaau;
-  check_eq(sim.step().status, StepStatus::invalid_configuration, "tquant rejects a u8 destination");
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "aquant rejects a u8 destination");
   check_eq(hex(state.t[0][0]), hex(0xaau), "non-mutating");
 
   // vScale's length must equal the source row count.
@@ -197,7 +197,7 @@ TEST_CASE(qnt_rejects_invalid) {
   acc_f32(state, 1, 2, 2);
   vec32_f32(state, 0, 3);
   check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "tquant rejects a scale length mismatch");
+           "aquant rejects a scale length mismatch");
 
   // The immediate scale lane must fall inside vScale.
   load_one(sim, memory, make_qnt(NpuDomain::vec8, 0, 0, 1, 2, 4));
@@ -235,7 +235,7 @@ TEST_CASE(qnt_rounding_ignores_host_fp_mode) {
     std::fesetround(rounding_mode);
     const auto status = sim.step().status;
     std::fesetround(FE_TONEAREST); // restore before any check can bail out
-    check_eq(status, StepStatus::retired, "tquant retires");
+    check_eq(status, StepStatus::retired, "aquant retires");
     return std::array{state.t[0][0], state.t[0][1]};
   };
 

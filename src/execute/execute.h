@@ -60,7 +60,7 @@ ExecuteResult execute(const CvtInstr &instr, State &state);
 ExecuteResult execute(const AreduceInstr &instr, State &state);
 ExecuteResult execute(const VreduceInstr &instr, State &state);
 ExecuteResult execute(const VreduceArgmaxInstr &instr, State &state);
-ExecuteResult execute(const TquantInstr &instr, State &state);
+ExecuteResult execute(const AquantInstr &instr, State &state);
 ExecuteResult execute(const TdequantInstr &instr, State &state);
 ExecuteResult execute(const VquantInstr &instr, State &state);
 ExecuteResult execute(const MmaInstr &instr, State &state);

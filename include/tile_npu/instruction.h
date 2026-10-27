@@ -269,9 +269,9 @@ struct CvtInstr {
 
 enum class QntScaleSource : std::uint8_t { computed, provided };
 
-// tquant.rows[.scale].q8s32: per-row quantization with either a computed or
+// aquant.rows[.scale].q8s32: per-row quantization with either a computed or
 // externally provided Vec32 scale.
-struct TquantInstr {
+struct AquantInstr {
   NpuRegister dest{};      // Tile
   NpuRegister src{};       // Acc
   RegisterIndex scale = 0; // Vec32

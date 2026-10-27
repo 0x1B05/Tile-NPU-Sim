@@ -11,9 +11,9 @@ using namespace tile_npu::test;
 
 namespace {
 
+using tile_npu::AquantInstr;
 using tile_npu::NpuDomain;
 using tile_npu::TdequantInstr;
-using tile_npu::TquantInstr;
 using tile_npu::VquantInstr;
 
 } // namespace
@@ -24,23 +24,23 @@ TEST_CASE(qnt_decode) {
     // order is tD, vScale, aS; vScale5 is in [21:17].
     const auto word = 0x40020102u;
     const auto result = tile_npu::decode(word);
-    const auto &decoded = expect_npu<TquantInstr>(result, "tquant.rows.q8s32");
-    check_eq(decoded.dest.domain, NpuDomain::tile, "tquant destination domain");
-    check_eq(decoded.dest.index, 0, "tquant destination");
-    check_eq(decoded.src.domain, NpuDomain::acc, "tquant source domain");
-    check_eq(decoded.src.index, 2, "tquant source");
-    check_eq(decoded.scale, 1, "tquant scale");
-    check_eq(decoded.scale_source, tile_npu::QntScaleSource::computed, "tquant source mode");
+    const auto &decoded = expect_npu<AquantInstr>(result, "aquant.rows.q8s32");
+    check_eq(decoded.dest.domain, NpuDomain::tile, "aquant destination domain");
+    check_eq(decoded.dest.index, 0, "aquant destination");
+    check_eq(decoded.src.domain, NpuDomain::acc, "aquant source domain");
+    check_eq(decoded.src.index, 2, "aquant source");
+    check_eq(decoded.scale, 1, "aquant scale");
+    check_eq(decoded.scale_source, tile_npu::QntScaleSource::computed, "aquant source mode");
   }
   {
     const auto result = tile_npu::decode(make_qnt(NpuDomain::tile, 1, 3, 4, 5));
-    const auto &decoded = expect_npu<TquantInstr>(result, "tquant.rows.scale.q8s32");
-    check_eq(decoded.dest.domain, NpuDomain::tile, "tquant.scale destination domain");
-    check_eq(decoded.dest.index, 3, "tquant.scale destination");
-    check_eq(decoded.src.domain, NpuDomain::acc, "tquant.scale source domain");
-    check_eq(decoded.src.index, 4, "tquant.scale source");
-    check_eq(decoded.scale, 5, "tquant.scale scale");
-    check_eq(decoded.scale_source, tile_npu::QntScaleSource::provided, "tquant.scale source mode");
+    const auto &decoded = expect_npu<AquantInstr>(result, "aquant.rows.scale.q8s32");
+    check_eq(decoded.dest.domain, NpuDomain::tile, "aquant.scale destination domain");
+    check_eq(decoded.dest.index, 3, "aquant.scale destination");
+    check_eq(decoded.src.domain, NpuDomain::acc, "aquant.scale source domain");
+    check_eq(decoded.src.index, 4, "aquant.scale source");
+    check_eq(decoded.scale, 5, "aquant.scale scale");
+    check_eq(decoded.scale_source, tile_npu::QntScaleSource::provided, "aquant.scale source mode");
   }
   {
     const auto result = tile_npu::decode(make_qnt(NpuDomain::acc, 0, 6, 7, 8));
@@ -72,7 +72,7 @@ TEST_CASE(qnt_decode_rejects_reserved) {
       DecodeCase{"vquant external scale", make_qnt(NpuDomain::vec8, 1, 0, 0, 0)},
       DecodeCase{"dom2 11 reserved", make_qnt(NpuDomain::vec32, 0, 0, 0, 0)},
       // The matrix forms reserve IS and index5.
-      DecodeCase{"tquant IS", make_qnt(NpuDomain::tile, 0, 0, 0, 0, 0, true)},
+      DecodeCase{"aquant IS", make_qnt(NpuDomain::tile, 0, 0, 0, 0, 0, true)},
       DecodeCase{"tdequant index5", make_qnt(NpuDomain::acc, 0, 0, 0, 0, 1)},
   };
   expect_illegal(cases);

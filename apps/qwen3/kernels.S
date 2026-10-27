@@ -63,7 +63,7 @@ qwen3_quant_act:
     addi    t6, t6, -1
     bnez    t6, .Lqa_amax
     # v2 = absmax * (1/127): the uniform scale reduces into the len-1
-    # scratch v30, broadcasts back as tquantx's external scale, and leaves
+    # scratch v30, broadcasts back as aquantx's external scale, and leaves
     # the vector domain through a one-lane store.
     VREDUCE 1, 30, 0            # v30[0] = absmax
     li      t1, 0x3C010204      # f32 bits of 1/127
@@ -95,13 +95,13 @@ qwen3_quant_act:
     beqz    t4, .Lqa_q0
     li      t5, 1
     beq     t4, t5, .Lqa_q1
-    TQUANTX 4, 0, 2
+    AQUANTX 4, 0, 2
     j       .Lqa_next
 .Lqa_q0:
-    TQUANTX 2, 0, 2
+    AQUANTX 2, 0, 2
     j       .Lqa_next
 .Lqa_q1:
-    TQUANTX 3, 0, 2
+    AQUANTX 3, 0, 2
 .Lqa_next:
     addi    t4, t4, 1
     bltu    t4, t3, .Lqa_quant
@@ -323,7 +323,7 @@ qwen3_quant_rows:
     srli    t6, a1, 5
 .Lqr_quant:
     ALOAD   0
-    TQUANTX 0, 0, 0
+    AQUANTX 0, 0, 0
     TSTORE  0
     addi    t6, t6, -1
     bnez    t6, .Lqr_quant

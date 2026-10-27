@@ -77,10 +77,10 @@ std::optional<std::uint32_t> scale_lane(const IndexOperand &index, const State &
   return static_cast<std::uint32_t>(lane);
 }
 
-// tquant.rows[.scale].q8s32: per-row quantization of an f32 Acc into an i8
+// aquant.rows[.scale].q8s32: per-row quantization of an f32 Acc into an i8
 // Tile of the same shape; the dynamic form also writes each row's scale
 // into vScale.
-ExecuteResult tquant(const TquantInstr &instr, State &state) {
+ExecuteResult aquant(const AquantInstr &instr, State &state) {
   const auto &dst_config = state.tc[instr.dest.index];
   const auto &src_config = state.ac[instr.src.index];
   const auto &scale_config = state.vc[instr.scale];
@@ -160,7 +160,7 @@ ExecuteResult vquant(const VquantInstr &instr, State &state) {
 
 } // namespace
 
-ExecuteResult execute(const TquantInstr &instr, State &state) { return tquant(instr, state); }
+ExecuteResult execute(const AquantInstr &instr, State &state) { return aquant(instr, state); }
 
 ExecuteResult execute(const TdequantInstr &instr, State &state) { return tdequant(instr, state); }
 
