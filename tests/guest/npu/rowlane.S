@@ -1,8 +1,8 @@
 #include "npu.inc"
 
 # Self-checking ROW_MOVE/LANE_MOVE image: programs configs and descriptors,
-# then exercises row insert/extract between Tile <-> Vec8 and Acc <-> Vec32,
-# plus lane extract/insert/broadcast (immediate and scalar index forms).
+# then exercises Acc <-> Vec32 row insert/extract and lane
+# extract/insert/broadcast (immediate and scalar index forms).
 # Every stage stores results back to memory and checks them with scalar
 # loads. Ends with ebreak: a0 = 0 pass, a0 = N identifies the failing check.
 #
@@ -11,10 +11,6 @@
 
     .globl _start
 _start:
-    # tc0: dtype = i8 (0), rows = 2, cols = 4
-    CFG_SETI  5, 0, 0, 0, 0
-    CFG_SETI  5, 0, 1, 2, 0
-    CFG_SETI  5, 0, 2, 4, 0
     # bc0/bc1: dtype = i8 (0), len = 4
     CFG_SETI  6, 0, 0, 0, 0
     CFG_SETI  6, 0, 1, 4, 0
@@ -29,20 +25,17 @@ _start:
     CFG_SETI  6, 1, 1, 2, 0
     CFG_SETI  6, 1, 0, 2, 1
     CFG_SETI  6, 1, 1, 2, 1
-    # tm0: base = srcbuf, row_stride = 4, col_stride = 1
-    lla       x3, srcbuf
-    CFG_REG   2, 0, 0, 0, 3, 0
-    CFG_SETI  5, 2, 1, 4, 0
-    CFG_SETI  5, 2, 2, 1, 0
     # am0: base = srcbuf32, row_stride = 8, col_stride = 4
     lla       x3, srcbuf32
     CFG_REG   3, 0, 0, 0, 3, 0
     CFG_SETI  5, 3, 1, 8, 0
     CFG_SETI  5, 3, 2, 4, 0
-    # bm0/bm1: base = dstbuf, stride = 1
-    lla       x3, dstbuf
+    # bm0: base = srcbuf + 4; bm1: base = dstbuf; both stride = 1
+    lla       x3, srcbuf
+    addi      x3, x3, 4
     CFG_REG   2, 1, 0, 0, 3, 0
     CFG_SETI  6, 2, 1, 1, 0
+    lla       x3, dstbuf
     CFG_REG   2, 1, 0, 0, 3, 1
     CFG_SETI  6, 2, 1, 1, 1
     # vm0/vm1: base = dstbuf32, stride = 4
@@ -52,27 +45,11 @@ _start:
     CFG_REG   3, 1, 0, 0, 3, 1
     CFG_SETI  6, 3, 1, 4, 1
 
-    # textract.row b0, t0[1]: t0 = {1..8} (2x4), so b0 = {5, 6, 7, 8}.
-    TLOAD     0
-    TEXROW    0, 0, 1
-    BSTORE    0
+    # b0 = {5, 6, 7, 8} loaded from srcbuf + 4.
+    BLOAD     0
+    # bm0 now points at dstbuf for the store checks.
     lla       x3, dstbuf
-    FENCE_MEM
-    lwu       x4, 0(x3)
-    li        x5, 0x08070605
-    li        a0, 1
-    bne       x4, x5, fail
-
-    # tinsert.row t0[0], b0: row 0 becomes {5, 6, 7, 8} as well.
-    TINSROW   0, 0, 0
-    lla       x3, dstbuf2
-    CFG_REG   2, 0, 0, 0, 3, 0   # tm0 base = dstbuf2 (strides still 4/1)
-    TSTORE    0
-    FENCE_MEM
-    lwu       x4, 0(x3)
-    li        x5, 0x08070605
-    li        a0, 2
-    bne       x4, x5, fail
+    CFG_REG   2, 1, 0, 0, 3, 0
 
     # bbroadcast b1, b0[2]: every effective lane takes b0[2] = 7.
     BBROADCAST 1, 0, 2
@@ -81,14 +58,14 @@ _start:
     FENCE_MEM
     lwu       x4, 0(x3)
     li        x5, 0x07070707
-    li        a0, 3
+    li        a0, 1
     bne       x4, x5, fail
 
     # bextract x5, b0[1] = 6; binsert b0[x9], x6 with x9 = 3, x6 = 0x1FF
     # writes the low 8 bits (0xFF) into lane 3.
     BEXTRACT  5, 0, 1
     li        x7, 6
-    li        a0, 4
+    li        a0, 2
     bne       x5, x7, fail
     li        x6, 0x1FF
     li        x9, 3
@@ -109,7 +86,7 @@ _start:
     FENCE_MEM
     lwu       x4, 0(x3)
     li        x5, 3
-    li        a0, 5
+    li        a0, 3
     bne       x4, x5, fail
     lwu       x4, 4(x3)
     li        x5, 4
@@ -123,7 +100,7 @@ _start:
     FENCE_MEM
     lwu       x4, 0(x3)
     li        x5, 3
-    li        a0, 6
+    li        a0, 4
     bne       x4, x5, fail
     lwu       x4, 4(x3)
     li        x5, 4
@@ -133,7 +110,7 @@ _start:
     # the low 32 bits (0xFFFFFFFF) into lane 1; vbroadcast v1, v0[0] = {3, 3}.
     VEXTRACT  5, 0, 0
     li        x7, 3
-    li        a0, 7
+    li        a0, 5
     bne       x5, x7, fail
     li        x6, -1
     li        x9, 1
@@ -164,5 +141,4 @@ srcbuf:   .byte 1, 2, 3, 4, 5, 6, 7, 8
     .balign 4
 srcbuf32: .word 1, 2, 3, 4
 dstbuf:   .space 4
-dstbuf2:  .space 8
 dstbuf32: .space 16

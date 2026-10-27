@@ -87,24 +87,6 @@ void check_lane_cases(const std::array<LaneCase, N> &cases) {
 
 TEST_CASE(row_move_decode) {
   constexpr std::array cases{
-      // Anchor word computed by hand from the encoding figure.
-      RowCase{.name = "tinsert.row t0[3], b5",
-              .word = 0x30003281u,
-              .op = RowOp::insert,
-              .matrix_domain = NpuDomain::tile,
-              .matrix = 0,
-              .vector_domain = NpuDomain::vec8,
-              .vector = 5,
-              .index = 3},
-      RowCase{.name = "textract.row b2, t1[x7]",
-              .word = make_row_move(false, true, 1, 7, 1, 2),
-              .op = RowOp::extract,
-              .matrix_domain = NpuDomain::tile,
-              .matrix = 1,
-              .vector_domain = NpuDomain::vec8,
-              .vector = 2,
-              .index = 7,
-              .index_is_scalar = true},
       RowCase{.name = "ainsert.row a31[0], v0",
               .word = make_row_move(true, false, 0, 0, 0, 31),
               .op = RowOp::insert,
@@ -171,11 +153,14 @@ TEST_CASE(lane_move_decode) {
 
 TEST_CASE(row_lane_decode_rejects_reserved) {
   constexpr std::array cases{
+      // ROW_MOVE requires EW = 1; EW = 0 encodings are reserved.
+      DecodeCase{"row EW 0 insert", make_row_move(false, false, 0, 0, 0, 0)},
+      DecodeCase{"row EW 0 extract", make_row_move(false, false, 1, 0, 0, 0)},
       // sel3 bit 27 and reserved5 must be 0.
-      DecodeCase{"row sel3 bit27", make_row_move(false, false, 0, 0, 0, 0) | (1u << 27)},
+      DecodeCase{"row sel3 bit27", make_row_move(true, false, 0, 0, 0, 0) | (1u << 27)},
       DecodeCase{"lane reserved5", make_lane_move(true, false, 0, 0, 0, 0) | (1u << 17)},
       // ROW_MOVE has only funct3 000/001; LANE_MOVE stops at 010.
-      DecodeCase{"row funct3 010", make_row_move(false, false, 2, 0, 0, 0)},
+      DecodeCase{"row funct3 010", make_row_move(true, false, 2, 0, 0, 0)},
       DecodeCase{"lane funct3 011", make_lane_move(false, false, 3, 0, 0, 0)},
   };
   expect_illegal(cases);

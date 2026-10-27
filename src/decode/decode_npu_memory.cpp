@@ -89,19 +89,20 @@ DecodeResult decode_move_copy(std::uint32_t word) {
 // ROW_MOVE (R4): major4 = 0011, q = 01.
 // 31    28  27  26   25  24    22 21       17 16      12 11       7 6        2 1   0
 // [major4] [0] [EW] [IS] [funct3] [reserved5] [ index5 ] [   S5   ] [   D5   ] [ q ]
-// EW: 0 = 8-bit Tile/Vec8, 1 = 32-bit Acc/Vec32.
+// EW: must be 1 (32-bit Acc/Vec32); 0 is reserved.
 // IS: 0 = immediate row, 1 = Scalar register in index5.
 // funct3: 000 insert.row (vector S5 -> matrix D5),
 //         001 extract.row (matrix S5 -> vector D5); 010..111 reserved.
 template <RowOp Op> DecodeResult decode_row_move(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
-  const auto domains = paired_domains(f.sel3);
+  constexpr auto MATRIX_DOMAIN = NpuDomain::acc;
+  constexpr auto VECTOR_DOMAIN = NpuDomain::vec32;
   constexpr bool insert = Op == RowOp::insert;
   const auto matrix_index = insert ? f.dest : f.src1;
   return DecodedNpuInstr{RowInstr{
       .op = Op,
-      .matrix = {.domain = domains.matrix, .index = matrix_index},
-      .vector = {.domain = domains.vector, .index = insert ? f.src1 : f.dest},
+      .matrix = {.domain = MATRIX_DOMAIN, .index = matrix_index},
+      .vector = {.domain = VECTOR_DOMAIN, .index = insert ? f.src1 : f.dest},
       .index = decode_index(f.src2, (f.sel3 & 1) != 0),
   }};
 }

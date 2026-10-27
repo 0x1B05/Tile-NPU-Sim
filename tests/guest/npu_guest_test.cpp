@@ -243,9 +243,9 @@ TEST_CASE(npu_guest_init) {
 }
 
 TEST_CASE(npu_guest_rowlane) {
-  // tests/guest/npu/rowlane.S exercises row insert/extract and lane
-  // extract/insert/broadcast with store-back checks. It reaches ebreak with
-  // a0 = 0 on success; a failing check reports its stage in a0.
+  // tests/guest/npu/rowlane.S exercises Acc <-> Vec32 row insert/extract and
+  // lane extract/insert/broadcast with store-back checks. It reaches ebreak
+  // with a0 = 0 on success; a failing check reports its stage in a0.
   check_guest_image("rowlane", 1024);
 }
 

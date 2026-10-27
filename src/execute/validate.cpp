@@ -120,8 +120,8 @@ bool valid_structure(const RowInstr &instr) {
   switch (instr.op) {
   case RowOp::insert:
   case RowOp::extract:
-    return is_domains_paired(instr.matrix.domain, instr.vector.domain) && in_range(instr.matrix) &&
-           in_range(instr.vector) && index_in_range(instr.index);
+    return instr.matrix.domain == NpuDomain::acc && instr.vector.domain == NpuDomain::vec32 &&
+           in_range(instr.matrix) && in_range(instr.vector) && index_in_range(instr.index);
   default: return false;
   }
 }

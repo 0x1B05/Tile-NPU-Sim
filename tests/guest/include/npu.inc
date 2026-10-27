@@ -305,20 +305,12 @@
 # ROW_MOVE (R4), mirroring NpuR4 in src/decode/encoding.h:
 #   [31:28] major4 = 3  [27] 0  [26] EW  [25] IS  [24:22] funct3
 #   [21:17] reserved(0)  [16:12] index5  [11:7] S5  [6:2] D5  [1:0] q = 01
-# EW = 0: Tile <-> Vec8; EW = 1: Acc <-> Vec32.
+# EW must be 1 (Acc <-> Vec32); EW = 0 is reserved.
 # funct3: 0 = insert.row (D5 = matrix, S5 = vector),
 #         1 = extract.row (D5 = vector, S5 = matrix).
 # IS = 0: index5 is an immediate row number; IS = 1: index5 names xS.
 .macro ROW_MOVE ew, is, funct3, index5, s5, d5
     .word ((3 << 28) | (\ew << 26) | (\is << 25) | (\funct3 << 22) | (\index5 << 12) | (\s5 << 7) | (\d5 << 2) | 1)
-.endm
-
-.macro TINSROW d5, idx, s5
-    ROW_MOVE 0, 0, 0, \idx, \s5, \d5
-.endm
-
-.macro TEXROW d5, s5, idx
-    ROW_MOVE 0, 0, 1, \idx, \s5, \d5
 .endm
 
 .macro AINSROW d5, idx, s5

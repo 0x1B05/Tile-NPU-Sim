@@ -90,8 +90,8 @@ enum class RowOp : std::uint8_t { insert, extract };
 
 struct RowInstr {
   RowOp op = RowOp::insert;
-  NpuRegister matrix{}; // dest for insert, src for extract
-  NpuRegister vector{}; // src for insert, dest for extract
+  NpuRegister matrix{}; // Acc; dest for insert, src for extract
+  NpuRegister vector{}; // Vec32; src for insert, dest for extract
   IndexOperand index = ImmediateIndex{};
 };
 

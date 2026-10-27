@@ -180,9 +180,13 @@ TEST_CASE(validate_rejects_bad_move) {
 }
 
 TEST_CASE(validate_rejects_bad_row_move) {
-  check_illegal(RowInstr{RowOp::insert, T(0), V(0), ImmediateIndex{0}}, "tile paired with vec32");
-  check_illegal(RowInstr{RowOp::insert, T(32), B(0), ImmediateIndex{0}}, "matrix index 32");
-  check_illegal(RowInstr{static_cast<RowOp>(2), T(0), B(0), ImmediateIndex{0}}, "reserved op");
+  check_illegal(RowInstr{RowOp::insert, T(0), B(0), ImmediateIndex{0}}, "tile/vec8 row move");
+  check_illegal(RowInstr{RowOp::insert, A(0), B(0), ImmediateIndex{0}}, "mismatched vector domain");
+  check_illegal(RowInstr{RowOp::extract, T(0), V(0), ImmediateIndex{0}},
+                "mismatched matrix domain");
+  check_illegal(RowInstr{RowOp::insert, A(32), V(0), ImmediateIndex{0}}, "matrix index 32");
+  check_illegal(RowInstr{RowOp::insert, A(0), V(32), ImmediateIndex{0}}, "vector index 32");
+  check_illegal(RowInstr{static_cast<RowOp>(2), A(0), V(0), ImmediateIndex{0}}, "reserved op");
 }
 
 TEST_CASE(validate_rejects_bad_lane_move) {

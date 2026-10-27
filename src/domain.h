@@ -23,22 +23,6 @@ inline constexpr bool is_vector_domain(NpuDomain domain) {
   return domain == NpuDomain::vec8 || domain == NpuDomain::vec32;
 }
 
-inline constexpr bool is_matrix_domain(NpuDomain domain) {
-  return domain == NpuDomain::tile || domain == NpuDomain::acc;
-}
-
-inline constexpr NpuDomain paired_vector_domain(NpuDomain matrix) {
-  switch (matrix) {
-  case NpuDomain::tile: return NpuDomain::vec8;
-  case NpuDomain::acc: return NpuDomain::vec32;
-  default: return NpuDomain::vec8;
-  }
-}
-
-inline constexpr bool is_domains_paired(NpuDomain matrix, NpuDomain vector) {
-  return is_matrix_domain(matrix) && paired_vector_domain(matrix) == vector;
-}
-
 template <NpuDomain Domain> auto &domain_regs(State &state) {
   if constexpr (Domain == NpuDomain::tile) {
     return state.t;

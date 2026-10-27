@@ -14,11 +14,12 @@ namespace tile_npu {
 namespace {
 
 // Both directions copy a full effective row: vector length must equal matrix columns.
-template <NpuDomain Domain, RowOp Op> ExecuteResult row_copy(const RowInstr &instr, State &state) {
-  constexpr auto VECTOR_DOMAIN = paired_vector_domain(Domain);
-  auto &matrix_regs = domain_regs<Domain>(state);
+template <RowOp Op> ExecuteResult row_copy(const RowInstr &instr, State &state) {
+  constexpr auto MATRIX_DOMAIN = NpuDomain::acc;
+  constexpr auto VECTOR_DOMAIN = NpuDomain::vec32;
+  auto &matrix_regs = domain_regs<MATRIX_DOMAIN>(state);
   auto &vector_regs = domain_regs<VECTOR_DOMAIN>(state);
-  const auto &matrix_configs = domain_configs<Domain>(state);
+  const auto &matrix_configs = domain_configs<MATRIX_DOMAIN>(state);
   const auto &vector_configs = domain_configs<VECTOR_DOMAIN>(state);
 
   const auto &mconfig = matrix_configs[instr.matrix.index];
@@ -99,23 +100,14 @@ ExecuteResult lane_broadcast(const LaneBroadcastInstr &instr, State &state) {
   return {.status = StepStatus::retired};
 }
 
-template <RowOp Op> ExecuteResult dispatch_row_copy(const RowInstr &instr, State &state) {
-  switch (instr.matrix.domain) {
-  case NpuDomain::tile: return row_copy<NpuDomain::tile, Op>(instr, state);
-  case NpuDomain::acc: return row_copy<NpuDomain::acc, Op>(instr, state);
-  default: break; // ROW_MOVE has no vector-matrix encoding
-  }
-  unreachable("execute_row_move without a matrix operand");
-}
-
 } // namespace
 
-// The Tile <-> Vec8 and Acc <-> Vec32 pairings are part of the structural
-// validation at execute_npu.
+// ROW_MOVE only pairs Acc with Vec32; the structural validation rejects any
+// other domain combination.
 ExecuteResult execute(const RowInstr &instr, State &state) {
   switch (instr.op) {
-  case RowOp::insert: return dispatch_row_copy<RowOp::insert>(instr, state);
-  case RowOp::extract: return dispatch_row_copy<RowOp::extract>(instr, state);
+  case RowOp::insert: return row_copy<RowOp::insert>(instr, state);
+  case RowOp::extract: return row_copy<RowOp::extract>(instr, state);
   default: break;
   }
   unreachable("execute_row_move with an unknown operation");
