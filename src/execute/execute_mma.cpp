@@ -22,9 +22,7 @@ constexpr std::int32_t i8_value(std::uint8_t value) {
 
 constexpr bool is_accumulate(MmaOp op) { return op == MmaOp::nt_acc; }
 
-constexpr bool is_nt(BdotOp op) { return op == BdotOp::nt_zero || op == BdotOp::nt_acc; }
-
-constexpr bool is_accumulate(BdotOp op) { return op == BdotOp::nn_acc || op == BdotOp::nt_acc; }
+constexpr bool is_accumulate(VmmaOp op) { return op == VmmaOp::nt_acc; }
 
 // The right operand is stored N x K: row j is contiguous in K, so the inner
 // loop accumulates one output element with wrap32 addition.
@@ -89,30 +87,29 @@ ExecuteResult mma(const MmaInstr &instr, State &state) {
   return {.status = StepStatus::retired};
 }
 
-// bdot.{nn,nt}[.acc].i8.i32: vD[j] = dot(bA, tB column j) for nn,
-//                                    dot(bA, tB row j) for nt;
-// acc adds the i32 partial into the existing lane value.
-ExecuteResult bdot(const BdotInstr &instr, State &state) {
+// vmma.nt.zero / vmma.nt.acc.i8.i32: vD[j] = dot(tA[row], tB row j); acc adds
+// the i32 partial into the existing lane.
+ExecuteResult vmma(const VmmaInstr &instr, State &state) {
   const auto &dst_config = state.vc[instr.dest.index];
-  const auto &lhs_config = state.bc[instr.src_a.index];
+  const auto &lhs_config = state.tc[instr.src_a.index];
   const auto &rhs_config = state.tc[instr.src_b.index];
   if (!valid_config_of(dst_config, DType::i32) || !valid_config_of(lhs_config, DType::i8) ||
       !valid_config_of(rhs_config, DType::i8)) {
     return config_error();
   }
-  const bool nt = is_nt(instr.op);
-  const auto k_size = nt ? rhs_config.cols : rhs_config.rows;
-  const auto n_size = nt ? rhs_config.rows : rhs_config.cols;
-  if (lhs_config.len != k_size || dst_config.len != n_size) {
+  const auto k_size = rhs_config.cols;
+  const auto n_size = rhs_config.rows;
+  if (dst_config.len != n_size || lhs_config.cols != k_size || instr.row >= lhs_config.rows) {
     return config_error();
   }
+
+  const auto *lhs = state.t[instr.src_a.index].data() + std::size_t{instr.row} * MATRIX_EXTENT;
   auto rhs = matrix_view(std::as_const(state.t[instr.src_b.index]));
-  const auto &lhs = state.b[instr.src_a.index];
   auto &dst = state.v[instr.dest.index];
   for (std::size_t j = 0; j < n_size; ++j) {
     std::int32_t sum = 0;
     for (std::size_t k = 0; k < k_size; ++k) {
-      sum += i8_product(lhs[k], nt ? rhs.at(j, k) : rhs.at(k, j));
+      sum += i8_product(lhs[k], rhs.at(j, k));
     }
     const auto partial = std::bit_cast<std::uint32_t>(sum);
     dst[j] = is_accumulate(instr.op) ? dst[j] + partial : partial;
@@ -124,6 +121,6 @@ ExecuteResult bdot(const BdotInstr &instr, State &state) {
 
 ExecuteResult execute(const MmaInstr &instr, State &state) { return mma(instr, state); }
 
-ExecuteResult execute(const BdotInstr &instr, State &state) { return bdot(instr, state); }
+ExecuteResult execute(const VmmaInstr &instr, State &state) { return vmma(instr, state); }
 
 } // namespace tile_npu

@@ -129,6 +129,56 @@ qwen3_quant_act:
 # nothing between the two calls may clobber them. Cross-tile accumulation runs
 # in an i32 memory buffer (qwen3_accbuf). n % 32 == 0, 32 | k, k <= 3072.
 # ---------------------------------------------------------------------------
+
+# Per-panel n-block loop. tile_a names the activation panel, which must be a
+# compile-time register number because vmma.nt encodes tA and its row in
+# the instruction word. One expansion per panel keeps the loop body free of a
+# runtime Tile->Tile copy.
+.macro Q3_MATVEC_NBLOCK tile_a
+    # t4 = valid activation rows in this panel: min(32, k/32 - panel*32)
+    srli    t4, a5, 5
+    slli    t5, s5, 5
+    sub     t4, t4, t5
+    li      t5, 32
+    bltu    t4, t5, 1f
+    mv      t4, t5
+1:
+    srli    s3, a4, 5           # n/32 blocks
+    li      s2, 0
+2:
+    # tm1 base = w + (nb*kblocks + panel*32)*1024; advance one kblock per
+    # loaded tile, since the tiled layout is [nblock][kblock][32][32].
+    srli    t0, a5, 5
+    mul     t0, s2, t0
+    slli    t0, t0, 10
+    add     t0, a0, t0
+    slli    t1, s5, 15
+    add     t0, t0, t1
+    li      t1, 1024
+    la      t2, qwen3_accbuf
+    slli    t3, s2, 7
+    add     t2, t2, t3
+    SETX    SEL_VM, 1, CF_BASE, 4, X_T2
+    beqz    s5, 3f
+    VLOAD   4                   # continue accumulation across panels
+    j       4f
+3:
+    VFILL   4, 0
+4:
+    .irp R,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
+    li      t5, \R
+    bgeu    t5, t4, 5f
+    SETX    SEL_TM, 0, CF_BASE, 1, X_T0
+    TLOAD   1
+    VMMA_NT_ACC 4, \tile_a, \R, 1
+    add     t0, t0, t1
+    .endr
+5:
+    VSTORE  4
+    addi    s2, s2, 1
+    bltu    s2, s3, 2b
+.endm
+
     .text
     .globl qwen3_matvec_q
 qwen3_matvec_q:
@@ -170,71 +220,23 @@ qwen3_matvec_q:
     SETIV   SEL_VM, CF_STRIDE, 4, 8
     SETIV   SEL_VM, CF_VFLAGS, 1, 8
 
-    # per panel: texrows once; per n-block: tload/bdot/vadd over the panel's
-    # valid activation rows (k/32 per panel) into accbuf
+    # per panel: accumulate the panel's valid activation rows (k/32 per
+    # panel) directly from the resident Tile, one static tA per panel.
     addi    s4, a5, 1023
     srli    s4, s4, 10          # panels
     li      s5, 0
 .Lmv_panel:
-    beqz    s5, .Lmv_tex0
+    beqz    s5, .Lmv_panel0
     li      t5, 1
-    beq     s5, t5, .Lmv_tex1
-    .irp R,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
-    TEXROW  \R, 4, \R
-    .endr
-    j       .Lmv_texdone
-.Lmv_tex0:
-    .irp R,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
-    TEXROW  \R, 2, \R
-    .endr
-    j       .Lmv_texdone
-.Lmv_tex1:
-    .irp R,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
-    TEXROW  \R, 3, \R
-    .endr
-.Lmv_texdone:
-    # t4 = valid activation rows in this panel: min(32, k/32 - panel*32)
-    srli    t4, a5, 5
-    slli    t5, s5, 5
-    sub     t4, t4, t5
-    li      t5, 32
-    bltu    t4, t5, 1f
-    mv      t4, t5
-1:
-    srli    s3, a4, 5           # n/32 blocks
-    li      s2, 0
-.Lmv_nblock:
-    # tm1 base = w + (nb*kblocks + panel*32)*1024; advance one kblock per
-    # loaded tile, since the tiled layout is [nblock][kblock][32][32].
-    srli    t0, a5, 5
-    mul     t0, s2, t0
-    slli    t0, t0, 10
-    add     t0, a0, t0
-    slli    t1, s5, 15
-    add     t0, t0, t1
-    li      t1, 1024
-    la      t2, qwen3_accbuf
-    slli    t3, s2, 7
-    add     t2, t2, t3
-    SETX    SEL_VM, 1, CF_BASE, 4, X_T2
-    beqz    s5, .Lmv_fresh
-    VLOAD   4                   # continue accumulation across panels
-    j       .Lmv_inner
-.Lmv_fresh:
-    VFILL   4, 0
-.Lmv_inner:
-    .irp R,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
-    li      t5, \R
-    bgeu    t5, t4, .Lmv_inner_done
-    SETX    SEL_TM, 0, CF_BASE, 1, X_T0
-    TLOAD   1
-    BDOT_NT_ACC 4, \R, 1
-    add     t0, t0, t1
-    .endr
-.Lmv_inner_done:
-    VSTORE  4
-    addi    s2, s2, 1
-    bltu    s2, s3, .Lmv_nblock
+    beq     s5, t5, .Lmv_panel1
+    Q3_MATVEC_NBLOCK 4
+    j       .Lmv_panel_done
+.Lmv_panel0:
+    Q3_MATVEC_NBLOCK 2
+    j       .Lmv_panel_done
+.Lmv_panel1:
+    Q3_MATVEC_NBLOCK 3
+.Lmv_panel_done:
     addi    s5, s5, 1
     bltu    s5, s4, .Lmv_panel
 

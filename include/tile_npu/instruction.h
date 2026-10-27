@@ -125,18 +125,17 @@ struct MmaInstr {
   NpuRegister src_b{}; // Tile.
 };
 
-enum class BdotOp : std::uint8_t {
-  nn_zero,
-  nn_acc,
+enum class VmmaOp : std::uint8_t {
   nt_zero,
   nt_acc,
 };
 
-struct BdotInstr {
-  BdotOp op = BdotOp::nn_zero;
+struct VmmaInstr {
+  VmmaOp op = VmmaOp::nt_zero;
   NpuRegister dest{};  // Vec32.
-  NpuRegister src_a{}; // Vec8.
+  NpuRegister src_a{}; // Tile; the selected row is the vector operand.
   NpuRegister src_b{}; // Tile.
+  std::uint8_t row = 0;
 };
 
 enum class EbinOp : std::uint8_t {
