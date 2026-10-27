@@ -1,6 +1,6 @@
 #include "npu.inc"
 
-# Self-checking MMA_BDOT image: programs configs and descriptors, loads a
+# Self-checking MMA image: programs configs and descriptors, loads a
 # shared 2x3 left Tile and a 2x3 right Tile in N x K order, then runs
 # mma.nt.zero, mma.nt.acc (accumulating onto the first result), and the
 # Tile-row tdot.nt and tdot.nt.acc forms over the same left Tile. Results are

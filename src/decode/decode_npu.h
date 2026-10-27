@@ -26,7 +26,7 @@ DecodeResult decode_er4(std::uint32_t word);
 DecodeResult decode_emask(std::uint32_t word);
 
 // Numeric decoders.
-DecodeResult decode_mma_bdot(std::uint32_t word);
+DecodeResult decode_mma(std::uint32_t word);
 DecodeResult decode_cvt(std::uint32_t word);
 DecodeResult decode_areduce(std::uint32_t word);
 DecodeResult decode_vreduce(std::uint32_t word);

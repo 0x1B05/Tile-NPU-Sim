@@ -4,7 +4,7 @@
 
 namespace tile_npu::test {
 
-// Shared MMA_BDOT instruction word builder for the mma test files; the field
+// Shared MMA instruction word builder for the mma test files; the field
 // layout mirrors encoding::NpuR4:
 //   [31:28] major4 = 0000  [27:25] reserved3  [24:22] funct3
 //   [21:17] row5  [16:12] B5 (tB)  [11:7] A5 (tA)  [6:2] D5 (aD/vD)

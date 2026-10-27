@@ -141,12 +141,12 @@ DecodeResult decode_qnt(std::uint32_t word) {
   }
 }
 
-// MMA_BDOT (R4): major4 = 0000, q = 10.
+// MMA (R4): major4 = 0000, q = 10.
 // 31    28 27       25 24    22 21       17 16      12 11       7 6        2 1   0
 // [major4] [reserved3] [funct3] [  row5  ] [   B5   ] [   A5   ] [   D5   ] [ q ]
 // funct3 = {000 mma.zero, 001 mma.acc, 010 tdot.zero, 011 tdot.acc};
 // 100..111 are reserved. row5 selects the tdot.nt Tile A row; mma requires 0.
-DecodeResult decode_mma_bdot(std::uint32_t word) {
+DecodeResult decode_mma(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto make_mma = [&](MmaOp op) -> DecodeResult {
     if (f.arg != 0) return DecodeError::illegal;
