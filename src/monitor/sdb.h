@@ -7,10 +7,6 @@
 
 namespace tile_npu::monitor {
 
-// Human-readable description of a stopped step, including the decoded
-// instruction word and fault address when present.
-std::string halt_message(const StepResult &result);
-
 void sdb_loop(Simulator &sim, AddressSpace &memory);
 
 } // namespace tile_npu::monitor

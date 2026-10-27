@@ -47,6 +47,10 @@ struct Options {
 // does not retire and returns it, or until the step budget is spent.
 std::optional<StepResult> npu_exec(Simulator &sim, std::uint64_t step_limit);
 
+// Human-readable description of a stopped step, including the decoded
+// instruction word and fault address when present.
+std::string halt_message(const StepResult &result);
+
 // An image argument is "path" (loaded at the entry address) or
 // "path@0xADDR" (loaded at ADDR). A dump range is "path@0xADDR:0xSIZE".
 bool parse_image(std::string_view arg, Image &image);

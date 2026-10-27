@@ -98,7 +98,7 @@ def run_once(cmd):
     returncode = proc.wait()
     stderr = proc.stderr.read().decode(errors="replace") if proc.stderr is not None else ""
     if returncode != 0:
-        raise SystemExit(f"bench: sim_run exited with {returncode}: {stderr.strip()}")
+        raise SystemExit(f"bench: simulator exited with {returncode}: {stderr.strip()}")
     if t_prompt is None or t_generated is None or t_first_token is None or not tokens:
         raise SystemExit("bench: incomplete serial output")
 
@@ -164,7 +164,7 @@ def build_parser():
     parser.add_argument("--prompt-out", type=Path, default=Path("build/apps/qwen3/bench_prompt.bin"))
     parser.add_argument("--tokenizer", type=Path, default=Path("external/qwen3/tokenizer.json"))
     parser.add_argument("--max-pos", type=int)
-    parser.add_argument("--sim-run", type=Path, required=True, help="sim_run executable")
+    parser.add_argument("--sim-run", type=Path, required=True, help="simulator executable")
     parser.add_argument("--app", type=Path, required=True, help="qwen3 guest binary")
     parser.add_argument(
         "--model", type=Path, default=Path("build/apps/qwen3/model.q3b"), help="Q3B model blob"
@@ -172,7 +172,7 @@ def build_parser():
     parser.add_argument("--memory-mib", type=int, default=1024)
     parser.add_argument("--runs", type=int, default=3)
     parser.add_argument("--warmup", type=int, default=1)
-    parser.add_argument("--cpu", type=int, help="pin sim_run with taskset -c CPU")
+    parser.add_argument("--cpu", type=int, help="pin the simulator with taskset -c CPU")
     parser.add_argument("--json", type=Path, help="write the median and per-run metrics as JSON")
     return parser
 

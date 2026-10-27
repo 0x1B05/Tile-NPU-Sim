@@ -82,56 +82,54 @@ target("qwen3_compile_commands", function()
 	end)
 end)
 
-if has_config("monitor") then
-	target("qwen3_run", function()
-		set_kind("phony")
-		set_default(false)
-		add_deps("qwen3_app", "sim_run")
-		on_run(function(target)
-			import("core.base.option")
-			import("lib.detect.find_program")
-			local args = option.get("arguments") or {}
-			if args[1] == "--" then
-				table.remove(args, 1)
-			end
-			local prompt = args[1]
-			if not prompt then
-				raise('usage: xmake run qwen3_run "prompt" [model]')
-			end
-			local python = find_program("python3")
-			if not python then
-				raise("python3 is required to run the Qwen3 app")
-			end
-			local app = path.join(app_bindir, "qwen3.bin")
-			local sim_run = target:dep("sim_run"):targetfile()
-			if not os.isfile(app) or not os.isfile(sim_run) then
-				raise("run `xmake build qwen3_run` before `xmake run qwen3_run`")
-			end
-			local model = path.absolute(args[2] or path.join(app_bindir, "model.q3b"), project_root)
-			if not os.isfile(model) then
-				raise(
-					"model blob not found: "
-						.. model
-						.. "; run `python3 scripts/qwen3/convert.py real external/qwen3 "
-						.. model
-						.. "` or pass an existing model as the second argument"
-				)
-			end
-			os.execv(python, {
-				path.join(project_root, "scripts", "qwen3", "run.py"),
-				"--sim-run",
-				sim_run,
-				"--app",
-				app,
-				"--model",
-				model,
-				"--prompt-out",
-				path.join(app_bindir, "prompt.bin"),
-				"--tokenizer",
-				path.join(project_root, "external", "qwen3", "tokenizer.json"),
-				"--",
-				prompt,
-			})
-		end)
+target("qwen3_run", function()
+	set_kind("phony")
+	set_default(false)
+	add_deps("qwen3_app", "sim")
+	on_run(function(target)
+		import("core.base.option")
+		import("lib.detect.find_program")
+		local args = option.get("arguments") or {}
+		if args[1] == "--" then
+			table.remove(args, 1)
+		end
+		local prompt = args[1]
+		if not prompt then
+			raise('usage: xmake run qwen3_run "prompt" [model]')
+		end
+		local python = find_program("python3")
+		if not python then
+			raise("python3 is required to run the Qwen3 app")
+		end
+		local app = path.join(app_bindir, "qwen3.bin")
+		local simulator = target:dep("sim"):targetfile()
+		if not os.isfile(app) or not os.isfile(simulator) then
+			raise("run `xmake build qwen3_run` before `xmake run qwen3_run`")
+		end
+		local model = path.absolute(args[2] or path.join(app_bindir, "model.q3b"), project_root)
+		if not os.isfile(model) then
+			raise(
+				"model blob not found: "
+					.. model
+					.. "; run `python3 scripts/qwen3/convert.py real external/qwen3 "
+					.. model
+					.. "` or pass an existing model as the second argument"
+			)
+		end
+		os.execv(python, {
+			path.join(project_root, "scripts", "qwen3", "run.py"),
+			"--sim-run",
+			simulator,
+			"--app",
+			app,
+			"--model",
+			model,
+			"--prompt-out",
+			path.join(app_bindir, "prompt.bin"),
+			"--tokenizer",
+			path.join(project_root, "external", "qwen3", "tokenizer.json"),
+			"--",
+			prompt,
+		})
 	end)
-end
+end)

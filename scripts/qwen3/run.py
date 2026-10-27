@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tokenize a prompt and run the Qwen3 guest under sim_run."""
+"""Tokenize a prompt and run the Qwen3 guest under the simulator."""
 
 import argparse
 import re
@@ -15,7 +15,7 @@ EOS_IDS = {151643, 151645}
 
 def build_parser():
     parser = argparse.ArgumentParser(
-        description="Tokenize a prompt and run apps/qwen3 under sim_run.",
+        description="Tokenize a prompt and run apps/qwen3 under the simulator.",
     )
     parser.add_argument("text", metavar="TEXT", help="prompt text")
     parser.add_argument(
@@ -23,7 +23,7 @@ def build_parser():
         type=Path,
         required=True,
         metavar="SIM_RUN",
-        help="sim_run executable",
+        help="simulator executable",
     )
     parser.add_argument(
         "--app",

@@ -12,7 +12,6 @@
 #include <iomanip>
 #include <iostream>
 #include <iterator>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -135,18 +134,6 @@ bool cmd_help(Simulator &, AddressSpace &, std::string_view) {
 }
 
 } // namespace
-
-std::string halt_message(const StepResult &result) {
-  std::ostringstream out;
-  out << status_name(result.status) << " at pc=" << hex64(result.pc);
-  if (result.instr) {
-    out << " instruction=" << hex32(*result.instr);
-  }
-  if (result.fault_address) {
-    out << " address=" << hex64(*result.fault_address);
-  }
-  return out.str();
-}
 
 void sdb_loop(Simulator &sim, AddressSpace &memory) {
   std::string last;

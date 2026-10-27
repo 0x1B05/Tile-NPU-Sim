@@ -2,7 +2,9 @@
 
 #include "format.h"
 #include "parse.h"
+#ifdef TILE_NPU_ENABLE_SDB
 #include "sdb.h"
+#endif
 
 #include "tile_npu/platform/bus.h"
 #include "tile_npu/platform/ram.h"
@@ -15,6 +17,7 @@
 #include <limits>
 #include <optional>
 #include <span>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -59,6 +62,18 @@ bool write_dump(const Ram &memory, const DumpRange &range) {
 
 } // namespace
 
+std::string halt_message(const StepResult &result) {
+  std::ostringstream out;
+  out << status_name(result.status) << " at pc=" << hex64(result.pc);
+  if (result.instr) {
+    out << " instruction=" << hex32(*result.instr);
+  }
+  if (result.fault_address) {
+    out << " address=" << hex64(*result.fault_address);
+  }
+  return out.str();
+}
+
 bool parse_image(std::string_view arg, Image &image) {
   const auto at = arg.find('@');
   image.path = std::string(arg.substr(0, at));
@@ -74,8 +89,7 @@ bool parse_dump_range(std::string_view arg, DumpRange &range) {
   if (colon == std::string_view::npos) return false;
   std::uint64_t size = 0;
   if (!parse_u64(arg.substr(at + 1, colon - at - 1), range.address) ||
-      !parse_u64(arg.substr(colon + 1), size) ||
-      size > std::numeric_limits<std::size_t>::max()) {
+      !parse_u64(arg.substr(colon + 1), size) || size > std::numeric_limits<std::size_t>::max()) {
     return false;
   }
   range.path = std::string(arg.substr(0, at));
@@ -102,6 +116,7 @@ int run_images(const Options &options) {
   tile_npu::Simulator sim(bus);
   sim.reset(MEMORY_BASE);
 
+#ifdef TILE_NPU_ENABLE_SDB
   if (options.interactive) {
     std::cout << "tile-npu monitor: entry " << hex64(MEMORY_BASE) << ", type 'help'\n";
     for (const auto &image : options.images) {
@@ -110,6 +125,7 @@ int run_images(const Options &options) {
     sdb_loop(sim, bus);
     return 0;
   }
+#endif
 
   // A guest stops at ebreak or kernel.end with a0 as the process exit code.
   const auto halt_result = npu_exec(sim, options.step_limit);

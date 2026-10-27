@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tiny Qwen3 regression: guest snapshot and generated tokens vs NumPy.
 
-The snapshot guest writes named f32 records into a fixed RAM region. sim_run
+The snapshot guest writes named f32 records into a fixed RAM region. The simulator
 dumps that region after the run, and this script compares the records and
 generated token ids with ref.py.
 
@@ -90,12 +90,12 @@ def run(cmd):
 
 
 def main():
-    sim_run, app_bin, blob, prompt, ref_npz, snapshot_bin = sys.argv[1:7]
+    simulator, app_bin, blob, prompt, ref_npz, snapshot_bin = sys.argv[1:7]
     snapshot_path = Path(snapshot_bin)
     ref_snapshot = str(snapshot_path.with_suffix(".ref.npz"))
 
     guest = run([
-        sim_run,
+        simulator,
         "-m",
         MEMORY_MIB,
         "--dump-range",

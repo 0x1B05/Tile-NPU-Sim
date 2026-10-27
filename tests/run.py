@@ -91,12 +91,12 @@ def suite_host(args: argparse.Namespace) -> int:
 def suite_guest(args: argparse.Namespace) -> int:
     build_dir, guest_dir, _ = build_dirs(args)
     if args.build:
-        xmake_build(["guest_images", "sim_guest_tests", "sim_run"])
+        xmake_build(["guest_images", "sim_guest_tests", "sim"])
 
     sim_guest_tests = find_artifact(
         "sim_guest_tests", args.sim_guest_tests, build_dir
     )
-    sim_run = find_artifact("sim_run", args.sim_run, build_dir)
+    simulator = find_artifact("sim", args.simulator, build_dir)
 
     listed = subprocess.run(
         [str(sim_guest_tests), "--list"],
@@ -128,7 +128,7 @@ def suite_guest(args: argparse.Namespace) -> int:
         image = guest_dir / f"{name}.bin"
         if not image.is_file():
             raise MissingPrerequisite(f"missing guest image: {image}")
-        result = run([str(sim_run), str(image)])
+        result = run([str(simulator), str(image)])
         status = "PASS" if result.returncode == 0 else f"FAIL ({result.returncode})"
         print(f"[{status}] guest/{name}")
         failures += result.returncode != 0
@@ -147,7 +147,7 @@ def suite_riscv_tests(args: argparse.Namespace) -> int:
             )
         xmake_build(["riscv_tests"])
 
-    sim_run = find_artifact("sim_run", args.sim_run, build_dir)
+    simulator = find_artifact("sim", args.simulator, build_dir)
     image_dir = guest_dir / "riscv-tests"
     images = sorted(image_dir.glob("*.bin"))
     images = [path for path in images if not args.filter or args.filter in path.name]
@@ -158,7 +158,7 @@ def suite_riscv_tests(args: argparse.Namespace) -> int:
 
     failures = 0
     for image in images:
-        result = run([str(sim_run), str(image)])
+        result = run([str(simulator), str(image)])
         status = "PASS" if result.returncode == 0 else f"FAIL ({result.returncode})"
         print(f"[{status}] riscv-tests/{image.stem}")
         failures += result.returncode != 0
@@ -173,9 +173,9 @@ def suite_qwen3(args: argparse.Namespace) -> int:
 
     build_dir, _, app_dir = build_dirs(args)
     if args.build:
-        xmake_build(["qwen3_snapshot_app", "sim_run"])
+        xmake_build(["qwen3_snapshot_app", "sim"])
 
-    sim_run = find_artifact("sim_run", args.sim_run, build_dir)
+    simulator = find_artifact("sim", args.simulator, build_dir)
     snapshot_app = app_dir / "qwen3_snapshot.bin"
     if not snapshot_app.is_file():
         raise MissingPrerequisite(f"missing snapshot app: {snapshot_app}")
@@ -216,7 +216,7 @@ def suite_qwen3(args: argparse.Namespace) -> int:
         [
             sys.executable,
             str(check),
-            str(sim_run),
+            str(simulator),
             str(snapshot_app),
             str(blob),
             str(prompt),
@@ -259,7 +259,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="for 'all', fail when an optional suite is unavailable",
     )
     parser.add_argument("--build-dir", help="xmake build directory (default: build)")
-    parser.add_argument("--sim-run", help="sim_run executable")
+    parser.add_argument("--sim-run", dest="simulator", help="sim executable")
     parser.add_argument("--sim-tests", help="sim_tests executable")
     parser.add_argument("--sim-guest-tests", help="sim_guest_tests executable")
     parser.add_argument("--guest-dir", help="guest image directory")

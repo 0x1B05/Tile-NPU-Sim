@@ -4,8 +4,8 @@
 -- images. Excluded: fence_i (Zifencei, not modeled) and ma_data (requires trap
 -- delivery, which the simulator does not implement).
 --
--- This is a build-only target. It is not attached to sim_tests, sim_run, or
--- xmake test.
+-- This is a build-only target. It is not attached to sim_tests, sim,
+-- or xmake test.
 
 local rvtests_srcdir = path.join(os.projectdir(), "external", "riscv-tests")
 local buildir = get_config("buildir") or "build"

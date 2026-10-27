@@ -18,22 +18,11 @@ if has_config("native") then
 	add_cxflags("-march=native", { tools = { "gcc", "gxx", "clang", "clangxx" } })
 end
 
-option("monitor", function()
-	set_default(true)
+option("sdb", function()
+	set_default(false)
 	set_showmenu(true)
-	set_description("Build sim_run, the guest runner and interactive monitor")
+	set_description("Enable the interactive sdb debugger in sim")
 end)
-
-if has_config("monitor") then
-	add_requires("cli11 2.7.2")
-	target("sim_run", function()
-		set_kind("binary")
-		add_deps("tile_npu_sim")
-		add_files("src/main.cpp", "src/monitor/*.cpp")
-		add_includedirs("src")
-		add_packages("cli11")
-	end)
-end
 
 option("riscv_cross", function()
 	set_default("riscv64-linux-gnu-")
@@ -41,17 +30,37 @@ option("riscv_cross", function()
 	set_description("Prefix of the RISC-V toolchain used to assemble guest test images")
 end)
 
-target("tile_npu_sim", function()
+add_requires("cli11 2.7.2")
+
+-- Internal static library shared by the runner and the host test binaries.
+-- It deliberately does not include main.cpp or the monitor front-end.
+target("sim_core", function()
 	set_kind("static")
+	set_default(false)
 	add_files("src/*.cpp|main.cpp", "src/decode/*.cpp", "src/execute/*.cpp", "src/platform/*.cpp")
 	add_includedirs("include", { public = true })
 	add_includedirs("src")
 end)
 
+-- The default target is the runnable simulator. sdb is a build-time option:
+-- when disabled, neither the sdb sources nor the -i flag are compiled in.
+target("sim", function()
+	set_kind("binary")
+	set_default(true)
+	add_deps("sim_core")
+	add_files("src/main.cpp", "src/monitor/monitor.cpp")
+	add_includedirs("src")
+	add_packages("cli11")
+	if has_config("sdb") then
+		add_files("src/monitor/sdb.cpp")
+		add_defines("TILE_NPU_ENABLE_SDB")
+	end
+end)
+
 target("sim_tests", function()
 	set_kind("binary")
 	set_default(false)
-	add_deps("tile_npu_sim")
+	add_deps("sim_core")
 	add_files("tests/*.cpp")
 	add_includedirs("src", "tests")
 	add_tests("core")
@@ -60,7 +69,7 @@ end)
 target("sim_guest_tests", function()
 	set_kind("binary")
 	set_default(false)
-	add_deps("tile_npu_sim")
+	add_deps("sim_core")
 	add_files("tests/main.cpp", "tests/guest/npu_guest_test.cpp")
 	add_includedirs("src", "tests")
 end)
