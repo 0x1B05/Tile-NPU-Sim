@@ -80,7 +80,7 @@ scripts/qwen3/fetch_model.sh   # set HF_BASE=... for another mirror
 python3 scripts/qwen3/convert.py real external/qwen3 build/apps/qwen3/model.q3b
 ```
 
-`--max-pos N` caps positions; conversion needs python3 with numpy. Run `scripts/qwen3/convert.py --help` for all options; `--verbose` reports per-tensor quantization errors and `--quiet` suppresses progress. Tokenize a prompt into a Q3P image and load it with the model; the two images must land at the addresses the guest is linked against (`BLOB_BASE` in `apps/qwen3/include/q3b.h`, `PROMPT_BASE` in `apps/qwen3/include/q3p.h`):
+`--max-pos N` caps positions; conversion needs python3 with numpy. Run `scripts/qwen3/convert.py --help` for all options; `--verbose` reports per-tensor quantization errors and `--quiet` suppresses progress. The embedding table is q8s32 with one scale per vocabulary row and is stored as `[V/32][D/32][32][32]` tiles in `[V][D]` order; one 32x32 Tile holds one token's hidden vector for `D <= 1024`. Tokenize a prompt into a Q3P image and load it with the model; the two images must land at the addresses the guest is linked against (`BLOB_BASE` in `apps/qwen3/include/q3b.h`, `PROMPT_BASE` in `apps/qwen3/include/q3p.h`):
 
 ```sh
 python3 scripts/qwen3/tokenize_prompt.py "你好" --out build/apps/qwen3/prompt.bin

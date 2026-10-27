@@ -6,7 +6,9 @@
 
 #define BLOB_BASE 0x81000000ull
 #define Q3B_MAGIC 0x00423351u // "Q3B\0" little-endian
-#define Q3B_LAYOUT_TILED 2u  // 32x32 tiles in [n/32][k/32][32][32] order
+// 32x32 tiles: [n/32][k/32][32][32] for weights, [V/32][D/32][32][32]
+// for the embedding table.
+#define Q3B_LAYOUT_TILED 2u
 
 struct q3b_header {
   uint32_t magic; // "Q3B"

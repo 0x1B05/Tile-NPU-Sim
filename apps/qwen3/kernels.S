@@ -858,47 +858,47 @@ qwen3_add:
 # ---------------------------------------------------------------------------
 # void qwen3_embed(const int8_t *table, const float *scales, uint32_t id,
 #               float *out, uint32_t hidden, uint32_t vocab)
-# out = dequant(table[id]) with the row's f32 scale. The table is stored as
-# [n/32][k/32][32][32] tiles in [n][k] order: the id row is contiguous across
-# the kblocks of its nblock.
+# out = dequant(table[id]) with the row's f32 scale. The embedding table is
+# q8s32 with one f32 scale per vocabulary row. It is stored as 32x32 tiles in
+# [V/32][D/32][32][32] order, each tile in [V][D] order. For token id i,
+# V-block i/32 and row i%32 select the token; its D/32 blocks are 1024 bytes
+# apart. One 32x32 Tile therefore holds one token's hidden vector (D <= 1024).
 # ---------------------------------------------------------------------------
     .globl qwen3_embed
 qwen3_embed:
-    srli    t4, a4, 5               # kblocks = hidden / 32
-    srli    t0, a2, 5               # id / 32
-    andi    t1, a2, 31              # id % 32
-    slli    t1, t1, 5               # n_inner * 32
-    mul     t5, t0, t4              # nblock * kblocks
+    srli    t4, a4, 5               # dblocks = D / 32
+    srli    t0, a2, 5               # vblock = id / 32
+    andi    t1, a2, 31              # vinner = id % 32
+    slli    t1, t1, 5               # row offset in a tile
+    mul     t5, t0, t4              # vblock * dblocks
     slli    t5, t5, 10
     add     t5, a0, t5
-    add     t5, t5, t1              # first kblock row for id
-    li      t6, 1024                # stride to the next kblock
+    add     t5, t5, t1              # first D-block row for id
     slli    t0, a2, 2
     add     t0, a1, t0
     lw      t2, 0(t0)               # t2 = scales[id]
 
-    li      t0, (DT_I8 << 16) | (32 << 8) | 1
-    SETW    SEL_TC, 0, 0, X_T0      # tc0 = i8 1 x 32
-    li      t0, (DT_F32 << 16) | (32 << 8) | 1
-    SETW    SEL_AC, 0, 0, X_T0      # ac0 = f32 1 x 32
-    li      t0, (DT_F32 << 8) | 1
-    SETW    SEL_VC, 1, 0, X_T0      # vc0 = f32 len 1 (tdequant scale len)
-    VFILLX  0, X_T2                 # v0 = s_i in every lane
-    SETIM   SEL_TM, CF_RSTRIDE, 0, 0
+    li      t0, (DT_I8 << 16) | (32 << 8)
+    or      t0, t0, t4
+    SETW    SEL_TC, 0, 0, X_T0      # tc0 = i8 dblocks x 32
+    li      t0, (DT_F32 << 16) | (32 << 8)
+    or      t0, t0, t4
+    SETW    SEL_AC, 0, 0, X_T0      # ac0 = f32 dblocks x 32
+    li      t0, DT_F32 << 8
+    or      t0, t0, t4
+    SETW    SEL_VC, 1, 0, X_T0      # vc0 = f32 len dblocks
+    VFILLX  0, X_T2                 # duplicate the token scale in v0
+    SETIM   SEL_TM, CF_RSTRIDE, 1024, 0
     SETIM   SEL_TM, CF_CSTRIDE, 1, 0
     SETIM   SEL_TM, CF_FLAGS, 0, 0
-    SETX    SEL_AM, 0, CF_BASE, 0, X_A3
-    SETIM   SEL_AM, CF_RSTRIDE, 0, 0
-    SETIM   SEL_AM, CF_CSTRIDE, 4, 0
-    SETIM   SEL_AM, CF_FLAGS, 2, 0  # inc along cols: += 32 * 4
-.Lem_loop:
     SETX    SEL_TM, 0, CF_BASE, 0, X_T5
-    TLOAD   0                       # t0 = 1 x 32 i8 contiguous run
-    TDEQUANT 0, 0, 0                # a0 = f32(t0) * v0
-    ASTORE  0
-    add     t5, t5, t6
-    addi    t4, t4, -1
-    bnez    t4, .Lem_loop
+    SETX    SEL_AM, 0, CF_BASE, 0, X_A3
+    SETIM   SEL_AM, CF_RSTRIDE, 128, 0
+    SETIM   SEL_AM, CF_CSTRIDE, 4, 0
+    SETIM   SEL_AM, CF_FLAGS, 0, 0
+    TLOAD   0                       # t0 = dblocks x 32, one token
+    TDEQUANT 0, 0, 0                # a0 = f32(t0) * token scale
+    ASTORE  0                       # contiguous f32 hidden vector
     ret
 
 # ---------------------------------------------------------------------------

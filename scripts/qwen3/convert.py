@@ -4,8 +4,9 @@
 Weight matrices are quantized per output row (symmetric int8, RNE, range
 [-127, 127]) with one f32 scale per row; RMSNorm gammas stay f32. Quantized
 matrices are stored as 32x32 tiles in [n/32][k/32][32][32] order, with each
-tile in [n][k] order. The blob carries a section directory so the guest
-locates tensors at runtime:
+tile in [n][k] order. The embedding table uses the same layout with V (vocab)
+and D (hidden) names: [V/32][D/32][32][32] tiles in [V][D] order. The blob
+carries a section directory so the guest locates tensors at runtime:
 
   header: magic "Q3B", arch dims, eps, section count   (all u32 LE)
   directory: n_sections x { name char[8], offset u32, size u32 }
@@ -51,6 +52,11 @@ def tile_weights(q):
     if n % 32 or k % 32:
         raise ValueError(f"tiled weights need dimensions divisible by 32, got {q.shape}")
     return q.reshape(n // 32, 32, k // 32, 32).transpose(0, 2, 1, 3).tobytes()
+
+
+def tile_embedding(q):
+    """Pack [V, D] int8 rows as [V/32][D/32][32][32] in [V][D] order."""
+    return tile_weights(q)
 
 
 # ---- rope ----------------------------------------------------------------
@@ -131,7 +137,7 @@ def convert_real(model_dir, max_pos):
     error = quant_error(embed, q, s)
     quant_errors.append(error)
     LOGGER.debug("embed %s rel-err %.4f", embed.shape, error)
-    blob.add("embed", tile_weights(q))
+    blob.add("embed", tile_embedding(q))
     blob.add("embed_s", s.tobytes())
     del embed, q, s
 
@@ -204,7 +210,7 @@ def convert_tiny():
         else:
             q, s = quantize_rows(w)
             LOGGER.debug("%s %s rel-err %.4f", sec, w.shape, quant_error(w, q, s))
-            blob.add(sec, tile_weights(q))
+            blob.add(sec, tile_embedding(q) if sec == "embed" else tile_weights(q))
             blob.add("embed_s" if sec == "embed" else sec + "s", s.tobytes())
             # the reference consumes the same dequantized weights as the guest
             ref[sec] = q.astype(np.float32) * s[:, None]
