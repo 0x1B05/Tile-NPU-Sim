@@ -4,7 +4,6 @@
 #include "encoding.h"
 
 #include <cstdint>
-#include <optional>
 
 namespace tile_npu {
 namespace {
@@ -143,18 +142,14 @@ DecodeResult decode_qnt(std::uint32_t word) {
 }
 
 // MMA_BDOT (R4): major4 = 0000, q = 10.
-// 31    28 27     26 25 24    22 21       17 16      12 11       7 6        2 1   0
-// [major4] [reserved2] [TA] [funct3] [  row5  ] [   B5   ] [   A5   ] [   D5   ] [ q ]
-// funct3 = {mma/bdot, nt, zero/acc}; only the nt layout is defined, so 000/001
-// and 100/101 are reserved. TA = 1 reads A from a Tile row; TA = 0 uses Vec8.
-// row5 is the Tile row and must be zero when TA = 0.
+// 31    28 27       25 24    22 21       17 16      12 11       7 6        2 1   0
+// [major4] [reserved3] [funct3] [  row5  ] [   B5   ] [   A5   ] [   D5   ] [ q ]
+// funct3 = {mma/tdot, nt, zero/acc}; only the nt layout is defined, so 000/001
+// and 100/101 are reserved. row5 selects the tdot.nt Tile A row; mma requires 0.
 DecodeResult decode_mma_bdot(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
-  if (f.sel3 > 1) return DecodeError::illegal;
-  const bool tile_a = f.sel3 == 1;
-
   const auto make_mma = [&](MmaOp op) -> DecodeResult {
-    if (tile_a || f.arg != 0) return DecodeError::illegal;
+    if (f.arg != 0) return DecodeError::illegal;
     return DecodedNpuInstr{MmaInstr{
         .op = op,
         .dest = {.domain = NpuDomain::acc, .index = f.dest},
@@ -162,22 +157,21 @@ DecodeResult decode_mma_bdot(std::uint32_t word) {
         .src_b = {.domain = NpuDomain::tile, .index = f.src2},
     }};
   };
-  const auto make_bdot = [&](BdotOp op) -> DecodeResult {
-    if (!tile_a && f.arg != 0) return DecodeError::illegal;
-    return DecodedNpuInstr{BdotInstr{
+  const auto make_tdot = [&](TdotOp op) -> DecodeResult {
+    return DecodedNpuInstr{TdotInstr{
         .op = op,
         .dest = {.domain = NpuDomain::vec32, .index = f.dest},
-        .src_a = {.domain = tile_a ? NpuDomain::tile : NpuDomain::vec8, .index = f.src1},
+        .src_a = {.domain = NpuDomain::tile, .index = f.src1},
         .src_b = {.domain = NpuDomain::tile, .index = f.src2},
-        .src_a_row = tile_a ? std::optional<std::uint8_t>{f.arg} : std::nullopt,
+        .row = f.arg,
     }};
   };
 
   switch (f.funct3) {
   case 0b010: return make_mma(MmaOp::nt_zero);
   case 0b011: return make_mma(MmaOp::nt_acc);
-  case 0b110: return make_bdot(BdotOp::nt_zero);
-  case 0b111: return make_bdot(BdotOp::nt_acc);
+  case 0b110: return make_tdot(TdotOp::nt_zero);
+  case 0b111: return make_tdot(TdotOp::nt_acc);
   default: return DecodeError::illegal;
   }
 }

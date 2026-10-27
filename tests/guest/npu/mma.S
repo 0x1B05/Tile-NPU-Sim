@@ -1,10 +1,9 @@
 #include "npu.inc"
 
 # Self-checking MMA_BDOT image: programs configs and descriptors, loads a
-# shared 2x3 left Tile, a 2x3 right Tile in N x K order, and a Vec8, then runs
-# mma.nt.zero, mma.nt.acc (accumulating onto the first result), bdot.nt and
-# bdot.nt.acc (accumulating onto the bdot result), followed by the Tile-row
-# bdot.nt and bdot.nt.acc forms over the same left Tile. Results are
+# shared 2x3 left Tile and a 2x3 right Tile in N x K order, then runs
+# mma.nt.zero, mma.nt.acc (accumulating onto the first result), and the
+# Tile-row tdot.nt and tdot.nt.acc forms over the same left Tile. Results are
 # stored back and compared word-wise. Ends with ebreak: a0 = 0 pass, a0 = N
 # identifies the failing check.
 #
@@ -31,26 +30,19 @@ _start:
     CFG_SETI  5, 1, 2, 2, 2
     CFG_SETI  5, 3, 1, 8, 2
     CFG_SETI  5, 3, 2, 4, 2
-    # bc0: dtype = i8 (0), len = 3; bm0: stride = 1
-    CFG_SETI  6, 0, 0, 0, 0
-    CFG_SETI  6, 0, 1, 3, 0
-    CFG_SETI  6, 2, 1, 1, 0
     # vc4: dtype = i32 (2), len = 2; vm4: stride = 4
     CFG_SETI  6, 1, 0, 2, 4
     CFG_SETI  6, 1, 1, 2, 4
     CFG_SETI  6, 3, 1, 4, 4
 
     # Load the operands: t0 = {{1,2,3},{4,-5,6}},
-    # t2 = {{7,8,9},{10,11,12}}, b0 = {1,-2,3}.
+    # t2 = {{7,8,9},{10,11,12}}.
     lla       x3, src_a
     CFG_REG   2, 0, 0, 0, 3, 0
     TLOAD     0
     lla       x3, src_b_nt
     CFG_REG   2, 0, 0, 0, 3, 2
     TLOAD     2
-    lla       x3, src_v
-    CFG_REG   2, 1, 0, 0, 3, 0
-    BLOAD     0
 
     # Stage 1 - mma.nt.zero.i8.i32 a2, t0, t2 -> {{50, 68}, {42, 57}}
     MMA_NT_ZERO 2, 0, 2
@@ -91,39 +83,9 @@ _start:
     addi      x6, x6, -1
     bnez      x6, 2b
 
-    # Stage 3 - bdot.nt.i8.i32 v4, b0, t2 -> {18, 24}
-    BDOT_NT   4, 0, 2
-    lla       x3, dstbuf2
-    CFG_REG   3, 1, 0, 0, 3, 4
-    VSTORE    4
-    lla       x3, dstbuf2
-    FENCE_MEM
-    lwu       x4, 0(x3)
-    li        x5, 18
-    li        a0, 3
-    bne       x4, x5, fail
-    lwu       x4, 4(x3)
-    li        x5, 24
-    bne       x4, x5, fail
-
-    # Stage 4 - bdot.nt.acc.i8.i32 v4, b0, t2 adds {18, 24} again -> {36, 48}
-    BDOT_NT_ACC 4, 0, 2
-    lla       x3, dstbuf2
-    CFG_REG   3, 1, 0, 0, 3, 4
-    VSTORE    4
-    lla       x3, dstbuf2
-    FENCE_MEM
-    lwu       x4, 0(x3)
-    li        x5, 36
-    li        a0, 4
-    bne       x4, x5, fail
-    lwu       x4, 4(x3)
-    li        x5, 48
-    bne       x4, x5, fail
-
-    # Stage 5 - bdot.nt.i8.i32 v4, t0[1], t2 reads {4, -5, 6}
-    # and overwrites v4 with {42, 57}.
-    BDOT_NT_ROW 4, 0, 1, 2
+    # Stage 3 - tdot.nt.i8.i32 v4, t0[1], t2 reads {4, -5, 6}
+    # and writes {42, 57}.
+    TDOT_NT 4, 0, 1, 2
     lla       x3, dstbuf2
     CFG_REG   3, 1, 0, 0, 3, 4
     VSTORE    4
@@ -131,15 +93,15 @@ _start:
     FENCE_MEM
     lwu       x4, 0(x3)
     li        x5, 42
-    li        a0, 5
+    li        a0, 3
     bne       x4, x5, fail
     lwu       x4, 4(x3)
     li        x5, 57
     bne       x4, x5, fail
 
-    # Stage 6 - bdot.nt.acc.i8.i32 v4, t0[0], t2 adds
+    # Stage 4 - tdot.nt.acc.i8.i32 v4, t0[0], t2 adds
     # {50, 68} from row 0 -> {92, 125}.
-    BDOT_NT_ROW_ACC 4, 0, 0, 2
+    TDOT_NT_ACC 4, 0, 0, 2
     lla       x3, dstbuf2
     CFG_REG   3, 1, 0, 0, 3, 4
     VSTORE    4
@@ -147,7 +109,7 @@ _start:
     FENCE_MEM
     lwu       x4, 0(x3)
     li        x5, 92
-    li        a0, 6
+    li        a0, 4
     bne       x4, x5, fail
     lwu       x4, 4(x3)
     li        x5, 125
@@ -163,8 +125,6 @@ fail:
 src_a:    .byte 1, 2, 3, 4, 0xFB, 6
     .balign 4
 src_b_nt: .byte 7, 8, 9, 10, 11, 12
-    .balign 4
-src_v:    .byte 1, 0xFE, 3
     .balign 4
 exp_mma1: .word 50, 68, 42, 57
 exp_mma2: .word 100, 136, 84, 114

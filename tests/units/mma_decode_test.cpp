@@ -13,11 +13,11 @@ using namespace tile_npu::test;
 
 namespace {
 
-using tile_npu::BdotInstr;
-using tile_npu::BdotOp;
 using tile_npu::MmaInstr;
 using tile_npu::MmaOp;
 using tile_npu::NpuDomain;
+using tile_npu::TdotInstr;
+using tile_npu::TdotOp;
 
 struct MmaCase {
   const char *name;
@@ -28,14 +28,13 @@ struct MmaCase {
   std::uint8_t src_b;
 };
 
-struct BdotCase {
+struct TdotCase {
   const char *name;
   std::uint32_t word;
-  BdotOp op;
+  TdotOp op;
   std::uint8_t dest;
   std::uint8_t src_a;
   std::uint8_t src_b;
-  NpuDomain src_a_domain = NpuDomain::vec8;
   std::uint8_t row = 0;
 };
 
@@ -54,26 +53,19 @@ template <std::size_t N> void check_mma_cases(const std::array<MmaCase, N> &case
   }
 }
 
-template <std::size_t N> void check_bdot_cases(const std::array<BdotCase, N> &cases) {
+template <std::size_t N> void check_tdot_cases(const std::array<TdotCase, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
     const std::string what = std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
-    const auto &decoded = expect_npu<BdotInstr>(result, what);
+    const auto &decoded = expect_npu<TdotInstr>(result, what);
     check_eq(decoded.op, test.op, what + ": op");
     check_eq(decoded.dest.domain, NpuDomain::vec32, what + ": dest domain");
     check_eq(decoded.dest.index, test.dest, what + ": dest");
-    check_eq(decoded.src_a.domain, test.src_a_domain, what + ": lhs domain");
+    check_eq(decoded.src_a.domain, NpuDomain::tile, what + ": lhs domain");
     check_eq(decoded.src_a.index, test.src_a, what + ": src_a");
     check_eq(decoded.src_b.domain, NpuDomain::tile, what + ": rhs domain");
     check_eq(decoded.src_b.index, test.src_b, what + ": src_b");
-    if (test.src_a_domain == NpuDomain::tile) {
-      check_eq(decoded.src_a_row.has_value(), true, what + ": Tile row set");
-      if (decoded.src_a_row.has_value()) {
-        check_eq(*decoded.src_a_row, test.row, what + ": Tile row");
-      }
-    } else {
-      check_eq(decoded.src_a_row.has_value(), false, what + ": Vec8 has no Tile row");
-    }
+    check_eq(decoded.row, test.row, what + ": Tile row");
   }
 }
 
@@ -99,38 +91,24 @@ TEST_CASE(mma_decode) {
   check_mma_cases(cases);
 }
 
-TEST_CASE(bdot_decode) {
+TEST_CASE(tdot_decode) {
   constexpr std::array cases{
-      BdotCase{.name = "bdot.nt.i8.i32 v16, b17, t15",
-               .word = make_mma(6, 16, 17, 15),
-               .op = BdotOp::nt_zero,
-               .dest = 16,
-               .src_a = 17,
-               .src_b = 15},
-      BdotCase{.name = "bdot.nt.acc.i8.i32 v31, b31, t0",
-               .word = make_mma(7, 31, 31, 0),
-               .op = BdotOp::nt_acc,
-               .dest = 31,
-               .src_a = 31,
-               .src_b = 0},
-      BdotCase{.name = "bdot.nt.i8.i32 v6, t7[0], t8",
-               .word = make_mma(6, 6, 7, 8, true, 0),
-               .op = BdotOp::nt_zero,
+      TdotCase{.name = "tdot.nt.i8.i32 v6, t7[0], t8",
+               .word = make_mma(6, 6, 7, 8, 0),
+               .op = TdotOp::nt_zero,
                .dest = 6,
                .src_a = 7,
                .src_b = 8,
-               .src_a_domain = NpuDomain::tile,
                .row = 0},
-      BdotCase{.name = "bdot.nt.acc.i8.i32 v9, t10[31], t11",
-               .word = make_mma(7, 9, 10, 11, true, 31),
-               .op = BdotOp::nt_acc,
+      TdotCase{.name = "tdot.nt.acc.i8.i32 v9, t10[31], t11",
+               .word = make_mma(7, 9, 10, 11, 31),
+               .op = TdotOp::nt_acc,
                .dest = 9,
                .src_a = 10,
                .src_b = 11,
-               .src_a_domain = NpuDomain::tile,
                .row = 31},
   };
-  check_bdot_cases(cases);
+  check_tdot_cases(cases);
 }
 
 TEST_CASE(mma_decode_rejects_reserved) {
@@ -140,11 +118,9 @@ TEST_CASE(mma_decode_rejects_reserved) {
       DecodeCase{"funct3 001", make_mma(1, 0, 0, 0)},
       DecodeCase{"funct3 100", make_mma(4, 0, 1, 2)},
       DecodeCase{"funct3 101", make_mma(5, 0, 1, 2)},
-      // reserved2 must be 0; TA/row5 are reserved for mma.
-      DecodeCase{"reserved2", 0x04003106u},
-      DecodeCase{"mma TA=1", 0x02003106u},
-      DecodeCase{"mma row5", 0x00023106u},
-      DecodeCase{"bdot.nt row5 without TA", make_mma(6, 0, 1, 2, false, 1)},
+      // reserved3 must be 0; row5 is reserved for mma.
+      DecodeCase{"reserved3", 0x02003106u},
+      DecodeCase{"mma row5", make_mma(2, 0, 1, 2, 1)},
   };
   expect_illegal(cases);
 }

@@ -25,8 +25,6 @@ namespace {
 using tile_npu::AquantInstr;
 using tile_npu::AreduceInstr;
 using tile_npu::BcastInstr;
-using tile_npu::BdotInstr;
-using tile_npu::BdotOp;
 using tile_npu::CfgCopyInstr;
 using tile_npu::CfgGetInstr;
 using tile_npu::CfgGetwInstr;
@@ -75,6 +73,8 @@ using tile_npu::StepStatus;
 using tile_npu::SysInstr;
 using tile_npu::SysOp;
 using tile_npu::TdequantInstr;
+using tile_npu::TdotInstr;
+using tile_npu::TdotOp;
 using tile_npu::VquantInstr;
 using tile_npu::VreduceArgmaxInstr;
 using tile_npu::VreduceInstr;
@@ -287,27 +287,18 @@ TEST_CASE(validate_rejects_bad_mma) {
                 "mma src_b domain");
 }
 
-TEST_CASE(validate_rejects_bad_bdot) {
-  check_illegal(BdotInstr{.op = static_cast<BdotOp>(2), .dest = V(0), .src_a = B(0), .src_b = T(1)},
-                "unassigned bdot op");
-  check_illegal(BdotInstr{.op = BdotOp::nt_zero, .dest = A(0), .src_a = B(0), .src_b = T(1)},
-                "bdot destination domain");
-  check_illegal(BdotInstr{.op = BdotOp::nt_zero, .dest = V(0), .src_a = T(0), .src_b = T(1)},
-                "bdot src_a domain");
-  check_illegal(BdotInstr{.op = BdotOp::nt_zero, .dest = V(0), .src_a = B(0), .src_b = A(1)},
-                "bdot src_b domain");
-  check_illegal(BdotInstr{.op = BdotOp::nt_zero,
-                          .dest = V(0),
-                          .src_a = B(0),
-                          .src_b = T(1),
-                          .src_a_row = std::uint8_t{0}},
-                "Tile row source must name a Tile");
-  check_illegal(BdotInstr{.op = BdotOp::nt_zero,
-                          .dest = V(0),
-                          .src_a = T(0),
-                          .src_b = T(1),
-                          .src_a_row = std::uint8_t{32}},
-                "bdot Tile row 32");
+TEST_CASE(validate_rejects_bad_tdot) {
+  check_illegal(TdotInstr{.op = static_cast<TdotOp>(2), .dest = V(0), .src_a = T(0), .src_b = T(1)},
+                "unassigned tdot op");
+  check_illegal(TdotInstr{.op = TdotOp::nt_zero, .dest = A(0), .src_a = T(0), .src_b = T(1)},
+                "tdot destination domain");
+  check_illegal(TdotInstr{.op = TdotOp::nt_zero, .dest = V(0), .src_a = B(0), .src_b = T(1)},
+                "tdot src_a domain");
+  check_illegal(TdotInstr{.op = TdotOp::nt_zero, .dest = V(0), .src_a = T(0), .src_b = A(1)},
+                "tdot src_b domain");
+  check_illegal(
+      TdotInstr{.op = TdotOp::nt_zero, .dest = V(0), .src_a = T(0), .src_b = T(1), .row = 32},
+      "tdot Tile row 32");
 }
 
 TEST_CASE(validate_rejects_bad_sys) {

@@ -22,7 +22,7 @@ constexpr std::int32_t i8_value(std::uint8_t value) {
 
 constexpr bool is_accumulate(MmaOp op) { return op == MmaOp::nt_acc; }
 
-constexpr bool is_accumulate(BdotOp op) { return op == BdotOp::nt_acc; }
+constexpr bool is_accumulate(TdotOp op) { return op == TdotOp::nt_acc; }
 
 // The right operand is stored N x K: row j is contiguous in K, so the inner
 // loop accumulates one output element with wrap32 addition.
@@ -87,36 +87,23 @@ ExecuteResult mma(const MmaInstr &instr, State &state) {
   return {.status = StepStatus::retired};
 }
 
-// bdot.nt[.acc].i8.i32: vD[j] = dot(A, tB row j), where A is either the Vec8
-// bA or a row of the Tile tA; acc adds the i32 partial into the existing lane.
-ExecuteResult bdot(const BdotInstr &instr, State &state) {
+// tdot.nt[.acc].i8.i32: vD[j] = dot(tA[row], tB row j); acc adds the i32
+// partial into the existing lane.
+ExecuteResult tdot(const TdotInstr &instr, State &state) {
   const auto &dst_config = state.vc[instr.dest.index];
+  const auto &lhs_config = state.tc[instr.src_a.index];
   const auto &rhs_config = state.tc[instr.src_b.index];
-  if (!valid_config_of(dst_config, DType::i32) || !valid_config_of(rhs_config, DType::i8)) {
+  if (!valid_config_of(dst_config, DType::i32) || !valid_config_of(lhs_config, DType::i8) ||
+      !valid_config_of(rhs_config, DType::i8)) {
     return config_error();
   }
   const auto k_size = rhs_config.cols;
   const auto n_size = rhs_config.rows;
-  if (dst_config.len != n_size) {
+  if (dst_config.len != n_size || lhs_config.cols != k_size || instr.row >= lhs_config.rows) {
     return config_error();
   }
 
-  const std::uint8_t *lhs = nullptr;
-  if (instr.src_a_row.has_value()) {
-    const auto &lhs_config = state.tc[instr.src_a.index];
-    if (!valid_config_of(lhs_config, DType::i8) || lhs_config.cols != k_size ||
-        *instr.src_a_row >= lhs_config.rows) {
-      return config_error();
-    }
-    lhs = state.t[instr.src_a.index].data() + std::size_t{*instr.src_a_row} * MATRIX_EXTENT;
-  } else {
-    const auto &lhs_config = state.bc[instr.src_a.index];
-    if (!valid_config_of(lhs_config, DType::i8) || lhs_config.len != k_size) {
-      return config_error();
-    }
-    lhs = state.b[instr.src_a.index].data();
-  }
-
+  const auto *lhs = state.t[instr.src_a.index].data() + std::size_t{instr.row} * MATRIX_EXTENT;
   auto rhs = matrix_view(std::as_const(state.t[instr.src_b.index]));
   auto &dst = state.v[instr.dest.index];
   for (std::size_t j = 0; j < n_size; ++j) {
@@ -134,6 +121,6 @@ ExecuteResult bdot(const BdotInstr &instr, State &state) {
 
 ExecuteResult execute(const MmaInstr &instr, State &state) { return mma(instr, state); }
 
-ExecuteResult execute(const BdotInstr &instr, State &state) { return bdot(instr, state); }
+ExecuteResult execute(const TdotInstr &instr, State &state) { return tdot(instr, state); }
 
 } // namespace tile_npu

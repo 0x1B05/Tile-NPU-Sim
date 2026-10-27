@@ -565,18 +565,14 @@
 .endm
 
 # MMA_BDOT (R4), mirroring NpuR4 in src/decode/encoding.h:
-#   [31:28] major4 = 0000  [27:26] reserved2  [25] TA  [24:22] funct3
-#   [21:17] row5  [16:12] B5 (tB)  [11:7] A5 (tA/bA)  [6:2] D5 (aD/vD)
+#   [31:28] major4 = 0000  [27:25] reserved3  [24:22] funct3
+#   [21:17] row5  [16:12] B5 (tB)  [11:7] A5 (tA)  [6:2] D5 (aD/vD)
 #   [1:0] q = 10
-# TA = 0 uses a Vec8 A operand; TA = 1 reads Tile row row5 for bdot.nt.
+# row5 selects the tdot.nt Tile A row and must be 0 for mma.
 # funct3: 000/001 reserved, 010 mma.nt.zero, 011 mma.nt.acc,
-#         100/101 reserved, 110 bdot.nt, 111 bdot.nt.acc.
-.macro MMA_BDOT_TA ta, row, funct3, d5, a5, b5
-    .word ((\ta << 25) | (\row << 17) | (\funct3 << 22) | (\b5 << 12) | (\a5 << 7) | (\d5 << 2) | 2)
-.endm
-
-.macro MMA_BDOT funct3, d5, a5, b5
-    MMA_BDOT_TA 0, 0, \funct3, \d5, \a5, \b5
+#         100/101 reserved, 110 tdot.nt, 111 tdot.nt.acc.
+.macro MMA_BDOT funct3, d5, a5, b5, row=0
+    .word ((\row << 17) | (\funct3 << 22) | (\b5 << 12) | (\a5 << 7) | (\d5 << 2) | 2)
 .endm
 
 .macro MMA_NT_ZERO d5, a5, b5
@@ -587,21 +583,13 @@
     MMA_BDOT 3, \d5, \a5, \b5
 .endm
 
-.macro BDOT_NT d5, a5, b5
-    MMA_BDOT 6, \d5, \a5, \b5
+# tdot.nt: asm operand order vD, tA[row], tB.
+.macro TDOT_NT d5, a5, row, b5
+    MMA_BDOT 6, \d5, \a5, \b5, \row
 .endm
 
-.macro BDOT_NT_ACC d5, a5, b5
-    MMA_BDOT 7, \d5, \a5, \b5
-.endm
-
-# bdot.nt Tile-row A forms: asm operand order vD, tA[row], tB.
-.macro BDOT_NT_ROW d5, a5, row, b5
-    MMA_BDOT_TA 1, \row, 6, \d5, \a5, \b5
-.endm
-
-.macro BDOT_NT_ROW_ACC d5, a5, row, b5
-    MMA_BDOT_TA 1, \row, 7, \d5, \a5, \b5
+.macro TDOT_NT_ACC d5, a5, row, b5
+    MMA_BDOT 7, \d5, \a5, \b5, \row
 .endm
 
 # SYS (Z format):
