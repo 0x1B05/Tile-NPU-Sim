@@ -11,6 +11,7 @@ add_moduledirs("xmake/modules")
 option("native", function()
 	set_default(false)
 	set_showmenu(true)
+	set_category("Build")
 	set_description("Build with -march=native for host-specific ISA extensions")
 end)
 
@@ -18,22 +19,7 @@ if has_config("native") then
 	add_cxflags("-march=native", { tools = { "gcc", "gxx", "clang", "clangxx" } })
 end
 
-option("sdb", function()
-	set_default(false)
-	set_showmenu(true)
-	set_description("Enable the interactive sdb debugger in sim")
-end)
-
-option("riscv_cross", function()
-	set_default("riscv64-linux-gnu-")
-	set_showmenu(true)
-	set_description("Prefix of the RISC-V toolchain used to assemble guest test images")
-end)
-
-add_requires("cli11 2.7.2")
-
 -- Internal static library shared by the runner and the host test binaries.
--- It deliberately does not include main.cpp or the monitor front-end.
 target("sim_core", function()
 	set_kind("static")
 	set_default(false)
@@ -42,8 +28,9 @@ target("sim_core", function()
 	add_includedirs("src")
 end)
 
--- The default target is the runnable simulator. sdb is a build-time option:
--- when disabled, neither the sdb sources nor the -i flag are compiled in.
+add_requires("cli11 2.7.2")
+
+-- The default target is the runnable simulator.
 target("sim", function()
 	set_kind("binary")
 	set_default(true)
@@ -55,6 +42,13 @@ target("sim", function()
 		add_files("src/monitor/sdb.cpp")
 		add_defines("TILE_NPU_ENABLE_SDB")
 	end
+end)
+
+option("sdb", function()
+	set_default(false)
+	set_showmenu(true)
+	set_category("Debug")
+	set_description("Enable the interactive sdb debugger in sim")
 end)
 
 target("sim_tests", function()
@@ -72,6 +66,13 @@ target("sim_guest_tests", function()
 	add_deps("sim_core")
 	add_files("tests/main.cpp", "tests/guest/npu_guest_test.cpp")
 	add_includedirs("src", "tests")
+end)
+
+option("riscv_cross", function()
+	set_default("riscv64-linux-gnu-")
+	set_showmenu(true)
+	set_category("Guests")
+	set_description("Prefix of the RISC-V toolchain used to assemble guest test images")
 end)
 
 -- Guest images and the optional conformance suite are separate build-only

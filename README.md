@@ -7,13 +7,14 @@ A functional simulator for the [Tile-NPU ISA](https://github.com/0x1B05/Tile-NPU
 ```sh
 xmake                    # build the sim binary
 xmake test               # host unit tests only (no cross toolchain)
+xmake f --menu           # grouped menu configuration
 xmake f --sdb=y          # optional interactive sdb build
 xmake f --native=y       # optional host-specific -march=native code generation
 ```
 
-`sim` is the default binary target. Its internal static library,
-`sim_core`, is not a public build target; the host tests link it
-directly. SDB is off by default and only changes the `sim` build.
+Project options are grouped in `xmake f --menu` under `Build`, `Debug`, and `Guests`.
+
+`sim` is the default binary target. Its internal static library, `sim_core`, is not a public build target; the host tests link it directly. SDB is off by default and only changes the `sim` build.
 
 Integration suites are driven by `tests/run.py`:
 

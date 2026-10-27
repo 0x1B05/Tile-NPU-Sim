@@ -15,6 +15,7 @@ ISA 手册位于相邻仓库 `../Tile-NPU-ISA/`，指令语义以 `tile-npu-isa.
 
 ```bash
 xmake                                  # 构建默认 sim 二进制
+xmake f --menu                         # 按 Build、Debug、Guests 分组配置
 xmake test                             # 只运行 host 单元测试，不需要交叉工具链
 python3 tests/run.py guest --build     # 构建并运行 guest 测试
 python3 tests/run.py riscv-tests --build
