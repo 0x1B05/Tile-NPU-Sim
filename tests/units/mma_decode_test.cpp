@@ -16,8 +16,8 @@ namespace {
 using tile_npu::MmaInstr;
 using tile_npu::MmaOp;
 using tile_npu::NpuDomain;
-using tile_npu::TdotInstr;
-using tile_npu::TdotOp;
+using tile_npu::VmmaInstr;
+using tile_npu::VmmaOp;
 
 struct MmaCase {
   const char *name;
@@ -28,10 +28,10 @@ struct MmaCase {
   std::uint8_t src_b;
 };
 
-struct TdotCase {
+struct VmmaCase {
   const char *name;
   std::uint32_t word;
-  TdotOp op;
+  VmmaOp op;
   std::uint8_t dest;
   std::uint8_t src_a;
   std::uint8_t src_b;
@@ -53,11 +53,11 @@ template <std::size_t N> void check_mma_cases(const std::array<MmaCase, N> &case
   }
 }
 
-template <std::size_t N> void check_tdot_cases(const std::array<TdotCase, N> &cases) {
+template <std::size_t N> void check_vmma_cases(const std::array<VmmaCase, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
     const std::string what = std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
-    const auto &decoded = expect_npu<TdotInstr>(result, what);
+    const auto &decoded = expect_npu<VmmaInstr>(result, what);
     check_eq(decoded.op, test.op, what + ": op");
     check_eq(decoded.dest.domain, NpuDomain::vec32, what + ": dest domain");
     check_eq(decoded.dest.index, test.dest, what + ": dest");
@@ -91,24 +91,24 @@ TEST_CASE(mma_decode) {
   check_mma_cases(cases);
 }
 
-TEST_CASE(tdot_decode) {
+TEST_CASE(vmma_decode) {
   constexpr std::array cases{
-      TdotCase{.name = "tdot.nt.i8.i32 v6, t7[0], t8",
+      VmmaCase{.name = "vmma.nt.zero.i8.i32 v6, t7[0], t8",
                .word = make_mma(2, 6, 7, 8, 0),
-               .op = TdotOp::nt_zero,
+               .op = VmmaOp::nt_zero,
                .dest = 6,
                .src_a = 7,
                .src_b = 8,
                .row = 0},
-      TdotCase{.name = "tdot.nt.acc.i8.i32 v9, t10[31], t11",
+      VmmaCase{.name = "vmma.nt.acc.i8.i32 v9, t10[31], t11",
                .word = make_mma(3, 9, 10, 11, 31),
-               .op = TdotOp::nt_acc,
+               .op = VmmaOp::nt_acc,
                .dest = 9,
                .src_a = 10,
                .src_b = 11,
                .row = 31},
   };
-  check_tdot_cases(cases);
+  check_vmma_cases(cases);
 }
 
 TEST_CASE(mma_decode_rejects_reserved) {

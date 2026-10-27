@@ -131,7 +131,7 @@ qwen3_quant_act:
 # ---------------------------------------------------------------------------
 
 # Per-panel n-block loop. tile_a names the activation panel, which must be a
-# compile-time register number because tdot.nt encodes tA and its row in
+# compile-time register number because vmma.nt encodes tA and its row in
 # the instruction word. One expansion per panel keeps the loop body free of a
 # runtime Tile->Tile copy.
 .macro Q3_MATVEC_NBLOCK tile_a
@@ -170,7 +170,7 @@ qwen3_quant_act:
     bgeu    t5, t4, 5f
     SETX    SEL_TM, 0, CF_BASE, 1, X_T0
     TLOAD   1
-    TDOT_NT_ACC 4, \tile_a, \R, 1
+    VMMA_NT_ACC 4, \tile_a, \R, 1
     add     t0, t0, t1
     .endr
 5:

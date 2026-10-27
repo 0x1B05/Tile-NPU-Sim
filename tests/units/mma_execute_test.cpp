@@ -85,7 +85,7 @@ TEST_CASE(mma_nt_acc) {
   check_eq(state.a[0][33], std::uint32_t{61}, "D[1,1] = 4 + 57");
 }
 
-TEST_CASE(tdot_nt) {
+TEST_CASE(vmma_nt) {
   Ram memory(CODE_BASE, 8);
   Simulator sim(memory);
   // A = {{1,2,3},{4,-5,6}}, B = {{7,8,9},{10,11,12}} in N x K order.
@@ -103,10 +103,10 @@ TEST_CASE(tdot_nt) {
   state.v[0][0] = 0x5a5a5a5au;
   state.v[0][1] = 0x5a5a5a5au;
 
-  check_eq(sim.step().status, StepStatus::retired, "tdot.nt retires");
+  check_eq(sim.step().status, StepStatus::retired, "vmma.nt.zero retires");
   check_eq(state.v[0][0], std::uint32_t{42}, "vD[0] from Tile row 1");
   check_eq(state.v[0][1], std::uint32_t{57}, "vD[1] from Tile row 1");
-  check_eq(sim.step().status, StepStatus::retired, "tdot.nt.acc retires");
+  check_eq(sim.step().status, StepStatus::retired, "vmma.nt.acc retires");
   check_eq(state.v[0][0], std::uint32_t{92}, "vD[0] = 42 + 50");
   check_eq(state.v[0][1], std::uint32_t{125}, "vD[1] = 57 + 68");
 }
@@ -150,14 +150,14 @@ TEST_CASE(mma_rejects_invalid) {
   check_eq(sim.step().status, StepStatus::invalid_configuration,
            "mma rejects a destination shape mismatch");
 
-  // tdot.nt requires len(vD) == rows(tB).
+  // vmma.nt requires len(vD) == rows(tB).
   load_one(sim, memory, make_mma(2, 0, 1, 2));
   state.vc[0].dtype = DType::i32;
   state.vc[0].len = 3;
   tile_i8(state, 1, 2, 3);
   tile_i8(state, 2, 2, 3);
   check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "tdot.nt rejects a destination length mismatch");
+           "vmma.nt.zero rejects a destination length mismatch");
 
   // The selected row must be within rows(tA).
   load_one(sim, memory, make_mma(2, 0, 1, 2, 2));
@@ -166,7 +166,7 @@ TEST_CASE(mma_rejects_invalid) {
   tile_i8(state, 1, 2, 3);
   tile_i8(state, 2, 2, 3);
   check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "tdot.nt rejects an out-of-range Tile row");
+           "vmma.nt.zero rejects an out-of-range Tile row");
 
   // The selected Tile row must have K columns.
   load_one(sim, memory, make_mma(2, 0, 1, 2, 0));
@@ -174,5 +174,6 @@ TEST_CASE(mma_rejects_invalid) {
   state.vc[0].len = 2;
   tile_i8(state, 1, 2, 2);
   tile_i8(state, 2, 2, 3);
-  check_eq(sim.step().status, StepStatus::invalid_configuration, "tdot.nt rejects a K mismatch");
+  check_eq(sim.step().status, StepStatus::invalid_configuration,
+           "vmma.nt.zero rejects a K mismatch");
 }

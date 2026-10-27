@@ -73,8 +73,8 @@ using tile_npu::StepStatus;
 using tile_npu::SysInstr;
 using tile_npu::SysOp;
 using tile_npu::TdequantInstr;
-using tile_npu::TdotInstr;
-using tile_npu::TdotOp;
+using tile_npu::VmmaInstr;
+using tile_npu::VmmaOp;
 using tile_npu::VquantInstr;
 using tile_npu::VreduceArgmaxInstr;
 using tile_npu::VreduceInstr;
@@ -287,18 +287,18 @@ TEST_CASE(validate_rejects_bad_mma) {
                 "mma src_b domain");
 }
 
-TEST_CASE(validate_rejects_bad_tdot) {
-  check_illegal(TdotInstr{.op = static_cast<TdotOp>(2), .dest = V(0), .src_a = T(0), .src_b = T(1)},
-                "unassigned tdot op");
-  check_illegal(TdotInstr{.op = TdotOp::nt_zero, .dest = A(0), .src_a = T(0), .src_b = T(1)},
-                "tdot destination domain");
-  check_illegal(TdotInstr{.op = TdotOp::nt_zero, .dest = V(0), .src_a = B(0), .src_b = T(1)},
-                "tdot src_a domain");
-  check_illegal(TdotInstr{.op = TdotOp::nt_zero, .dest = V(0), .src_a = T(0), .src_b = A(1)},
-                "tdot src_b domain");
+TEST_CASE(validate_rejects_bad_vmma) {
+  check_illegal(VmmaInstr{.op = static_cast<VmmaOp>(2), .dest = V(0), .src_a = T(0), .src_b = T(1)},
+                "unassigned vmma op");
+  check_illegal(VmmaInstr{.op = VmmaOp::nt_zero, .dest = A(0), .src_a = T(0), .src_b = T(1)},
+                "vmma destination domain");
+  check_illegal(VmmaInstr{.op = VmmaOp::nt_zero, .dest = V(0), .src_a = B(0), .src_b = T(1)},
+                "vmma src_a domain");
+  check_illegal(VmmaInstr{.op = VmmaOp::nt_zero, .dest = V(0), .src_a = T(0), .src_b = A(1)},
+                "vmma src_b domain");
   check_illegal(
-      TdotInstr{.op = TdotOp::nt_zero, .dest = V(0), .src_a = T(0), .src_b = T(1), .row = 32},
-      "tdot Tile row 32");
+      VmmaInstr{.op = VmmaOp::nt_zero, .dest = V(0), .src_a = T(0), .src_b = T(1), .row = 32},
+      "vmma Tile row 32");
 }
 
 TEST_CASE(validate_rejects_bad_sys) {

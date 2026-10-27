@@ -568,8 +568,8 @@
 #   [31:28] major4 = 0000  [27:25] reserved3  [24:22] funct3
 #   [21:17] row5  [16:12] B5 (tB)  [11:7] A5 (tA)  [6:2] D5 (aD/vD)
 #   [1:0] q = 10
-# row5 selects the tdot.nt Tile A row and must be 0 for mma.
-# funct3: 000 mma.nt.zero, 001 mma.nt.acc, 010 tdot.nt, 011 tdot.nt.acc,
+# row5 selects the vmma.nt Tile A row and must be 0 for mma.
+# funct3: 000 mma.nt.zero, 001 mma.nt.acc, 010 vmma.nt.zero, 011 vmma.nt.acc,
 #         100..111 reserved.
 .macro MMA funct3, d5, a5, b5, row=0
     .word ((\row << 17) | (\funct3 << 22) | (\b5 << 12) | (\a5 << 7) | (\d5 << 2) | 2)
@@ -583,12 +583,12 @@
     MMA 1, \d5, \a5, \b5
 .endm
 
-# tdot.nt: asm operand order vD, tA[row], tB.
-.macro TDOT_NT d5, a5, row, b5
+# vmma.nt.zero: asm operand order vD, tA[row], tB.
+.macro VMMA_NT_ZERO d5, a5, row, b5
     MMA 2, \d5, \a5, \b5, \row
 .endm
 
-.macro TDOT_NT_ACC d5, a5, row, b5
+.macro VMMA_NT_ACC d5, a5, row, b5
     MMA 3, \d5, \a5, \b5, \row
 .endm
 

@@ -22,7 +22,7 @@ constexpr std::int32_t i8_value(std::uint8_t value) {
 
 constexpr bool is_accumulate(MmaOp op) { return op == MmaOp::nt_acc; }
 
-constexpr bool is_accumulate(TdotOp op) { return op == TdotOp::nt_acc; }
+constexpr bool is_accumulate(VmmaOp op) { return op == VmmaOp::nt_acc; }
 
 // The right operand is stored N x K: row j is contiguous in K, so the inner
 // loop accumulates one output element with wrap32 addition.
@@ -87,9 +87,9 @@ ExecuteResult mma(const MmaInstr &instr, State &state) {
   return {.status = StepStatus::retired};
 }
 
-// tdot.nt[.acc].i8.i32: vD[j] = dot(tA[row], tB row j); acc adds the i32
-// partial into the existing lane.
-ExecuteResult tdot(const TdotInstr &instr, State &state) {
+// vmma.nt.zero / vmma.nt.acc.i8.i32: vD[j] = dot(tA[row], tB row j); acc adds
+// the i32 partial into the existing lane.
+ExecuteResult vmma(const VmmaInstr &instr, State &state) {
   const auto &dst_config = state.vc[instr.dest.index];
   const auto &lhs_config = state.tc[instr.src_a.index];
   const auto &rhs_config = state.tc[instr.src_b.index];
@@ -121,6 +121,6 @@ ExecuteResult tdot(const TdotInstr &instr, State &state) {
 
 ExecuteResult execute(const MmaInstr &instr, State &state) { return mma(instr, state); }
 
-ExecuteResult execute(const TdotInstr &instr, State &state) { return tdot(instr, state); }
+ExecuteResult execute(const VmmaInstr &instr, State &state) { return vmma(instr, state); }
 
 } // namespace tile_npu

@@ -3,7 +3,7 @@
 # Self-checking MMA image: programs configs and descriptors, loads a
 # shared 2x3 left Tile and a 2x3 right Tile in N x K order, then runs
 # mma.nt.zero, mma.nt.acc (accumulating onto the first result), and the
-# Tile-row tdot.nt and tdot.nt.acc forms over the same left Tile. Results are
+# Tile-row vmma.nt.zero and vmma.nt.acc forms over the same left Tile. Results are
 # stored back and compared word-wise. Ends with ebreak: a0 = 0 pass, a0 = N
 # identifies the failing check.
 #
@@ -83,9 +83,9 @@ _start:
     addi      x6, x6, -1
     bnez      x6, 2b
 
-    # Stage 3 - tdot.nt.i8.i32 v4, t0[1], t2 reads {4, -5, 6}
+    # Stage 3 - vmma.nt.zero.i8.i32 v4, t0[1], t2 reads {4, -5, 6}
     # and writes {42, 57}.
-    TDOT_NT 4, 0, 1, 2
+    VMMA_NT_ZERO 4, 0, 1, 2
     lla       x3, dstbuf2
     CFG_REG   3, 1, 0, 0, 3, 4
     VSTORE    4
@@ -99,9 +99,9 @@ _start:
     li        x5, 57
     bne       x4, x5, fail
 
-    # Stage 4 - tdot.nt.acc.i8.i32 v4, t0[0], t2 adds
+    # Stage 4 - vmma.nt.acc.i8.i32 v4, t0[0], t2 adds
     # {50, 68} from row 0 -> {92, 125}.
-    TDOT_NT_ACC 4, 0, 0, 2
+    VMMA_NT_ACC 4, 0, 0, 2
     lla       x3, dstbuf2
     CFG_REG   3, 1, 0, 0, 3, 4
     VSTORE    4

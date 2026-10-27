@@ -125,15 +125,15 @@ struct MmaInstr {
   NpuRegister src_b{}; // Tile.
 };
 
-enum class TdotOp : std::uint8_t {
+enum class VmmaOp : std::uint8_t {
   nt_zero,
   nt_acc,
 };
 
-struct TdotInstr {
-  TdotOp op = TdotOp::nt_zero;
+struct VmmaInstr {
+  VmmaOp op = VmmaOp::nt_zero;
   NpuRegister dest{};  // Vec32.
-  NpuRegister src_a{}; // Tile; the selected row is the dot's A operand.
+  NpuRegister src_a{}; // Tile; the selected row is the vector operand.
   NpuRegister src_b{}; // Tile.
   std::uint8_t row = 0;
 };

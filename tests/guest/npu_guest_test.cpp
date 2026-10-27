@@ -319,8 +319,8 @@ TEST_CASE(npu_guest_qnt) {
 TEST_CASE(npu_guest_mma) {
   // tests/guest/npu/mma.S self-configures configs and descriptors, loads its
   // operands, then exercises mma.nt.zero and mma.nt.acc on an N x K right Tile
-  // (accumulating onto the first product), followed by tdot.nt and
-  // tdot.nt.acc reading A from a Tile row, with store-back checks. It reaches
+  // (accumulating onto the first product), followed by vmma.nt.zero and
+  // vmma.nt.acc reading A from a Tile row, with store-back checks. It reaches
   // ebreak with a0 = 0 on success; a failing check reports its stage in a0.
   check_guest_image("mma", 1024);
 }
