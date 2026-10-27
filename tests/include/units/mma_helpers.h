@@ -10,8 +10,8 @@ namespace tile_npu::test {
 //   [21:17] row5  [16:12] B5 (tB)  [11:7] A5 (tA)  [6:2] D5 (aD/vD)
 //   [1:0] q = 10
 // row5 selects the tdot.nt Tile A row and must be 0 for mma.
-// funct3: 000/001 reserved, 010 mma.nt.zero, 011 mma.nt.acc,
-// 100/101 reserved, 110 tdot.nt, 111 tdot.nt.acc.
+// funct3: 000 mma.nt.zero, 001 mma.nt.acc, 010 tdot.nt, 011 tdot.nt.acc,
+// 100..111 reserved.
 constexpr std::uint32_t make_mma(std::uint32_t funct3, std::uint32_t dest, std::uint32_t src_a,
                                  std::uint32_t src_b, std::uint32_t row = 0) {
   return (row << 17) | (funct3 << 22) | (src_b << 12) | (src_a << 7) | (dest << 2) | 2u;

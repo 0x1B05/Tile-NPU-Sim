@@ -569,27 +569,27 @@
 #   [21:17] row5  [16:12] B5 (tB)  [11:7] A5 (tA)  [6:2] D5 (aD/vD)
 #   [1:0] q = 10
 # row5 selects the tdot.nt Tile A row and must be 0 for mma.
-# funct3: 000/001 reserved, 010 mma.nt.zero, 011 mma.nt.acc,
-#         100/101 reserved, 110 tdot.nt, 111 tdot.nt.acc.
+# funct3: 000 mma.nt.zero, 001 mma.nt.acc, 010 tdot.nt, 011 tdot.nt.acc,
+#         100..111 reserved.
 .macro MMA_BDOT funct3, d5, a5, b5, row=0
     .word ((\row << 17) | (\funct3 << 22) | (\b5 << 12) | (\a5 << 7) | (\d5 << 2) | 2)
 .endm
 
 .macro MMA_NT_ZERO d5, a5, b5
-    MMA_BDOT 2, \d5, \a5, \b5
+    MMA_BDOT 0, \d5, \a5, \b5
 .endm
 
 .macro MMA_NT_ACC d5, a5, b5
-    MMA_BDOT 3, \d5, \a5, \b5
+    MMA_BDOT 1, \d5, \a5, \b5
 .endm
 
 # tdot.nt: asm operand order vD, tA[row], tB.
 .macro TDOT_NT d5, a5, row, b5
-    MMA_BDOT 6, \d5, \a5, \b5, \row
+    MMA_BDOT 2, \d5, \a5, \b5, \row
 .endm
 
 .macro TDOT_NT_ACC d5, a5, row, b5
-    MMA_BDOT 7, \d5, \a5, \b5, \row
+    MMA_BDOT 3, \d5, \a5, \b5, \row
 .endm
 
 # SYS (Z format):

@@ -76,13 +76,13 @@ TEST_CASE(mma_decode) {
       // Anchor word computed by hand from the encoding figure: the asm
       // operand order is aD, tA, tB.
       MmaCase{.name = "mma.nt.zero.i8.i32 a1, t2, t3",
-              .word = 0x00803106u,
+              .word = 0x00003106u,
               .op = MmaOp::nt_zero,
               .dest = 1,
               .src_a = 2,
               .src_b = 3},
       MmaCase{.name = "mma.nt.acc.i8.i32 a4, t5, t6",
-              .word = make_mma(3, 4, 5, 6),
+              .word = make_mma(1, 4, 5, 6),
               .op = MmaOp::nt_acc,
               .dest = 4,
               .src_a = 5,
@@ -94,14 +94,14 @@ TEST_CASE(mma_decode) {
 TEST_CASE(tdot_decode) {
   constexpr std::array cases{
       TdotCase{.name = "tdot.nt.i8.i32 v6, t7[0], t8",
-               .word = make_mma(6, 6, 7, 8, 0),
+               .word = make_mma(2, 6, 7, 8, 0),
                .op = TdotOp::nt_zero,
                .dest = 6,
                .src_a = 7,
                .src_b = 8,
                .row = 0},
       TdotCase{.name = "tdot.nt.acc.i8.i32 v9, t10[31], t11",
-               .word = make_mma(7, 9, 10, 11, 31),
+               .word = make_mma(3, 9, 10, 11, 31),
                .op = TdotOp::nt_acc,
                .dest = 9,
                .src_a = 10,
@@ -113,14 +113,14 @@ TEST_CASE(tdot_decode) {
 
 TEST_CASE(mma_decode_rejects_reserved) {
   constexpr std::array cases{
-      // Only the nt dot layout is assigned; 100/101 are reserved.
-      DecodeCase{"funct3 000", make_mma(0, 0, 0, 0)},
-      DecodeCase{"funct3 001", make_mma(1, 0, 0, 0)},
+      // funct3 100..111 are reserved.
       DecodeCase{"funct3 100", make_mma(4, 0, 1, 2)},
       DecodeCase{"funct3 101", make_mma(5, 0, 1, 2)},
+      DecodeCase{"funct3 110", make_mma(6, 0, 1, 2)},
+      DecodeCase{"funct3 111", make_mma(7, 0, 1, 2)},
       // reserved3 must be 0; row5 is reserved for mma.
       DecodeCase{"reserved3", 0x02003106u},
-      DecodeCase{"mma row5", make_mma(2, 0, 1, 2, 1)},
+      DecodeCase{"mma row5", make_mma(0, 0, 1, 2, 1)},
   };
   expect_illegal(cases);
 }

@@ -46,7 +46,7 @@ TEST_CASE(mma_nt_zero) {
   Simulator sim(memory);
   // {{1,2,3},{4,-5,6}} x {{7,8,9},{10,11,12}}^T =
   //   {{50, 68}, {42, 57}}; i8 operands sign-extend before the i32 product.
-  load_one(sim, memory, make_mma(2, 0, 1, 2));
+  load_one(sim, memory, make_mma(0, 0, 1, 2));
   auto &state = sim.state();
   acc_i32(state, 0, 2, 2);
   tile_i8(state, 1, 2, 3);
@@ -66,7 +66,7 @@ TEST_CASE(mma_nt_acc) {
   Simulator sim(memory);
   // Same product as mma_nt_zero accumulated onto {INT32_MAX, 2, 3, 4}:
   // D[0,0] wraps to 0x80000031 (wrap32), the rest add normally.
-  load_one(sim, memory, make_mma(3, 0, 1, 2));
+  load_one(sim, memory, make_mma(1, 0, 1, 2));
   auto &state = sim.state();
   acc_i32(state, 0, 2, 2);
   tile_i8(state, 1, 2, 3);
@@ -90,8 +90,8 @@ TEST_CASE(tdot_nt) {
   Simulator sim(memory);
   // A = {{1,2,3},{4,-5,6}}, B = {{7,8,9},{10,11,12}} in N x K order.
   // Row 1 dots to {42, 57}; the acc form then adds row 0's {50, 68}.
-  write_word(memory, CODE_BASE, make_mma(6, 0, 1, 2, 1));
-  write_word(memory, CODE_BASE + 4, make_mma(7, 0, 1, 2, 0));
+  write_word(memory, CODE_BASE, make_mma(2, 0, 1, 2, 1));
+  write_word(memory, CODE_BASE + 4, make_mma(3, 0, 1, 2, 0));
   sim.reset(CODE_BASE);
   auto &state = sim.state();
   state.vc[0].dtype = DType::i32;
@@ -117,7 +117,7 @@ TEST_CASE(mma_rejects_invalid) {
   auto &state = sim.state();
 
   // The left Tile must be i8.
-  load_one(sim, memory, make_mma(2, 0, 1, 2));
+  load_one(sim, memory, make_mma(0, 0, 1, 2));
   acc_i32(state, 0, 2, 2);
   state.tc[1].dtype = DType::u8;
   state.tc[1].rows = 2;
@@ -128,7 +128,7 @@ TEST_CASE(mma_rejects_invalid) {
   check_eq(hex(state.a[0][0]), hex(0xeeeeeeeeu), "non-mutating");
 
   // The Acc destination must be i32.
-  load_one(sim, memory, make_mma(2, 0, 1, 2));
+  load_one(sim, memory, make_mma(0, 0, 1, 2));
   acc_i32(state, 0, 2, 2);
   state.ac[0].dtype = DType::f32;
   tile_i8(state, 1, 2, 3);
@@ -136,14 +136,14 @@ TEST_CASE(mma_rejects_invalid) {
   check_eq(sim.step().status, StepStatus::invalid_configuration, "mma rejects an f32 destination");
 
   // nt requires cols(tA) == cols(tB).
-  load_one(sim, memory, make_mma(2, 0, 1, 2));
+  load_one(sim, memory, make_mma(0, 0, 1, 2));
   acc_i32(state, 0, 2, 2);
   tile_i8(state, 1, 2, 3);
   tile_i8(state, 2, 2, 2);
   check_eq(sim.step().status, StepStatus::invalid_configuration, "mma.nt rejects a K mismatch");
 
   // The destination shape must be M x N.
-  load_one(sim, memory, make_mma(2, 0, 1, 2));
+  load_one(sim, memory, make_mma(0, 0, 1, 2));
   acc_i32(state, 0, 2, 3);
   tile_i8(state, 1, 2, 3);
   tile_i8(state, 2, 2, 3);
@@ -151,7 +151,7 @@ TEST_CASE(mma_rejects_invalid) {
            "mma rejects a destination shape mismatch");
 
   // tdot.nt requires len(vD) == rows(tB).
-  load_one(sim, memory, make_mma(6, 0, 1, 2));
+  load_one(sim, memory, make_mma(2, 0, 1, 2));
   state.vc[0].dtype = DType::i32;
   state.vc[0].len = 3;
   tile_i8(state, 1, 2, 3);
@@ -160,7 +160,7 @@ TEST_CASE(mma_rejects_invalid) {
            "tdot.nt rejects a destination length mismatch");
 
   // The selected row must be within rows(tA).
-  load_one(sim, memory, make_mma(6, 0, 1, 2, 2));
+  load_one(sim, memory, make_mma(2, 0, 1, 2, 2));
   state.vc[0].dtype = DType::i32;
   state.vc[0].len = 2;
   tile_i8(state, 1, 2, 3);
@@ -169,7 +169,7 @@ TEST_CASE(mma_rejects_invalid) {
            "tdot.nt rejects an out-of-range Tile row");
 
   // The selected Tile row must have K columns.
-  load_one(sim, memory, make_mma(6, 0, 1, 2, 0));
+  load_one(sim, memory, make_mma(2, 0, 1, 2, 0));
   state.vc[0].dtype = DType::i32;
   state.vc[0].len = 2;
   tile_i8(state, 1, 2, 2);
