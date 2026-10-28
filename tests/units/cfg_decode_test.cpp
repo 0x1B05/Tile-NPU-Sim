@@ -32,11 +32,11 @@ constexpr std::uint32_t cfg_i(std::uint32_t major4, std::uint32_t sel2, std::uin
          ((static_cast<std::uint32_t>(imm) & 0xffffu) << 7) | (c5 << 2) | 0x2u;
 }
 
-// R4 format (CFG_REG, major4 = 0111): sel2 MV funct3 field5 N5 S5 D5 q; N5
+// R4 format (CFG_REG, major4 = 0111): sel2 CM funct3 field5 N5 S5 D5 q; N5
 // ([16:12]) is the last destination offset N for writes and zero for reads.
-constexpr std::uint32_t cfg_reg(std::uint32_t sel2, std::uint32_t mv, std::uint32_t funct3,
+constexpr std::uint32_t cfg_reg(std::uint32_t sel2, std::uint32_t cm, std::uint32_t funct3,
                                 std::uint32_t field5, std::uint32_t s5, std::uint32_t d5) {
-  return (0x7u << 28) | (sel2 << 26) | (mv << 25) | (funct3 << 22) | (field5 << 17) | (s5 << 7) |
+  return (0x7u << 28) | (sel2 << 26) | (cm << 25) | (funct3 << 22) | (field5 << 17) | (s5 << 7) |
          (d5 << 2) | 0x2u;
 }
 
@@ -121,13 +121,13 @@ TEST_CASE(cfg_decode_seti) {
            ConfigField::rows, 32},
       Case{"seti ac cols", cfg_i(0x5, 1, 2, 16, 3), Case::Kind::seti, ConfigRegType::ac, 3, 0,
            ConfigField::cols, 16},
-      Case{"seti negative imm", cfg_i(0x5, 2, 1, -4, 0), Case::Kind::seti, ConfigRegType::tm, 0, 0,
+      Case{"seti negative imm", cfg_i(0x6, 0, 1, -4, 0), Case::Kind::seti, ConfigRegType::tm, 0, 0,
            ConfigField::row_stride_bytes, -4},
       Case{"seti imm min", cfg_i(0x5, 0, 1, -32768, 0), Case::Kind::seti, ConfigRegType::tc, 0, 0,
            ConfigField::rows, -32768},
       Case{"seti imm max", cfg_i(0x5, 0, 1, 32767, 0), Case::Kind::seti, ConfigRegType::tc, 0, 0,
            ConfigField::rows, 32767},
-      Case{"seti vm31 flags (vector side)", cfg_i(0x6, 3, 2, 1, 31), Case::Kind::seti,
+      Case{"seti vm31 flags (memory group)", cfg_i(0x6, 2, 2, 1, 31), Case::Kind::seti,
            ConfigRegType::vm, 31, 0, ConfigField::flags, 1},
       Case{"seti tc31 (last tile)", cfg_i(0x5, 0, 0, 1, 31), Case::Kind::seti, ConfigRegType::tc,
            31, 0, ConfigField::dtype, 1},
@@ -139,24 +139,24 @@ TEST_CASE(cfg_decode_seti) {
 
 TEST_CASE(cfg_decode_reg) {
   constexpr std::array cases{
-      Case{"cfg.setx tm2, row_stride_bytes, x4", cfg_reg(2, 0, 0, 1, 4, 2), Case::Kind::setx,
+      Case{"cfg.setx tm2, row_stride_bytes, x4", cfg_reg(0, 1, 0, 1, 4, 2), Case::Kind::setx,
            ConfigRegType::tm, 2, 4, ConfigField::row_stride_bytes, 0},
-      Case{"cfg.setx vc0, len, x31", cfg_reg(1, 1, 0, 1, 31, 0), Case::Kind::setx,
+      Case{"cfg.setx vc0, len, x31", cfg_reg(2, 0, 0, 1, 31, 0), Case::Kind::setx,
            ConfigRegType::vc, 0, 31, ConfigField::len, 0},
       Case{"cfg.copy tc7, tc3", cfg_reg(0, 0, 1, 0, 3, 7), Case::Kind::copy, ConfigRegType::tc, 7,
            3, std::nullopt, 0},
       Case{"cfg.get x5, tc0, rows", cfg_reg(0, 0, 2, 1, 0, 5), Case::Kind::get, ConfigRegType::tc,
            5, 0, ConfigField::rows, 0},
-      Case{"cfg.get x0, am11, base_addr", cfg_reg(3, 0, 2, 0, 11, 0), Case::Kind::get,
+      Case{"cfg.get x0, am11, base_addr", cfg_reg(1, 1, 2, 0, 11, 0), Case::Kind::get,
            ConfigRegType::am, 0, 11, ConfigField::base_addr, 0},
       // N5 is the last destination offset for the writes.
-      Case{"cfg.setx vm0, flags, x6, N=2", cfg_reg(3, 1, 0, 2, 6, 0) | (2u << 12), Case::Kind::setx,
+      Case{"cfg.setx vm0, flags, x6, N=2", cfg_reg(2, 1, 0, 2, 6, 0) | (2u << 12), Case::Kind::setx,
            ConfigRegType::vm, 0, 6, ConfigField::flags, 0, 2},
-      Case{"cfg.copy tm0, tm1, N=31", cfg_reg(2, 0, 1, 0, 1, 0) | (31u << 12), Case::Kind::copy,
+      Case{"cfg.copy tm0, tm1, N=31", cfg_reg(0, 1, 1, 0, 1, 0) | (31u << 12), Case::Kind::copy,
            ConfigRegType::tm, 0, 1, std::nullopt, 0, 31},
       Case{"cfg.setw tc2, x4, N=2", cfg_reg(0, 0, 3, 0, 4, 2) | (2u << 12), Case::Kind::setw,
            ConfigRegType::tc, 2, 4, std::nullopt, 0, 2},
-      Case{"cfg.getw x5, vc0", cfg_reg(1, 1, 4, 0, 0, 5), Case::Kind::getw, ConfigRegType::vc, 5, 0,
+      Case{"cfg.getw x5, vc0", cfg_reg(2, 0, 4, 0, 0, 5), Case::Kind::getw, ConfigRegType::vc, 5, 0,
            std::nullopt, 0},
   };
   check_cases(cases);
@@ -166,8 +166,9 @@ TEST_CASE(cfg_decode_field_codes_by_register_type) {
   struct RegisterCase {
     const char *name;
     ConfigRegType type;
+    std::uint32_t major4;
     std::uint32_t sel2;
-    std::uint32_t mv;
+    std::uint32_t cm;
     std::span<const ConfigField> fields;
   };
 
@@ -182,33 +183,33 @@ TEST_CASE(cfg_decode_field_codes_by_register_type) {
   constexpr std::array vm_fields{ConfigField::base_addr, ConfigField::stride_bytes,
                                  ConfigField::flags};
   const std::array registers{
-      RegisterCase{"tc", ConfigRegType::tc, 0, 0, tc_fields},
-      RegisterCase{"ac", ConfigRegType::ac, 1, 0, ac_fields},
-      RegisterCase{"vc", ConfigRegType::vc, 1, 1, vc_fields},
-      RegisterCase{"tm", ConfigRegType::tm, 2, 0, tm_fields},
-      RegisterCase{"am", ConfigRegType::am, 3, 0, tm_fields},
-      RegisterCase{"vm", ConfigRegType::vm, 3, 1, vm_fields},
+      RegisterCase{"tc", ConfigRegType::tc, 0x5, 0, 0, tc_fields},
+      RegisterCase{"ac", ConfigRegType::ac, 0x5, 1, 0, ac_fields},
+      RegisterCase{"vc", ConfigRegType::vc, 0x5, 2, 0, vc_fields},
+      RegisterCase{"tm", ConfigRegType::tm, 0x6, 0, 1, tm_fields},
+      RegisterCase{"am", ConfigRegType::am, 0x6, 1, 1, tm_fields},
+      RegisterCase{"vm", ConfigRegType::vm, 0x6, 2, 1, vm_fields},
   };
   for (const auto &reg : registers) {
     for (std::uint8_t field = 0; field < 8; ++field) {
       if (field < reg.fields.size()) {
         const auto expected = reg.fields[field];
         const std::array cases{
-            Case{reg.name, cfg_i(0x5 + reg.mv, reg.sel2, field, 32, 0), Case::Kind::seti, reg.type,
-                 0, 0, expected, 32},
-            Case{reg.name, cfg_reg(reg.sel2, reg.mv, 0, field, 4, 0), Case::Kind::setx, reg.type, 0,
+            Case{reg.name, cfg_i(reg.major4, reg.sel2, field, 32, 0), Case::Kind::seti, reg.type, 0,
+                 0, expected, 32},
+            Case{reg.name, cfg_reg(reg.sel2, reg.cm, 0, field, 4, 0), Case::Kind::setx, reg.type, 0,
                  4, expected, 0},
-            Case{reg.name, cfg_reg(reg.sel2, reg.mv, 2, field, 0, 5), Case::Kind::get, reg.type, 5,
+            Case{reg.name, cfg_reg(reg.sel2, reg.cm, 2, field, 0, 5), Case::Kind::get, reg.type, 5,
                  0, expected, 0},
         };
         check_cases(cases);
       } else {
         const std::array cases{
-            Case{reg.name, cfg_i(0x5 + reg.mv, reg.sel2, field, 32, 0), Case::Kind::seti, reg.type,
-                 0, 0, std::nullopt, 32},
-            Case{reg.name, cfg_reg(reg.sel2, reg.mv, 0, field, 4, 0), Case::Kind::setx, reg.type, 0,
+            Case{reg.name, cfg_i(reg.major4, reg.sel2, field, 32, 0), Case::Kind::seti, reg.type, 0,
+                 0, std::nullopt, 32},
+            Case{reg.name, cfg_reg(reg.sel2, reg.cm, 0, field, 4, 0), Case::Kind::setx, reg.type, 0,
                  4, std::nullopt, 0},
-            Case{reg.name, cfg_reg(reg.sel2, reg.mv, 2, field, 0, 5), Case::Kind::get, reg.type, 5,
+            Case{reg.name, cfg_reg(reg.sel2, reg.cm, 2, field, 0, 5), Case::Kind::get, reg.type, 5,
                  0, std::nullopt, 0},
         };
         for (const auto &test : cases) {
@@ -226,24 +227,24 @@ TEST_CASE(cfg_decode_rejects_reserved) {
       // N5 is a destination offset for writes and must be 0 for reads.
       DecodeCase{"get N5 nonzero", cfg_reg(0, 0, 2, 0, 0, 5) | (1u << 12)},
       DecodeCase{"setx tc31 + 2", cfg_reg(0, 0, 0, 1, 4, 31) | (1u << 12)},
-      DecodeCase{"copy vc31 + 2", cfg_reg(1, 1, 1, 0, 0, 31) | (1u << 12)},
-      DecodeCase{"copy am31 + 2", cfg_reg(3, 0, 1, 0, 0, 31) | (1u << 12)},
+      DecodeCase{"copy vc31 + 2", cfg_reg(2, 0, 1, 0, 0, 31) | (1u << 12)},
+      DecodeCase{"copy am31 + 2", cfg_reg(1, 1, 1, 0, 0, 31) | (1u << 12)},
       DecodeCase{"funct3 = 101 reserved", cfg_reg(0, 0, 5, 0, 0, 0)},
       DecodeCase{"funct3 = 111 reserved", cfg_reg(0, 0, 7, 0, 0, 0)},
       // setw/getw: compute configs only, field5 zero, span within the type.
-      DecodeCase{"setw on tm", cfg_reg(2, 0, 3, 0, 4, 0)},
-      DecodeCase{"getw on vm", cfg_reg(3, 1, 4, 0, 0, 5)},
+      DecodeCase{"setw on tm", cfg_reg(0, 1, 3, 0, 4, 0)},
+      DecodeCase{"getw on vm", cfg_reg(2, 1, 4, 0, 0, 5)},
       DecodeCase{"setw field5 nonzero", cfg_reg(0, 0, 3, 1, 4, 0)},
       DecodeCase{"setw tc31 + 2", cfg_reg(0, 0, 3, 0, 4, 31) | (1u << 12)},
       DecodeCase{"setw ac31 + 2", cfg_reg(1, 0, 3, 0, 4, 31) | (1u << 12)},
       DecodeCase{"getw N5 nonzero", cfg_reg(0, 0, 4, 0, 0, 5) | (1u << 12)},
-      // The vector side only defines sel2 = 01 (VC) and 11 (VM).
-      DecodeCase{"vector seti sel2 00", cfg_i(0x6, 0, 0, 32, 0)},
-      DecodeCase{"vector seti sel2 10", cfg_i(0x6, 2, 0, 32, 0)},
-      DecodeCase{"vector setx sel2 00", cfg_reg(0, 1, 0, 0, 4, 0)},
-      DecodeCase{"vector get sel2 10", cfg_reg(2, 1, 2, 0, 0, 5)},
-      DecodeCase{"vector setw sel2 00", cfg_reg(0, 1, 3, 0, 4, 0)},
-      DecodeCase{"vector getw sel2 10", cfg_reg(2, 1, 4, 0, 0, 5)},
+      // sel2 = 11 is reserved in both config groups.
+      DecodeCase{"mem seti sel2 11", cfg_i(0x6, 3, 0, 32, 0)},
+      DecodeCase{"compute seti sel2 11", cfg_i(0x5, 3, 0, 32, 0)},
+      DecodeCase{"cfg_reg sel2 11", cfg_reg(3, 0, 0, 0, 4, 0)},
+      DecodeCase{"cfg_reg sel2 11 with CM", cfg_reg(3, 1, 2, 0, 0, 5)},
+      DecodeCase{"setw sel2 11", cfg_reg(3, 0, 3, 0, 4, 0)},
+      DecodeCase{"getw sel2 11", cfg_reg(3, 1, 4, 0, 0, 5)},
       // Reserved major4 encodings report illegal.
       DecodeCase{"reserved major4 1010", (0xau << 28) | 0x2u},
   };

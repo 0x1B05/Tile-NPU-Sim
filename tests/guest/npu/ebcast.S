@@ -15,29 +15,29 @@ _start:
     CFG_SETI  5, 1, 0, 2, 0
     CFG_SETI  5, 1, 1, 2, 0
     CFG_SETI  5, 1, 2, 2, 0
-    CFG_SETI  5, 3, 1, 8, 0
-    CFG_SETI  5, 3, 2, 4, 0
+    CFG_SETI  6, 1, 1, 8, 0
+    CFG_SETI  6, 1, 2, 4, 0
     CFG_SETI  5, 1, 0, 2, 1
     CFG_SETI  5, 1, 1, 2, 1
     CFG_SETI  5, 1, 2, 2, 1
-    CFG_SETI  5, 3, 1, 8, 1
-    CFG_SETI  5, 3, 2, 4, 1
+    CFG_SETI  6, 1, 1, 8, 1
+    CFG_SETI  6, 1, 2, 4, 1
     # vc0: dtype = i32 (2), len = 2; vm0: stride = 4
-    CFG_SETI  6, 1, 0, 2, 0
-    CFG_SETI  6, 1, 1, 2, 0
-    CFG_SETI  6, 3, 1, 4, 0
+    CFG_SETI  5, 2, 0, 2, 0
+    CFG_SETI  5, 2, 1, 2, 0
+    CFG_SETI  6, 2, 1, 4, 0
 
     # Stage 1 - aaddv.byrow a0, a1, v0 (i32): row i takes v0[i]
     #   {{6, 7}, {8, 9}} with v0 = {2, 3} -> {{8, 9}, {11, 12}}
     lla       x3, src_a
-    CFG_REG   3, 0, 0, 0, 3, 1
+    CFG_REG   1, 1, 0, 0, 3, 1
     ALOAD     1
     lla       x3, src_v
-    CFG_REG   3, 1, 0, 0, 3, 0
+    CFG_REG   2, 1, 0, 0, 3, 0
     VLOAD     0
     AADDV_BYROW 0, 1, 0
     lla       x3, dstbuf
-    CFG_REG   3, 0, 0, 0, 3, 0
+    CFG_REG   1, 1, 0, 0, 3, 0
     ASTORE    0
     lla       x3, dstbuf
     lla       x4, exp_a_add
@@ -56,14 +56,14 @@ _start:
     # Stage 2 - amulv.bycol a0, a1, v0 (i32): column j takes v0[j]
     #   {{6, 7}, {8, 9}} with v0 = {2, 3} -> {{12, 21}, {16, 27}}
     lla       x3, src_a
-    CFG_REG   3, 0, 0, 0, 3, 1
+    CFG_REG   1, 1, 0, 0, 3, 1
     ALOAD     1
     lla       x3, src_v
-    CFG_REG   3, 1, 0, 0, 3, 0
+    CFG_REG   2, 1, 0, 0, 3, 0
     VLOAD     0
     AMULV_BYCOL 0, 1, 0
     lla       x3, dstbuf
-    CFG_REG   3, 0, 0, 0, 3, 0
+    CFG_REG   1, 1, 0, 0, 3, 0
     ASTORE    0
     lla       x3, dstbuf
     lla       x4, exp_a

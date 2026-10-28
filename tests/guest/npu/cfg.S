@@ -1,8 +1,8 @@
 #include "npu.inc"
 
 # Self-checking cfg image: programs config registers with cfg.seti/cfg.setx,
-# reads them back with cfg.get, and exercises cfg.copy on both the matrix and
-# vector sides. Ends with ebreak: a0 = 0 pass, a0 = 1 fail.
+# reads them back with cfg.get, and exercises cfg.copy on compute configs
+# and memory descriptors. Ends with ebreak: a0 = 0 pass, a0 = 1 fail.
 
     .globl _start
 _start:
@@ -15,13 +15,13 @@ _start:
 
     # cfg.setx tm0, base_addr, x3 with the full 64-bit scalar value
     li        x3, 0x4000
-    CFG_REG   2, 0, 0, 0, 3, 0     # cfg.setx tm0, base_addr, x3
-    CFG_REG   2, 0, 2, 0, 0, 4     # cfg.get x4, tm0, base_addr
+    CFG_REG   0, 1, 0, 0, 3, 0     # cfg.setx tm0, base_addr, x3
+    CFG_REG   0, 1, 2, 0, 0, 4     # cfg.get x4, tm0, base_addr
     bne       x3, x4, fail
 
     # cfg.seti tm0, row_stride_bytes, -4: negative immediates sign-extend
-    CFG_SETI  5, 2, 1, -4, 0
-    CFG_REG   2, 0, 2, 1, 0, 7     # cfg.get x7, tm0, row_stride_bytes
+    CFG_SETI  6, 0, 1, -4, 0
+    CFG_REG   0, 1, 2, 1, 0, 7     # cfg.get x7, tm0, row_stride_bytes
     li        x8, -4
     bne       x7, x8, fail
 
@@ -31,9 +31,9 @@ _start:
     li        x6, 3
     bne       x5, x6, fail
 
-    # vector side: cfg.seti vc0, len, 32 (major4 = 6, MV = 1 on readback)
-    CFG_SETI  6, 1, 1, 32, 0
-    CFG_REG   1, 1, 2, 1, 0, 9     # cfg.get x9, vc0, len
+    # compute group: cfg.seti vc0, len, 32 (major4 = 5, sel2 = 2)
+    CFG_SETI  5, 2, 1, 32, 0
+    CFG_REG   2, 0, 2, 1, 0, 9     # cfg.get x9, vc0, len
     li        x10, 32
     bne       x9, x10, fail
 

@@ -1,4 +1,4 @@
-# NPU guest bindings: config field numbers, sel2/dtype codes, scalar register
+# NPU guest bindings: config field numbers, config type/dtype codes, scalar register
 # numbers, and instruction encoding macros. Shared by tests/guest and
 # apps/qwen3. Field layouts mirror src/decode/encoding.h; the CF_* numbers
 # follow the manual's field3 table. Correctness is pinned by the known-good
@@ -19,13 +19,13 @@
 .equ CF_STRIDE,   1
 .equ CF_VFLAGS,   2
 
-# Config register sel2 codes: matrix side TC/AC/TM/AM, vector side VC/VM.
+# Config type codes: sel3 = {sel2, CM}, CM = 0 compute / 1 memory.
 .equ SEL_TC, 0
-.equ SEL_AC, 1
-.equ SEL_TM, 2
+.equ SEL_AC, 2
+.equ SEL_VC, 4
+.equ SEL_TM, 1
 .equ SEL_AM, 3
-.equ SEL_VC, 1
-.equ SEL_VM, 3
+.equ SEL_VM, 5
 
 # DType codes.
 .equ DT_I8,  0
@@ -177,43 +177,53 @@
 .endm
 
 # I format (cfg.seti), mirroring NpuI in src/decode/encoding.h:
-#   [31:28] major4 (5 = matrix side, 6 = vector side)  [27:26] sel2
+#   [31:28] major4 (5 = compute group, 6 = memory group)  [27:26] sel2
 #   [25:23] field3  [22:7] imm16  [6:2] C5  [1:0] q = 10
 .macro CFG_SETI major4, sel2, field3, imm, c5
     .word ((\major4 << 28) | (\sel2 << 26) | (\field3 << 23) | ((\imm & 0xffff) << 7) | (\c5 << 2) | 2)
 .endm
 
+# Type-coded cfg.seti: SEL_* already contains {sel2, CM}; the group bit is
+# the low bit of the type code.
+.macro CFG_SETI_T type, field, imm, c5
+    CFG_SETI (5 + (\type & 1)), (\type >> 1), \field, \imm, \c5
+.endm
+
 # R4 format (CFG_REG), mirroring NpuR4 in src/decode/encoding.h:
-#   [31:28] major4 = 7  [27:26] sel2  [25] MV  [24:22] funct3
+#   [31:28] major4 = 7  [27:26] sel2  [25] CM  [24:22] funct3
 #   cfg.setx/get: [21:20] reserved2 [19:17] field3 [16:12] N5/reserved5
 #   cfg.copy/setw: [21:17] reserved5 [16:12] N5; cfg.getw: [21:12] reserved10
 #   [11:7] S5  [6:2] D5  [1:0] q = 10
 # funct3: 0 = setx (S5 = xS, D5 = C), 1 = copy (S5 = CS, D5 = CD),
 #         2 = get (S5 = C, D5 = xD)
 # N5 ([16:12]) is the last destination offset N; omitted N defaults to 0.
-.macro CFG_REG sel2, mv, funct3, field5, s5, d5, n=0
-    .word ((7 << 28) | (\sel2 << 26) | (\mv << 25) | (\funct3 << 22) | (\field5 << 17) | (\n << 12) | (\s5 << 7) | (\d5 << 2) | 2)
+.macro CFG_REG sel2, cm, funct3, field5, s5, d5, n=0
+    .word ((7 << 28) | (\sel2 << 26) | (\cm << 25) | (\funct3 << 22) | (\field5 << 17) | (\n << 12) | (\s5 << 7) | (\d5 << 2) | 2)
 .endm
 
-# cfg.seti on the matrix side (major4 = 5).
-.macro SETIM sel2, field, imm, c5
-    CFG_SETI 5, \sel2, \field, \imm, \c5
+# Type-coded CFG_REG: type is the 3-bit sel3 value.
+.macro CFG_REG_T type, funct3, field5, s5, d5, n=0
+    .word ((7 << 28) | (\type << 25) | (\funct3 << 22) | (\field5 << 17) | (\n << 12) | (\s5 << 7) | (\d5 << 2) | 2)
 .endm
 
-# cfg.seti on the vector side (major4 = 6).
-.macro SETIV sel2, field, imm, c5
-    CFG_SETI 6, \sel2, \field, \imm, \c5
+# cfg.seti with a SEL_* type code; the group is implied by CM.
+.macro SETIM type, field, imm, c5
+    CFG_SETI_T \type, \field, \imm, \c5
+.endm
+
+.macro SETIV type, field, imm, c5
+    CFG_SETI_T \type, \field, \imm, \c5
 .endm
 
 # cfg.setw C, xS[, N] (CFG_REG funct3 = 011): writes xS[31:0] as the config
 # word into C through C+N; N is the last destination offset in [16:12].
 # cfg.getw xD, C (funct3 = 100) reads one config word into xD.
-.macro SETW sel2, mv, c5, xs, n=0
-    CFG_REG \sel2, \mv, 3, 0, \xs, \c5, \n
+.macro SETW type, c5, xs, n=0
+    CFG_REG_T \type, 3, 0, \xs, \c5, \n
 .endm
 
-.macro GETW sel2, mv, xd, c5
-    CFG_REG \sel2, \mv, 4, 0, \c5, \xd
+.macro GETW type, xd, c5
+    CFG_REG_T \type, 4, 0, \c5, \xd
 .endm
 
 # Config words for cfg.setw (row-major, wrap): matrix rows[7:0] cols[15:8]
@@ -226,15 +236,14 @@
     li      \xd, ((\dtype << 8) | \len)
 .endm
 
-# cfg.setx: C[field] = x[xS] for C through C+N. MV = 0 matrix side,
-# 1 vector side.
-.macro SETX sel2, mv, field, c5, xs, n=0
-    CFG_REG \sel2, \mv, 0, \field, \xs, \c5, \n
+# cfg.setx: C[field] = x[xS] for C through C+N.
+.macro SETX type, field, c5, xs, n=0
+    CFG_REG_T \type, 0, \field, \xs, \c5, \n
 .endm
 
 # cfg.copy: broadcast config cs into configs cd through cd+N.
-.macro COPY sel2, mv, cd, cs, n=0
-    CFG_REG \sel2, \mv, 1, 0, \cs, \cd, \n
+.macro COPY type, cd, cs, n=0
+    CFG_REG_T \type, 1, 0, \cs, \cd, \n
 .endm
 
 .macro ASTORE d5

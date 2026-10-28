@@ -14,28 +14,28 @@
     .globl _start
 _start:
     # vc0: dtype = u32 (3), len = 4 (mask); vm0: stride = 4
-    CFG_SETI  6, 1, 0, 3, 0
-    CFG_SETI  6, 1, 1, 4, 0
-    CFG_SETI  6, 3, 1, 4, 0
+    CFG_SETI  5, 2, 0, 3, 0
+    CFG_SETI  5, 2, 1, 4, 0
+    CFG_SETI  6, 2, 1, 4, 0
     # vc1/vc2: dtype = i32 (2), len = 4; vm1/vm2: stride = 4
-    CFG_SETI  6, 1, 0, 2, 1
-    CFG_SETI  6, 1, 1, 4, 1
-    CFG_SETI  6, 3, 1, 4, 1
-    CFG_SETI  6, 1, 0, 2, 2
-    CFG_SETI  6, 1, 1, 4, 2
-    CFG_SETI  6, 3, 1, 4, 2
+    CFG_SETI  5, 2, 0, 2, 1
+    CFG_SETI  5, 2, 1, 4, 1
+    CFG_SETI  6, 2, 1, 4, 1
+    CFG_SETI  5, 2, 0, 2, 2
+    CFG_SETI  5, 2, 1, 4, 2
+    CFG_SETI  6, 2, 1, 4, 2
 
     # Stage 1 - vcmp.lt v0, v1, v2 (i32):
     #   {-1, 5, INT32_MIN, 7} < {1, 5, 0, INT32_MIN}
     lla       x3, src_i1
-    CFG_REG   3, 1, 0, 0, 3, 1
+    CFG_REG   2, 1, 0, 0, 3, 1
     VLOAD     1
     lla       x3, src_i2
-    CFG_REG   3, 1, 0, 0, 3, 2
+    CFG_REG   2, 1, 0, 0, 3, 2
     VLOAD     2
     VCMPLT    0, 1, 2
     lla       x3, dstbuf32
-    CFG_REG   3, 1, 0, 0, 3, 0
+    CFG_REG   2, 1, 0, 0, 3, 0
     VSTORE    0
     lla       x3, dstbuf32
     lla       x4, exp_lt
@@ -54,7 +54,7 @@ _start:
     # Stage 2 - vcmp.ge v0, v1, v2 (i32), reusing the stage-1 sources
     VCMPGE    0, 1, 2
     lla       x3, dstbuf32
-    CFG_REG   3, 1, 0, 0, 3, 0
+    CFG_REG   2, 1, 0, 0, 3, 0
     VSTORE    0
     lla       x3, dstbuf32
     lla       x4, exp_ge
@@ -74,7 +74,7 @@ _start:
     li        x5, 0xffffffff00000005
     VCMPXEQ   0, 1, 5
     lla       x3, dstbuf32
-    CFG_REG   3, 1, 0, 0, 3, 0
+    CFG_REG   2, 1, 0, 0, 3, 0
     VSTORE    0
     lla       x3, dstbuf32
     lla       x4, exp_eqx
@@ -92,17 +92,17 @@ _start:
 
     # Stage 4 - vcmp.unord v0, v1, v2 (f32):
     #   {1.5, NaN, +inf, -0} vs {1.5, +0, NaN, 1.0}
-    CFG_SETI  6, 1, 0, 4, 1
-    CFG_SETI  6, 1, 0, 4, 2
+    CFG_SETI  5, 2, 0, 4, 1
+    CFG_SETI  5, 2, 0, 4, 2
     lla       x3, src_f1
-    CFG_REG   3, 1, 0, 0, 3, 1
+    CFG_REG   2, 1, 0, 0, 3, 1
     VLOAD     1
     lla       x3, src_f2
-    CFG_REG   3, 1, 0, 0, 3, 2
+    CFG_REG   2, 1, 0, 0, 3, 2
     VLOAD     2
     VCMPUNORD 0, 1, 2
     lla       x3, dstbuf32
-    CFG_REG   3, 1, 0, 0, 3, 0
+    CFG_REG   2, 1, 0, 0, 3, 0
     VSTORE    0
     lla       x3, dstbuf32
     lla       x4, exp_unord
@@ -121,7 +121,7 @@ _start:
     # Stage 5 - vcmp.le v0, v1, v2 (f32), reusing the stage-4 sources
     VCMPLE    0, 1, 2
     lla       x3, dstbuf32
-    CFG_REG   3, 1, 0, 0, 3, 0
+    CFG_REG   2, 1, 0, 0, 3, 0
     VSTORE    0
     lla       x3, dstbuf32
     lla       x4, exp_le

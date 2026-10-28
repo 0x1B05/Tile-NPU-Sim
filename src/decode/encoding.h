@@ -138,7 +138,7 @@ struct NpuR3 {
   }
 };
 
-// cfg.seti (CFG_MAT_SETI / CFG_VEC_SETI): major4 sel2 field3 imm16 C5 q.
+// cfg.seti (CFG_COMPUTE_SETI / CFG_MEM_SETI): major4 sel2 field3 imm16 C5 q.
 struct NpuI {
   std::uint8_t major4;
   std::uint8_t sel2;

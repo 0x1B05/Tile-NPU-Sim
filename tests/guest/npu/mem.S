@@ -24,31 +24,31 @@ _start:
     CFG_SETI  5, 0, 1, 2, 2
     CFG_SETI  5, 0, 2, 2, 2
     # vc2: dtype = u32 (3), len = 2 (gather index vector)
-    CFG_SETI  6, 1, 0, 3, 2
-    CFG_SETI  6, 1, 1, 2, 2
+    CFG_SETI  5, 2, 0, 3, 2
+    CFG_SETI  5, 2, 1, 2, 2
     # tm0: base = srcbuf, row_stride = 2, col_stride = 1
     lla       x3, srcbuf
-    CFG_REG   2, 0, 0, 0, 3, 0
-    CFG_SETI  5, 2, 1, 2, 0
-    CFG_SETI  5, 2, 2, 1, 0
+    CFG_REG   0, 1, 0, 0, 3, 0
+    CFG_SETI  6, 0, 1, 2, 0
+    CFG_SETI  6, 0, 2, 1, 0
     # tm1: base = srcbuf + 2 (row 1 of the source), col_stride = 1
     lla       x3, srcbuf + 2
-    CFG_REG   2, 0, 0, 0, 3, 1
-    CFG_SETI  5, 2, 2, 1, 1
+    CFG_REG   0, 1, 0, 0, 3, 1
+    CFG_SETI  6, 0, 2, 1, 1
     # tm2: base = gthbuf, row_stride = 2, col_stride = 1
     lla       x3, gthbuf
-    CFG_REG   2, 0, 0, 0, 3, 2
-    CFG_SETI  5, 2, 1, 2, 2
-    CFG_SETI  5, 2, 2, 1, 2
+    CFG_REG   0, 1, 0, 0, 3, 2
+    CFG_SETI  6, 0, 1, 2, 2
+    CFG_SETI  6, 0, 2, 1, 2
     # vm2: base = idxbuf, stride = 4
     lla       x3, idxbuf
-    CFG_REG   3, 1, 0, 0, 3, 2
-    CFG_SETI  6, 3, 1, 4, 2
+    CFG_REG   2, 1, 0, 0, 3, 2
+    CFG_SETI  6, 2, 1, 4, 2
 
     # Block round trip: tload t0 from srcbuf, tstore t0 to dstbuf.
     TLOAD     0
     lla       x3, dstbuf
-    CFG_REG   2, 0, 0, 0, 3, 0
+    CFG_REG   0, 1, 0, 0, 3, 0
     TSTORE    0
     FENCE_MEM
     lw        x4, 0(x3)
@@ -57,13 +57,13 @@ _start:
     bne       x4, x5, fail
 
     # Transposed tload: transform = 1 swaps the address indices.
-    CFG_SETI  5, 2, 3, 1, 0
+    CFG_SETI  6, 0, 3, 1, 0
     lla       x3, srcbuf
-    CFG_REG   2, 0, 0, 0, 3, 0
+    CFG_REG   0, 1, 0, 0, 3, 0
     TLOAD     0
-    CFG_SETI  5, 2, 3, 0, 0
+    CFG_SETI  6, 0, 3, 0, 0
     lla       x3, dstbuf
-    CFG_REG   2, 0, 0, 0, 3, 0
+    CFG_REG   0, 1, 0, 0, 3, 0
     TSTORE    0
     FENCE_MEM
     lw        x4, 0(x3)
@@ -75,7 +75,7 @@ _start:
     # tstorer t1, x9 (x9 = 1) stores register row 1 back to rowbuf.
     TLOADR    1, 1
     lla       x3, rowbuf
-    CFG_REG   2, 0, 0, 0, 3, 1
+    CFG_REG   0, 1, 0, 0, 3, 1
     li        x9, 1
     TSTORERX  1, 9
     lhu       x4, 0(x3)
@@ -100,7 +100,7 @@ _start:
     VLOAD     2
     TGATHER   2, 2
     lla       x3, gthdst
-    CFG_REG   2, 0, 0, 0, 3, 2
+    CFG_REG   0, 1, 0, 0, 3, 2
     TSTORE    2
     FENCE_MEM
     lw        x4, 0(x3)
@@ -111,15 +111,15 @@ _start:
     # Negative strides with u32 indices: base = gthbuf + 3, row_stride = -2,
     # col_stride = -1, indices = {1, 0} select {20, 10} and {40, 30}.
     lla       x3, gthbuf + 3
-    CFG_REG   2, 0, 0, 0, 3, 2
-    CFG_SETI  5, 2, 1, -2, 2
-    CFG_SETI  5, 2, 2, -1, 2
+    CFG_REG   0, 1, 0, 0, 3, 2
+    CFG_SETI  6, 0, 1, -2, 2
+    CFG_SETI  6, 0, 2, -1, 2
     VLOAD     2
     TGATHER   2, 2
     lla       x3, gthdst
-    CFG_REG   2, 0, 0, 0, 3, 2
-    CFG_SETI  5, 2, 1, 2, 2
-    CFG_SETI  5, 2, 2, 1, 2
+    CFG_REG   0, 1, 0, 0, 3, 2
+    CFG_SETI  6, 0, 1, 2, 2
+    CFG_SETI  6, 0, 2, 1, 2
     TSTORE    2
     FENCE_MEM
     lw        x4, 0(x3)
@@ -129,11 +129,11 @@ _start:
 
     # Auto-increment along rows: base advances by rows * row_stride = 4.
     lla       x3, srcbuf
-    CFG_REG   2, 0, 0, 0, 3, 0
-    CFG_SETI  5, 2, 1, 2, 0
-    CFG_SETI  5, 2, 4, 1, 0
+    CFG_REG   0, 1, 0, 0, 3, 0
+    CFG_SETI  6, 0, 1, 2, 0
+    CFG_SETI  6, 0, 4, 1, 0
     TLOAD     0
-    CFG_REG   2, 0, 2, 0, 0, 5  # cfg.get x5, tm0, base_addr
+    CFG_REG   0, 1, 2, 0, 0, 5  # cfg.get x5, tm0, base_addr
     lla       x6, srcbuf + 4
     li        a0, 7
     bne       x5, x6, fail

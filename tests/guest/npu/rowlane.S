@@ -16,21 +16,21 @@ _start:
     CFG_SETI  5, 1, 1, 2, 0
     CFG_SETI  5, 1, 2, 2, 0
     # vc0/vc1: dtype = i32 (2), len = 2
-    CFG_SETI  6, 1, 0, 2, 0
-    CFG_SETI  6, 1, 1, 2, 0
-    CFG_SETI  6, 1, 0, 2, 1
-    CFG_SETI  6, 1, 1, 2, 1
+    CFG_SETI  5, 2, 0, 2, 0
+    CFG_SETI  5, 2, 1, 2, 0
+    CFG_SETI  5, 2, 0, 2, 1
+    CFG_SETI  5, 2, 1, 2, 1
     # am0: base = srcbuf32, row_stride = 8, col_stride = 4
     lla       x3, srcbuf32
-    CFG_REG   3, 0, 0, 0, 3, 0
-    CFG_SETI  5, 3, 1, 8, 0
-    CFG_SETI  5, 3, 2, 4, 0
+    CFG_REG   1, 1, 0, 0, 3, 0
+    CFG_SETI  6, 1, 1, 8, 0
+    CFG_SETI  6, 1, 2, 4, 0
     # vm0/vm1: base = dstbuf32, stride = 4
     lla       x3, dstbuf32
-    CFG_REG   3, 1, 0, 0, 3, 0
-    CFG_SETI  6, 3, 1, 4, 0
-    CFG_REG   3, 1, 0, 0, 3, 1
-    CFG_SETI  6, 3, 1, 4, 1
+    CFG_REG   2, 1, 0, 0, 3, 0
+    CFG_SETI  6, 2, 1, 4, 0
+    CFG_REG   2, 1, 0, 0, 3, 1
+    CFG_SETI  6, 2, 1, 4, 1
 
     # aextract.row v0, a0[x9]: a0 = {1, 2, 3, 4} (2x2), x9 = 1 -> v0 = {3, 4}.
     ALOAD     0
@@ -50,7 +50,7 @@ _start:
     # ainsert.row a0[0], v0: row 0 becomes {3, 4} as well.
     AINSROW   0, 0, 0
     lla       x3, dstbuf32
-    CFG_REG   3, 0, 0, 0, 3, 0   # am0 base = dstbuf32 (strides still 8/4)
+    CFG_REG   1, 1, 0, 0, 3, 0   # am0 base = dstbuf32 (strides still 8/4)
     ASTORE    0
     FENCE_MEM
     lwu       x4, 0(x3)

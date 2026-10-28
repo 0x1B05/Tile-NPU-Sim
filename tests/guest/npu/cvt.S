@@ -16,30 +16,30 @@ _start:
     CFG_SETI  5, 0, 0, 0, 1
     CFG_SETI  5, 0, 1, 2, 1
     CFG_SETI  5, 0, 2, 2, 1
-    CFG_SETI  5, 2, 1, 2, 1
-    CFG_SETI  5, 2, 2, 1, 1
+    CFG_SETI  6, 0, 1, 2, 1
+    CFG_SETI  6, 0, 2, 1, 1
     # ac0: dtype = i32 (2), 2x2; am0: row_stride = 8, col_stride = 4 (bytes)
     CFG_SETI  5, 1, 0, 2, 0
     CFG_SETI  5, 1, 1, 2, 0
     CFG_SETI  5, 1, 2, 2, 0
-    CFG_SETI  5, 3, 1, 8, 0
-    CFG_SETI  5, 3, 2, 4, 0
+    CFG_SETI  6, 1, 1, 8, 0
+    CFG_SETI  6, 1, 2, 4, 0
     # vc0/vc1: dtype = i32 (2), len = 2; vm0/vm1: stride = 4
-    CFG_SETI  6, 1, 0, 2, 0
-    CFG_SETI  6, 1, 1, 2, 0
-    CFG_SETI  6, 3, 1, 4, 0
-    CFG_SETI  6, 1, 0, 2, 1
-    CFG_SETI  6, 1, 1, 2, 1
-    CFG_SETI  6, 3, 1, 4, 1
+    CFG_SETI  5, 2, 0, 2, 0
+    CFG_SETI  5, 2, 1, 2, 0
+    CFG_SETI  6, 2, 1, 4, 0
+    CFG_SETI  5, 2, 0, 2, 1
+    CFG_SETI  5, 2, 1, 2, 1
+    CFG_SETI  6, 2, 1, 4, 1
 
     # Stage 1 - twiden.i8.i32 a0, t1 over {-1, 2, -3, 4} (i8) ->
     #   {0xFFFFFFFF, 2, 0xFFFFFFFD, 4} (i32)
     lla       x3, src_t
-    CFG_REG   2, 0, 0, 0, 3, 1
+    CFG_REG   0, 1, 0, 0, 3, 1
     TLOAD     1
     TWIDEN    0, 1
     lla       x3, dstbuf
-    CFG_REG   3, 0, 0, 0, 3, 0
+    CFG_REG   1, 1, 0, 0, 3, 0
     ASTORE    0
     lla       x3, dstbuf
     lla       x4, exp_wide
@@ -59,7 +59,7 @@ _start:
     #   {-1.0f, 2.0f, -3.0f, 4.0f}
     ACVT      0, 0
     lla       x3, dstbuf
-    CFG_REG   3, 0, 0, 0, 3, 0
+    CFG_REG   1, 1, 0, 0, 3, 0
     ASTORE    0
     lla       x3, dstbuf
     lla       x4, exp_cvt
@@ -77,11 +77,11 @@ _start:
 
     # Stage 3 - vcvt.i32.f32 v0, v1 over {7, -8} -> {7.0f, -8.0f}
     lla       x3, src_v
-    CFG_REG   3, 1, 0, 0, 3, 1
+    CFG_REG   2, 1, 0, 0, 3, 1
     VLOAD     1
     VCVT      0, 1
     lla       x3, dstbuf
-    CFG_REG   3, 1, 0, 0, 3, 0
+    CFG_REG   2, 1, 0, 0, 3, 0
     VSTORE    0
     lla       x3, dstbuf
     lla       x4, exp_vcvt

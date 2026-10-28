@@ -24,39 +24,39 @@ _start:
     CFG_SETI  5, 1, 1, 2, 1
     CFG_SETI  5, 1, 2, 2, 1
     # tm0: row_stride = 2, col_stride = 1 (bytes)
-    CFG_SETI  5, 2, 1, 2, 0
-    CFG_SETI  5, 2, 2, 1, 0
+    CFG_SETI  6, 0, 1, 2, 0
+    CFG_SETI  6, 0, 2, 1, 0
     # am0/am1: row_stride = 8, col_stride = 4 (bytes)
-    CFG_SETI  5, 3, 1, 8, 0
-    CFG_SETI  5, 3, 2, 4, 0
-    CFG_SETI  5, 3, 1, 8, 1
-    CFG_SETI  5, 3, 2, 4, 1
+    CFG_SETI  6, 1, 1, 8, 0
+    CFG_SETI  6, 1, 2, 4, 0
+    CFG_SETI  6, 1, 1, 8, 1
+    CFG_SETI  6, 1, 2, 4, 1
     # vc0: dtype = f32, len = 2; vm0: stride = 4
-    CFG_SETI  6, 1, 0, 4, 0
-    CFG_SETI  6, 1, 1, 2, 0
-    CFG_SETI  6, 3, 1, 4, 0
+    CFG_SETI  5, 2, 0, 4, 0
+    CFG_SETI  5, 2, 1, 2, 0
+    CFG_SETI  6, 2, 1, 4, 0
     # vc1: dtype = f32, len = 2; vm1: stride = 4
-    CFG_SETI  6, 1, 0, 4, 1
-    CFG_SETI  6, 1, 1, 2, 1
-    CFG_SETI  6, 3, 1, 4, 1
+    CFG_SETI  5, 2, 0, 4, 1
+    CFG_SETI  5, 2, 1, 2, 1
+    CFG_SETI  6, 2, 1, 4, 1
     # vc3: dtype = f32, len = 2; vm3: stride = 4
-    CFG_SETI  6, 1, 0, 4, 3
-    CFG_SETI  6, 1, 1, 2, 3
-    CFG_SETI  6, 3, 1, 4, 3
+    CFG_SETI  5, 2, 0, 4, 3
+    CFG_SETI  5, 2, 1, 2, 3
+    CFG_SETI  6, 2, 1, 4, 3
 
     # Stage 1 - aquant.rows.q8s32 t0, v0, a0 over
     #   {127.0, -63.5}, {0.0, 0.0} -> t0 bytes {0x7F, 0xC0, 0, 0},
     #   v0 = {1.0, +0.0} (RNE(-63.5) = -64; the zero row divides by +0.0,
     #   giving NaN quotients that quantize to 0).
     lla       x3, src_m
-    CFG_REG   3, 0, 0, 0, 3, 0
+    CFG_REG   1, 1, 0, 0, 3, 0
     ALOAD     0
     AQUANT    0, 0, 0
     lla       x3, dstbuf
-    CFG_REG   2, 0, 0, 0, 3, 0
+    CFG_REG   0, 1, 0, 0, 3, 0
     TSTORE    0
     lla       x3, dstbuf2
-    CFG_REG   3, 1, 0, 0, 3, 0
+    CFG_REG   2, 1, 0, 0, 3, 0
     VSTORE    0
     lla       x3, dstbuf
     FENCE_MEM
@@ -74,7 +74,7 @@ _start:
     # Stage 2 - tdequant.rows.f32 a1, t0, v0 (consuming stage 1) ->
     #   {127.0, -64.0}, {0.0, 0.0}
     lla       x3, dstbuf3
-    CFG_REG   3, 0, 0, 0, 3, 1
+    CFG_REG   1, 1, 0, 0, 3, 1
     TDEQUANT  1, 0, 0
     ASTORE    1
     lla       x3, dstbuf3
@@ -96,7 +96,7 @@ _start:
     #   Distinct source/scale numbers catch swapped macro operands;
     #   external scales must remain unchanged.
     lla       x3, dstbuf6
-    CFG_REG   3, 1, 0, 0, 3, 3
+    CFG_REG   2, 1, 0, 0, 3, 3
     li        a0, 3
     li        x5, 0x40000000     # 2.0
     VINSERT   3, 0, 5

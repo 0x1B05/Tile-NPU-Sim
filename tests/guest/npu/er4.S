@@ -26,42 +26,42 @@ _start:
     CFG_SETI  5, 0, 1, 2, 3
     CFG_SETI  5, 0, 2, 2, 3
     # tm0..tm3: row_stride = 2, col_stride = 1
-    CFG_SETI  5, 2, 1, 2, 0
-    CFG_SETI  5, 2, 2, 1, 0
-    CFG_SETI  5, 2, 1, 2, 1
-    CFG_SETI  5, 2, 2, 1, 1
-    CFG_SETI  5, 2, 1, 2, 2
-    CFG_SETI  5, 2, 2, 1, 2
-    CFG_SETI  5, 2, 1, 2, 3
-    CFG_SETI  5, 2, 2, 1, 3
+    CFG_SETI  6, 0, 1, 2, 0
+    CFG_SETI  6, 0, 2, 1, 0
+    CFG_SETI  6, 0, 1, 2, 1
+    CFG_SETI  6, 0, 2, 1, 1
+    CFG_SETI  6, 0, 1, 2, 2
+    CFG_SETI  6, 0, 2, 1, 2
+    CFG_SETI  6, 0, 1, 2, 3
+    CFG_SETI  6, 0, 2, 1, 3
     # vc0..vc3: dtype = f32 (4), len = 2; vm0..vm3: stride = 4
-    CFG_SETI  6, 1, 0, 4, 0
-    CFG_SETI  6, 1, 1, 2, 0
-    CFG_SETI  6, 3, 1, 4, 0
-    CFG_SETI  6, 1, 0, 4, 1
-    CFG_SETI  6, 1, 1, 2, 1
-    CFG_SETI  6, 3, 1, 4, 1
-    CFG_SETI  6, 1, 0, 4, 2
-    CFG_SETI  6, 1, 1, 2, 2
-    CFG_SETI  6, 3, 1, 4, 2
-    CFG_SETI  6, 1, 0, 4, 3
-    CFG_SETI  6, 1, 1, 2, 3
-    CFG_SETI  6, 3, 1, 4, 3
+    CFG_SETI  5, 2, 0, 4, 0
+    CFG_SETI  5, 2, 1, 2, 0
+    CFG_SETI  6, 2, 1, 4, 0
+    CFG_SETI  5, 2, 0, 4, 1
+    CFG_SETI  5, 2, 1, 2, 1
+    CFG_SETI  6, 2, 1, 4, 1
+    CFG_SETI  5, 2, 0, 4, 2
+    CFG_SETI  5, 2, 1, 2, 2
+    CFG_SETI  6, 2, 1, 4, 2
+    CFG_SETI  5, 2, 0, 4, 3
+    CFG_SETI  5, 2, 1, 2, 3
+    CFG_SETI  6, 2, 1, 4, 3
 
     # Stage 1 - tselect t0, t1, t2, t3: M = {0xFF, 0, 0, 1} over
     #   A = {1, 2, 3, 4}, B = {10, 20, 30, 40} -> {1, 20, 30, 4}
     lla       x3, src_m
-    CFG_REG   2, 0, 0, 0, 3, 1
+    CFG_REG   0, 1, 0, 0, 3, 1
     TLOAD     1
     lla       x3, src_a
-    CFG_REG   2, 0, 0, 0, 3, 2
+    CFG_REG   0, 1, 0, 0, 3, 2
     TLOAD     2
     lla       x3, src_b
-    CFG_REG   2, 0, 0, 0, 3, 3
+    CFG_REG   0, 1, 0, 0, 3, 3
     TLOAD     3
     TSELECT   0, 1, 2, 3
     lla       x3, dstbuf
-    CFG_REG   2, 0, 0, 0, 3, 0
+    CFG_REG   0, 1, 0, 0, 3, 0
     TSTORE    0
     lla       x3, dstbuf
     lla       x4, exp_sel
@@ -80,17 +80,17 @@ _start:
     # Stage 2 - vfmadd v0, v1, v2, v3:
     #   {1.5, -2.0} * {4.0, 0.5} + {0.25, 1.0} -> {6.25, 0.0}
     lla       x3, src_fa
-    CFG_REG   3, 1, 0, 0, 3, 1
+    CFG_REG   2, 1, 0, 0, 3, 1
     VLOAD     1
     lla       x3, src_fb
-    CFG_REG   3, 1, 0, 0, 3, 2
+    CFG_REG   2, 1, 0, 0, 3, 2
     VLOAD     2
     lla       x3, src_fc
-    CFG_REG   3, 1, 0, 0, 3, 3
+    CFG_REG   2, 1, 0, 0, 3, 3
     VLOAD     3
     VFMADD    0, 1, 2, 3
     lla       x3, dstbuf
-    CFG_REG   3, 1, 0, 0, 3, 0
+    CFG_REG   2, 1, 0, 0, 3, 0
     VSTORE    0
     lla       x3, dstbuf
     lla       x4, exp_fma

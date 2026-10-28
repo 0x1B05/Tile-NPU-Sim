@@ -16,38 +16,38 @@ _start:
     CFG_SETI  5, 0, 0, 0, 0
     CFG_SETI  5, 0, 1, 2, 0
     CFG_SETI  5, 0, 2, 3, 0
-    CFG_SETI  5, 2, 1, 3, 0
-    CFG_SETI  5, 2, 2, 1, 0
+    CFG_SETI  6, 0, 1, 3, 0
+    CFG_SETI  6, 0, 2, 1, 0
     # tc2: i8, 2x3; tm2: row_stride = 3, col_stride = 1
     CFG_SETI  5, 0, 0, 0, 2
     CFG_SETI  5, 0, 1, 2, 2
     CFG_SETI  5, 0, 2, 3, 2
-    CFG_SETI  5, 2, 1, 3, 2
-    CFG_SETI  5, 2, 2, 1, 2
+    CFG_SETI  6, 0, 1, 3, 2
+    CFG_SETI  6, 0, 2, 1, 2
     # ac2: dtype = i32 (2), 2x2; am2: row_stride = 8, col_stride = 4
     CFG_SETI  5, 1, 0, 2, 2
     CFG_SETI  5, 1, 1, 2, 2
     CFG_SETI  5, 1, 2, 2, 2
-    CFG_SETI  5, 3, 1, 8, 2
-    CFG_SETI  5, 3, 2, 4, 2
+    CFG_SETI  6, 1, 1, 8, 2
+    CFG_SETI  6, 1, 2, 4, 2
     # vc4: dtype = i32 (2), len = 2; vm4: stride = 4
-    CFG_SETI  6, 1, 0, 2, 4
-    CFG_SETI  6, 1, 1, 2, 4
-    CFG_SETI  6, 3, 1, 4, 4
+    CFG_SETI  5, 2, 0, 2, 4
+    CFG_SETI  5, 2, 1, 2, 4
+    CFG_SETI  6, 2, 1, 4, 4
 
     # Load the operands: t0 = {{1,2,3},{4,-5,6}},
     # t2 = {{7,8,9},{10,11,12}}.
     lla       x3, src_a
-    CFG_REG   2, 0, 0, 0, 3, 0
+    CFG_REG   0, 1, 0, 0, 3, 0
     TLOAD     0
     lla       x3, src_b_nt
-    CFG_REG   2, 0, 0, 0, 3, 2
+    CFG_REG   0, 1, 0, 0, 3, 2
     TLOAD     2
 
     # Stage 1 - mma.nt.zero.i8.i32 a2, t0, t2 -> {{50, 68}, {42, 57}}
     MMA_NT_ZERO 2, 0, 2
     lla       x3, dstbuf
-    CFG_REG   3, 0, 0, 0, 3, 2
+    CFG_REG   1, 1, 0, 0, 3, 2
     ASTORE    2
     lla       x3, dstbuf
     lla       x4, exp_mma1
@@ -67,7 +67,7 @@ _start:
     # the same product onto stage 1 -> {{100, 136}, {84, 114}}
     MMA_NT_ACC 2, 0, 2
     lla       x3, dstbuf
-    CFG_REG   3, 0, 0, 0, 3, 2
+    CFG_REG   1, 1, 0, 0, 3, 2
     ASTORE    2
     lla       x3, dstbuf
     lla       x4, exp_mma2
@@ -87,7 +87,7 @@ _start:
     # and writes {42, 57}.
     VMMA_NT_ZERO 4, 0, 1, 2
     lla       x3, dstbuf2
-    CFG_REG   3, 1, 0, 0, 3, 4
+    CFG_REG   2, 1, 0, 0, 3, 4
     VSTORE    4
     lla       x3, dstbuf2
     FENCE_MEM
@@ -103,7 +103,7 @@ _start:
     # {50, 68} from row 0 -> {92, 125}.
     VMMA_NT_ACC 4, 0, 0, 2
     lla       x3, dstbuf2
-    CFG_REG   3, 1, 0, 0, 3, 4
+    CFG_REG   2, 1, 0, 0, 3, 4
     VSTORE    4
     lla       x3, dstbuf2
     FENCE_MEM

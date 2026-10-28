@@ -13,29 +13,29 @@
     .globl _start
 _start:
     # vc0: dtype = f32 (4), len = 4; vm0: stride = 4
-    CFG_SETI  6, 1, 0, 4, 0
-    CFG_SETI  6, 1, 1, 4, 0
-    CFG_SETI  6, 3, 1, 4, 0
+    CFG_SETI  5, 2, 0, 4, 0
+    CFG_SETI  5, 2, 1, 4, 0
+    CFG_SETI  6, 2, 1, 4, 0
     # tc0: dtype = i8 (0), rows = 1, cols = 4; tm0: row_stride = 4, col = 1
     CFG_SETI  5, 0, 0, 0, 0
     CFG_SETI  5, 0, 1, 1, 0
     CFG_SETI  5, 0, 2, 4, 0
-    CFG_SETI  5, 2, 1, 4, 0
-    CFG_SETI  5, 2, 2, 1, 0
+    CFG_SETI  6, 0, 1, 4, 0
+    CFG_SETI  6, 0, 2, 1, 0
     # ac0: dtype = i32 (2), rows = 1, cols = 2; am0: row_stride = 8, col = 4
     CFG_SETI  5, 1, 0, 2, 0
     CFG_SETI  5, 1, 1, 1, 0
     CFG_SETI  5, 1, 2, 2, 0
-    CFG_SETI  5, 3, 1, 8, 0
-    CFG_SETI  5, 3, 2, 4, 0
+    CFG_SETI  6, 1, 1, 8, 0
+    CFG_SETI  6, 1, 2, 4, 0
 
     # vexp2.approx: {3, -inf, +0, 1} -> {8, +0, 1, 2}
     lla       x3, src_f1
-    CFG_REG   3, 1, 0, 0, 3, 0
+    CFG_REG   2, 1, 0, 0, 3, 0
     VLOAD     0
     VEXP2     0, 0
     lla       x3, dstbuf32
-    CFG_REG   3, 1, 0, 0, 3, 0
+    CFG_REG   2, 1, 0, 0, 3, 0
     VSTORE    0
     lla       x3, dstbuf32
     lla       x4, exp_f1
@@ -53,11 +53,11 @@ _start:
 
     # vrcp.approx: {4, -2, +inf, -0} -> {0.25, -0.5, +0, -inf}
     lla       x3, src_f2
-    CFG_REG   3, 1, 0, 0, 3, 0
+    CFG_REG   2, 1, 0, 0, 3, 0
     VLOAD     0
     VRCP      0, 0
     lla       x3, dstbuf32
-    CFG_REG   3, 1, 0, 0, 3, 0
+    CFG_REG   2, 1, 0, 0, 3, 0
     VSTORE    0
     lla       x3, dstbuf32
     lla       x4, exp_f2
@@ -75,11 +75,11 @@ _start:
 
     # vrsqrt.approx: {0.25, 4, +inf, +0} -> {2, 0.5, +0, +inf}
     lla       x3, src_f3
-    CFG_REG   3, 1, 0, 0, 3, 0
+    CFG_REG   2, 1, 0, 0, 3, 0
     VLOAD     0
     VRSQRT    0, 0
     lla       x3, dstbuf32
-    CFG_REG   3, 1, 0, 0, 3, 0
+    CFG_REG   2, 1, 0, 0, 3, 0
     VSTORE    0
     lla       x3, dstbuf32
     lla       x4, exp_f3
@@ -97,11 +97,11 @@ _start:
 
     # tnot: {0x0F, 0xF0, 0x55, 0xAA} -> {0xF0, 0x0F, 0xAA, 0x55}
     lla       x3, src_b
-    CFG_REG   2, 0, 0, 0, 3, 0
+    CFG_REG   0, 1, 0, 0, 3, 0
     TLOAD     0
     TNOT      0, 0
     lla       x3, dstbuf32
-    CFG_REG   2, 0, 0, 0, 3, 0
+    CFG_REG   0, 1, 0, 0, 3, 0
     TSTORE    0
     lla       x3, dstbuf32
     lla       x4, exp_b
@@ -119,11 +119,11 @@ _start:
 
     # aneg: {5, -5} -> {-5, 5}
     lla       x3, src_n
-    CFG_REG   3, 0, 0, 0, 3, 0
+    CFG_REG   1, 1, 0, 0, 3, 0
     ALOAD     0
     ANEG      0, 0
     lla       x3, dstbuf32
-    CFG_REG   3, 0, 0, 0, 3, 0
+    CFG_REG   1, 1, 0, 0, 3, 0
     ASTORE    0
     lla       x3, dstbuf32
     lla       x4, exp_n
@@ -141,11 +141,11 @@ _start:
 
     # aabs: {-7, INT32_MIN} -> {7, INT32_MIN}
     lla       x3, src_a
-    CFG_REG   3, 0, 0, 0, 3, 0
+    CFG_REG   1, 1, 0, 0, 3, 0
     ALOAD     0
     AABS      0, 0
     lla       x3, dstbuf32
-    CFG_REG   3, 0, 0, 0, 3, 0
+    CFG_REG   1, 1, 0, 0, 3, 0
     ASTORE    0
     lla       x3, dstbuf32
     lla       x4, exp_a

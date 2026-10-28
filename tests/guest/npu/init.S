@@ -23,9 +23,9 @@ _start:
     CFG_SETI  5, 1, 2, 2, 0
     # tm0: base = dstbuf, row_stride = 3, col_stride = 1
     lla       x3, dstbuf
-    CFG_REG   2, 0, 0, 0, 3, 0
-    CFG_SETI  5, 2, 1, 3, 0
-    CFG_SETI  5, 2, 2, 1, 0
+    CFG_REG   0, 1, 0, 0, 3, 0
+    CFG_SETI  6, 0, 1, 3, 0
+    CFG_SETI  6, 0, 2, 1, 0
 
     # tfill t0, -3: every effective lane takes the low 8 bits (0xFD).
     TFILL     0, -3
@@ -59,9 +59,9 @@ _start:
     li        x6, 0xCAFEF00D
     AFILLX    0, 6
     lla       x3, dstbuf2
-    CFG_REG   3, 0, 0, 0, 3, 0   # am0 base = dstbuf2
-    CFG_SETI  5, 3, 1, 8, 0      # am0 row_stride = 8
-    CFG_SETI  5, 3, 2, 4, 0      # am0 col_stride = 4
+    CFG_REG   1, 1, 0, 0, 3, 0   # am0 base = dstbuf2
+    CFG_SETI  6, 1, 1, 8, 0      # am0 row_stride = 8
+    CFG_SETI  6, 1, 2, 4, 0      # am0 col_stride = 4
     ASTORE    0
     FENCE_MEM
     lwu       x4, 0(x3)

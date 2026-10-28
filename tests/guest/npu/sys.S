@@ -14,14 +14,14 @@ _start:
     CFG_SETI  5, 0, 0, 0, 0
     CFG_SETI  5, 0, 1, 2, 0
     CFG_SETI  5, 0, 2, 2, 0
-    CFG_SETI  5, 2, 1, 2, 0
-    CFG_SETI  5, 2, 2, 1, 0
+    CFG_SETI  6, 0, 1, 2, 0
+    CFG_SETI  6, 0, 2, 1, 0
 
     # tfill t0, 0x5A; the fences must not disturb the surrounding operations.
     TFILL     0, 0x5A
     FENCE_MEM
     lla       x3, dstbuf
-    CFG_REG   2, 0, 0, 0, 3, 0
+    CFG_REG   0, 1, 0, 0, 3, 0
     TSTORE    0
     FENCE_SA
     FENCE_ALL

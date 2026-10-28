@@ -44,12 +44,12 @@ qwen3_fence_mem:
     .globl qwen3_quant_act
 qwen3_quant_act:
     LI_CWV  t6, DT_F32, 32
-    SETW    SEL_VC, 1, 0, X_T6, 2
+    SETW    SEL_VC, 0, X_T6, 2
     LI_CWV  t6, DT_F32, 1
-    SETW    SEL_VC, 1, 30, X_T6     # vc30: len-1 store of the activation scale
+    SETW    SEL_VC, 30, X_T6     # vc30: len-1 store of the activation scale
 
     # activation absmax over the padded panels (v0 max, v1 chunk)
-    SETX    SEL_VM, 1, CF_BASE, 1, X_A0
+    SETX    SEL_VM, CF_BASE, 1, X_A0
     SETIV   SEL_VM, CF_STRIDE, 4, 1
     SETIV   SEL_VM, CF_VFLAGS, 1, 1
     VFILL   0, 0
@@ -70,7 +70,7 @@ qwen3_quant_act:
     VMULX   30, 30, X_T1        # v30[0] = scale
     VBROADCAST 2, 30, 0         # v2 = scale in every lane
     addi    sp, sp, -16
-    SETX    SEL_VM, 1, CF_BASE, 30, X_SP
+    SETX    SEL_VM, CF_BASE, 30, X_SP
     SETIV   SEL_VM, CF_STRIDE, 4, 30
     SETIV   SEL_VM, CF_VFLAGS, 0, 30
     VSTORE  30
@@ -80,13 +80,13 @@ qwen3_quant_act:
 
     # quantize the panels into t2..t4 (32x32 i8)
     LI_CWM  t3, DT_F32, 32, 32
-    SETW    SEL_AC, 0, 0, X_T3
-    SETX    SEL_AM, 0, CF_BASE, 0, X_A0
+    SETW    SEL_AC, 0, X_T3
+    SETX    SEL_AM, CF_BASE, 0, X_A0
     SETIM   SEL_AM, CF_RSTRIDE, 128, 0
     SETIM   SEL_AM, CF_CSTRIDE, 4, 0
     SETIM   SEL_AM, CF_FLAGS, 1, 0        # inc along rows: += 32 * 128
     LI_CWM  t3, DT_I8, 32, 32
-    SETW    SEL_TC, 0, 2, X_T3, 2
+    SETW    SEL_TC, 2, X_T3, 2
     addi    t3, a1, 1023
     srli    t3, t3, 10          # panels
     li      t4, 0
@@ -110,7 +110,7 @@ qwen3_quant_act:
     la      t0, qwen3_debug_qtile
     ld      t1, 0(t0)
     beqz    t1, .Lqa_nodump
-    SETX    SEL_TM, 0, CF_BASE, 2, X_T1
+    SETX    SEL_TM, CF_BASE, 2, X_T1
     SETIM   SEL_TM, CF_RSTRIDE, 32, 2
     SETIM   SEL_TM, CF_CSTRIDE, 1, 2
     SETIM   SEL_TM, CF_FLAGS, 0, 2
@@ -158,7 +158,7 @@ qwen3_quant_act:
     la      t2, qwen3_accbuf
     slli    t3, s2, 7
     add     t2, t2, t3
-    SETX    SEL_VM, 1, CF_BASE, 4, X_T2
+    SETX    SEL_VM, CF_BASE, 4, X_T2
     beqz    s5, 3f
     VLOAD   4                   # continue accumulation across panels
     j       4f
@@ -168,7 +168,7 @@ qwen3_quant_act:
     .irp R,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
     li      t5, \R
     bgeu    t5, t4, 5f
-    SETX    SEL_TM, 0, CF_BASE, 1, X_T0
+    SETX    SEL_TM, CF_BASE, 1, X_T0
     TLOAD   1
     VMMA_NT_ACC 4, \tile_a, \R, 1
     add     t0, t0, t1
@@ -196,25 +196,25 @@ qwen3_matvec_q:
 
     # shared vector configs (len 32)
     LI_CWV  t0, DT_I32, 32
-    SETW    SEL_VC, 1, 4, X_T0, 1
+    SETW    SEL_VC, 4, X_T0, 1
     LI_CWV  t0, DT_F32, 32
-    SETW    SEL_VC, 1, 6, X_T0
-    SETW    SEL_VC, 1, 8, X_T0
+    SETW    SEL_VC, 6, X_T0
+    SETW    SEL_VC, 8, X_T0
 
     # phase B configs: one [n][k] weight tile in t1 (tile row_stride = 32)
     LI_CWM  t0, DT_I8, 32, 32
-    SETW    SEL_TC, 0, 1, X_T0
+    SETW    SEL_TC, 1, X_T0
     SETIM   SEL_TM, CF_RSTRIDE, 32, 1
     SETIM   SEL_TM, CF_CSTRIDE, 1, 1
     SETIM   SEL_TM, CF_FLAGS, 0, 1
     la      t0, qwen3_accbuf
-    SETX    SEL_VM, 1, CF_BASE, 4, X_T0
+    SETX    SEL_VM, CF_BASE, 4, X_T0
     SETIV   SEL_VM, CF_STRIDE, 4, 4
     SETIV   SEL_VM, CF_VFLAGS, 0, 4
-    SETX    SEL_VM, 1, CF_BASE, 6, X_A1
+    SETX    SEL_VM, CF_BASE, 6, X_A1
     SETIV   SEL_VM, CF_STRIDE, 4, 6
     SETIV   SEL_VM, CF_VFLAGS, 1, 6
-    SETX    SEL_VM, 1, CF_BASE, 8, X_A3
+    SETX    SEL_VM, CF_BASE, 8, X_A3
     SETIV   SEL_VM, CF_STRIDE, 4, 8
     SETIV   SEL_VM, CF_VFLAGS, 1, 8
 
@@ -241,7 +241,7 @@ qwen3_matvec_q:
     # epilogue: i32 -> f32, per-row weight scales, activation scale
     SETIV   SEL_VM, CF_VFLAGS, 1, 4       # accbuf descriptor now advances
     la      t0, qwen3_accbuf
-    SETX    SEL_VM, 1, CF_BASE, 4, X_T0
+    SETX    SEL_VM, CF_BASE, 4, X_T0
     srli    s3, a4, 5
     li      s2, 0
 .Lmv_epi:
@@ -280,14 +280,14 @@ qwen3_matvec_q:
     .globl qwen3_quant_rows
 qwen3_quant_rows:
     LI_CWV  t6, DT_F32, 32
-    SETW    SEL_VC, 1, 0, X_T6, 1
-    SETX    SEL_VC, 1, CF_LEN, 0, X_A4, 1
+    SETW    SEL_VC, 0, X_T6, 1
+    SETX    SEL_VC, CF_LEN, 0, X_A4, 1
     LI_CWM  t6, DT_F32, 32, 32
-    SETW    SEL_AC, 0, 0, X_T6
-    SETX    SEL_AC, 0, CF_ROWS, 0, X_A4
-    SETX    SEL_AM, 0, CF_BASE, 0, X_A0
+    SETW    SEL_AC, 0, X_T6
+    SETX    SEL_AC, CF_ROWS, 0, X_A4
+    SETX    SEL_AM, CF_BASE, 0, X_A0
     slli    t0, a1, 2
-    SETX    SEL_AM, 0, CF_RSTRIDE, 0, X_T0
+    SETX    SEL_AM, CF_RSTRIDE, 0, X_T0
     SETIM   SEL_AM, CF_CSTRIDE, 4, 0
     SETIM   SEL_AM, CF_FLAGS, 2, 0        # inc along cols: += 32 * 4
 
@@ -306,18 +306,18 @@ qwen3_quant_rows:
 .Lqr_scale:
     li      t0, 0x3C010204      # f32 bits of 1/127
     VMULX   0, 0, X_T0
-    SETX    SEL_VM, 1, CF_BASE, 0, X_A3
+    SETX    SEL_VM, CF_BASE, 0, X_A3
     SETIV   SEL_VM, CF_STRIDE, 4, 0
     SETIV   SEL_VM, CF_VFLAGS, 0, 0
     VSTORE  0                   # xs scales out; v0 stays for pass 2
 
     # pass 2: quantize chunks to xq (t0, tm0 inc along cols: += 32 * 1)
     LI_CWM  t6, DT_I8, 32, 32
-    SETW    SEL_TC, 0, 0, X_T6
-    SETX    SEL_TC, 0, CF_ROWS, 0, X_A4
-    SETX    SEL_AM, 0, CF_BASE, 0, X_A0   # rewind x
-    SETX    SEL_TM, 0, CF_BASE, 0, X_A2
-    SETX    SEL_TM, 0, CF_RSTRIDE, 0, X_A1
+    SETW    SEL_TC, 0, X_T6
+    SETX    SEL_TC, CF_ROWS, 0, X_A4
+    SETX    SEL_AM, CF_BASE, 0, X_A0   # rewind x
+    SETX    SEL_TM, CF_BASE, 0, X_A2
+    SETX    SEL_TM, CF_RSTRIDE, 0, X_A1
     SETIM   SEL_TM, CF_CSTRIDE, 1, 0
     SETIM   SEL_TM, CF_FLAGS, 2, 0
     srli    t6, a1, 5
@@ -359,29 +359,29 @@ qwen3_matmul_q:
     mv      s7, a0              # weight base
 
     LI_CWM  t0, DT_I8, 32, 32
-    SETW    SEL_TC, 0, 0, X_T0, 1
-    SETX    SEL_TC, 0, CF_ROWS, 0, X_A7
-    SETX    SEL_TM, 0, CF_RSTRIDE, 0, X_A6
+    SETW    SEL_TC, 0, X_T0, 1
+    SETX    SEL_TC, CF_ROWS, 0, X_A7
+    SETX    SEL_TM, CF_RSTRIDE, 0, X_A6
     SETIM   SEL_TM, CF_CSTRIDE, 1, 0
     SETIM   SEL_TM, CF_FLAGS, 2, 0      # inc along cols: += 32 * 1
     SETIM   SEL_TM, CF_RSTRIDE, 32, 1
     SETIM   SEL_TM, CF_CSTRIDE, 1, 1
     SETIM   SEL_TM, CF_FLAGS, 0, 1
     LI_CWM  t0, DT_I32, 32, 32
-    SETW    SEL_AC, 0, 0, X_T0, 8
-    SETX    SEL_AC, 0, CF_ROWS, 0, X_A7, 8
-    SETX    SEL_AM, 0, CF_BASE, 8, X_A4
+    SETW    SEL_AC, 0, X_T0, 8
+    SETX    SEL_AC, CF_ROWS, 0, X_A7, 8
+    SETX    SEL_AM, CF_BASE, 8, X_A4
     slli    t0, a5, 2
-    SETX    SEL_AM, 0, CF_RSTRIDE, 8, X_T0
+    SETX    SEL_AM, CF_RSTRIDE, 8, X_T0
     SETIM   SEL_AM, CF_CSTRIDE, 4, 8
     SETIM   SEL_AM, CF_FLAGS, 2, 8      # inc along cols: += 32 * 4
     LI_CWV  s3, DT_F32, 32
-    SETW    SEL_VC, 1, 29, X_S3, 1    # vc29 (ws stream), vc30 (xs)
-    SETX    SEL_VC, 1, CF_LEN, 30, X_A7
-    SETX    SEL_VM, 1, CF_BASE, 29, X_A1
+    SETW    SEL_VC, 29, X_S3, 1    # vc29 (ws stream), vc30 (xs)
+    SETX    SEL_VC, CF_LEN, 30, X_A7
+    SETX    SEL_VM, CF_BASE, 29, X_A1
     SETIV   SEL_VM, CF_STRIDE, 4, 29
     SETIV   SEL_VM, CF_VFLAGS, 1, 29    # ws stream, one block per load
-    SETX    SEL_VM, 1, CF_BASE, 30, X_A3
+    SETX    SEL_VM, CF_BASE, 30, X_A3
     SETIV   SEL_VM, CF_STRIDE, 4, 30
     SETIV   SEL_VM, CF_VFLAGS, 0, 30
     VLOAD   30                          # xs stays resident in v30
@@ -397,7 +397,7 @@ qwen3_matmul_q:
     bltu    t0, t1, .Lmm_nblock    # fewer than eight blocks remain
 
     # Full group: load xq once per k chunk and keep eight accumulators.
-    SETX    SEL_TM, 0, CF_BASE, 0, X_S6
+    SETX    SEL_TM, CF_BASE, 0, X_S6
     mul     t0, s2, s4
     slli    t0, t0, 10
     add     t0, s7, t0              # first weight tile of this nblock group
@@ -405,7 +405,7 @@ qwen3_matmul_q:
     TLOAD   0
     mv      t4, t0
     .irp G,0,1,2,3,4,5,6,7
-    SETX    SEL_TM, 0, CF_BASE, 1, X_T4
+    SETX    SEL_TM, CF_BASE, 1, X_T4
     TLOAD   1
     MMA_NT_ZERO \G, 0, 1
     add     t4, t4, t3
@@ -417,7 +417,7 @@ qwen3_matmul_q:
     TLOAD   0
     mv      t4, t0
     .irp G,0,1,2,3,4,5,6,7
-    SETX    SEL_TM, 0, CF_BASE, 1, X_T4
+    SETX    SEL_TM, CF_BASE, 1, X_T4
     TLOAD   1
     MMA_NT_ACC \G, 0, 1
     add     t4, t4, t3
@@ -440,12 +440,12 @@ qwen3_matmul_q:
 
 .Lmm_nblock:
     # Tail: fewer than eight output blocks remain.
-    SETX    SEL_TM, 0, CF_BASE, 0, X_S6
+    SETX    SEL_TM, CF_BASE, 0, X_S6
     mul     t0, s2, s4
     slli    t0, t0, 10
     add     t0, s7, t0
     li      t1, 1024
-    SETX    SEL_TM, 0, CF_BASE, 1, X_T0
+    SETX    SEL_TM, CF_BASE, 1, X_T0
     TLOAD   0
     TLOAD   1
     MMA_NT_ZERO 0, 0, 1
@@ -453,7 +453,7 @@ qwen3_matmul_q:
     li      s5, 1
 .Lmm_tail_kloop:
     bgeu    s5, s4, .Lmm_tail_epi
-    SETX    SEL_TM, 0, CF_BASE, 1, X_T0
+    SETX    SEL_TM, CF_BASE, 1, X_T0
     TLOAD   0
     TLOAD   1
     MMA_NT_ACC 0, 0, 1
@@ -488,8 +488,8 @@ qwen3_matmul_q:
     .globl qwen3_rmsnorm
 qwen3_rmsnorm:
     LI_CWV  t6, DT_F32, 32
-    SETW    SEL_VC, 1, 0, X_T6, 4
-    SETX    SEL_VM, 1, CF_BASE, 1, X_A0
+    SETW    SEL_VC, 0, X_T6, 4
+    SETX    SEL_VM, CF_BASE, 1, X_A0
     SETIV   SEL_VM, CF_STRIDE, 4, 1
     SETIV   SEL_VM, CF_VFLAGS, 1, 1
     VFILL   0, 0
@@ -503,11 +503,11 @@ qwen3_rmsnorm:
     VMULX   2, 2, X_A5                    # mean = sum * (1/n)
     VADDX   2, 2, X_A4                    # + eps
     VRSQRT  2, 2
-    SETX    SEL_VM, 1, CF_BASE, 1, X_A0   # rewind x
-    SETX    SEL_VM, 1, CF_BASE, 3, X_A1
+    SETX    SEL_VM, CF_BASE, 1, X_A0   # rewind x
+    SETX    SEL_VM, CF_BASE, 3, X_A1
     SETIV   SEL_VM, CF_STRIDE, 4, 3
     SETIV   SEL_VM, CF_VFLAGS, 1, 3
-    SETX    SEL_VM, 1, CF_BASE, 4, X_A2
+    SETX    SEL_VM, CF_BASE, 4, X_A2
     SETIV   SEL_VM, CF_STRIDE, 4, 4
     SETIV   SEL_VM, CF_VFLAGS, 1, 4
     srli    t6, a3, 5
@@ -537,32 +537,32 @@ qwen3_rope:
 1:
     .irp R,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
     SETIV   SEL_VC, CF_DTYPE, DT_F32, \R
-    SETX    SEL_VC, 1, CF_LEN, (0 + \R), X_T6
+    SETX    SEL_VC, CF_LEN, (0 + \R), X_T6
     .endr
     # stream descriptors (stride 4, inc): cos vm0/vm1, sin vm2/vm3,
     # x1 vm4/vm5, x2 vm6/vm7; x2 starts half elements into x (hd*2 bytes).
     # Broadcast stride/inc first: cfg.copy copies every field, base included.
     SETIV   SEL_VM, CF_STRIDE, 4, 0
     SETIV   SEL_VM, CF_VFLAGS, 1, 0
-    COPY SEL_VM, 1, 1, 0, 6          # vm1..vm7 = vm0 stride/inc
-    SETX    SEL_VM, 1, CF_BASE, 0, X_A1
+    COPY SEL_VM, 1, 0, 6          # vm1..vm7 = vm0 stride/inc
+    SETX    SEL_VM, CF_BASE, 0, X_A1
     addi    t0, a1, 128
-    SETX    SEL_VM, 1, CF_BASE, 1, X_T0
-    SETX    SEL_VM, 1, CF_BASE, 2, X_A2
+    SETX    SEL_VM, CF_BASE, 1, X_T0
+    SETX    SEL_VM, CF_BASE, 2, X_A2
     addi    t0, a2, 128
-    SETX    SEL_VM, 1, CF_BASE, 3, X_T0
-    SETX    SEL_VM, 1, CF_BASE, 4, X_A0
+    SETX    SEL_VM, CF_BASE, 3, X_T0
+    SETX    SEL_VM, CF_BASE, 4, X_A0
     addi    t0, a0, 128
-    SETX    SEL_VM, 1, CF_BASE, 5, X_T0
+    SETX    SEL_VM, CF_BASE, 5, X_T0
     slli    t0, a3, 1
     add     t0, a0, t0
-    SETX    SEL_VM, 1, CF_BASE, 6, X_T0
+    SETX    SEL_VM, CF_BASE, 6, X_T0
     addi    t0, t0, 128
-    SETX    SEL_VM, 1, CF_BASE, 7, X_T0
+    SETX    SEL_VM, CF_BASE, 7, X_T0
     # store descriptors vm12..vm15: base = x + c*128, stride 4, no inc
     mv      t0, a0
     .irp R,0,1,2,3
-    SETX    SEL_VM, 1, CF_BASE, (12 + \R), X_T0
+    SETX    SEL_VM, CF_BASE, (12 + \R), X_T0
     SETIV   SEL_VM, CF_STRIDE, 4, (12 + \R)
     SETIV   SEL_VM, CF_VFLAGS, 0, (12 + \R)
     addi    t0, t0, 128
@@ -584,7 +584,7 @@ qwen3_rope:
     VSTORE  12                            # vm12 = x
     slli    t0, a3, 1
     add     t0, a0, t0
-    SETX    SEL_VM, 1, CF_BASE, 13, X_T0  # vm13 = x + half
+    SETX    SEL_VM, CF_BASE, 13, X_T0  # vm13 = x + half
     VSTORE  13
     ret
 .Lrp_half64:
@@ -623,12 +623,12 @@ qwen3_rope:
     .globl qwen3_scores
 qwen3_scores:
     LI_CWV  t6, DT_F32, 32
-    SETW    SEL_VC, 1, 0, X_T6, 20
+    SETW    SEL_VC, 0, X_T6, 20
     srli    t6, a5, 5                     # chunks = hd / 32
     # q chunk descriptors vm8..vm11 (base = q + c*128, no inc)
     mv      t0, a0
     .irp R,0,1,2,3
-    SETX    SEL_VM, 1, CF_BASE, (8 + \R), X_T0
+    SETX    SEL_VM, CF_BASE, (8 + \R), X_T0
     SETIV   SEL_VM, CF_STRIDE, 4, (8 + \R)
     SETIV   SEL_VM, CF_VFLAGS, 0, (8 + \R)
     addi    t0, t0, 128
@@ -638,7 +638,7 @@ qwen3_scores:
     SETIV   SEL_VM, CF_VFLAGS, 1, 12
     # one-lane score store: vc17/vm17 are fixed except the base per key
     LI_CWV  t5, DT_F32, 1
-    SETW    SEL_VC, 1, 17, X_T5
+    SETW    SEL_VC, 17, X_T5
     SETIV   SEL_VM, CF_STRIDE, 4, 17
     SETIV   SEL_VM, CF_VFLAGS, 0, 17
     VLOAD   8
@@ -657,7 +657,7 @@ qwen3_scores:
     VFILL   16, 0
     mul     t0, t4, a2
     add     t0, a1, t0
-    SETX    SEL_VM, 1, CF_BASE, 12, X_T0
+    SETX    SEL_VM, CF_BASE, 12, X_T0
     VLOAD   12
     VFMADD  16, 12, 8, 16
     li      t5, 1
@@ -676,7 +676,7 @@ qwen3_scores:
     VREDUCE 0, 17, 16                   # v17[0] = dot (len-1 scratch)
     slli    t1, t4, 2
     add     t1, a3, t1
-    SETX    SEL_VM, 1, CF_BASE, 17, X_T1
+    SETX    SEL_VM, CF_BASE, 17, X_T1
     VSTORE  17                          # one-lane score store
     addi    t4, t4, 1
     bltu    t4, a4, .Lsc_key
@@ -691,16 +691,16 @@ qwen3_scores:
     .globl qwen3_softmax_exp
 qwen3_softmax_exp:
     LI_CWV  t6, DT_F32, 32
-    SETW    SEL_VC, 1, 0, X_T6, 4
+    SETW    SEL_VC, 0, X_T6, 4
     LI_CWV  t6, DT_F32, 1
-    SETW    SEL_VC, 1, 4, X_T6     # vc4: len-1 store of the rcp result
+    SETW    SEL_VC, 4, X_T6     # vc4: len-1 store of the rcp result
     SETIV   SEL_VM, CF_STRIDE, 4, 1
     SETIV   SEL_VM, CF_VFLAGS, 1, 1
     SETIV   SEL_VM, CF_STRIDE, 4, 3
     SETIV   SEL_VM, CF_VFLAGS, 1, 3
     li      t0, 0xFF800000                # -inf
     VFILLX  0, X_T0
-    SETX    SEL_VM, 1, CF_BASE, 1, X_A0
+    SETX    SEL_VM, CF_BASE, 1, X_A0
     srli    t6, a1, 5
 .Lsm_max:
     VLOAD   1
@@ -709,8 +709,8 @@ qwen3_softmax_exp:
     bnez    t6, .Lsm_max
     VREDUCE 1, 0, 0                       # v0 = max f32 bits in every lane
     VFILL   2, 0
-    SETX    SEL_VM, 1, CF_BASE, 1, X_A0   # rewind load
-    SETX    SEL_VM, 1, CF_BASE, 3, X_A0   # store stream
+    SETX    SEL_VM, CF_BASE, 1, X_A0   # rewind load
+    SETX    SEL_VM, CF_BASE, 3, X_A0   # store stream
     srli    t6, a1, 5
 .Lsm_exp:
     VLOAD   1
@@ -724,7 +724,7 @@ qwen3_softmax_exp:
     bnez    t6, .Lsm_exp
     VREDUCE 0, 4, 2                       # v4 = sum in every lane
     VRCP    4, 4
-    SETX    SEL_VM, 1, CF_BASE, 4, X_A3
+    SETX    SEL_VM, CF_BASE, 4, X_A3
     SETIV   SEL_VM, CF_STRIDE, 4, 4
     SETIV   SEL_VM, CF_VFLAGS, 0, 4
     VSTORE  4                             # *rcp_out = rcp(sum)
@@ -739,7 +739,7 @@ qwen3_softmax_exp:
     .globl qwen3_pv
 qwen3_pv:
     LI_CWV  t6, DT_F32, 32
-    SETW    SEL_VC, 1, 0, X_T6, 20
+    SETW    SEL_VC, 0, X_T6, 20
     srli    t6, a5, 5                     # chunks
     SETIV   SEL_VM, CF_STRIDE, 4, 12
     SETIV   SEL_VM, CF_VFLAGS, 1, 12
@@ -756,7 +756,7 @@ qwen3_pv:
     VBROADCAST 20, 20, 0
     mul     t0, t4, a1
     add     t0, a0, t0
-    SETX    SEL_VM, 1, CF_BASE, 12, X_T0
+    SETX    SEL_VM, CF_BASE, 12, X_T0
     VLOAD   12
     VFMADD  16, 12, 20, 16
     li      t5, 1
@@ -777,7 +777,7 @@ qwen3_pv:
     # out descriptors vm16..vm19 (one per accumulator, no inc)
     mv      t0, a3
     .irp R,0,1,2,3
-    SETX    SEL_VM, 1, CF_BASE, (16 + \R), X_T0
+    SETX    SEL_VM, CF_BASE, (16 + \R), X_T0
     SETIV   SEL_VM, CF_STRIDE, 4, (16 + \R)
     SETIV   SEL_VM, CF_VFLAGS, 0, (16 + \R)
     addi    t0, t0, 128
@@ -806,13 +806,13 @@ qwen3_pv:
     .globl qwen3_silu_mul
 qwen3_silu_mul:
     LI_CWV  t6, DT_F32, 32
-    SETW    SEL_VC, 1, 0, X_T6, 2
+    SETW    SEL_VC, 0, X_T6, 2
     SETIV   SEL_VM, CF_STRIDE, 4, 0
     SETIV   SEL_VM, CF_VFLAGS, 1, 0
-    COPY SEL_VM, 1, 1, 0, 1          # vm1, vm2 = vm0 stride/inc
-    SETX    SEL_VM, 1, CF_BASE, 0, X_A0
-    SETX    SEL_VM, 1, CF_BASE, 1, X_A1
-    SETX    SEL_VM, 1, CF_BASE, 2, X_A2
+    COPY SEL_VM, 1, 0, 1          # vm1, vm2 = vm0 stride/inc
+    SETX    SEL_VM, CF_BASE, 0, X_A0
+    SETX    SEL_VM, CF_BASE, 1, X_A1
+    SETX    SEL_VM, CF_BASE, 2, X_A2
     li      t0, 0xBFB8AA3B                 # -log2(e), f32 bits
     li      t1, 0x3F800000                 # 1.0f, f32 bits
     srli    t6, a3, 5
@@ -837,13 +837,13 @@ qwen3_silu_mul:
     .globl qwen3_add
 qwen3_add:
     LI_CWV  t6, DT_F32, 32
-    SETW    SEL_VC, 1, 0, X_T6, 2
+    SETW    SEL_VC, 0, X_T6, 2
     SETIV   SEL_VM, CF_STRIDE, 4, 0
     SETIV   SEL_VM, CF_VFLAGS, 1, 0
-    COPY SEL_VM, 1, 1, 0, 1          # vm1, vm2 = vm0 stride/inc
-    SETX    SEL_VM, 1, CF_BASE, 0, X_A0
-    SETX    SEL_VM, 1, CF_BASE, 1, X_A1
-    SETX    SEL_VM, 1, CF_BASE, 2, X_A0
+    COPY SEL_VM, 1, 0, 1          # vm1, vm2 = vm0 stride/inc
+    SETX    SEL_VM, CF_BASE, 0, X_A0
+    SETX    SEL_VM, CF_BASE, 1, X_A1
+    SETX    SEL_VM, CF_BASE, 2, X_A0
     srli    t6, a2, 5
 .Lad_loop:
     VLOAD   0
@@ -880,19 +880,19 @@ qwen3_embed:
 
     li      t0, (DT_I8 << 16) | (32 << 8)
     or      t0, t0, t4
-    SETW    SEL_TC, 0, 0, X_T0      # tc0 = i8 dblocks x 32
+    SETW    SEL_TC, 0, X_T0      # tc0 = i8 dblocks x 32
     li      t0, (DT_F32 << 16) | (32 << 8)
     or      t0, t0, t4
-    SETW    SEL_AC, 0, 0, X_T0      # ac0 = f32 dblocks x 32
+    SETW    SEL_AC, 0, X_T0      # ac0 = f32 dblocks x 32
     li      t0, DT_F32 << 8
     or      t0, t0, t4
-    SETW    SEL_VC, 1, 0, X_T0      # vc0 = f32 len dblocks
+    SETW    SEL_VC, 0, X_T0      # vc0 = f32 len dblocks
     VFILLX  0, X_T2                 # duplicate the token scale in v0
     SETIM   SEL_TM, CF_RSTRIDE, 1024, 0
     SETIM   SEL_TM, CF_CSTRIDE, 1, 0
     SETIM   SEL_TM, CF_FLAGS, 0, 0
-    SETX    SEL_TM, 0, CF_BASE, 0, X_T5
-    SETX    SEL_AM, 0, CF_BASE, 0, X_A3
+    SETX    SEL_TM, CF_BASE, 0, X_T5
+    SETX    SEL_AM, CF_BASE, 0, X_A3
     SETIM   SEL_AM, CF_RSTRIDE, 128, 0
     SETIM   SEL_AM, CF_CSTRIDE, 4, 0
     SETIM   SEL_AM, CF_FLAGS, 0, 0
@@ -914,14 +914,14 @@ qwen3_embed:
 qwen3_argmax:
     addi    sp, sp, -16
     LI_CWV  t6, DT_F32, 32
-    SETW    SEL_VC, 1, 0, X_T6, 1   # vc0/vc1 f32: best value, chunk
+    SETW    SEL_VC, 0, X_T6, 1   # vc0/vc1 f32: best value, chunk
     LI_CWV  t6, DT_U32, 32
-    SETW    SEL_VC, 1, 2, X_T6, 1   # vc2/vc3 u32: best index, candidate index
+    SETW    SEL_VC, 2, X_T6, 1   # vc2/vc3 u32: best index, candidate index
     LI_CWV  t6, DT_F32, 32
-    SETW    SEL_VC, 1, 4, X_T6      # vc4 f32: candidate value
+    SETW    SEL_VC, 4, X_T6      # vc4 f32: candidate value
     LI_CWV  t6, DT_U32, 32
-    SETW    SEL_VC, 1, 5, X_T6, 2   # vc5..vc7 u32: compare/NaN masks
-    SETX    SEL_VM, 1, CF_BASE, 1, X_A0
+    SETW    SEL_VC, 5, X_T6, 2   # vc5..vc7 u32: compare/NaN masks
+    SETX    SEL_VM, CF_BASE, 1, X_A0
     SETIV   SEL_VM, CF_STRIDE, 4, 1
     SETIV   SEL_VM, CF_VFLAGS, 1, 1
     li      t4, 32                        # next chunk base
@@ -947,8 +947,8 @@ qwen3_argmax:
     bnez    t6, .Lam_loop
 .Lam_done:
     LI_CWV  t6, DT_U32, 1
-    SETW    SEL_VC, 1, 5, X_T6      # vc5: len-1 exit store
-    SETX    SEL_VM, 1, CF_BASE, 5, X_SP
+    SETW    SEL_VC, 5, X_T6      # vc5: len-1 exit store
+    SETX    SEL_VM, CF_BASE, 5, X_SP
     SETIV   SEL_VM, CF_STRIDE, 4, 5
     SETIV   SEL_VM, CF_VFLAGS, 0, 5
     VBROADCAST 5, 2, 0
