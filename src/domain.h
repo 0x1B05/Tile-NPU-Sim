@@ -18,8 +18,6 @@ inline constexpr std::size_t domain_register_count(NpuDomain domain) {
   }
 }
 
-inline constexpr bool is_vector_domain(NpuDomain domain) { return domain == NpuDomain::vec32; }
-
 template <NpuDomain Domain> auto &domain_regs(State &state) {
   if constexpr (Domain == NpuDomain::tile) {
     return state.t;

@@ -29,11 +29,8 @@ template <typename Config>
 concept DomainConfig = MatrixConfig<Config> || VectorConfig<Config>;
 
 // Tile holds 8-bit elements, Acc/Vec32 hold 32-bit elements.
-template <DomainConfig Config>
-inline constexpr bool is_8bit_config_v = std::same_as<Config, TileConfig>;
-
 template <DomainConfig Config> constexpr bool dtype_fits(DType dtype) {
-  if constexpr (is_8bit_config_v<Config>) {
+  if constexpr (std::same_as<Config, TileConfig>) {
     return dtype == DType::i8 || dtype == DType::u8;
   } else {
     return dtype == DType::i32 || dtype == DType::u32 || dtype == DType::f32;

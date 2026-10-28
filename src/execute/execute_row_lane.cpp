@@ -1,29 +1,20 @@
 #include "execute.h"
 
 #include "config_check.h"
-#include "domain.h"
 #include "matrix_view.h"
 #include "operand.h"
 #include "utils/common.h"
 
 #include <cstddef>
 #include <cstdint>
-#include <type_traits>
 
 namespace tile_npu {
 namespace {
 
 // Both directions copy a full effective row: vector length must equal matrix columns.
 template <RowOp Op> ExecuteResult row_copy(const RowInstr &instr, State &state) {
-  constexpr auto MATRIX_DOMAIN = NpuDomain::acc;
-  constexpr auto VECTOR_DOMAIN = NpuDomain::vec32;
-  auto &matrix_regs = domain_regs<MATRIX_DOMAIN>(state);
-  auto &vector_regs = domain_regs<VECTOR_DOMAIN>(state);
-  const auto &matrix_configs = domain_configs<MATRIX_DOMAIN>(state);
-  const auto &vector_configs = domain_configs<VECTOR_DOMAIN>(state);
-
-  const auto &mconfig = matrix_configs[instr.matrix.index];
-  const auto &vconfig = vector_configs[instr.vector.index];
+  const auto &mconfig = state.ac[instr.matrix.index];
+  const auto &vconfig = state.vc[instr.vector.index];
   if (!valid_domain_config(mconfig) || !valid_domain_config(vconfig) ||
       mconfig.dtype != vconfig.dtype || vconfig.len != mconfig.cols) {
     return config_error();
@@ -31,8 +22,8 @@ template <RowOp Op> ExecuteResult row_copy(const RowInstr &instr, State &state) 
   const auto row = resolve_index(instr.index, state);
   if (row >= mconfig.rows) return config_error();
 
-  auto matrix = matrix_view(matrix_regs[instr.matrix.index]);
-  auto &vector = vector_regs[instr.vector.index];
+  auto matrix = matrix_view(state.a[instr.matrix.index]);
+  auto &vector = state.v[instr.vector.index];
   for (std::size_t col = 0; col < mconfig.cols; ++col) {
     if constexpr (Op == RowOp::insert) {
       matrix.at(row, col) = vector[col];
@@ -55,47 +46,40 @@ std::uint64_t extend_element(DType dtype, std::uint32_t raw) {
   }
 }
 
-template <NpuDomain Domain>
 ExecuteResult lane_extract(const LaneExtractInstr &instr, State &state) {
-  auto &regs = domain_regs<Domain>(state);
-  const auto &configs = domain_configs<Domain>(state);
   const auto lane = resolve_index(instr.index, state);
-  const auto &config = configs[instr.src.index];
+  const auto &config = state.vc[instr.src.index];
   if (!valid_domain_config(config) || lane >= config.len) {
     return config_error();
   }
-  state.scalar.write_x(instr.dest.index, extend_element(config.dtype, regs[instr.src.index][lane]));
+  state.scalar.write_x(instr.dest.index,
+                       extend_element(config.dtype, state.v[instr.src.index][lane]));
   return {.status = StepStatus::retired};
 }
 
-template <NpuDomain Domain> ExecuteResult lane_insert(const LaneInsertInstr &instr, State &state) {
-  auto &regs = domain_regs<Domain>(state);
-  const auto &configs = domain_configs<Domain>(state);
-  using Element = typename std::remove_cvref_t<decltype(regs)>::value_type::value_type;
+ExecuteResult lane_insert(const LaneInsertInstr &instr, State &state) {
   const auto lane = resolve_index(instr.index, state);
-  const auto &config = configs[instr.dest.index];
+  const auto &config = state.vc[instr.dest.index];
   if (!valid_domain_config(config) || lane >= config.len) {
     return config_error();
   }
   // Like fillx, the lane keeps the low element-width bits of the scalar.
-  regs[instr.dest.index][lane] = static_cast<Element>(state.scalar.read_x(instr.src.index));
+  state.v[instr.dest.index][lane] =
+      static_cast<Vec32::value_type>(state.scalar.read_x(instr.src.index));
   return {.status = StepStatus::retired};
 }
 
-template <NpuDomain Domain>
 ExecuteResult lane_broadcast(const LaneBroadcastInstr &instr, State &state) {
-  auto &regs = domain_regs<Domain>(state);
-  const auto &configs = domain_configs<Domain>(state);
   const auto lane = resolve_index(instr.index, state);
-  const auto &dst_config = configs[instr.dest.index];
-  const auto &src_config = configs[instr.src.index];
+  const auto &dst_config = state.vc[instr.dest.index];
+  const auto &src_config = state.vc[instr.src.index];
   if (!valid_domain_config(dst_config) || !valid_domain_config(src_config) ||
       dst_config.dtype != src_config.dtype || lane >= src_config.len) {
     return config_error();
   }
-  const auto value = regs[instr.src.index][lane];
+  const auto value = state.v[instr.src.index][lane];
   for (std::size_t j = 0; j < dst_config.len; ++j) {
-    regs[instr.dest.index][j] = value;
+    state.v[instr.dest.index][j] = value;
   }
   return {.status = StepStatus::retired};
 }
@@ -114,15 +98,15 @@ ExecuteResult execute(const RowInstr &instr, State &state) {
 }
 
 ExecuteResult execute(const LaneExtractInstr &instr, State &state) {
-  return lane_extract<NpuDomain::vec32>(instr, state);
+  return lane_extract(instr, state);
 }
 
 ExecuteResult execute(const LaneInsertInstr &instr, State &state) {
-  return lane_insert<NpuDomain::vec32>(instr, state);
+  return lane_insert(instr, state);
 }
 
 ExecuteResult execute(const LaneBroadcastInstr &instr, State &state) {
-  return lane_broadcast<NpuDomain::vec32>(instr, state);
+  return lane_broadcast(instr, state);
 }
 
 } // namespace tile_npu

@@ -318,9 +318,8 @@ ExecuteResult gather_tile_access(const MblkInstr &instr, ExecContext &ctx) {
                                          column_address, element);
 }
 
-template <typename Reg>
 ExecuteResult gather_vector_access(const MblkInstr &instr, ExecContext &ctx, VectorDescView &desc,
-                                   std::size_t len, Reg &reg) {
+                                   std::size_t len, Vec32 &reg) {
   const auto &index_config = ctx.state.vc[instr.gather_src];
   if (!valid_config_of(index_config, DType::u32)) {
     return config_error();
@@ -330,7 +329,7 @@ ExecuteResult gather_vector_access(const MblkInstr &instr, ExecContext &ctx, Vec
   // descriptor increment is performed for gather.
   const auto indexed = std::min(len, std::size_t{index_config.len});
   const auto &index_reg = ctx.state.v[instr.gather_src];
-  using Element = typename Reg::value_type;
+  using Element = Vec32::value_type;
   const auto row_address = [&](std::size_t lane) {
     return desc.gather_vector_addr(index_reg[lane]);
   };
@@ -341,15 +340,14 @@ ExecuteResult gather_vector_access(const MblkInstr &instr, ExecContext &ctx, Vec
   return gather_access<Element>(ctx.memory, len, 1, indexed, row_address, column_address, element);
 }
 
-template <typename Reg>
 ExecuteResult strided_vector_access(const MblkInstr &instr, ExecContext &ctx, VectorDescView &desc,
-                                    std::size_t len, Reg &reg) {
+                                    std::size_t len, Vec32 &reg) {
   const auto next_base = desc.incremented_base(len);
   if (!next_base) {
     return config_error();
   }
 
-  using Element = typename Reg::value_type;
+  using Element = Vec32::value_type;
   const auto visit = [&](auto &&fn) {
     for (std::size_t lane = 0; lane < len; ++lane) {
       fn(desc.vector_element_addr(lane), reg[lane]);
@@ -363,9 +361,11 @@ ExecuteResult strided_vector_access(const MblkInstr &instr, ExecContext &ctx, Ve
   return result;
 }
 
-template <NpuDomain Domain> ExecuteResult vector_access(const MblkInstr &instr, ExecContext &ctx) {
-  static_assert(Domain == NpuDomain::vec32);
-  auto [reg, config, descriptor] = bind_register<Domain>(ctx.state, instr.reg.index);
+ExecuteResult vector_access(const MblkInstr &instr, ExecContext &ctx) {
+  const auto index = instr.reg.index;
+  auto &reg = ctx.state.v[index];
+  const auto &config = ctx.state.vc[index];
+  auto &descriptor = ctx.state.vm[index];
   if (!valid_domain_config(config)) {
     return config_error();
   }
@@ -403,7 +403,7 @@ ExecuteResult execute(const MblkInstr &instr, ExecContext &ctx) {
     case MblkOp::gather: // gather has no Acc-domain encoding
     default: unreachable("M_BLK op/domain combination rejected by validation");
     }
-  case NpuDomain::vec32: return vector_access<NpuDomain::vec32>(instr, ctx);
+  case NpuDomain::vec32: return vector_access(instr, ctx);
   default: unreachable("M_BLK op/domain combination rejected by validation");
   }
 }

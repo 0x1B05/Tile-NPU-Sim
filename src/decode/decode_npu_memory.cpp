@@ -36,7 +36,7 @@ DecodeResult decode_mblk_gather(std::uint32_t word) { return decode_mblk<MblkOp:
 // funct3 = {form2, LS}: 100 row load, 101 row store.
 template <MblkOp Op> DecodeResult decode_mblk_row(std::uint32_t word) {
   const auto f = encoding::NpuMR::from(word);
-  const auto domain = (f.sel3 & 0b010) != 0 ? NpuDomain::acc : NpuDomain::tile;
+  const auto domain = sel3_domain(f.sel3);
   const NpuRegister reg{domain, f.reg};
   const auto index = decode_index(f.index, (f.sel3 & 1) != 0);
   return DecodedNpuInstr{MblkInstr{.op = Op, .reg = reg, .index = index}};

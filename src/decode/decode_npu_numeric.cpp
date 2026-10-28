@@ -5,14 +5,6 @@
 #include <cstdint>
 
 namespace tile_npu {
-namespace {
-
-// QNT pairs the quantized Tile with its f32 Acc counterpart.
-constexpr NpuDomain qnt_paired_domain(NpuDomain domain) {
-  return domain == NpuDomain::tile ? NpuDomain::acc : NpuDomain::tile;
-}
-
-} // namespace
 
 // CVT (R2): major4 = 0011, q = 10.
 // 31    28 27  26 25  24    22 21                12 11       7 6        2 1   0
@@ -89,7 +81,7 @@ DecodeResult decode_qnt(std::uint32_t word) {
   if (domain != NpuDomain::tile && domain != NpuDomain::acc) {
     return DecodeError::illegal;
   }
-  const auto src_domain = qnt_paired_domain(domain);
+  const auto src_domain = domain == NpuDomain::tile ? NpuDomain::acc : NpuDomain::tile;
 
   // Tile has two forms: dynamic (funct3 = 000) and external scale (001).
   // Acc has exactly one form (funct3 = 000).

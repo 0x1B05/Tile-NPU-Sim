@@ -96,7 +96,7 @@ inline constexpr bool mask_legal(MaskOp op, NpuDomain domain) {
   switch (op) {
   case MaskOp::tail: return true;
   case MaskOp::tril:
-  case MaskOp::triu: return !is_vector_domain(domain);
+  case MaskOp::triu: return domain == NpuDomain::tile || domain == NpuDomain::acc;
   default: return false;
   }
 }
