@@ -112,29 +112,6 @@ TEST_CASE(emask_vec_tail) {
   check_eq(state.v[0][4], std::uint32_t{0x5a5a5a5au}, "mask keeps lanes past the effective length");
 }
 
-TEST_CASE(emask_vec8_maskx) {
-  Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
-  // bmaskx.tail b0, b1, x2, x3 on a len-4 u8 vector with xLen = 2; the fill
-  // takes the low 8 bits of xFill.
-  load_one(sim, memory, make_emask(NpuDomain::vec8, 0, 0, 1, 2, 3, true));
-  auto &state = sim.state();
-  for (auto index : {0, 1}) {
-    state.bc[index].dtype = DType::u8;
-    state.bc[index].len = 4;
-  }
-  state.scalar.write_x(2, 2);
-  state.scalar.write_x(3, 0xffffffffffffffabu);
-  for (std::uint8_t lane = 0; lane < 4; ++lane)
-    state.b[1][lane] = static_cast<std::uint8_t>(lane + 1);
-
-  check_eq(sim.step().status, StepStatus::retired, "bmaskx.tail retires");
-  check_eq(state.b[0][0], std::uint8_t{1}, "lane < xLen keeps source");
-  check_eq(state.b[0][1], std::uint8_t{2}, "lane < xLen keeps source");
-  check_eq(state.b[0][2], std::uint8_t{0xab}, "fill takes the low 8 bits");
-  check_eq(state.b[0][3], std::uint8_t{0xab}, "fill takes the low 8 bits");
-}
-
 TEST_CASE(emask_rejects_invalid) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);

@@ -140,7 +140,7 @@ TEST_CASE(ecmp_decode_rejects_reserved) {
   constexpr std::array cases{
       // Comparisons only exist on Vec32: dom2 = 00/01/10 is reserved.
       DecodeCase{"tile domain", make_ecmp(NpuDomain::tile, false, 0, 0, 0, 0)},
-      DecodeCase{"vec8 domain", make_ecmp(NpuDomain::vec8, false, 0, 0, 0, 0)},
+      DecodeCase{"reserved domain", make_ecmp(NpuDomain::reserved, false, 0, 0, 0, 0)},
       DecodeCase{"acc domain", make_ecmp(NpuDomain::acc, false, 0, 0, 0, 0)},
       // funct3 = 110/111 is reserved.
       DecodeCase{"funct3 110", make_ecmp(NpuDomain::vec32, false, 6, 0, 0, 0)},

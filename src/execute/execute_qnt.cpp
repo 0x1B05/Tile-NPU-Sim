@@ -12,7 +12,6 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <optional>
 #include <span>
 #include <utility>
 
@@ -28,12 +27,6 @@ bool valid_matrix_quant_configs(const TileConfig &quantized, const AccConfig &fl
   return valid_config_of(quantized, DType::i8) && valid_config_of(floating, DType::f32) &&
          valid_config_of(scale, DType::f32) && quantized.rows == floating.rows &&
          quantized.cols == floating.cols && scale.len == floating.rows;
-}
-
-bool valid_vector_quant_configs(const Vec8Config &quantized, const Vec32Config &floating,
-                                const Vec32Config &scale) {
-  return valid_config_of(quantized, DType::i8) && valid_config_of(floating, DType::f32) &&
-         valid_config_of(scale, DType::f32) && quantized.len == floating.len;
 }
 
 // q8s32 element rule: round-to-nearest-even of value / scale, saturated to
@@ -63,18 +56,6 @@ float row_amax(MatrixView<const std::uint32_t> src, std::size_t row, std::size_t
     values[col] = as_f32(src.at(row, col));
   }
   return f32_absmax(std::span(values).first(cols));
-}
-
-// Resolves the vector-form scale lane: an immediate index or the value of
-// the named Scalar register; the lane must fall inside vScale's effective
-// length.
-std::optional<std::uint32_t> scale_lane(const IndexOperand &index, const State &state,
-                                        std::uint8_t vscale_len) {
-  const auto lane = resolve_index(index, state);
-  if (lane >= vscale_len) {
-    return std::nullopt;
-  }
-  return static_cast<std::uint32_t>(lane);
 }
 
 // aquant.rows[.scale].q8s32: per-row quantization of an f32 Acc into an i8
@@ -129,41 +110,10 @@ ExecuteResult tdequant(const TdequantInstr &instr, State &state) {
   return {.status = StepStatus::retired};
 }
 
-// vquant.q8s32: quantizes an f32 Vec32 into an i8 Vec8 of the same length;
-// the single scale lands in vScale[index].
-ExecuteResult vquant(const VquantInstr &instr, State &state) {
-  const auto &dst_config = state.bc[instr.dest.index];
-  const auto &src_config = state.vc[instr.src.index];
-  const auto &scale_config = state.vc[instr.scale];
-  if (!valid_vector_quant_configs(dst_config, src_config, scale_config)) {
-    return config_error();
-  }
-  const FpEnvGuard fp_env;
-  const auto lane = scale_lane(instr.index, state, scale_config.len);
-  if (!lane) {
-    return config_error();
-  }
-  const auto &src_reg = state.v[instr.src.index];
-  auto &dst_reg = state.b[instr.dest.index];
-  std::array<float, REDUCE_LEAVES> values{};
-  for (std::size_t j = 0; j < src_config.len; ++j) {
-    values[j] = as_f32(src_reg[j]);
-  }
-  const float amax = f32_absmax(std::span(values).first(src_config.len));
-  const float scale = amax / Q8_MAX_MAGNITUDE;
-  for (std::size_t j = 0; j < src_config.len; ++j) {
-    dst_reg[j] = static_cast<std::uint8_t>(quantize_lane(as_f32(src_reg[j]), scale));
-  }
-  state.v[instr.scale][*lane] = as_u32(scale);
-  return {.status = StepStatus::retired};
-}
-
 } // namespace
 
 ExecuteResult execute(const AquantInstr &instr, State &state) { return aquant(instr, state); }
 
 ExecuteResult execute(const TdequantInstr &instr, State &state) { return tdequant(instr, state); }
-
-ExecuteResult execute(const VquantInstr &instr, State &state) { return vquant(instr, state); }
 
 } // namespace tile_npu

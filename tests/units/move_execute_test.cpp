@@ -89,22 +89,6 @@ TEST_CASE(move_fillx_acc_keeps_low32) {
   check_eq(hex(state.a[3][1]), hex(0xcafef00du), "afillx lane 1 raw bits");
 }
 
-TEST_CASE(move_fillx_vec8) {
-  Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
-  load_one(sim, memory, make_reg_move(NpuDomain::vec8, 1, 1, 2)); // bfillx b1, x2
-  auto &state = sim.state();
-  state.bc[1].dtype = DType::u8;
-  state.bc[1].len = 3;
-  state.b[1][3] = 0xab;
-  state.scalar.write_x(2, 0x10000001full);
-  check_eq(sim.step().status, StepStatus::retired, "bfillx retires");
-  for (std::size_t lane = 0; lane < 3; ++lane) {
-    check_eq(state.b[1][lane], std::uint8_t{0x1f}, "bfillx lane " + std::to_string(lane));
-  }
-  check_eq(state.b[1][3], std::uint8_t{0xab}, "bfillx keeps invalid lanes");
-}
-
 TEST_CASE(move_copy_matrix_effective_region) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);

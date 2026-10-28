@@ -303,18 +303,18 @@ TEST_CASE(mblk_row_store) {
 }
 
 TEST_CASE(mblk_vector_load_store) {
-  MblkRun run(block(NpuDomain::vec8, 0, 0)); // bload b0
+  MblkRun run(block(NpuDomain::vec32, 0, 0)); // vload v0
   auto &state = run.sim.state();
-  state.bc[0].dtype = DType::i8;
-  state.bc[0].len = 3;
-  state.bm[0].base_addr = DATA;
-  state.bm[0].stride_bytes = 2;
-  poke(run.memory, DATA, {10, 0, 11, 0, 12});
+  state.vc[0].dtype = DType::u32;
+  state.vc[0].len = 3;
+  state.vm[0].base_addr = DATA;
+  state.vm[0].stride_bytes = 4;
+  poke(run.memory, DATA, {10, 0, 0, 0, 11, 0, 0, 0, 12, 0, 0, 0});
 
-  check_eq(run.sim.step().status, StepStatus::retired, "bload retires");
-  check_eq(state.b[0][0], std::uint8_t{10}, "b0[0]");
-  check_eq(state.b[0][1], std::uint8_t{11}, "b0[1]");
-  check_eq(state.b[0][2], std::uint8_t{12}, "b0[2]");
+  check_eq(run.sim.step().status, StepStatus::retired, "vload retires");
+  check_eq(state.v[0][0], std::uint32_t{10}, "v0[0]");
+  check_eq(state.v[0][1], std::uint32_t{11}, "v0[1]");
+  check_eq(state.v[0][2], std::uint32_t{12}, "v0[2]");
 
   MblkRun store_run(block(NpuDomain::vec32, 1, 1)); // vstore v1
   auto &store_state = store_run.sim.state();

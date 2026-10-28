@@ -11,11 +11,6 @@
 
     .globl _start
 _start:
-    # bc0/bc1: dtype = i8 (0), len = 4
-    CFG_SETI  6, 0, 0, 0, 0
-    CFG_SETI  6, 0, 1, 4, 0
-    CFG_SETI  6, 0, 0, 0, 1
-    CFG_SETI  6, 0, 1, 4, 1
     # ac0: dtype = i32 (2), rows = 2, cols = 2
     CFG_SETI  5, 1, 0, 2, 0
     CFG_SETI  5, 1, 1, 2, 0
@@ -30,52 +25,12 @@ _start:
     CFG_REG   3, 0, 0, 0, 3, 0
     CFG_SETI  5, 3, 1, 8, 0
     CFG_SETI  5, 3, 2, 4, 0
-    # bm0: base = srcbuf + 4; bm1: base = dstbuf; both stride = 1
-    lla       x3, srcbuf
-    addi      x3, x3, 4
-    CFG_REG   2, 1, 0, 0, 3, 0
-    CFG_SETI  6, 2, 1, 1, 0
-    lla       x3, dstbuf
-    CFG_REG   2, 1, 0, 0, 3, 1
-    CFG_SETI  6, 2, 1, 1, 1
     # vm0/vm1: base = dstbuf32, stride = 4
     lla       x3, dstbuf32
     CFG_REG   3, 1, 0, 0, 3, 0
     CFG_SETI  6, 3, 1, 4, 0
     CFG_REG   3, 1, 0, 0, 3, 1
     CFG_SETI  6, 3, 1, 4, 1
-
-    # b0 = {5, 6, 7, 8} loaded from srcbuf + 4.
-    BLOAD     0
-    # bm0 now points at dstbuf for the store checks.
-    lla       x3, dstbuf
-    CFG_REG   2, 1, 0, 0, 3, 0
-
-    # bbroadcast b1, b0[2]: every effective lane takes b0[2] = 7.
-    BBROADCAST 1, 0, 2
-    BSTORE    1
-    lla       x3, dstbuf
-    FENCE_MEM
-    lwu       x4, 0(x3)
-    li        x5, 0x07070707
-    li        a0, 1
-    bne       x4, x5, fail
-
-    # bextract x5, b0[1] = 6; binsert b0[x9], x6 with x9 = 3, x6 = 0x1FF
-    # writes the low 8 bits (0xFF) into lane 3.
-    BEXTRACT  5, 0, 1
-    li        x7, 6
-    li        a0, 2
-    bne       x5, x7, fail
-    li        x6, 0x1FF
-    li        x9, 3
-    LANE_MOVE 0, 1, 1, 9, 6, 0   # binsert b0[x9], x6
-    BSTORE    0
-    lla       x3, dstbuf
-    FENCE_MEM
-    lwu       x4, 0(x3)
-    li        x5, 0xFF070605
-    bne       x4, x5, fail
 
     # aextract.row v0, a0[x9]: a0 = {1, 2, 3, 4} (2x2), x9 = 1 -> v0 = {3, 4}.
     ALOAD     0
@@ -86,7 +41,7 @@ _start:
     FENCE_MEM
     lwu       x4, 0(x3)
     li        x5, 3
-    li        a0, 3
+    li        a0, 1
     bne       x4, x5, fail
     lwu       x4, 4(x3)
     li        x5, 4
@@ -100,7 +55,7 @@ _start:
     FENCE_MEM
     lwu       x4, 0(x3)
     li        x5, 3
-    li        a0, 4
+    li        a0, 2
     bne       x4, x5, fail
     lwu       x4, 4(x3)
     li        x5, 4
@@ -110,7 +65,7 @@ _start:
     # the low 32 bits (0xFFFFFFFF) into lane 1; vbroadcast v1, v0[0] = {3, 3}.
     VEXTRACT  5, 0, 0
     li        x7, 3
-    li        a0, 5
+    li        a0, 3
     bne       x5, x7, fail
     li        x6, -1
     li        x9, 1
@@ -137,8 +92,5 @@ fail:
 
     .section .data
     .balign 4
-srcbuf:   .byte 1, 2, 3, 4, 5, 6, 7, 8
-    .balign 4
 srcbuf32: .word 1, 2, 3, 4
-dstbuf:   .space 4
 dstbuf32: .space 16

@@ -1,7 +1,7 @@
 #include "npu.inc"
 
 # Self-checking fill/move image: programs configs and descriptors, then
-# exercises fill/fillx/copy on the tile, acc and vec8 domains. Every stage
+# exercises fill/fillx/copy on the tile and acc domains. Every stage
 # stores results back to memory and checks them with scalar loads. Ends with
 # ebreak: a0 = 0 pass, a0 = N identifies the failing check.
 #
@@ -21,9 +21,6 @@ _start:
     CFG_SETI  5, 1, 0, 2, 0
     CFG_SETI  5, 1, 1, 1, 0
     CFG_SETI  5, 1, 2, 2, 0
-    # bc0: dtype = u8 (1), len = 4
-    CFG_SETI  6, 0, 0, 1, 0
-    CFG_SETI  6, 0, 1, 4, 0
     # tm0: base = dstbuf, row_stride = 3, col_stride = 1
     lla       x3, dstbuf
     CFG_REG   2, 0, 0, 0, 3, 0
@@ -73,18 +70,6 @@ _start:
     lwu       x4, 4(x3)
     bne       x4, x6, fail
 
-    # bfill b0, 0x5A on the vec8 domain.
-    BFILL     0, 0x5A
-    lla       x3, dstbuf3
-    CFG_REG   2, 1, 0, 0, 3, 0   # bm0 base = dstbuf3
-    CFG_SETI  6, 2, 1, 1, 0      # bm0 stride = 1
-    BSTORE    0
-    FENCE_MEM
-    lwu       x4, 0(x3)
-    li        x5, 0x5A5A5A5A
-    li        a0, 4
-    bne       x4, x5, fail
-
     li        a0, 0
     ebreak
 fail:
@@ -94,4 +79,3 @@ fail:
     .balign 4
 dstbuf:  .space 8
 dstbuf2: .space 8
-dstbuf3: .space 4

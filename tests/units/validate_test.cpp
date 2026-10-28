@@ -75,7 +75,6 @@ using tile_npu::SysOp;
 using tile_npu::TdequantInstr;
 using tile_npu::VmmaInstr;
 using tile_npu::VmmaOp;
-using tile_npu::VquantInstr;
 using tile_npu::VreduceArgmaxInstr;
 using tile_npu::VreduceInstr;
 
@@ -103,7 +102,7 @@ constexpr NpuRegister T(std::uint8_t i) { return {NpuDomain::tile, i}; }
 
 constexpr NpuRegister A(std::uint8_t i) { return {NpuDomain::acc, i}; }
 
-constexpr NpuRegister B(std::uint8_t i) { return {NpuDomain::vec8, i}; }
+constexpr NpuRegister R(std::uint8_t i) { return {NpuDomain::reserved, i}; }
 
 constexpr NpuRegister V(std::uint8_t i) { return {NpuDomain::vec32, i}; }
 
@@ -112,7 +111,7 @@ constexpr NpuRegister V(std::uint8_t i) { return {NpuDomain::vec32, i}; }
 TEST_CASE(validate_rejects_bad_ebin) {
   check_illegal(EbinInstr{static_cast<EbinOp>(14), T(0), T(1), T(2)}, "unassigned funct4 code");
   check_illegal(EbinInstr{static_cast<EbinOp>(3), A(0), A(1), A(2)}, "reserved funct4 code");
-  check_illegal(EbinInstr{EbinOp::add, B(0), B(1), B(2)}, "vec8 domain");
+  check_illegal(EbinInstr{EbinOp::add, R(0), R(1), R(2)}, "reserved domain");
   check_illegal(EbinInstr{EbinOp::mul, T(0), T(1), T(2)}, "tile mul");
   check_illegal(EbinInstr{EbinOp::add, T(0), A(1), T(2)}, "cross-domain src1");
   check_illegal(EbinInstr{EbinOp::add, T(32), T(1), T(2)}, "dest index 32");
@@ -121,7 +120,7 @@ TEST_CASE(validate_rejects_bad_ebin) {
 
 TEST_CASE(validate_rejects_bad_eun) {
   check_illegal(EunInstr{static_cast<EunOp>(7), A(0), A(1)}, "reserved op");
-  check_illegal(EunInstr{EunOp::bit_not, B(0), B(1)}, "vec8 domain");
+  check_illegal(EunInstr{EunOp::bit_not, R(0), R(1)}, "reserved domain");
   check_illegal(EunInstr{EunOp::abs, T(0), T(1)}, "tile only has bit_not");
   check_illegal(EunInstr{EunOp::neg, A(0), V(1)}, "cross-domain src");
 }
@@ -136,23 +135,24 @@ TEST_CASE(validate_rejects_bad_ecmp) {
 TEST_CASE(validate_rejects_bad_ebcast) {
   check_illegal(BcastInstr{static_cast<EbinOp>(3), A(0), A(1), V(0), false},
                 "reserved funct4 code");
-  check_illegal(BcastInstr{EbinOp::add, T(0), T(1), B(0), false}, "tile bcast reserved");
+  check_illegal(BcastInstr{EbinOp::add, T(0), T(1), V(0), false}, "tile bcast reserved");
   check_illegal(BcastInstr{EbinOp::add, T(0), T(1), V(0), false}, "tile paired with vec32");
-  check_illegal(BcastInstr{EbinOp::add, V(0), V(1), B(0), false}, "vector destination");
+  check_illegal(BcastInstr{EbinOp::add, V(0), V(1), V(0), false}, "vector destination");
   check_illegal(BcastInstr{EbinOp::add, A(0), A(1), V(32), false}, "vector index 32");
-  check_illegal(BcastInstr{EbinOp::mul, T(0), T(1), B(0), false}, "tile mul");
+  check_illegal(BcastInstr{EbinOp::mul, T(0), T(1), V(0), false}, "tile mul");
 }
 
 TEST_CASE(validate_rejects_bad_er4) {
   check_illegal(Er4Instr{static_cast<Er4Op>(2), A(0), A(1), A(2), A(3)}, "reserved op");
   check_illegal(Er4Instr{Er4Op::fmadd, T(0), T(1), T(2), T(3)}, "fmadd on tile");
-  check_illegal(Er4Instr{Er4Op::select, B(0), B(1), B(2), B(3)}, "vec8 domain");
+  check_illegal(Er4Instr{Er4Op::select, R(0), R(1), R(2), R(3)}, "reserved domain");
   check_illegal(Er4Instr{Er4Op::select, A(0), A(1), A(2), V(3)}, "cross-domain src2");
 }
 
 TEST_CASE(validate_rejects_bad_emask) {
   check_illegal(MaskInstr{static_cast<MaskOp>(3), A(0), A(1), 0, Fill5Code{0}}, "reserved op");
-  check_illegal(MaskInstr{MaskOp::tril, B(0), B(1), 0, Fill5Code{0}}, "tril on a vector domain");
+  check_illegal(MaskInstr{MaskOp::tril, V(0), V(1), 0, Fill5Code{0}}, "tril on a vector domain");
+  check_illegal(MaskInstr{MaskOp::tail, R(0), R(1), 0, Fill5Code{0}}, "reserved domain");
   check_illegal(MaskInstr{MaskOp::tail, A(0), A(1), 0, Fill5Code{9}}, "fill5 code 9");
   check_illegal(MaskInstr{MaskOp::tail, A(0), A(1), 0, ScalarRegister{32}}, "xFill index 32");
   check_illegal(MaskInstr{MaskOp::tail, A(0), A(1), 32, Fill5Code{0}}, "bound index 32");
@@ -160,7 +160,8 @@ TEST_CASE(validate_rejects_bad_emask) {
 
 TEST_CASE(validate_rejects_bad_mblk) {
   check_illegal(MblkInstr{.op = MblkOp::gather, .reg = A(0)}, "gather on acc");
-  check_illegal(MblkInstr{.op = MblkOp::row_load, .reg = B(0)}, "row form on vec8");
+  check_illegal(MblkInstr{.op = MblkOp::row_load, .reg = R(0)}, "row form on reserved");
+  check_illegal(MblkInstr{.op = MblkOp::load, .reg = R(0)}, "block form on reserved");
   check_illegal(MblkInstr{.op = MblkOp::gather, .reg = T(0), .gather_src = 32},
                 "gather_src index 32");
   check_illegal(MblkInstr{.op = MblkOp::load, .reg = T(32)}, "reg index 32");
@@ -180,8 +181,8 @@ TEST_CASE(validate_rejects_bad_move) {
 }
 
 TEST_CASE(validate_rejects_bad_row_move) {
-  check_illegal(RowInstr{RowOp::insert, T(0), B(0), ImmediateIndex{0}}, "tile/vec8 row move");
-  check_illegal(RowInstr{RowOp::insert, A(0), B(0), ImmediateIndex{0}}, "mismatched vector domain");
+  check_illegal(RowInstr{RowOp::insert, T(0), R(0), ImmediateIndex{0}}, "tile/reserved row move");
+  check_illegal(RowInstr{RowOp::insert, A(0), R(0), ImmediateIndex{0}}, "mismatched vector domain");
   check_illegal(RowInstr{RowOp::extract, T(0), V(0), ImmediateIndex{0}},
                 "mismatched matrix domain");
   check_illegal(RowInstr{RowOp::insert, A(32), V(0), ImmediateIndex{0}}, "matrix index 32");
@@ -190,14 +191,14 @@ TEST_CASE(validate_rejects_bad_row_move) {
 }
 
 TEST_CASE(validate_rejects_bad_lane_move) {
-  check_illegal(LaneBroadcastInstr{.dest = B(0), .src = V(1), .index = ImmediateIndex{0}},
-                "broadcast with mismatched domains");
+  check_illegal(LaneBroadcastInstr{.dest = R(0), .src = V(1), .index = ImmediateIndex{0}},
+                "broadcast with a reserved destination");
   check_illegal(
-      LaneInsertInstr{.dest = B(0), .src = ScalarRegister{32}, .index = ImmediateIndex{0}},
+      LaneInsertInstr{.dest = V(0), .src = ScalarRegister{32}, .index = ImmediateIndex{0}},
       "insert xS index 32");
   check_illegal(LaneInsertInstr{.dest = T(0), .src = ScalarRegister{0}, .index = ImmediateIndex{0}},
                 "insert destination domain");
-  check_illegal(LaneBroadcastInstr{.dest = B(0), .src = B(1), .index = ScalarRegister{32}},
+  check_illegal(LaneBroadcastInstr{.dest = V(0), .src = V(1), .index = ScalarRegister{32}},
                 "broadcast index xS index 32");
 }
 
@@ -220,9 +221,8 @@ TEST_CASE(validate_rejects_cfg_without_decoded_fields) {
 
   constexpr std::array registers{
       RegisterCase{ConfigRegType::tc}, RegisterCase{ConfigRegType::ac},
-      RegisterCase{ConfigRegType::bc}, RegisterCase{ConfigRegType::vc},
-      RegisterCase{ConfigRegType::tm}, RegisterCase{ConfigRegType::am},
-      RegisterCase{ConfigRegType::bm}, RegisterCase{ConfigRegType::vm},
+      RegisterCase{ConfigRegType::vc}, RegisterCase{ConfigRegType::tm},
+      RegisterCase{ConfigRegType::am}, RegisterCase{ConfigRegType::vm},
   };
   for (const auto &reg : registers) {
     const std::string what = "cfg seti type " + std::to_string(static_cast<unsigned>(reg.type));
@@ -238,7 +238,7 @@ TEST_CASE(validate_rejects_cfg_without_decoded_fields) {
 TEST_CASE(validate_rejects_bad_cfg_word) {
   using tile_npu::ConfigRegType;
   check_illegal(CfgSetwInstr{.reg_type = ConfigRegType::tm}, "setw on a descriptor");
-  check_illegal(CfgGetwInstr{.reg_type = ConfigRegType::bm}, "getw on a descriptor");
+  check_illegal(CfgGetwInstr{.reg_type = ConfigRegType::vm}, "getw on a descriptor");
   check_illegal(CfgSetwInstr{.reg_type = ConfigRegType::tc, .dest = 31, .n = 1},
                 "setw span past tc31");
   check_illegal(CfgSetwInstr{.reg_type = ConfigRegType::ac, .dest = 31, .n = 1},
@@ -246,7 +246,7 @@ TEST_CASE(validate_rejects_bad_cfg_word) {
 }
 
 TEST_CASE(validate_rejects_bad_cvt) {
-  check_illegal(CvtInstr{CvtOp::widen, A(0), B(0)}, "widen from vec8");
+  check_illegal(CvtInstr{CvtOp::widen, A(0), R(0)}, "widen from reserved");
   check_illegal(CvtInstr{CvtOp::cvt, A(0), V(0)}, "cross-domain cvt");
   check_illegal(CvtInstr{CvtOp::cvt, T(0), T(1)}, "cvt on tile");
   check_illegal(CvtInstr{static_cast<CvtOp>(2), A(0), A(1)}, "reserved op");
@@ -257,10 +257,10 @@ TEST_CASE(validate_rejects_bad_reduce) {
   check_illegal(AreduceInstr{ReduceOp::sum, V(0), V(1)}, "areduce source domain");
   check_illegal(VreduceInstr{static_cast<ReduceOp>(4), V(0), V(1)}, "vreduce argmax op");
   check_illegal(VreduceInstr{ReduceOp::sum, V(32), V(0)}, "vreduce vD index 32");
-  check_illegal(VreduceInstr{ReduceOp::sum, B(0), V(1)}, "vreduce destination domain");
+  check_illegal(VreduceInstr{ReduceOp::sum, T(0), V(1)}, "vreduce destination domain");
   check_illegal(VreduceInstr{ReduceOp::absmax, V(0), V(0)}, "vreduce absmax op");
   check_illegal(VreduceArgmaxInstr{V(0), V(32), V(0)}, "vreduce.argmax vVal index 32");
-  check_illegal(VreduceArgmaxInstr{V(0), B(1), V(0)}, "vreduce.argmax vVal domain");
+  check_illegal(VreduceArgmaxInstr{V(0), R(1), V(0)}, "vreduce.argmax vVal domain");
 }
 
 TEST_CASE(validate_rejects_bad_qnt) {
@@ -272,12 +272,6 @@ TEST_CASE(validate_rejects_bad_qnt) {
       "aquant scale source");
   check_illegal(TdequantInstr{.dest = T(0), .src = A(0), .scale = 0},
                 "tdequant destination domain");
-  check_illegal(VquantInstr{.dest = B(0), .src = B(1), .scale = 0, .index = ImmediateIndex{0}},
-                "vquant source domain");
-  check_illegal(VquantInstr{.dest = B(0), .src = V(1), .scale = 32, .index = ImmediateIndex{0}},
-                "vquant scale index 32");
-  check_illegal(VquantInstr{.dest = B(0), .src = V(1), .scale = 0, .index = ScalarRegister{32}},
-                "vquant scalar lane index 32");
 }
 
 TEST_CASE(validate_rejects_bad_mma) {
@@ -296,7 +290,7 @@ TEST_CASE(validate_rejects_bad_vmma) {
                 "unassigned vmma op");
   check_illegal(VmmaInstr{.op = VmmaOp::nt_zero, .dest = A(0), .src_a = T(0), .src_b = T(1)},
                 "vmma destination domain");
-  check_illegal(VmmaInstr{.op = VmmaOp::nt_zero, .dest = V(0), .src_a = B(0), .src_b = T(1)},
+  check_illegal(VmmaInstr{.op = VmmaOp::nt_zero, .dest = V(0), .src_a = R(0), .src_b = T(1)},
                 "vmma src_a domain");
   check_illegal(VmmaInstr{.op = VmmaOp::nt_zero, .dest = V(0), .src_a = T(0), .src_b = A(1)},
                 "vmma src_b domain");

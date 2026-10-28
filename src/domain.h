@@ -13,23 +13,18 @@ inline constexpr std::size_t domain_register_count(NpuDomain domain) {
   switch (domain) {
   case NpuDomain::tile: return TILE_REGISTERS;
   case NpuDomain::acc: return ACC_REGISTERS;
-  case NpuDomain::vec8:
   case NpuDomain::vec32: return VECTOR_REGISTERS;
   default: return 0;
   }
 }
 
-inline constexpr bool is_vector_domain(NpuDomain domain) {
-  return domain == NpuDomain::vec8 || domain == NpuDomain::vec32;
-}
+inline constexpr bool is_vector_domain(NpuDomain domain) { return domain == NpuDomain::vec32; }
 
 template <NpuDomain Domain> auto &domain_regs(State &state) {
   if constexpr (Domain == NpuDomain::tile) {
     return state.t;
   } else if constexpr (Domain == NpuDomain::acc) {
     return state.a;
-  } else if constexpr (Domain == NpuDomain::vec8) {
-    return state.b;
   } else {
     return state.v;
   }
@@ -40,8 +35,6 @@ template <NpuDomain Domain, typename StateLike> auto &domain_configs(StateLike &
     return state.tc;
   } else if constexpr (Domain == NpuDomain::acc) {
     return state.ac;
-  } else if constexpr (Domain == NpuDomain::vec8) {
-    return state.bc;
   } else {
     return state.vc;
   }
@@ -52,8 +45,6 @@ template <NpuDomain Domain> auto &domain_descriptors(State &state) {
     return state.tm;
   } else if constexpr (Domain == NpuDomain::acc) {
     return state.am;
-  } else if constexpr (Domain == NpuDomain::vec8) {
-    return state.bm;
   } else {
     return state.vm;
   }

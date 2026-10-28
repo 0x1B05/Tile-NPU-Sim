@@ -84,11 +84,11 @@ TEST_CASE(cfg_seti_rejects_unsupported_dtype) {
 TEST_CASE(cfg_seti_rejects_unsupported_field) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
-  // BC has dtype/len only; field code 2 (cols in matrix configs) is absent.
-  load_one(sim, memory, cfg_i(0x6, 0, FIELD_COLS, 8, 0));
-  sim.state().bc[0].len = 7;
-  check_eq(sim.step().status, StepStatus::illegal_instruction, "bc cols is reserved");
-  check_eq(sim.state().bc[0].len, std::uint8_t{7}, "illegal seti preserves config");
+  // VC has dtype/len only; field code 2 (cols in matrix configs) is absent.
+  load_one(sim, memory, cfg_i(0x6, 1, FIELD_COLS, 8, 0));
+  sim.state().vc[0].len = 7;
+  check_eq(sim.step().status, StepStatus::illegal_instruction, "vc cols is reserved");
+  check_eq(sim.state().vc[0].len, std::uint8_t{7}, "illegal seti preserves config");
   check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE), "illegal seti keeps pc");
 }
 
@@ -211,11 +211,11 @@ TEST_CASE(cfg_get_to_x0_is_discarded) {
 TEST_CASE(cfg_get_rejects_unsupported_field) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
-  load_one(sim, memory, cfg_reg(0, 1, 2, 4, 0, 5));
-  sim.state().bc[0].len = 7;
+  load_one(sim, memory, cfg_reg(1, 1, 2, 2, 0, 5));
+  sim.state().vc[0].len = 7;
   sim.state().scalar.write_x(5, 0x1234);
-  check_eq(sim.step().status, StepStatus::illegal_instruction, "bc field 4 is reserved");
-  check_eq(sim.state().bc[0].len, std::uint8_t{7}, "illegal get preserves config");
+  check_eq(sim.step().status, StepStatus::illegal_instruction, "vc field 2 is reserved");
+  check_eq(sim.state().vc[0].len, std::uint8_t{7}, "illegal get preserves config");
   check_eq(hex(sim.state().scalar.read_x(5)), hex(0x1234u), "illegal get preserves xD");
   check_eq(hex(sim.state().scalar.pc), hex(CODE_BASE), "illegal get keeps pc");
 }
@@ -307,9 +307,9 @@ TEST_CASE(cfg_setw_rejects_invalid_word) {
 
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
-  load_one(sim, memory, cfg_setw(0, 1, 0, 5, 0));
-  sim.state().scalar.write_x(5, 0x1020); // BC len 32 with a reserved bit 12
-  check_eq(sim.step().status, StepStatus::invalid_configuration, "bc reserved bit 12");
+  load_one(sim, memory, cfg_setw(1, 1, 0, 5, 0));
+  sim.state().scalar.write_x(5, 0x1020); // VC len 32 with a reserved bit 12
+  check_eq(sim.step().status, StepStatus::invalid_configuration, "vc reserved bit 12");
 }
 
 TEST_CASE(cfg_getw_round_trips_setw) {
@@ -317,20 +317,20 @@ TEST_CASE(cfg_getw_round_trips_setw) {
   Simulator sim(memory);
   write_word(memory, CODE_BASE, cfg_setw(1, 0, 3, 5, 0));       // ac3 = x5
   write_word(memory, CODE_BASE + 4, cfg_getw(1, 0, 6, 3));      // x6 = ac3
-  write_word(memory, CODE_BASE + 8, cfg_getw(0, 1, 7, 9));      // x7 = bc9
-  write_word(memory, CODE_BASE + 12, cfg_setw(0, 1, 10, 7, 0)); // bc10 = x7
+  write_word(memory, CODE_BASE + 8, cfg_getw(1, 1, 7, 9));      // x7 = vc9
+  write_word(memory, CODE_BASE + 12, cfg_setw(1, 1, 10, 7, 0)); // vc10 = x7
   sim.reset(CODE_BASE);
   sim.state().scalar.write_x(5, 0x0004'1f07); // AC: rows 7, cols 31, f32
-  sim.state().bc[9].dtype = DType::u8;
-  sim.state().bc[9].len = 5;
+  sim.state().vc[9].dtype = DType::u32;
+  sim.state().vc[9].len = 5;
   check_eq(sim.step().status, StepStatus::retired, "cfg.setw retires");
   check_eq(sim.step().status, StepStatus::retired, "cfg.getw ac retires");
   check_eq(hex(sim.state().scalar.read_x(6)), hex(0x0004'1f07u), "x6 = ac3 word");
-  check_eq(sim.step().status, StepStatus::retired, "cfg.getw bc retires");
-  check_eq(hex(sim.state().scalar.read_x(7)), hex(0x0105u), "x7 = bc9 word");
+  check_eq(sim.step().status, StepStatus::retired, "cfg.getw vc retires");
+  check_eq(hex(sim.state().scalar.read_x(7)), hex(0x0305u), "x7 = vc9 word");
   check_eq(sim.step().status, StepStatus::retired, "cfg.setw from a getw word retires");
-  check_eq(sim.state().bc[10].len, std::uint8_t{5}, "bc10 copies bc9 len");
-  check_eq(sim.state().bc[10].dtype, DType::u8, "bc10 copies bc9 dtype");
+  check_eq(sim.state().vc[10].len, std::uint8_t{5}, "vc10 copies vc9 len");
+  check_eq(sim.state().vc[10].dtype, DType::u32, "vc10 copies vc9 dtype");
 }
 
 TEST_CASE(cfg_setx_writes_config_span) {
@@ -340,9 +340,6 @@ TEST_CASE(cfg_setx_writes_config_span) {
   load_one(sim, memory, cfg_reg(3, 1, 0, FIELD_ROW_STRIDE, 5, 1) | (2u << 12));
   sim.state().scalar.write_x(5, static_cast<std::uint64_t>(-8));
   check_eq(sim.step().status, StepStatus::retired, "cfg.setx span retires");
-  for (int i = 1; i <= 3; ++i) {
-    check_eq(sim.state().bm[i].stride_bytes, std::int32_t{0}, "bm untouched");
-  }
   check_eq(sim.state().vm[0].stride_bytes, std::int32_t{0}, "vm0 untouched");
   check_eq(sim.state().vm[1].stride_bytes, std::int32_t{-8}, "vm1 stride");
   check_eq(sim.state().vm[3].stride_bytes, std::int32_t{-8}, "vm3 stride");

@@ -145,8 +145,6 @@ TEST_CASE(cfg_decode_reg) {
            ConfigRegType::vc, 0, 31, ConfigField::len, 0},
       Case{"cfg.copy tc7, tc3", cfg_reg(0, 0, 1, 0, 3, 7), Case::Kind::copy, ConfigRegType::tc, 7,
            3, std::nullopt, 0},
-      Case{"cfg.copy bm5, bm2 (vector side)", cfg_reg(2, 1, 1, 0, 2, 5), Case::Kind::copy,
-           ConfigRegType::bm, 5, 2, std::nullopt, 0},
       Case{"cfg.get x5, tc0, rows", cfg_reg(0, 0, 2, 1, 0, 5), Case::Kind::get, ConfigRegType::tc,
            5, 0, ConfigField::rows, 0},
       Case{"cfg.get x0, am11, base_addr", cfg_reg(3, 0, 2, 0, 11, 0), Case::Kind::get,
@@ -177,21 +175,19 @@ TEST_CASE(cfg_decode_field_codes_by_register_type) {
                                  ConfigField::layout, ConfigField::arith_mode};
   constexpr std::array ac_fields{ConfigField::dtype, ConfigField::rows, ConfigField::cols,
                                  ConfigField::layout};
-  constexpr std::array bc_fields{ConfigField::dtype, ConfigField::len};
+  constexpr std::array vc_fields{ConfigField::dtype, ConfigField::len};
   constexpr std::array tm_fields{ConfigField::base_addr, ConfigField::row_stride_bytes,
                                  ConfigField::col_stride_bytes, ConfigField::transform,
                                  ConfigField::flags};
-  constexpr std::array bm_fields{ConfigField::base_addr, ConfigField::stride_bytes,
+  constexpr std::array vm_fields{ConfigField::base_addr, ConfigField::stride_bytes,
                                  ConfigField::flags};
   const std::array registers{
       RegisterCase{"tc", ConfigRegType::tc, 0, 0, tc_fields},
       RegisterCase{"ac", ConfigRegType::ac, 1, 0, ac_fields},
-      RegisterCase{"bc", ConfigRegType::bc, 0, 1, bc_fields},
-      RegisterCase{"vc", ConfigRegType::vc, 1, 1, bc_fields},
+      RegisterCase{"vc", ConfigRegType::vc, 1, 1, vc_fields},
       RegisterCase{"tm", ConfigRegType::tm, 2, 0, tm_fields},
       RegisterCase{"am", ConfigRegType::am, 3, 0, tm_fields},
-      RegisterCase{"bm", ConfigRegType::bm, 2, 1, bm_fields},
-      RegisterCase{"vm", ConfigRegType::vm, 3, 1, bm_fields},
+      RegisterCase{"vm", ConfigRegType::vm, 3, 1, vm_fields},
   };
   for (const auto &reg : registers) {
     for (std::uint8_t field = 0; field < 8; ++field) {
@@ -241,6 +237,13 @@ TEST_CASE(cfg_decode_rejects_reserved) {
       DecodeCase{"setw tc31 + 2", cfg_reg(0, 0, 3, 0, 4, 31) | (1u << 12)},
       DecodeCase{"setw ac31 + 2", cfg_reg(1, 0, 3, 0, 4, 31) | (1u << 12)},
       DecodeCase{"getw N5 nonzero", cfg_reg(0, 0, 4, 0, 0, 5) | (1u << 12)},
+      // The vector side only defines sel2 = 01 (VC) and 11 (VM).
+      DecodeCase{"vector seti sel2 00", cfg_i(0x6, 0, 0, 32, 0)},
+      DecodeCase{"vector seti sel2 10", cfg_i(0x6, 2, 0, 32, 0)},
+      DecodeCase{"vector setx sel2 00", cfg_reg(0, 1, 0, 0, 4, 0)},
+      DecodeCase{"vector get sel2 10", cfg_reg(2, 1, 2, 0, 0, 5)},
+      DecodeCase{"vector setw sel2 00", cfg_reg(0, 1, 3, 0, 4, 0)},
+      DecodeCase{"vector getw sel2 10", cfg_reg(2, 1, 4, 0, 0, 5)},
       // Reserved major4 encodings report illegal.
       DecodeCase{"reserved major4 1010", (0xau << 28) | 0x2u},
   };

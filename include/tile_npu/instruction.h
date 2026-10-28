@@ -40,10 +40,10 @@ enum class ScalarOp {
 };
 
 enum class NpuDomain : std::uint8_t {
-  tile  = 0b00,
-  acc   = 0b01,
-  vec8  = 0b10,
-  vec32 = 0b11,
+  tile     = 0b00,
+  acc      = 0b01,
+  reserved = 0b10,
+  vec32    = 0b11,
 };
 // clang-format on
 
@@ -200,7 +200,7 @@ struct BcastInstr {
   EbinOp op = EbinOp::add;
   NpuRegister dest{};   // matrix D
   NpuRegister src1{};   // matrix A
-  NpuRegister vector{}; // broadcast source S (Vec8/Vec32)
+  NpuRegister vector{}; // broadcast source S (Vec32)
   bool by_col = false;  // true: vector[col]; false: vector[row].
 };
 
@@ -284,15 +284,7 @@ struct TdequantInstr {
   RegisterIndex scale = 0;
 };
 
-// vquant.q8s32: writes one selected lane of the Vec32 scale register.
-struct VquantInstr {
-  NpuRegister dest{}; // Vec8
-  NpuRegister src{};  // Vec32
-  RegisterIndex scale = 0;
-  IndexOperand index = ImmediateIndex{};
-};
-
-enum class ConfigRegType : std::uint8_t { tc, ac, bc, vc, tm, am, bm, vm, count };
+enum class ConfigRegType : std::uint8_t { tc, ac, vc, tm, am, vm, count };
 
 // clang-format off
 enum class ConfigField : std::uint8_t {

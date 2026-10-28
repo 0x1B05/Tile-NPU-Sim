@@ -107,8 +107,8 @@ TEST_CASE(ebin_decode_rejects_reserved) {
                  make_ebin(static_cast<EbinOp>(14), NpuDomain::vec32, false, 0, 1, 2)},
       DecodeCase{"funct4 = 1111 unassigned",
                  make_ebin(static_cast<EbinOp>(15), NpuDomain::vec32, false, 0, 1, 2)},
-      DecodeCase{"vec8 has no E_BIN encoding",
-                 make_ebin(EbinOp::add, NpuDomain::vec8, false, 0, 1, 2)},
+      DecodeCase{"reserved domain has no E_BIN encoding",
+                 make_ebin(EbinOp::add, NpuDomain::reserved, false, 0, 1, 2)},
       DecodeCase{"nonzero E_BIN reserved4",
                  make_ebin(EbinOp::add, NpuDomain::tile, false, 0, 1, 2) | (1u << 17)},
   };

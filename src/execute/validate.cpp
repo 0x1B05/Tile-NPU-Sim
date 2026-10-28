@@ -218,12 +218,6 @@ bool valid_matrix_quant(const NpuRegister &dest, const NpuRegister &src, Registe
          in_range(dest) && in_range(src);
 }
 
-template <NpuDomain DestDomain, NpuDomain SrcDomain>
-bool valid_vector_quant(const NpuRegister &dest, const NpuRegister &src, RegisterIndex scale,
-                        const IndexOperand &index) {
-  return valid_matrix_quant<DestDomain, SrcDomain>(dest, src, scale) && index_in_range(index);
-}
-
 bool valid_structure(const AquantInstr &instr) {
   return instr.scale_source <= QntScaleSource::provided &&
          valid_matrix_quant<NpuDomain::tile, NpuDomain::acc>(instr.dest, instr.src, instr.scale);
@@ -231,11 +225,6 @@ bool valid_structure(const AquantInstr &instr) {
 
 bool valid_structure(const TdequantInstr &instr) {
   return valid_matrix_quant<NpuDomain::acc, NpuDomain::tile>(instr.dest, instr.src, instr.scale);
-}
-
-bool valid_structure(const VquantInstr &instr) {
-  return valid_vector_quant<NpuDomain::vec8, NpuDomain::vec32>(instr.dest, instr.src, instr.scale,
-                                                               instr.index);
 }
 
 bool valid_structure(const MmaInstr &instr) {

@@ -92,9 +92,9 @@ TEST_CASE(eun_decode) {
 
 TEST_CASE(eun_decode_rejects_reserved) {
   constexpr std::array cases{
-      // Vec8 has no E_UNARY; on Tile only `not` exists; funct3 = 110/111 are
+      // The reserved domain has no E_UNARY; on Tile only `not` exists; funct3 = 110/111 are
       // reserved.
-      DecodeCase{"bnot", make_eun(NpuDomain::vec8, 0, 0, 0)},
+      DecodeCase{"reserved not", make_eun(NpuDomain::reserved, 0, 0, 0)},
       DecodeCase{"tabs", make_eun(NpuDomain::tile, 1, 0, 0)},
       DecodeCase{"texp2", make_eun(NpuDomain::tile, 3, 0, 0)},
       DecodeCase{"funct3 110", make_eun(NpuDomain::acc, 6, 0, 0)},

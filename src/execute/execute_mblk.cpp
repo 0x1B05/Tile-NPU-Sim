@@ -364,7 +364,7 @@ ExecuteResult strided_vector_access(const MblkInstr &instr, ExecContext &ctx, Ve
 }
 
 template <NpuDomain Domain> ExecuteResult vector_access(const MblkInstr &instr, ExecContext &ctx) {
-  static_assert(Domain == NpuDomain::vec8 || Domain == NpuDomain::vec32);
+  static_assert(Domain == NpuDomain::vec32);
   auto [reg, config, descriptor] = bind_register<Domain>(ctx.state, instr.reg.index);
   if (!valid_domain_config(config)) {
     return config_error();
@@ -403,7 +403,6 @@ ExecuteResult execute(const MblkInstr &instr, ExecContext &ctx) {
     case MblkOp::gather: // gather has no Acc-domain encoding
     default: unreachable("M_BLK op/domain combination rejected by validation");
     }
-  case NpuDomain::vec8: return vector_access<NpuDomain::vec8>(instr, ctx);
   case NpuDomain::vec32: return vector_access<NpuDomain::vec32>(instr, ctx);
   default: unreachable("M_BLK op/domain combination rejected by validation");
   }

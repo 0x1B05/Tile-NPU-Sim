@@ -38,18 +38,19 @@ inline constexpr std::array<std::optional<EbinInfo>, 16> EBIN_BY_FUNCT4 = [] {
 }();
 
 // E_BIN/E_BCAST op legality on a destination domain: an assigned funct4 code,
-// no Vec8 form, and no Tile mul.
+// a defined domain, and no Tile mul.
 inline constexpr bool ebin_legal(EbinOp op, NpuDomain domain) {
   const auto code = static_cast<std::uint8_t>(op);
   if (code >= EBIN_BY_FUNCT4.size() || !EBIN_BY_FUNCT4[code]) return false;
-  return domain != NpuDomain::vec8 &&
+  return domain != NpuDomain::reserved &&
          (domain != NpuDomain::tile || EBIN_BY_FUNCT4[code]->tile_allowed);
 }
 
-// Vec8 has no E_UNARY form; Tile only has `not`.
+// Tile only has `not`.
 inline constexpr bool eun_legal(EunOp op, NpuDomain domain) {
+  if (domain == NpuDomain::reserved) return false;
   switch (op) {
-  case EunOp::bit_not: return domain != NpuDomain::vec8;
+  case EunOp::bit_not: return true;
   case EunOp::abs:
   case EunOp::neg:
   case EunOp::exp2:
@@ -79,10 +80,11 @@ inline constexpr std::array<std::optional<CmpInfo>, 8> CMP_BY_FUNCT3 = [] {
   return table;
 }();
 
-// Vec8 has no E_R4 form; fmadd excludes Tile.
+// fmadd excludes Tile.
 inline constexpr bool er4_legal(Er4Op op, NpuDomain domain) {
+  if (domain == NpuDomain::reserved) return false;
   switch (op) {
-  case Er4Op::select: return domain != NpuDomain::vec8;
+  case Er4Op::select: return true;
   case Er4Op::fmadd: return domain == NpuDomain::acc || domain == NpuDomain::vec32;
   default: return false;
   }
@@ -90,6 +92,7 @@ inline constexpr bool er4_legal(Er4Op op, NpuDomain domain) {
 
 // tril/triu are matrix-only.
 inline constexpr bool mask_legal(MaskOp op, NpuDomain domain) {
+  if (domain == NpuDomain::reserved) return false;
   switch (op) {
   case MaskOp::tail: return true;
   case MaskOp::tril:

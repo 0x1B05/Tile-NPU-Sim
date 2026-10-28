@@ -8,13 +8,7 @@ namespace tile_npu {
 
 DecodeResult decode_npu(std::uint32_t word);
 
-struct PairedDomains {
-  NpuDomain matrix;
-  NpuDomain vector;
-};
-
 NpuDomain sel3_domain(std::uint8_t sel3);
-PairedDomains paired_domains(std::uint8_t sel3);
 IndexOperand decode_index(RegisterIndex raw, bool is_scalar);
 
 // Elementwise decoders.

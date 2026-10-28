@@ -2,37 +2,33 @@
 
 ## 项目与职责
 
-本仓库为 C++20 功能模拟器：单 hart、按程序序同步执行 RV64IM 标量与 NPU 指令。核心为内部静态库 `sim_core`；默认 target `sim` 是用于程序运行和调试的二进制，命令行由 CLI11 解析。使用方法与 Qwen3 模型准备流程见 `README.md`；本文件维护开发约定和模块边界。
+本仓库为 C++20 功能模拟器：单 hart、按程序序同步执行 RV64IM 标量与 NPU 指令。核心为内部静态库 `sim_core`；默认 target `sim` 是用于程序运行和调试的二进制，命令行由 CLI11 解析。使用方法见 `README.md`；本文件维护开发约定和模块边界。
 
-ISA 手册位于相邻仓库 `../Tile-NPU-ISA/`，指令语义以 `tile-npu-isa.typ` 为准；`rivet/*.yaml` 定义编码图的位段，`编码设计规则.md` 记录指令空间与字段布局设计。
-
-- 发现手册与实现不一致时，默认按手册修模拟器；若需要调整 ISA，先澄清手册，再同步受影响的实现与测试。
-- 手册未定义的行为须先明确设计。仅在编码或布局变化时更新相应的编码设计说明和 Rivet 文件，不要求每次语义修改都改这些文件。
+ISA 手册位于相邻仓库 `../Tile-NPU-ISA/`，指令语义与编码位段以 `tile-npu-isa.typ` 和 `rivet/*.yaml` 为准。发现手册与实现不一致时默认修模拟器；需要调整 ISA 时先澄清手册，再同步实现与测试。只有编码或布局变化才更新编码设计说明和 Rivet 文件。
 
 ## 构建与验证
 
 在本目录执行：
 
 ```bash
-xmake                                  # 构建默认 sim 二进制
-xmake f --menu                         # 按 Build、Debug、Guests 分组配置
-xmake test                             # 只运行 host 单元测试，不需要交叉工具链
-python3 tests/run.py guest --build     # 构建并运行 guest 测试
-python3 tests/run.py riscv-tests --build
-python3 tests/run.py qwen3 --build
-python3 tests/run.py all --build
-xmake run sim program.bin          # 默认运行程序
-xmake f --sdb=y && xmake                    # 构建带 sdb 的二进制
-xmake run sim -i program.bin       # 进入交互 sdb
-xmake project -k compile_commands      # 为 clangd 生成 compile_commands.json
+xmake                                    # 构建默认 sim 二进制
+xmake f --menu                           # 按 Build、Debug、Guests 分组配置
+xmake test                               # 只运行 host 单元测试，不需要交叉工具链
+python3 tests/run.py guest --build       # 构建并运行 guest 测试
+python3 tests/run.py riscv-tests --build # 构建并运行官方套件
+python3 tests/run.py qwen3 --build       # 构建并运行 Qwen3 回归
+python3 tests/run.py all --build         # 运行全部可用套件
+xmake run sim program.bin                # 默认运行程序
+xmake f --sdb=y && xmake                 # 构建带 sdb 的二进制
+xmake run sim -i program.bin             # 进入交互 sdb
+xmake project -k compile_commands        # 为 clangd 生成 compile_commands.json
 ```
 
 - 修改后至少运行 `xmake test`。`sim_tests/core` 只包含 host 用例；guest 测试在独立二进制 `sim_guest_tests` 中，由 `tests/run.py` 调用。
 - 构建选项在 `xmake.lua`，使用 `xmake f --xxx=y/n`；编译器缓存位于仓库内 `.cache/ccache`。
 - 宿主构建启用 `set_warnings("all", "error")`，所有已启用的警告都按错误处理。
 - guest 镜像需要 RISC-V 交叉工具链，默认前缀 `riscv64-linux-gnu-`，可用 `xmake f --riscv_cross=<prefix>` 覆盖；构建 `sim` 和 `sim_tests` 本身不需要交叉工具链。
-- Qwen3 模型 Q3B 只保存权重和架构参数；prompt 通过 `scripts/qwen3/tokenize_prompt.py` 生成 Q3P 镜像，并随 `sim` 加载到 `0x80F00000`。`xmake build qwen3_run && xmake run qwen3_run "prompt"` 会完成分词、临时镜像和模拟器调用。
-- Qwen3 tiny 回归由 `tests/run.py qwen3` 驱动，使用 `qwen3_snapshot_app`；模型、prompt 和 NumPy 参考由脚本生成。
+- Qwen3 的 Q3B/Q3P 格式、prompt 分词与 `qwen3_run` 用法见 `README.md`。tiny 回归由 `tests/run.py qwen3` 驱动：`qwen3_snapshot_app`、模型、prompt 与 NumPy 参考均由脚本生成。
 - `tests/run.py` 负责 suite 选择、过滤、构建缺失 artifact 和结果汇总；xmake 只负责生成 `sim_tests`、`sim_guest_tests`、`guest_images` 及可选 app/image artifact。
 
 ## 模块导航
@@ -41,7 +37,7 @@ xmake project -k compile_commands      # 为 clangd 生成 compile_commands.json
 | ---- | ---- |
 | `include/tile_npu/state.h` | 寄存器堆、配置、描述符与物理尺寸常量 |
 | `include/tile_npu/instruction.h` | 按功能组织的标量/NPU 语义 IR 与操作数类型，语义类型不要求与 major 一一对应 |
-| `src/op_info.h` | 译码与结构检查共享的操作元数据：寄存器数量、操作/数据域合法性与 funct 表 |
+| `src/op_info.h` | 译码与结构检查共享的操作元数据：操作/数据域合法性与 funct 表 |
 | `include/tile_npu/decode.h` | `DecodeResult` 与译码接口 |
 | `include/tile_npu/simulator.h`、`src/simulator.cpp` | `Simulator::reset` / `step`、取指与步进状态词表 `StepStatus` |
 | `src/config.h`、`src/config.cpp` | 配置字段编号映射、字段读写、值转换与写入校验 |
@@ -54,7 +50,7 @@ xmake project -k compile_commands      # 为 clangd 生成 compile_commands.json
 | `src/execute/validate.h`、`validate.cpp` | IR 的统一结构合法性检查，头文件仅声明 `valid_structure(const DecodedNpuInstr &)` |
 | `src/execute/config_check.h` | dtype、shape、layout 等配置约束与配置匹配 |
 | `src/execute/execute_*.cpp` | 按指令族实现执行语义；`execute_cfg.cpp` 负责配置指令取值和执行结果转换 |
-| `src/execute/execute_move.cpp` | `FillInstr` 执行立即数/Scalar 填充，`MoveInstr` 执行同域复制和 Tile 转置 |
+| `src/execute/execute_move.cpp` | `FillInstr` 执行立即数/Scalar 填充，`MoveInstr` 执行同域复制 |
 | `src/domain.h` | 数据域工具、寄存器堆/配置/描述符绑定、域分派与有效区域遍历 |
 | `src/execute/elementwise_op.h`、`operand.h` | 执行域共享的元素运算、操作数读取和浮点工具 |
 | `src/execute/reduce_util.h` | 规约树、absmax 叶映射与跨指令族共享的规约工具 |
@@ -63,7 +59,7 @@ xmake project -k compile_commands      # 为 clangd 生成 compile_commands.json
 | `src/utils/` | 通用内部工具：位模式、小端转换、variant visitor 与 `unreachable`；十六进制格式化位于 `src/monitor/format.h` |
 | `src/main.cpp`、`src/monitor/` | CLI、镜像装载、`npu_exec` 步进循环和 sdb 命令 |
 | `tests/` | `units/` host 用例与入口、`guest/` guest driver 与 guest 源码、`include/` 测试头文件 |
-| `tests/run.py` | host/guest/riscv-tests/Qwen3 suite runner；xmake 不注册这些外部测试 |
+| `tests/run.py` | host/guest/riscv-tests/Qwen3 suite runner |
 | `apps/qwen3/`、`scripts/qwen3/` | Qwen3 guest、Q3B/Q3P 输入、权重转换、分词、NumPy 参考、运行与对齐检查工具 |
 | `xmake/guest.lua`、`riscv_tests.lua` | guest 与官方套件镜像的 build-only target；交叉编译公共逻辑在 `xmake/modules/guestimg.lua` |
 | `apps/qwen3/xmake.lua` | Qwen3 app 与 snapshot app 的构建，以及 `qwen3_run` 注册 |
@@ -89,7 +85,7 @@ xmake project -k compile_commands      # 为 clangd 生成 compile_commands.json
 ## 配置访问契约
 
 - 配置访问使用 `decode_config_field`、`read_config_field`、`write_config_field_range`、`copy_config_range`，字段编号和写入范围检查集中在 `config.cpp`。
-- 配置类型与字段编号的组合未定义时，`cfg.seti/setx/get` 在译码阶段报 `illegal`；译码后的 `CfgInstr::field` 保存 `std::optional<ConfigField>`，字段操作必须有值，`cfg.copy/setw/getw` 必须为空。执行入口会复查手工构造的 IR。`CFG_REG` 的写操作 (`setx/copy/setw`) 以 `CfgInstr::n` 直接保存 `N5` 的零基目的偏移，`copy` 先读源再广播；`cfg.setw/getw` 只接受计算配置 (TC/AC/BC/VC)，经 `write_compute_config_range`/`read_compute_config` 按 32-bit 配置字读写；配置字的保留位必须为零。
+- 配置类型与字段编号的组合未定义时，`cfg.seti/setx/get` 在译码阶段报 `illegal`；对应 IR 的 `field` 只保存合法字段。执行入口会复查手工构造的 IR。`CFG_REG` 的写操作 (`setx/copy/setw`) 以 `n` 直接保存 `N5` 的零基目的偏移，`copy` 先读源再广播；`cfg.setw/getw` 只接受计算配置 (TC/AC/VC)，经 `write_compute_config_range`/`read_compute_config` 按 32-bit 配置字读写；配置字的保留位必须为零。
 - 字段值以 ISA 传递的 64-bit 原始值进出配置接口：枚举字段为架构编码，带符号步长为符号扩展的 i32。`read_config_field` 返回 `cfg.get` 写入 `xD` 的值，要求寄存器类型、编号和字段组合已合法；非法调用进入 `unreachable()`。原始字段编号解析返回 `std::optional`，配置写入保留可检查的错误状态。
 - `write_config_field_range`、`copy_config_range` 和 `write_compute_config_range` 的 `ConfigAccessStatus::success` 表示整个范围写入成功；合法字段的非法值对应手册的 `CFG_ERROR`，执行器映射为 `invalid_configuration`。模拟器不自行定义 `CFG_ERROR` 的 trap 行为。
 
@@ -103,11 +99,11 @@ xmake project -k compile_commands      # 为 clangd 生成 compile_commands.json
 测试放置与运行约定：
 
 - `tests/include/framework.h` 提供 `TEST_CASE`、`check_eq` 与 `i8_bits`；`tests/units/main.cpp` 是 host 入口，`tests/guest/main.cpp` 是 guest 入口。`sim_tests --list` 列出 host 用例，`sim_guest_tests --list` 列出 guest 用例，二者都支持 `--filter SUBSTR`；只有 guest 入口接受 `--guest-dir`。host 执行 fixture 在 `tests/include/units/execute_helpers.h`，各指令族的编码构造器在 `tests/include/units/<族>_helpers.h`；guest 图片加载接口在 `tests/include/guest/guest_image.h`。
-- host 译码测试直接内联机器码常量，行尾标注汇编；指令字和地址的断言用 `hex()` 包装。
+- host 译码测试使用内联机器码常量或 `tests/include/units/<族>_helpers.h` 的构造器，并标注对应汇编；指令字和地址的断言用 `hex()` 包装。
 - NPU 正例优先放在 `tests/guest/npu/*.S`，复用 `tests/guest/include/npu.inc` 的编码宏；`tests/guest/npu_guest_test.cpp` 负责装载、执行与断言，镜像目录通过 `--guest-dir` 传入。复用 `run_until_stop` 的步数上限和停机诊断，或 `check_guest_image` 的自校验流程；非法编码负例放在 `tests/units`。
 - guest C 程序链接共享 `crt0.S`，裸 `.S` 提供自己的 `_start`，生成到构建目录的 `guest/`。标量自校验程序放在 `tests/guest/rv64im/`，按 `ebreak/a0` 约定退出。
 - 官方套件的 env 在 `tests/guest/riscv-tests-env/`；排除项在 `xmake/riscv_tests.lua`，对应尚未建模的 Zifencei 与 trap 投递。镜像由 `xmake build riscv_tests` 生成，由 `tests/run.py riscv-tests` 执行。
-- tiny Qwen3 回归以固定 seed 模型对照 NumPy 参考：整数探针与 token 精确匹配，f32 探针使用容差。Q3B 模型与 Q3P prompt 分别加载；构建由 `apps/qwen3/xmake.lua` 提供，运行与比较由 `tests/run.py qwen3` 驱动。
+- tiny Qwen3 回归以固定 seed 模型对照 NumPy 参考：整数探针与 token 精确匹配，f32 探针使用容差。
 - 仓库内 guest 源码生成的镜像属于构建依赖；用户提供的外部镜像和下载的模型不加入构建依赖或提交。
 
 ## 代码风格与 Git

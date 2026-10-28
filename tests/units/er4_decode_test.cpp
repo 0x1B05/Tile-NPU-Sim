@@ -98,8 +98,8 @@ TEST_CASE(er4_decode) {
 
 TEST_CASE(er4_decode_rejects_reserved) {
   constexpr std::array cases{
-      // Vec8 has no E_R4; tile has no fmadd; funct3 >= 010 is reserved.
-      DecodeCase{"bselect", make_er4(NpuDomain::vec8, 0, 0, 0, 0, 0)},
+      // The reserved domain has no E_R4; tile has no fmadd; funct3 >= 010 is reserved.
+      DecodeCase{"reserved select", make_er4(NpuDomain::reserved, 0, 0, 0, 0, 0)},
       DecodeCase{"tfmadd", make_er4(NpuDomain::tile, 1, 0, 0, 0, 0)},
       DecodeCase{"funct3 010", make_er4(NpuDomain::acc, 2, 0, 0, 0, 0)},
       DecodeCase{"funct3 111", make_er4(NpuDomain::vec32, 7, 0, 0, 0, 0)},

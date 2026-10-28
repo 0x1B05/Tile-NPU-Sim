@@ -109,15 +109,6 @@ TEST_CASE(emask_decode) {
            .bound = 12,
            .fill = 7,
            .fill_is_scalar = false},
-      Case{.name = "bmaskx.tail b13, b14, x15, x31",
-           .word = make_emask(NpuDomain::vec8, 0, 13, 14, 15, 31, true),
-           .op = MaskOp::tail,
-           .domain = NpuDomain::vec8,
-           .dest = 13,
-           .src = 14,
-           .bound = 15,
-           .fill = 31,
-           .fill_is_scalar = true},
   };
   check_cases(cases);
 }
@@ -129,7 +120,8 @@ TEST_CASE(emask_decode_rejects_reserved) {
       DecodeCase{"funct3 111", make_emask(NpuDomain::tile, 7, 0, 0, 0, 0)},
       // tril/triu are matrix-only.
       DecodeCase{"vmask.tril", make_emask(NpuDomain::vec32, 1, 0, 0, 0, 0)},
-      DecodeCase{"bmask.triu", make_emask(NpuDomain::vec8, 2, 0, 0, 0, 0)},
+      DecodeCase{"reserved domain", make_emask(NpuDomain::reserved, 0, 0, 0, 0, 0)},
+      DecodeCase{"reserved triu", make_emask(NpuDomain::reserved, 2, 0, 0, 0, 0)},
       // fill5 codes 9-31 are reserved (FS = 0 only; with FS = 1 [16:12] names
       // xFill and any 5-bit number is a valid Scalar register).
       DecodeCase{"fill5 9", make_emask(NpuDomain::tile, 0, 0, 0, 0, 9)},

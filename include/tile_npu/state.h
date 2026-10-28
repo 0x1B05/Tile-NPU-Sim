@@ -20,7 +20,6 @@ inline constexpr std::uint64_t INSTR_BYTES = 4;
 
 using Tile = std::array<std::uint8_t, MATRIX_ELEMENTS>;
 using Acc = std::array<std::uint32_t, MATRIX_ELEMENTS>;
-using Vec8 = std::array<std::uint8_t, VECTOR_LANES>;
 using Vec32 = std::array<std::uint32_t, VECTOR_LANES>;
 
 // The numeric values match the dtype codes in the ISA configuration registers.
@@ -41,11 +40,6 @@ struct AccConfig {
   std::uint8_t rows = 0;
   std::uint8_t cols = 0;
   Layout layout = Layout::row_major;
-};
-
-struct Vec8Config {
-  DType dtype = DType::i8;
-  std::uint8_t len = 0;
 };
 
 struct Vec32Config {
@@ -70,7 +64,7 @@ struct VectorDescriptor {
 // The matrix inc_mode values (TM/AM flags[1:0] in the manual)
 enum class MatrixIncMode : std::uint8_t { off = 0, row = 1, col = 2, count };
 
-// The vector increment-enable values (BM/VM flags[0] in the manual).
+// The vector increment-enable values (VM flags[0] in the manual).
 enum class VectorIncMode : std::uint8_t { off = 0, on = 1, count };
 
 // The TM/AM transform values: 0 = normal, 1 = transpose.
@@ -103,17 +97,14 @@ struct State {
 
   std::array<Tile, TILE_REGISTERS> t{};
   std::array<Acc, ACC_REGISTERS> a{};
-  std::array<Vec8, VECTOR_REGISTERS> b{};
   std::array<Vec32, VECTOR_REGISTERS> v{};
 
   std::array<TileConfig, TILE_REGISTERS> tc{};
   std::array<AccConfig, ACC_REGISTERS> ac{};
-  std::array<Vec8Config, VECTOR_REGISTERS> bc{};
   std::array<Vec32Config, VECTOR_REGISTERS> vc{};
 
   std::array<MatrixDescriptor, TILE_REGISTERS> tm{};
   std::array<MatrixDescriptor, ACC_REGISTERS> am{};
-  std::array<VectorDescriptor, VECTOR_REGISTERS> bm{};
   std::array<VectorDescriptor, VECTOR_REGISTERS> vm{};
 };
 

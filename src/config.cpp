@@ -181,7 +181,7 @@ constexpr ConfigFieldInfo AC_FIELDS[] = {
     {ConfigField::layout, BitRange{22, 20}}, // field3 = 3
 };
 
-constexpr ConfigFieldInfo BC_FIELDS[] = {
+constexpr ConfigFieldInfo VC_FIELDS[] = {
     {ConfigField::dtype, BitRange{11, 8}}, // field3 = 0
     {ConfigField::len,   BitRange{7,  0}}, // field3 = 1
 };
@@ -223,7 +223,7 @@ consteval bool config_fields_are_valid(const ConfigFieldInfo (&fields)[N], bool 
 
 static_assert(config_fields_are_valid(TC_FIELDS, true), "invalid TC config fields");
 static_assert(config_fields_are_valid(AC_FIELDS, true), "invalid AC config fields");
-static_assert(config_fields_are_valid(BC_FIELDS, true), "invalid vector config fields");
+static_assert(config_fields_are_valid(VC_FIELDS, true), "invalid vector config fields");
 static_assert(config_fields_are_valid(MATRIX_DESC_FIELDS, false),
               "invalid matrix descriptor fields");
 static_assert(config_fields_are_valid(VECTOR_DESC_FIELDS, false),
@@ -233,11 +233,9 @@ constexpr std::span<const ConfigFieldInfo> fields_for(ConfigRegType reg_type) {
   switch (reg_type) {
   case ConfigRegType::tc: return TC_FIELDS;
   case ConfigRegType::ac: return AC_FIELDS;
-  case ConfigRegType::bc:
-  case ConfigRegType::vc: return BC_FIELDS;
+  case ConfigRegType::vc: return VC_FIELDS;
   case ConfigRegType::tm:
   case ConfigRegType::am: return MATRIX_DESC_FIELDS;
-  case ConfigRegType::bm:
   case ConfigRegType::vm: return VECTOR_DESC_FIELDS;
   default: return {};
   }

@@ -77,7 +77,6 @@ TEST_CASE(move_decode_fill_imm) {
   constexpr std::array cases{
       FillCase{"tfill t0, 1", 0x10000081u, {NpuDomain::tile, 0}, FillImm16{1}},
       FillCase{"afill a11, -1", 0x147fffadu, {NpuDomain::acc, 11}, FillImm16{0xffff}},
-      FillCase{"bfill b31, 0x7fff", 0x183ffffdu, {NpuDomain::vec8, 31}, FillImm16{0x7fff}},
       FillCase{"vfill v2, -32736", 0x1c401009u, {NpuDomain::vec32, 2}, FillImm16{0x8020}},
       // The full imm16 range is valid, including BF16 -0.0 (0x8000).
       FillCase{"vfill v9, 0x8000", 0x1c400025u, {NpuDomain::vec32, 9}, FillImm16{0x8000}},
@@ -96,7 +95,6 @@ TEST_CASE(move_decode_fill_scalar) {
 
 TEST_CASE(move_decode_copy) {
   constexpr std::array cases{
-      MoveCase{"bcopy b3, b4", 0x2880020du, NpuDomain::vec8, 3, 4},
       MoveCase{"vcopy v31, v0", 0x2c80007du, NpuDomain::vec32, 31, 0},
       MoveCase{"tcopy t15, t1", 0x208000bdu, NpuDomain::tile, 15, 1},
       MoveCase{"tcopy t31, t30", make_reg_move(NpuDomain::tile, 2, 31, 30), NpuDomain::tile, 31,
@@ -118,6 +116,10 @@ TEST_CASE(move_decode_rejects_reserved) {
       // FILL_IMM funct3 != 000 and REG_MOVE funct3 = 000 are reserved.
       DecodeCase{"fill funct3 010", 0x11000001u},
       DecodeCase{"REG_MOVE funct3 000", make_reg_move(NpuDomain::tile, 0, 0, 0)},
+      // dom2 = 10 is reserved.
+      DecodeCase{"reserved fill domain", make_fill_imm(NpuDomain::reserved, 0, 1)},
+      DecodeCase{"reserved fillx domain", make_reg_move(NpuDomain::reserved, 1, 0, 0)},
+      DecodeCase{"reserved copy domain", make_reg_move(NpuDomain::reserved, 2, 0, 0)},
   };
   expect_illegal(cases);
 }

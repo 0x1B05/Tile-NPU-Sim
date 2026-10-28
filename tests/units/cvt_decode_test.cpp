@@ -81,7 +81,7 @@ TEST_CASE(cvt_decode_rejects_reserved) {
   constexpr std::array cases{
       // The destination domain is Acc or Vec32 only.
       DecodeCase{"tile destination", make_cvt(NpuDomain::tile, 0, 0, 0)},
-      DecodeCase{"vec8 destination", make_cvt(NpuDomain::vec8, 0, 0, 0)},
+      DecodeCase{"reserved destination", make_cvt(NpuDomain::reserved, 0, 0, 0)},
       // funct3 >= 010 is reserved; widen has no Vec32 encoding.
       DecodeCase{"funct3 010", make_cvt(NpuDomain::acc, 2, 0, 0)},
       DecodeCase{"funct3 111", make_cvt(NpuDomain::vec32, 7, 0, 0)},

@@ -82,13 +82,6 @@ TEST_CASE(lane_extract_extension) {
   Simulator sim(memory);
   auto &state = sim.state();
 
-  load_one(sim, memory, make_lane_move(false, false, 0, 2, 1, 5)); // bextract x5, b1[2]
-  state.bc[1].dtype = DType::i8;
-  state.bc[1].len = 4;
-  state.b[1][2] = 0x80; // -128 as i8
-  check_eq(sim.step().status, StepStatus::retired, "bextract retires");
-  check_eq(hex(state.scalar.read_x(5)), hex(0xffffffffffffff80ull), "i8 sign-extends");
-
   load_one(sim, memory, make_lane_move(true, false, 0, 1, 2, 6)); // vextract x6, v2[1]
   state.vc[2].dtype = DType::u32;
   state.vc[2].len = 4;
@@ -107,19 +100,19 @@ TEST_CASE(lane_extract_extension) {
 TEST_CASE(lane_insert_keeps_low_bits) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
-  load_one(sim, memory, make_lane_move(false, true, 1, 9, 7, 1)); // binsert b1[x9], x7
+  load_one(sim, memory, make_lane_move(true, true, 1, 9, 7, 1)); // vinsert v1[x9], x7
   auto &state = sim.state();
-  state.bc[1].dtype = DType::u8;
-  state.bc[1].len = 4;
+  state.vc[1].dtype = DType::u32;
+  state.vc[1].len = 4;
   state.scalar.write_x(9, 2);
-  state.scalar.write_x(7, 0x1000000ffull);
-  state.b[1][2] = 0xee;
-  check_eq(sim.step().status, StepStatus::retired, "binsert retires");
-  check_eq(state.b[1][2], std::uint8_t{0xff}, "lane keeps the low 8 bits");
+  state.scalar.write_x(7, 0x1'0000'00ffull);
+  state.v[1][2] = 0xeeeeeeeeu;
+  check_eq(sim.step().status, StepStatus::retired, "vinsert retires");
+  check_eq(state.v[1][2], std::uint32_t{0x000000ff}, "lane keeps the low 32 bits");
 
-  load_one(sim, memory, make_lane_move(false, true, 1, 9, 7, 1)); // binsert b1[x9], x7
-  state.bc[1].dtype = DType::u8;
-  state.bc[1].len = 4;
+  load_one(sim, memory, make_lane_move(true, true, 1, 9, 7, 1)); // vinsert v1[x9], x7
+  state.vc[1].dtype = DType::u32;
+  state.vc[1].len = 4;
   state.scalar.write_x(9, 4); // lane 4 >= len 4
   check_eq(sim.step().status, StepStatus::invalid_configuration, "lane out of range");
 }

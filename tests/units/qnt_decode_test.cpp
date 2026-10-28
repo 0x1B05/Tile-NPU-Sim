@@ -4,7 +4,6 @@
 
 #include "framework.h"
 #include "units/decode_helpers.h"
-#include "units/index_helpers.h"
 #include "units/qnt_helpers.h"
 
 using namespace tile_npu::test;
@@ -14,7 +13,6 @@ namespace {
 using tile_npu::AquantInstr;
 using tile_npu::NpuDomain;
 using tile_npu::TdequantInstr;
-using tile_npu::VquantInstr;
 
 } // namespace
 
@@ -51,25 +49,15 @@ TEST_CASE(qnt_decode) {
     check_eq(decoded.src.index, 7, "tdequant source");
     check_eq(decoded.scale, 8, "tdequant scale");
   }
-  {
-    const auto result = tile_npu::decode(make_qnt(NpuDomain::vec8, 0, 9, 11, 10, 3));
-    const auto &decoded = expect_npu<VquantInstr>(result, "vquant.q8s32");
-    check_eq(decoded.dest.domain, NpuDomain::vec8, "vquant destination domain");
-    check_eq(decoded.dest.index, 9, "vquant destination");
-    check_eq(decoded.src.domain, NpuDomain::vec32, "vquant source domain");
-    check_eq(decoded.src.index, 11, "vquant source");
-    check_eq(decoded.scale, 10, "vquant scale");
-    check_index(decoded.index, 3, false, "vquant scale lane");
-  }
 }
 
 TEST_CASE(qnt_decode_rejects_reserved) {
   constexpr std::array cases{
       // funct3 >= 010 is reserved; the external-scale form is Tile-dst only.
       DecodeCase{"funct3 010", make_qnt(NpuDomain::tile, 2, 0, 0, 0)},
-      DecodeCase{"funct3 111", make_qnt(NpuDomain::vec8, 7, 0, 0, 0)},
+      DecodeCase{"funct3 111", make_qnt(NpuDomain::tile, 7, 0, 0, 0)},
       DecodeCase{"tdequant external scale", make_qnt(NpuDomain::acc, 1, 0, 0, 0)},
-      DecodeCase{"vquant external scale", make_qnt(NpuDomain::vec8, 1, 0, 0, 0)},
+      DecodeCase{"dom2 10 reserved", make_qnt(NpuDomain::reserved, 0, 0, 0, 0)},
       DecodeCase{"dom2 11 reserved", make_qnt(NpuDomain::vec32, 0, 0, 0, 0)},
       // The matrix forms reserve IS and index5.
       DecodeCase{"aquant IS", make_qnt(NpuDomain::tile, 0, 0, 0, 0, 0, true)},

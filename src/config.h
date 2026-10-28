@@ -23,15 +23,14 @@ template <typename Config>
 concept MatrixConfig = std::same_as<Config, TileConfig> || std::same_as<Config, AccConfig>;
 
 template <typename Config>
-concept VectorConfig = std::same_as<Config, Vec8Config> || std::same_as<Config, Vec32Config>;
+concept VectorConfig = std::same_as<Config, Vec32Config>;
 
 template <typename Config>
 concept DomainConfig = MatrixConfig<Config> || VectorConfig<Config>;
 
-// Tile/Vec8 hold 8-bit elements, Acc/Vec32 hold 32-bit elements.
+// Tile holds 8-bit elements, Acc/Vec32 hold 32-bit elements.
 template <DomainConfig Config>
-inline constexpr bool is_8bit_config_v =
-    std::same_as<Config, TileConfig> || std::same_as<Config, Vec8Config>;
+inline constexpr bool is_8bit_config_v = std::same_as<Config, TileConfig>;
 
 template <DomainConfig Config> constexpr bool dtype_fits(DType dtype) {
   if constexpr (is_8bit_config_v<Config>) {
@@ -55,9 +54,7 @@ inline constexpr std::size_t config_register_count(ConfigRegType reg_type) {
   case ConfigRegType::tm: return TILE_REGISTERS;
   case ConfigRegType::ac:
   case ConfigRegType::am: return ACC_REGISTERS;
-  case ConfigRegType::bc:
   case ConfigRegType::vc:
-  case ConfigRegType::bm:
   case ConfigRegType::vm: return VECTOR_REGISTERS;
   default: return 0;
   }
@@ -73,11 +70,9 @@ decltype(auto) dispatch_configs(StateLike &state, ConfigRegType reg_type, Fn &&f
   switch (reg_type) {
   case ConfigRegType::tc: return std::forward<Fn>(fn)(state.tc);
   case ConfigRegType::ac: return std::forward<Fn>(fn)(state.ac);
-  case ConfigRegType::bc: return std::forward<Fn>(fn)(state.bc);
   case ConfigRegType::vc: return std::forward<Fn>(fn)(state.vc);
   case ConfigRegType::tm: return std::forward<Fn>(fn)(state.tm);
   case ConfigRegType::am: return std::forward<Fn>(fn)(state.am);
-  case ConfigRegType::bm: return std::forward<Fn>(fn)(state.bm);
   case ConfigRegType::vm: return std::forward<Fn>(fn)(state.vm);
   default: unreachable("invalid config register type");
   }
@@ -89,7 +84,6 @@ decltype(auto) dispatch_compute_configs(StateLike &state, ConfigRegType reg_type
   switch (reg_type) {
   case ConfigRegType::tc: return std::forward<Fn>(fn)(state.tc);
   case ConfigRegType::ac: return std::forward<Fn>(fn)(state.ac);
-  case ConfigRegType::bc: return std::forward<Fn>(fn)(state.bc);
   case ConfigRegType::vc: return std::forward<Fn>(fn)(state.vc);
   default: unreachable("invalid config register type");
   }

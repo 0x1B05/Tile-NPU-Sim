@@ -24,7 +24,7 @@ using DecodedNpuInstr = std::variant<
     // Reductions, conversions, and quantization.
     AreduceInstr, VreduceInstr, VreduceArgmaxInstr,
     CvtInstr,
-    AquantInstr, TdequantInstr, VquantInstr,
+    AquantInstr, TdequantInstr,
     // Configuration and system control.
     CfgSetiInstr, CfgSetxInstr, CfgCopyInstr, CfgGetInstr, CfgSetwInstr, CfgGetwInstr, SysInstr>;
 // clang-format on

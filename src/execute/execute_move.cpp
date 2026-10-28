@@ -31,7 +31,7 @@ std::uint32_t fill_value(const FillInstr &instr, const State &state, DType dtype
 } // namespace
 
 ExecuteResult execute(const FillInstr &instr, State &state) {
-  return with_domain<NpuDomain::tile, NpuDomain::acc, NpuDomain::vec8, NpuDomain::vec32>(
+  return with_domain<NpuDomain::tile, NpuDomain::acc, NpuDomain::vec32>(
       state, instr.dest.domain, [&](auto &regs, const auto &configs) -> ExecuteResult {
         const auto &config = configs[instr.dest.index];
         if (!valid_domain_config(config)) return config_error();
@@ -44,7 +44,7 @@ ExecuteResult execute(const FillInstr &instr, State &state) {
 }
 
 ExecuteResult execute(const MoveInstr &instr, State &state) {
-  return with_domain<NpuDomain::tile, NpuDomain::acc, NpuDomain::vec8, NpuDomain::vec32>(
+  return with_domain<NpuDomain::tile, NpuDomain::acc, NpuDomain::vec32>(
       state, instr.dest.domain, [&](auto &regs, const auto &configs) -> ExecuteResult {
         const auto &dst_config = configs[instr.dest.index];
         const auto &src_config = configs[instr.src.index];

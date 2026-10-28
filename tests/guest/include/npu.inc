@@ -6,12 +6,12 @@
 # stay as raw constants on purpose.
 
 # Config field numbers (field3 / field5).
-.equ CF_DTYPE,    0   # TC/AC/BC/VC dtype; TM/AM/BM/VM base_addr
+.equ CF_DTYPE,    0   # TC/AC/VC dtype; TM/AM/VM base_addr
 .equ CF_ROWS,     1   # TC/AC rows; TM/AM row_stride_bytes
-.equ CF_COLS,     2   # TC/AC cols; TM/AM col_stride_bytes; BM/VM flags
+.equ CF_COLS,     2   # TC/AC cols; TM/AM col_stride_bytes; VM flags
 .equ CF_LAYOUT,   3   # TC/AC layout; TM/AM transform
 .equ CF_ARITH,    4   # TC arith_mode; TM/AM flags
-.equ CF_LEN,      1   # BC/VC len; BM/VM stride_bytes
+.equ CF_LEN,      1   # VC len; VM stride_bytes
 .equ CF_BASE,     0
 .equ CF_RSTRIDE,  1
 .equ CF_CSTRIDE,  2
@@ -19,14 +19,12 @@
 .equ CF_STRIDE,   1
 .equ CF_VFLAGS,   2
 
-# Config register sel2 codes: matrix side TC/AC/TM/AM, vector side BC/VC/BM/VM.
+# Config register sel2 codes: matrix side TC/AC/TM/AM, vector side VC/VM.
 .equ SEL_TC, 0
 .equ SEL_AC, 1
 .equ SEL_TM, 2
 .equ SEL_AM, 3
-.equ SEL_BC, 0
 .equ SEL_VC, 1
-.equ SEL_BM, 2
 .equ SEL_VM, 3
 
 # DType codes.
@@ -128,7 +126,7 @@
 #   [31:28] major4 = 0000  [27:26] dom2  [25] 0  [24:22] funct3
 #   [21:12] reserved(0)    [11:7] S5 (u32 gather index vS)  [6:2] D5  [1:0] q = 01
 # funct3 = {form2, LS}: 000/001 = block load/store, 010 = gather load.
-# dom2: 0 = tile, 1 = acc, 2 = b (vec8), 3 = v (vec32).
+# dom2: 0 = tile, 1 = acc, 3 = v (vec32); 2 is reserved.
 .macro M_BLK dom2, funct3, d5, s5
     .word ((\dom2 << 26) | (\funct3 << 22) | (\s5 << 7) | (\d5 << 2) | 1)
 .endm
@@ -243,14 +241,6 @@
     M_BLK 1, 1, \d5, 0
 .endm
 
-.macro BSTORE d5
-    M_BLK 2, 1, \d5, 0
-.endm
-
-.macro BLOAD d5
-    M_BLK 2, 0, \d5, 0
-.endm
-
 # FILL_IMM (I format), mirroring NpuI in src/decode/encoding.h:
 #   [31:28] major4 = 1  [27:26] dom2  [25:23] funct3 = 000
 #   [22:7] imm16  [6:2] D5  [1:0] q = 01
@@ -280,10 +270,6 @@
 
 .macro AFILLX d5, xs
     REG_MOVE 1, 1, \d5, \xs
-.endm
-
-.macro BFILL d5, imm
-    FILL_IMM 2, \d5, \imm
 .endm
 
 # Vec32 fill forms.
@@ -322,23 +308,11 @@
 .endm
 
 # LANE_MOVE (R4): major4 = 4, same layout as ROW_MOVE.
-# EW = 0: Vec8; EW = 1: Vec32.
+# EW must be 1 (Vec32); EW = 0 is reserved.
 # funct3: 0 = extract (D5 = xD, S5 = vector), 1 = insert (D5 = vector,
 #         S5 = xS), 2 = broadcast (D5/S5 vectors).
 .macro LANE_MOVE ew, is, funct3, index5, s5, d5
     .word ((4 << 28) | (\ew << 26) | (\is << 25) | (\funct3 << 22) | (\index5 << 12) | (\s5 << 7) | (\d5 << 2) | 1)
-.endm
-
-.macro BEXTRACT xd, s5, idx
-    LANE_MOVE 0, 0, 0, \idx, \s5, \xd
-.endm
-
-.macro BINSERT d5, idx, xs
-    LANE_MOVE 0, 0, 1, \idx, \xs, \d5
-.endm
-
-.macro BBROADCAST d5, s5, idx
-    LANE_MOVE 0, 0, 2, \idx, \s5, \d5
 .endm
 
 .macro VEXTRACT xd, s5, idx
@@ -528,10 +502,9 @@
 # QNT (R4), mirroring NpuR4 in src/decode/encoding.h:
 #   [31:28] major4 = 4 (0100)  [27:26] dom2  [25] IS  [24:22] funct3
 #   [21:17] vScale5  [16:12] index5  [11:7] S5  [6:2] D5  [1:0] q = 10
-# dom2: 0 aquant (Tile dst), 1 tdequant (Acc dst), 2 vquant (Vec8 dst),
-#       3 reserved (Vec32 dst). funct3: 0 = quant/dequant, 1 = aquant with
-# external scale (Tile dst only). index5/IS carry the vector-form scale
-# lane and are reserved (0) for the matrix forms.
+# dom2: 0 aquant (Tile dst), 1 tdequant (Acc dst); 2/3 reserved.
+# funct3: 0 = quant/dequant, 1 = aquant with external scale (Tile dst only).
+# index5/IS are reserved (0).
 .macro QNT dom2, is, funct3, vscale5, index5, s5, d5
     .word ((4 << 28) | (\dom2 << 26) | (\is << 25) | (\funct3 << 22) | (\vscale5 << 17) | (\index5 << 12) | (\s5 << 7) | (\d5 << 2) | 2)
 .endm
@@ -549,11 +522,6 @@
 # tdequant.rows.f32: asm operand order aD, tS, vScale.
 .macro TDEQUANT d5, s5, vscale
     QNT 1, 0, 0, \vscale, 0, \s5, \d5
-.endm
-
-# vquant.q8s32: asm operand order bD, vScale[lane], vS.
-.macro VQUANT d5, vscale, s5, lane
-    QNT 2, 0, 0, \vscale, \lane, \s5, \d5
 .endm
 
 # MMA (R4), mirroring NpuR4 in src/decode/encoding.h:

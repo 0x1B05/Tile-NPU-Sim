@@ -9,8 +9,8 @@ namespace tile_npu::test {
 //   [31:28] major4 (3 = ROW_MOVE, 4 = LANE_MOVE)  [27] 0  [26] EW  [25] IS
 //   [24:22] funct3  [21:17] reserved5 = 0  [16:12] index5
 //   [11:7] S5  [6:2] D5  [1:0] q = 01
-// EW = 0 is reserved for ROW_MOVE; EW = 1 pairs Acc <-> Vec32. For LANE_MOVE,
-// EW = 0 selects Vec8 and EW = 1 selects Vec32.
+// EW = 0 is reserved for both forms; EW = 1 pairs Acc <-> Vec32 for
+// ROW_MOVE and selects Vec32 for LANE_MOVE.
 constexpr std::uint32_t make_row_move(bool ew, bool is, std::uint32_t funct3, std::uint32_t index5,
                                       std::uint32_t s5, std::uint32_t d5) {
   return (3u << 28) | (static_cast<std::uint32_t>(ew) << 26) |

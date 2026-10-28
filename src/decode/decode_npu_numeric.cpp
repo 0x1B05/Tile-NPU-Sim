@@ -1,6 +1,5 @@
 #include "decode_npu.h"
 
-#include "domain.h"
 #include "encoding.h"
 
 #include <cstdint>
@@ -8,16 +7,9 @@
 namespace tile_npu {
 namespace {
 
-// QNT pairs a quantized 8-bit domain with its f32 counterpart: Tile with Acc
-// (the matrix forms) and Vec8 with Vec32 (the vector forms).
+// QNT pairs the quantized Tile with its f32 Acc counterpart.
 constexpr NpuDomain qnt_paired_domain(NpuDomain domain) {
-  switch (domain) {
-  case NpuDomain::tile: return NpuDomain::acc;
-  case NpuDomain::acc: return NpuDomain::tile;
-  case NpuDomain::vec8: return NpuDomain::vec32;
-  case NpuDomain::vec32: return NpuDomain::vec8;
-  default: return NpuDomain::tile;
-  }
+  return domain == NpuDomain::tile ? NpuDomain::acc : NpuDomain::tile;
 }
 
 } // namespace
@@ -87,34 +79,28 @@ DecodeResult decode_vreduce_argmax(std::uint32_t word) {
 // QNT (R4): major4 = 0100, q = 10.
 // 31    28 27  26  25  24    22 21      17 16      12 11       7 6        2 1   0
 // [major4] [dom2] [IS] [funct3] [vScale5 ] [ index5 ] [   S5   ] [   D5   ] [ q ]
-// dom2: 00 aquant (Tile), 01 tdequant (Acc), 10 vquant (Vec8), 11 reserved.
+// dom2: 00 aquant (Tile), 01 tdequant (Acc); 10/11 reserved.
 // funct3: 000 quant/dequant, 001 external-scale aquant; 010..111 reserved.
 // vScale5 is an output for dynamic quant, an input for external-scale quant/dequant.
-// Vector forms use IS: 0 = immediate scale lane, 1 = Scalar register in index5.
-// Matrix forms require IS = 0 and index5 = 0.
+// IS and index5 are reserved and must be 0.
 DecodeResult decode_qnt(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domain = sel3_domain(f.sel3);
+  if (domain != NpuDomain::tile && domain != NpuDomain::acc) {
+    return DecodeError::illegal;
+  }
   const auto src_domain = qnt_paired_domain(domain);
-  const bool vector_form = is_vector_domain(domain);
-  const bool index_is_scalar = (f.sel3 & 1) != 0;
 
   // Tile has two forms: dynamic (funct3 = 000) and external scale (001).
-  // Acc/Vec8/Vec32 each have exactly one form (funct3 = 000).
+  // Acc has exactly one form (funct3 = 000).
   const bool valid_funct3 = domain == NpuDomain::tile ? f.funct3 <= 0b001 : f.funct3 == 0b000;
-
-  // Matrix forms reserve IS and index5; vector forms use them as the scale lane.
-  const bool valid_index = vector_form || (!index_is_scalar && f.src2 == 0);
-
-  if (!valid_funct3 || !valid_index) {
+  const bool index_is_scalar = (f.sel3 & 1) != 0;
+  if (!valid_funct3 || index_is_scalar || f.src2 != 0) {
     return DecodeError::illegal;
   }
 
   const NpuRegister dest{domain, f.dest};
   const NpuRegister src{src_domain, f.src1};
-
-  // Only vector forms consume the lane index; matrix forms force it to 0 above.
-  const auto index = decode_index(f.src2, index_is_scalar);
 
   switch (domain) {
   case NpuDomain::tile:
@@ -129,13 +115,6 @@ DecodeResult decode_qnt(std::uint32_t word) {
         .dest = dest,
         .src = src,
         .scale = f.arg,
-    }};
-  case NpuDomain::vec8:
-    return DecodedNpuInstr{VquantInstr{
-        .dest = dest,
-        .src = src,
-        .scale = f.arg,
-        .index = index,
     }};
   default: return DecodeError::illegal;
   }

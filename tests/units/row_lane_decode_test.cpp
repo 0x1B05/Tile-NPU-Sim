@@ -115,13 +115,6 @@ TEST_CASE(lane_move_decode) {
                .dst = 3,
                .src = 4,
                .index = 2},
-      LaneCase{.name = "bextract x0, b9[x1]",
-               .word = make_lane_move(false, true, 0, 1, 9, 0),
-               .vector_domain = NpuDomain::vec8,
-               .dst = 0,
-               .src = 9,
-               .index = 1,
-               .index_is_scalar = true},
   };
   constexpr std::array insert_cases{
       LaneCase{.name = "vinsert v5[6], x9",
@@ -132,12 +125,6 @@ TEST_CASE(lane_move_decode) {
                .index = 6},
   };
   constexpr std::array broadcast_cases{
-      LaneCase{.name = "bbroadcast b1, b2[5]",
-               .word = make_lane_move(false, false, 2, 5, 2, 1),
-               .vector_domain = NpuDomain::vec8,
-               .dst = 1,
-               .src = 2,
-               .index = 5},
       LaneCase{.name = "vbroadcast v3, v4[x8]",
                .word = make_lane_move(true, true, 2, 8, 4, 3),
                .vector_domain = NpuDomain::vec32,
@@ -161,7 +148,10 @@ TEST_CASE(row_lane_decode_rejects_reserved) {
       DecodeCase{"lane reserved5", make_lane_move(true, false, 0, 0, 0, 0) | (1u << 17)},
       // ROW_MOVE has only funct3 000/001; LANE_MOVE stops at 010.
       DecodeCase{"row funct3 010", make_row_move(true, false, 2, 0, 0, 0)},
-      DecodeCase{"lane funct3 011", make_lane_move(false, false, 3, 0, 0, 0)},
+      DecodeCase{"lane funct3 011", make_lane_move(true, false, 3, 0, 0, 0)},
+      // LANE_MOVE also requires EW = 1.
+      DecodeCase{"lane EW 0 extract", make_lane_move(false, false, 0, 0, 0, 0)},
+      DecodeCase{"lane EW 0 insert", make_lane_move(false, true, 1, 0, 0, 0)},
   };
   expect_illegal(cases);
 }

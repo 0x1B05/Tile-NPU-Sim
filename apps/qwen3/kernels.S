@@ -207,8 +207,6 @@ qwen3_matvec_q:
     SETIM   SEL_TM, CF_RSTRIDE, 32, 1
     SETIM   SEL_TM, CF_CSTRIDE, 1, 1
     SETIM   SEL_TM, CF_FLAGS, 0, 1
-    LI_CWV  t0, DT_I8, 32
-    SETW    SEL_BC, 1, 0, X_T0, 31
     la      t0, qwen3_accbuf
     SETX    SEL_VM, 1, CF_BASE, 4, X_T0
     SETIV   SEL_VM, CF_STRIDE, 4, 4

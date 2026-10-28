@@ -30,11 +30,6 @@ void acc_f32(tile_npu::State &state, std::size_t index, std::uint8_t rows, std::
   state.ac[index].cols = cols;
 }
 
-void vec8_i8(tile_npu::State &state, std::size_t index, std::uint8_t len) {
-  state.bc[index].dtype = DType::i8;
-  state.bc[index].len = len;
-}
-
 void vec32_f32(tile_npu::State &state, std::size_t index, std::uint8_t len) {
   state.vc[index].dtype = DType::f32;
   state.vc[index].len = len;
@@ -142,39 +137,6 @@ TEST_CASE(qnt_tdequant) {
   check_eq(hex(state.a[2][1]), hex(as_u32(-1.0f)), "col1 dequantizes");
 }
 
-TEST_CASE(qnt_vquant) {
-  Ram memory(CODE_BASE, 8);
-  Simulator sim(memory);
-  // v1 = {127.0, 0.0, -63.5}: amax 127.0, scale 1.0 lands only in the lane
-  // named by index5/xS; the remaining vScale lanes keep their values.
-  write_word(memory, CODE_BASE, make_qnt(NpuDomain::vec8, 0, 0, 1, 2, 2));
-  write_word(memory, CODE_BASE + 4, make_qnt(NpuDomain::vec8, 0, 0, 1, 2, 3, true));
-  sim.reset(CODE_BASE);
-  auto &state = sim.state();
-  vec8_i8(state, 0, 3);
-  vec32_f32(state, 1, 3);
-  vec32_f32(state, 2, 4);
-  state.v[1][0] = as_u32(127.0f);
-  state.v[1][1] = as_u32(0.0f);
-  state.v[1][2] = as_u32(-63.5f);
-  for (std::size_t lane = 0; lane < 4; ++lane)
-    state.v[2][lane] = 0xdeadbeefu;
-  state.scalar.write_x(3, 1);
-
-  check_eq(sim.step().status, StepStatus::retired, "vquant.q8s32 with immediate lane retires");
-  check_eq(hex(state.b[0][0]), hex(0x7fu), "lane0 saturates at 127");
-  check_eq(hex(state.b[0][1]), hex(0x00u), "lane1 is 0");
-  check_eq(hex(state.b[0][2]), hex(0xc0u), "lane2 rounds to -64");
-  check_eq(hex(state.v[2][2]), hex(as_u32(1.0f)), "scale lane 2 written");
-  check_eq(hex(state.v[2][1]), hex(0xdeadbeefu), "lane1 untouched");
-
-  state.b[0][0] = 0x55u; // clobber to prove the second form rewrites it
-  check_eq(sim.step().status, StepStatus::retired, "vquant.q8s32 with scalar lane retires");
-  check_eq(hex(state.b[0][0]), hex(0x7fu), "lane0 rewritten");
-  check_eq(hex(state.v[2][1]), hex(as_u32(1.0f)), "scale lane x3 written");
-  check_eq(hex(state.v[2][2]), hex(as_u32(1.0f)), "lane2 keeps old scale");
-}
-
 TEST_CASE(qnt_rejects_invalid) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
@@ -198,23 +160,6 @@ TEST_CASE(qnt_rejects_invalid) {
   vec32_f32(state, 0, 3);
   check_eq(sim.step().status, StepStatus::invalid_configuration,
            "aquant rejects a scale length mismatch");
-
-  // The immediate scale lane must fall inside vScale.
-  load_one(sim, memory, make_qnt(NpuDomain::vec8, 0, 0, 1, 2, 4));
-  vec8_i8(state, 0, 3);
-  vec32_f32(state, 1, 3);
-  vec32_f32(state, 2, 4);
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "vquant rejects an out-of-range immediate lane");
-
-  // So must the Scalar-register lane.
-  load_one(sim, memory, make_qnt(NpuDomain::vec8, 0, 0, 1, 2, 5, true));
-  vec8_i8(state, 0, 3);
-  vec32_f32(state, 1, 3);
-  vec32_f32(state, 2, 4);
-  state.scalar.write_x(5, 4);
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "vquant rejects an out-of-range scalar lane");
 }
 
 TEST_CASE(qnt_rounding_ignores_host_fp_mode) {

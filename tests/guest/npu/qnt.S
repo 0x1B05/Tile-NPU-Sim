@@ -2,9 +2,9 @@
 
 # Self-checking QNT image: programs configs and descriptors, then runs a
 # dynamic aquant (RNE + saturation, all-zero row -> scale +0.0), a tdequant
-# that consumes the aquant outputs, a vquant with an immediate scale lane,
-# and an external-scale aquant with distinct source and scale register
-# numbers. Results are stored back and compared word-wise. Ends with ebreak:
+# that consumes the aquant outputs, and an external-scale aquant with
+# distinct source and scale register numbers. Results are stored back and
+# compared word-wise. Ends with ebreak:
 # a0 = 0 pass, a0 = N identifies the failing check.
 #
 # Buffer addresses go through lla (pc-relative): the image is loaded at
@@ -39,18 +39,10 @@ _start:
     CFG_SETI  6, 1, 0, 4, 1
     CFG_SETI  6, 1, 1, 2, 1
     CFG_SETI  6, 3, 1, 4, 1
-    # vc2: dtype = f32, len = 1; vm2: stride = 4
-    CFG_SETI  6, 1, 0, 4, 2
-    CFG_SETI  6, 1, 1, 1, 2
-    CFG_SETI  6, 3, 1, 4, 2
     # vc3: dtype = f32, len = 2; vm3: stride = 4
     CFG_SETI  6, 1, 0, 4, 3
     CFG_SETI  6, 1, 1, 2, 3
     CFG_SETI  6, 3, 1, 4, 3
-    # bc0: dtype = i8 (0), len = 2; bm0: stride = 1
-    CFG_SETI  6, 0, 0, 0, 0
-    CFG_SETI  6, 0, 1, 2, 0
-    CFG_SETI  6, 2, 1, 1, 0
 
     # Stage 1 - aquant.rows.q8s32 t0, v0, a0 over
     #   {127.0, -63.5}, {0.0, 0.0} -> t0 bytes {0x7F, 0xC0, 0, 0},
@@ -99,36 +91,13 @@ _start:
     addi      x6, x6, -1
     bnez      x6, 1b
 
-    # Stage 3 - vquant.q8s32 b0, v2[0], v1 over {127.0, 63.5} ->
-    #   b0 bytes {0x7F, 0x40} (RNE(63.5) = 64), v2[0] = 1.0
-    lla       x3, src_v
-    CFG_REG   3, 1, 0, 0, 3, 1
-    VLOAD     1
-    VQUANT    0, 2, 1, 0
-    lla       x3, dstbuf4
-    CFG_REG   2, 1, 0, 0, 3, 0
-    BSTORE    0
-    lla       x3, dstbuf5
-    CFG_REG   3, 1, 0, 0, 3, 2
-    VSTORE    2
-    lla       x3, dstbuf4
-    lhu       x4, 0(x3)
-    li        x5, 0x407F         # bytes {0x7F, 0x40}
-    li        a0, 3
-    bne       x4, x5, fail
-    lla       x3, dstbuf5
-    FENCE_MEM
-    lwu       x4, 0(x3)
-    li        x5, 0x3F800000     # 1.0
-    bne       x4, x5, fail
-
-    # Stage 4 - aquant.rows.scale.q8s32 t0, a0, v3 over stage 1's input
+    # Stage 3 - aquant.rows.scale.q8s32 t0, a0, v3 over stage 1's input
     #   with scales {2.0, 1.0} -> bytes {64, -32, 0, 0} (RNE).
     #   Distinct source/scale numbers catch swapped macro operands;
     #   external scales must remain unchanged.
     lla       x3, dstbuf6
     CFG_REG   3, 1, 0, 0, 3, 3
-    li        a0, 4
+    li        a0, 3
     li        x5, 0x40000000     # 2.0
     VINSERT   3, 0, 5
     li        x5, 0x3F800000     # 1.0
@@ -157,11 +126,8 @@ fail:
     .section .data
     .balign 4
 src_m:   .word 0x42FE0000, 0xC27E0000, 0x00000000, 0x00000000
-src_v:   .word 0x42FE0000, 0x427E0000
 exp_tdq: .word 0x42FE0000, 0xC2800000, 0x00000000, 0x00000000
 dstbuf:  .space 4
 dstbuf2: .space 8
 dstbuf3: .space 16
-dstbuf4: .space 4
-dstbuf5: .space 4
 dstbuf6: .space 8
