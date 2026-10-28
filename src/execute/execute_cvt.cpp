@@ -6,18 +6,12 @@
 #include "matrix_view.h"
 #include "utils/bits.h"
 
-#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <utility>
 
 namespace tile_npu {
 namespace {
-
-// One i32 -> f32 conversion on raw storage bits.
-constexpr std::uint32_t i32_to_f32_bits(std::uint32_t bits) {
-  return as_u32(static_cast<float>(std::bit_cast<std::int32_t>(bits)));
-}
 
 // acvt/vcvt: in-place-capable i32 -> f32 conversion over the destination's
 // effective region; on success the destination dtype becomes f32.
@@ -52,8 +46,7 @@ ExecuteResult widen_tile_to_acc(const CvtInstr &instr, State &state) {
   auto src = matrix_view(std::as_const(state.t[instr.src.index]));
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
-      const auto value = std::bit_cast<std::int8_t>(src.at(row, col));
-      dst.at(row, col) = static_cast<std::uint32_t>(static_cast<std::int32_t>(value));
+      dst.at(row, col) = i8_to_i32_bits(src.at(row, col));
     }
   }
   return {.status = StepStatus::retired};

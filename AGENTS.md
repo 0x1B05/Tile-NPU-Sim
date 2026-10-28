@@ -54,7 +54,7 @@ xmake project -k compile_commands        # 为 clangd 生成 compile_commands.js
 | `src/domain.h` | 数据域工具、寄存器堆/配置/描述符绑定、域分派与有效区域遍历 |
 | `src/execute/elementwise_op.h`、`operand.h` | 执行域共享的元素运算、操作数读取和浮点工具 |
 | `src/execute/reduce_util.h` | 规约树、absmax 叶映射与跨指令族共享的规约工具 |
-| `src/utils/bits.h` | f32 位模式解释、低位符号扩展与 32-bit word 符号扩展工具 |
+| `src/utils/bits.h` | f32 位模式解释、整数/浮点存储位转换与符号扩展工具 |
 | `src/utils/` | 通用内部工具：位模式、小端转换、variant visitor 与 `unreachable`；十六进制格式化位于 `src/monitor/format.h` |
 | `src/main.cpp`、`src/monitor/` | CLI、镜像装载、`npu_exec` 步进循环和 sdb 命令 |
 | `tests/` | `units/` host 用例与入口、`guest/` guest driver 与 guest 源码、`include/` 测试头文件 |

@@ -28,4 +28,13 @@ constexpr std::uint64_t sign_extend_word(std::uint32_t value) {
   return static_cast<std::uint64_t>(sign_extend<32>(value));
 }
 
+// Integer conversions that produce raw storage bit patterns.
+constexpr std::uint32_t i8_to_i32_bits(std::uint8_t bits) {
+  return static_cast<std::uint32_t>(sign_extend<8>(bits));
+}
+
+constexpr std::uint32_t i32_to_f32_bits(std::uint32_t bits) {
+  return as_u32(static_cast<float>(std::bit_cast<std::int32_t>(bits)));
+}
+
 } // namespace tile_npu
