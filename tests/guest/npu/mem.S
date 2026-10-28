@@ -2,7 +2,7 @@
 
 # Self-checking M_BLK image: programs configs and descriptors with
 # cfg.seti/cfg.setx, then exercises block load/store, a transposed tload,
-# row load/store (immediate and scalar row forms), and a gather through an
+# row load/store (immediate and scalar row forms), and a gather through a u32
 # index vector loaded from memory. Every stage stores results back to memory
 # and checks them with scalar loads; the descriptor auto-increment is read
 # back with cfg.get. Ends with ebreak: a0 = 0 pass, a0 = N identifies the
@@ -23,8 +23,8 @@ _start:
     CFG_SETI  5, 0, 0, 0, 2
     CFG_SETI  5, 0, 1, 2, 2
     CFG_SETI  5, 0, 2, 2, 2
-    # vc2: dtype = i32 (2), len = 2 (gather index vector)
-    CFG_SETI  6, 1, 0, 2, 2
+    # vc2: dtype = u32 (3), len = 2 (gather index vector)
+    CFG_SETI  6, 1, 0, 3, 2
     CFG_SETI  6, 1, 1, 2, 2
     # tm0: base = srcbuf, row_stride = 2, col_stride = 1
     lla       x3, srcbuf
@@ -108,14 +108,13 @@ _start:
     li        a0, 5
     bne       x4, x5, fail
 
-    # Signed indices and strides: base = gthbuf + 1, row_stride = -2,
-    # col_stride = -1, indices = {-1, 0} select {40, 30} and {20, 10}.
-    lla       x3, gthbuf + 1
+    # Negative strides with u32 indices: base = gthbuf + 3, row_stride = -2,
+    # col_stride = -1, indices = {1, 0} select {20, 10} and {40, 30}.
+    lla       x3, gthbuf + 3
     CFG_REG   2, 0, 0, 0, 3, 2
     CFG_SETI  5, 2, 1, -2, 2
     CFG_SETI  5, 2, 2, -1, 2
-    li        x6, -1
-    VINSERT   2, 0, 6
+    VLOAD     2
     TGATHER   2, 2
     lla       x3, gthdst
     CFG_REG   2, 0, 0, 0, 3, 2
@@ -124,7 +123,7 @@ _start:
     TSTORE    2
     FENCE_MEM
     lw        x4, 0(x3)
-    li        x5, 0x0a141e28  # bytes {40, 30, 20, 10}
+    li        x5, 0x1e280a14  # bytes {20, 10, 40, 30}
     li        a0, 6
     bne       x4, x5, fail
 

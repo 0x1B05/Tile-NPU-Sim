@@ -10,7 +10,6 @@
 
 #include <algorithm>
 #include <array>
-#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -196,13 +195,6 @@ try_contiguous_block(const MblkInstr &instr, ExecContext &ctx, const MatrixDescV
   return ExecuteResult{.status = StepStatus::retired};
 }
 
-// The gather index vector must use a valid Vec32 configuration with i32 elements.
-bool valid_gather_index(const Vec32Config &config) { return valid_config_of(config, DType::i32); }
-
-std::int32_t gather_index(const Vec32 &reg, std::size_t lane) {
-  return std::bit_cast<std::int32_t>(reg[lane]);
-}
-
 template <NpuDomain Domain> ExecuteResult block_access(const MblkInstr &instr, ExecContext &ctx) {
   static_assert(Domain == NpuDomain::tile || Domain == NpuDomain::acc);
   auto [reg, config, descriptor] = bind_register<Domain>(ctx.state, instr.reg.index);
@@ -301,7 +293,7 @@ ExecuteResult gather_tile_access(const MblkInstr &instr, ExecContext &ctx) {
     return config_error();
   }
   const auto &index_config = ctx.state.vc[instr.gather_src];
-  if (!valid_gather_index(index_config)) {
+  if (!valid_config_of(index_config, DType::u32)) {
     return config_error();
   }
   MatrixDescView desc(ctx.state.tm[index]);
@@ -315,9 +307,7 @@ ExecuteResult gather_tile_access(const MblkInstr &instr, ExecContext &ctx) {
   const auto &index_reg = ctx.state.v[instr.gather_src];
   auto &reg = ctx.state.t[index];
   auto view = matrix_view(reg);
-  const auto row_address = [&](std::size_t row) {
-    return desc.gather_row_base(gather_index(index_reg, row));
-  };
+  const auto row_address = [&](std::size_t row) { return desc.gather_row_base(index_reg[row]); };
   const auto column_address = [&](std::uint64_t row_base, std::size_t col) {
     return desc.gather_matrix_addr(row_base, col);
   };
@@ -332,7 +322,7 @@ template <typename Reg>
 ExecuteResult gather_vector_access(const MblkInstr &instr, ExecContext &ctx, VectorDescView &desc,
                                    std::size_t len, Reg &reg) {
   const auto &index_config = ctx.state.vc[instr.gather_src];
-  if (!valid_gather_index(index_config)) {
+  if (!valid_config_of(index_config, DType::u32)) {
     return config_error();
   }
 
@@ -342,7 +332,7 @@ ExecuteResult gather_vector_access(const MblkInstr &instr, ExecContext &ctx, Vec
   const auto &index_reg = ctx.state.v[instr.gather_src];
   using Element = typename Reg::value_type;
   const auto row_address = [&](std::size_t lane) {
-    return desc.gather_vector_addr(gather_index(index_reg, lane));
+    return desc.gather_vector_addr(index_reg[lane]);
   };
   const auto column_address = [](std::uint64_t address, std::size_t) {
     return std::optional<std::uint64_t>{address};

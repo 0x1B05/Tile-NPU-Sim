@@ -126,7 +126,7 @@
 # M_BLK block and gather forms (R2 format), mirroring NpuR2 in
 # src/decode/encoding.h:
 #   [31:28] major4 = 0000  [27:26] dom2  [25] 0  [24:22] funct3
-#   [21:12] reserved(0)    [11:7] S5 (gather index vS)  [6:2] D5  [1:0] q = 01
+#   [21:12] reserved(0)    [11:7] S5 (u32 gather index vS)  [6:2] D5  [1:0] q = 01
 # funct3 = {form2, LS}: 000/001 = block load/store, 010 = gather load.
 # dom2: 0 = tile, 1 = acc, 2 = b (vec8), 3 = v (vec32).
 .macro M_BLK dom2, funct3, d5, s5
@@ -151,7 +151,7 @@
     M_BLK 0, 1, \d5, 0
 .endm
 
-# tload.gather: rows indexed by vS lane values.
+# tload.gather: rows indexed by non-negative u32 vS lane values.
 .macro TGATHER d5, vs
     M_BLK 0, 2, \d5, \vs
 .endm

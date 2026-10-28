@@ -176,7 +176,7 @@ struct NpuR4 {
 };
 
 // M_BLK block/gather forms (R2): sel3 = {dom2, 0}, reserved10 pinned by the
-// patterns; src2 names the gather index vector (S5).
+// patterns; src2 names the u32 gather index vector (S5).
 struct NpuR2 {
   std::uint8_t major4;
   std::uint8_t sel3;

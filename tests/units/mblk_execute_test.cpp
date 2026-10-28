@@ -336,7 +336,8 @@ TEST_CASE(mblk_gather_tile) {
   auto &state = run.sim.state();
   config_tile_2x2(state, 0);
   stride_desc(state.tm[0], DATA, 2, 1);
-  state.v[2][0] = 2; // i32 indices
+  state.vc[2].dtype = DType::u32;
+  state.v[2][0] = 2; // u32 indices
   state.v[2][1] = 0;
   state.vc[2].len = 2;
   poke(run.memory, DATA, {10, 11, 12, 13, 14, 15});
@@ -353,6 +354,7 @@ TEST_CASE(mblk_gather_tile) {
   auto &short_state = short_run.sim.state();
   config_tile_2x2(short_state, 0);
   stride_desc(short_state.tm[0], DATA, 2, 1);
+  short_state.vc[2].dtype = DType::u32;
   short_state.v[2][0] = 1;
   short_state.vc[2].len = 1; // row 1 lies beyond the index vector
   short_state.t[0][tile_index(1, 0)] = 0x77;
@@ -369,6 +371,42 @@ TEST_CASE(mblk_gather_tile) {
            "row beyond len(vS) is zero-filled");
 }
 
+TEST_CASE(mblk_gather_negative_stride) {
+  MblkRun run(block(NpuDomain::tile, 2, 0, 2)); // tload.gather t0, v2
+  auto &state = run.sim.state();
+  config_tile_2x2(state, 0);
+  stride_desc(state.tm[0], DATA + 3, -2, -1);
+  state.vc[2].dtype = DType::u32;
+  state.vc[2].len = 2;
+  state.v[2][0] = 1;
+  state.v[2][1] = 0;
+  poke(run.memory, DATA, {10, 20, 30, 40});
+
+  check_eq(run.sim.step().status, StepStatus::retired, "negative-stride gather retires");
+  check_eq(state.t[0][tile_index(0, 0)], std::uint8_t{20}, "t0(0,0)");
+  check_eq(state.t[0][tile_index(0, 1)], std::uint8_t{10}, "t0(0,1)");
+  check_eq(state.t[0][tile_index(1, 0)], std::uint8_t{40}, "t0(1,0)");
+  check_eq(state.t[0][tile_index(1, 1)], std::uint8_t{30}, "t0(1,1)");
+}
+
+TEST_CASE(mblk_gather_u32_high_bit) {
+  // 0x80000000 is a large positive u32 index, not -2^31: with stride -1 and
+  // base 0x80000000 the gather address is 0, not 0x100000000.
+  MblkRun run(block(NpuDomain::vec32, 2, 0, 2)); // vload.gather v0, v2
+  auto &state = run.sim.state();
+  state.vc[0].dtype = DType::u32;
+  state.vc[0].len = 1;
+  state.vm[0].base_addr = 0x80000000u;
+  state.vm[0].stride_bytes = -1;
+  state.vc[2].dtype = DType::u32;
+  state.vc[2].len = 1;
+  state.v[2][0] = 0x80000000u;
+
+  const auto result = run.sim.step();
+  check_eq(result.status, StepStatus::load_fault, "high-bit u32 index faults at address 0");
+  check_eq(hex(*result.fault_address), hex(0u), "u32 index is not sign-extended");
+}
+
 TEST_CASE(mblk_gather_vector) {
   MblkRun run(block(NpuDomain::vec32, 2, 3, 2)); // vload.gather v3, v2
   auto &state = run.sim.state();
@@ -376,6 +414,7 @@ TEST_CASE(mblk_gather_vector) {
   state.vc[3].len = 3;
   state.vm[3].base_addr = DATA;
   state.vm[3].stride_bytes = 4;
+  state.vc[2].dtype = DType::u32;
   state.v[2][0] = 1;
   state.v[2][1] = 0;
   state.vc[2].len = 2;
@@ -518,6 +557,7 @@ TEST_CASE(mblk_rejects_invalid_configs) {
     auto &state = run.sim.state();
     config_tile_2x2(state, 0);
     stride_desc(state.tm[0], DATA, 2, 1);
+    state.vc[2].dtype = DType::u32;
     state.vc[2].len = 33; // beyond the lane count
     check_eq(run.sim.step().status, StepStatus::invalid_configuration,
              "index vector length beyond the lane count rejects");
@@ -527,6 +567,7 @@ TEST_CASE(mblk_rejects_invalid_configs) {
     auto &state = run.sim.state();
     config_tile_2x2(state, 0);
     stride_desc(state.tm[0], DATA, 2, 1);
+    state.vc[2].dtype = DType::u32;
     state.vc[2].len = 0; // empty index vector
     check_eq(run.sim.step().status, StepStatus::invalid_configuration,
              "empty index vector rejects");
@@ -536,9 +577,9 @@ TEST_CASE(mblk_rejects_invalid_configs) {
     auto &state = run.sim.state();
     config_tile_2x2(state, 0);
     stride_desc(state.tm[0], DATA, 2, 1);
-    state.vc[2].dtype = DType::u32;
+    state.vc[2].dtype = DType::i32;
     state.vc[2].len = 1;
-    check_eq(run.sim.step().status, StepStatus::invalid_configuration, "u32 index vector rejects");
+    check_eq(run.sim.step().status, StepStatus::invalid_configuration, "i32 index vector rejects");
   }
   {
     MblkRun run(block(NpuDomain::vec32, 2, 0, 2)); // vload.gather v0, v2
@@ -692,6 +733,7 @@ TEST_CASE(mblk_gather_faults_leave_state_unchanged) {
     auto &state = run.sim.state();
     config_tile_2x2(state, 0);
     stride_desc(state.tm[0], MEM_END - 1, 2, 1);
+    state.vc[2].dtype = DType::u32;
     state.v[2][0] = 0;
     state.vc[2].len = 1;
     state.t[0][tile_index(0, 0)] = 0x11;
@@ -716,6 +758,7 @@ TEST_CASE(mblk_gather_faults_leave_state_unchanged) {
     state.vc[3].len = 2;
     state.vm[3].base_addr = MEM_END - 4;
     state.vm[3].stride_bytes = 4;
+    state.vc[2].dtype = DType::u32;
     state.v[2][0] = 1; // lane 0 gathers at MEM_END
     state.vc[2].len = 1;
     state.v[3][0] = 0xdeadbeefu;
@@ -740,7 +783,7 @@ TEST_CASE(mblk_gather_address_overflow_leaves_state_unchanged) {
 
   constexpr std::array scenarios{
       Scenario{"row overflow", 0xfffffffffffffffeull, 2, 1, 1},
-      Scenario{"row underflow", 0, 2, 1, 0xffffffffu},
+      Scenario{"row underflow", 0, -2, 1, 1},
       Scenario{"column overflow", 0xffffffffffffffffull, 2, 1, 0},
       Scenario{"column underflow", 0, 2, -1, 0},
   };
@@ -749,6 +792,7 @@ TEST_CASE(mblk_gather_address_overflow_leaves_state_unchanged) {
     auto &state = run.sim.state();
     config_tile_2x2(state, 0);
     stride_desc(state.tm[0], test.base, test.row_stride, test.col_stride);
+    state.vc[2].dtype = DType::u32;
     state.vc[2].len = 2;
     state.v[2][0] = 0;
     state.v[2][1] = test.second_index;
@@ -769,7 +813,7 @@ TEST_CASE(mblk_gather_aliased_index_vector) {
   // values even though the destination overwrites it.
   MblkRun run(block(NpuDomain::vec32, 2, 2, 2)); // vload.gather v2, v2
   auto &state = run.sim.state();
-  state.vc[2].dtype = DType::i32;
+  state.vc[2].dtype = DType::u32;
   state.vc[2].len = 2;
   state.vm[2].base_addr = DATA;
   state.vm[2].stride_bytes = 4;

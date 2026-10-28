@@ -229,9 +229,10 @@ TEST_CASE(npu_guest_ebin) {
 
 TEST_CASE(npu_guest_mem) {
   // tests/guest/npu/mem.S self-configures descriptors and configs, then
-  // exercises block/transposed/row/gather accesses with store-back checks
-  // and a descriptor auto-increment readback. It reaches ebreak with
-  // a0 = 0 on success; a failing check reports its stage number in a0.
+  // exercises block/transposed/row/gather accesses (u32 gather indices)
+  // with store-back checks and a descriptor auto-increment readback. It
+  // reaches ebreak with a0 = 0 on success; a failing check reports its stage
+  // number in a0.
   check_guest_image("mem", 1024);
 }
 

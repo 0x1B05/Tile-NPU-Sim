@@ -55,8 +55,8 @@ constexpr DecodeEntry NPU_TABLE[] = {
     // All assigned elementwise majors decode above; the rest is reserved.
     {"???? ??? ???? ???? ????? ????? ????? 00", illegal},
 
-    // M_BLK (R2): sel3 = {dom2, 0}; S5 is the gather index vector, 0 for the
-    // block forms. funct3 = {form2, LS}: 00x block, 010 gather.
+    // M_BLK (R2): sel3 = {dom2, 0}; S5 is the u32 gather index vector, 0 for
+    // the block forms. funct3 = {form2, LS}: 00x block, 010 gather.
     {"0000 ??0 000 0000000000 00000 ????? 01", decode_mblk_load},                    // block load
     {"0000 ??0 001 0000000000 00000 ????? 01", decode_mblk_store},                   // block store
     {"0000 ??0 010 0000000000 ????? ????? 01", decode_mblk_gather},                   // gather load

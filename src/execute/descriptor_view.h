@@ -47,10 +47,10 @@ public:
   }
 
   // Gather addressing (the ISA's gaddr): a lane of the index vector, read as
-  // i32, selects the indexed element. The matrix form locates the gathered
+  // u32, selects the indexed element. The matrix form locates the gathered
   // row's first element through row_stride_bytes, then walks the row along
   // col_stride_bytes.
-  std::optional<std::uint64_t> gather_row_base(std::int32_t index) const
+  std::optional<std::uint64_t> gather_row_base(std::uint32_t index) const
     requires(is_matrix)
   {
     return addr_with_offset(descriptor_->base_addr,
@@ -72,7 +72,7 @@ public:
     return addr_with_offset(descriptor_->base_addr, offset);
   }
 
-  std::optional<std::uint64_t> gather_vector_addr(std::int32_t index) const
+  std::optional<std::uint64_t> gather_vector_addr(std::uint32_t index) const
     requires(is_vector)
   {
     return addr_with_offset(descriptor_->base_addr,
