@@ -14,18 +14,11 @@
 namespace tile_npu {
 namespace {
 
-// The select mask dtype is fixed per domain: u8 for the 8-bit tile domain,
-// u32 for the 32-bit domains.
-template <typename E> constexpr DType mask_dtype_of() {
-  return sizeof(E) == 1 ? DType::u8 : DType::u32;
-}
-
 // Common E_R4 constraints: all four operands live in the destination's
 // register file with valid configs; A/B match D in dtype and shape. select
-// adds the fixed mask dtype on arg, fmadd requires f32 everywhere (arg is
-// the addend C and matches D fully).
-template <typename Element, typename Configs>
-bool valid_operands(const Er4Instr &instr, const Configs &configs) {
+// adds the u32 mask dtype on arg, fmadd requires f32 everywhere (arg is the
+// addend C and matches D fully).
+template <typename Configs> bool valid_operands(const Er4Instr &instr, const Configs &configs) {
   const auto &dst = configs[instr.dest.index];
   const auto &arg = configs[instr.arg.index];
   const auto &lhs = configs[instr.src1.index];
@@ -36,7 +29,7 @@ bool valid_operands(const Er4Instr &instr, const Configs &configs) {
     return false;
   }
   if (instr.op == Er4Op::select) {
-    return arg.dtype == mask_dtype_of<Element>() && shapes_match(arg, dst);
+    return arg.dtype == DType::u32 && shapes_match(arg, dst);
   }
   return dst.dtype == DType::f32 && configs_match(dst, arg);
 }
@@ -57,10 +50,9 @@ template <typename E> E apply_er4_op(Er4Op op, E arg, E lhs, E rhs) {
 
 // Runs over the destination's effective region.
 ExecuteResult execute(const Er4Instr &instr, State &state) {
-  return with_domain<NpuDomain::tile, NpuDomain::acc, NpuDomain::vec32>(
+  return with_domain<NpuDomain::acc, NpuDomain::vec32>(
       state, instr.dest.domain, [&](auto &regs, const auto &configs) {
-        using Element = typename std::remove_cvref_t<decltype(regs)>::value_type::value_type;
-        if (!valid_operands<Element>(instr, configs)) {
+        if (!valid_operands(instr, configs)) {
           return config_error();
         }
         const auto &dst_config = configs[instr.dest.index];

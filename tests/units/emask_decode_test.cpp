@@ -118,7 +118,9 @@ TEST_CASE(emask_decode_rejects_reserved) {
       // funct3 >= 011 is reserved.
       DecodeCase{"funct3 011", make_emask(NpuDomain::acc, 3, 0, 0, 0, 0)},
       DecodeCase{"funct3 111", make_emask(NpuDomain::tile, 7, 0, 0, 0, 0)},
-      // tril/triu are matrix-only.
+      // tril/triu are Acc-only.
+      DecodeCase{"tmask.tril", make_emask(NpuDomain::tile, 1, 0, 0, 0, 0)},
+      DecodeCase{"tmask.triu", make_emask(NpuDomain::tile, 2, 0, 0, 0, 0)},
       DecodeCase{"vmask.tril", make_emask(NpuDomain::vec32, 1, 0, 0, 0, 0)},
       DecodeCase{"reserved domain", make_emask(NpuDomain::reserved, 0, 0, 0, 0, 0)},
       DecodeCase{"reserved triu", make_emask(NpuDomain::reserved, 2, 0, 0, 0, 0)},

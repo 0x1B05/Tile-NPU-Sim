@@ -276,7 +276,7 @@ TEST_CASE(npu_guest_ebcast) {
 
 TEST_CASE(npu_guest_er4) {
   // tests/guest/npu/er4.S self-configures configs and descriptors, then
-  // exercises a Tile select (u8 mask) and a Vec32 fmadd (f32, single
+  // exercises a Vec32 select (u32 mask) and a Vec32 fmadd (f32, single
   // rounding) with store-back checks. It reaches ebreak with a0 = 0 on
   // success; a failing check reports its stage in a0.
   check_guest_image("er4", 1024);

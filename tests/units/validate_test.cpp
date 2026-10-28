@@ -144,6 +144,7 @@ TEST_CASE(validate_rejects_bad_ebcast) {
 
 TEST_CASE(validate_rejects_bad_er4) {
   check_illegal(Er4Instr{static_cast<Er4Op>(2), A(0), A(1), A(2), A(3)}, "reserved op");
+  check_illegal(Er4Instr{Er4Op::select, T(0), T(1), T(2), T(3)}, "select on tile");
   check_illegal(Er4Instr{Er4Op::fmadd, T(0), T(1), T(2), T(3)}, "fmadd on tile");
   check_illegal(Er4Instr{Er4Op::select, R(0), R(1), R(2), R(3)}, "reserved domain");
   check_illegal(Er4Instr{Er4Op::select, A(0), A(1), A(2), V(3)}, "cross-domain src2");
@@ -151,6 +152,7 @@ TEST_CASE(validate_rejects_bad_er4) {
 
 TEST_CASE(validate_rejects_bad_emask) {
   check_illegal(MaskInstr{static_cast<MaskOp>(3), A(0), A(1), 0, Fill5Code{0}}, "reserved op");
+  check_illegal(MaskInstr{MaskOp::tril, T(0), T(1), 0, Fill5Code{0}}, "tril on a tile domain");
   check_illegal(MaskInstr{MaskOp::tril, V(0), V(1), 0, Fill5Code{0}}, "tril on a vector domain");
   check_illegal(MaskInstr{MaskOp::tail, R(0), R(1), 0, Fill5Code{0}}, "reserved domain");
   check_illegal(MaskInstr{MaskOp::tail, A(0), A(1), 0, Fill5Code{9}}, "fill5 code 9");

@@ -105,9 +105,9 @@ DecodeResult decode_ebcast(std::uint32_t word) {
 // E_R4 (R4): major4 = 0011, q = 00.
 // 31    28 27  26 25  24    22 21      17 16      12 11       7 6        2 1   0
 // [major4] [dom2] [0] [funct3] [ M5/C5 ] [   B5   ] [   A5   ] [   D5   ] [ q ]
-// dom2: 00 Tile, 01 Acc, 11 Vec32; 10 reserved.
+// dom2: 01 Acc, 11 Vec32; 00/10 reserved.
 // funct3: 000 select (M5/C5 = mask M), 001 fmadd (M5/C5 = addend C);
-//         010..111 reserved. fmadd requires Acc/Vec32 with f32 dtype.
+//         010..111 reserved. Both ops require Acc/Vec32; fmadd also requires f32.
 DecodeResult decode_er4(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domain = sel3_domain(f.sel3);
@@ -129,8 +129,8 @@ DecodeResult decode_er4(std::uint32_t word) {
 // [major4] [dom2] [FS] [funct3] [xBound5 ] [ fill5  ] [   S5   ] [   D5   ] [ q ]
 // dom2: 00 Tile, 01 Acc, 11 Vec32; 10 reserved.
 // FS: 0 = fill5 code in [16:12], 1 = Scalar xFill in [16:12].
-// funct3: 000 tail, 001 tril, 010 triu; 011..111 reserved. tril/triu are matrix-only.
-// xBound5 names Scalar xBounds/xLen for tail, or xDelta for tril/triu.
+// funct3: 000 tail, 001 tril, 010 triu; 011..111 reserved. tril/triu are Acc-only.
+// xBound5 names Scalar xBounds/xLen for tail, or xDelta for Acc tril/triu.
 DecodeResult decode_emask(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domain = sel3_domain(f.sel3);

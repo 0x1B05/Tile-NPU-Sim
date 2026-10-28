@@ -49,7 +49,7 @@ std::optional<Element> fill_value(const MaskInstr &instr, const State &state, DT
 }
 
 // Whether a matrix mask keeps element (row, col): tail reads the packed
-// nRows/nCols bound, tril/triu the signed xDelta.
+// nRows/nCols bound, Acc-only tril/triu the signed xDelta.
 bool keeps(MaskOp op, std::uint64_t bound, std::size_t row, std::size_t col) {
   switch (op) {
   case MaskOp::tail: {

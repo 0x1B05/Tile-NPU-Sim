@@ -17,35 +17,6 @@ using tile_npu::StepStatus;
 
 } // namespace
 
-TEST_CASE(er4_tile_select) {
-  Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
-  // tselect t0, t1, t2, t3: D = M != 0 ? A : B (any nonzero mask lane picks).
-  load_one(sim, memory, make_er4(NpuDomain::tile, 0, 0, 1, 2, 3));
-  auto &state = sim.state();
-  for (auto index : {0, 2, 3})
-    tile_cfg(state, index, DType::i8, 2, 2);
-  tile_cfg(state, 1, DType::u8, 2, 2); // the tile mask is u8
-  state.t[1][0] = 0xff;
-  state.t[1][1] = 0;
-  state.t[1][32] = 0;
-  state.t[1][33] = 0x01; // any nonzero lane counts as true
-  for (std::uint8_t lane = 0; lane < 2; ++lane) {
-    state.t[2][lane] = static_cast<std::uint8_t>(1 + lane);            // 1, 2
-    state.t[2][32 + lane] = static_cast<std::uint8_t>(3 + lane);       // 3, 4
-    state.t[3][lane] = static_cast<std::uint8_t>(10 + 10 * lane);      // 10, 20
-    state.t[3][32 + lane] = static_cast<std::uint8_t>(30 + 10 * lane); // 30, 40
-  }
-  state.t[0][2] = 0x5a; // sentinel outside the 2x2 effective region
-
-  check_eq(sim.step().status, StepStatus::retired, "tselect retires");
-  check_eq(state.t[0][0], std::uint8_t{1}, "mask picks A");
-  check_eq(state.t[0][1], std::uint8_t{20}, "mask picks B");
-  check_eq(state.t[0][32], std::uint8_t{30}, "mask picks B");
-  check_eq(state.t[0][33], std::uint8_t{4}, "nonzero mask picks A");
-  check_eq(state.t[0][2], std::uint8_t{0x5a}, "tselect keeps invalid lanes");
-}
-
 TEST_CASE(er4_acc_select) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
@@ -123,14 +94,7 @@ TEST_CASE(er4_rejects_invalid) {
   Simulator sim(memory);
   auto &state = sim.state();
 
-  // The select mask dtype is fixed per domain (u8 on tile, u32 on 32-bit).
-  load_one(sim, memory, make_er4(NpuDomain::tile, 0, 0, 1, 2, 3));
-  for (auto index : {0, 1, 2, 3})
-    tile_cfg(state, index, DType::i8, 2, 2); // mask must be u8
-  state.t[0][0] = 0xee;
-  check_eq(sim.step().status, StepStatus::invalid_configuration, "tselect rejects a non-u8 mask");
-  check_eq(state.t[0][0], std::uint8_t{0xee}, "non-mutating");
-
+  // The select mask dtype is u32 on the 32-bit domains.
   load_one(sim, memory, make_er4(NpuDomain::acc, 0, 0, 1, 2, 3));
   for (auto index : {0, 1, 2, 3})
     acc_cfg(state, index, DType::i32, 1, 2); // mask must be u32
@@ -157,13 +121,4 @@ TEST_CASE(er4_rejects_invalid) {
   vec_cfg(state, 3, DType::f32, 3); // shape mismatch
   check_eq(sim.step().status, StepStatus::invalid_configuration,
            "vfmadd rejects an addend shape mismatch");
-
-  // A/B must match D in dtype and shape.
-  load_one(sim, memory, make_er4(NpuDomain::tile, 0, 0, 1, 2, 3));
-  tile_cfg(state, 0, DType::i8, 2, 2);
-  tile_cfg(state, 1, DType::u8, 2, 2);
-  tile_cfg(state, 2, DType::u8, 2, 2); // dtype mismatch with D (i8)
-  tile_cfg(state, 3, DType::i8, 2, 2);
-  check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "tselect rejects a source dtype mismatch");
 }

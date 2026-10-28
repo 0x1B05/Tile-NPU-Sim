@@ -11,7 +11,7 @@ namespace tile_npu::test {
 //   [31:28] major4 = 0100  [27:26] dom2  [25] FS  [24:22] funct3
 //   [21:17] xBound  [16:12] fill5 code / xFill  [11:7] A5 (S)
 //   [6:2] D5  [1:0] q = 00
-// funct3: 000 tail, 001 tril, 010 triu (matrix-only); 011-111 reserved.
+// funct3: 000 tail, 001 tril, 010 triu (tril/triu Acc-only); 011-111 reserved.
 // FS = 0 takes [16:12] as a fill5 code, FS = 1 as the xFill Scalar register.
 constexpr std::uint32_t make_emask(tile_npu::NpuDomain domain, std::uint32_t funct3,
                                    std::uint32_t dest, std::uint32_t src, std::uint32_t bound,

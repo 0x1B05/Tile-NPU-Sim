@@ -80,23 +80,23 @@ inline constexpr std::array<std::optional<CmpInfo>, 8> CMP_BY_FUNCT3 = [] {
   return table;
 }();
 
-// fmadd excludes Tile.
+// select and fmadd are Acc/Vec32 only; Tile is reserved.
 inline constexpr bool er4_legal(Er4Op op, NpuDomain domain) {
   if (domain == NpuDomain::reserved) return false;
   switch (op) {
-  case Er4Op::select: return true;
+  case Er4Op::select:
   case Er4Op::fmadd: return domain == NpuDomain::acc || domain == NpuDomain::vec32;
   default: return false;
   }
 }
 
-// tril/triu are matrix-only.
+// tril/triu are Acc-only; tail exists on all data domains.
 inline constexpr bool mask_legal(MaskOp op, NpuDomain domain) {
   if (domain == NpuDomain::reserved) return false;
   switch (op) {
   case MaskOp::tail: return true;
   case MaskOp::tril:
-  case MaskOp::triu: return domain == NpuDomain::tile || domain == NpuDomain::acc;
+  case MaskOp::triu: return domain == NpuDomain::acc;
   default: return false;
   }
 }

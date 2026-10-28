@@ -49,18 +49,10 @@ template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
 
 TEST_CASE(er4_decode) {
   constexpr std::array cases{
-      // Anchor word computed by hand from the encoding figure: the asm
+      // Anchor word computed by hand from the encoding figure: the select asm
       // operand order is D, M, A, B; M5/C5 carries M.
-      Case{.name = "tselect t0, t1, t2, t3",
-           .word = 0x30023100u,
-           .op = Er4Op::select,
-           .domain = NpuDomain::tile,
-           .dest = 0,
-           .arg = 1,
-           .src1 = 2,
-           .src2 = 3},
       Case{.name = "aselect a4, a5, a6, a7",
-           .word = make_er4(NpuDomain::acc, 0, 4, 5, 6, 7),
+           .word = 0x340a7310u,
            .op = Er4Op::select,
            .domain = NpuDomain::acc,
            .dest = 4,
@@ -98,8 +90,9 @@ TEST_CASE(er4_decode) {
 
 TEST_CASE(er4_decode_rejects_reserved) {
   constexpr std::array cases{
-      // The reserved domain has no E_R4; tile has no fmadd; funct3 >= 010 is reserved.
+      // Tile has no E_R4 now; funct3 >= 010 is reserved.
       DecodeCase{"reserved select", make_er4(NpuDomain::reserved, 0, 0, 0, 0, 0)},
+      DecodeCase{"tselect", make_er4(NpuDomain::tile, 0, 0, 0, 0, 0)},
       DecodeCase{"tfmadd", make_er4(NpuDomain::tile, 1, 0, 0, 0, 0)},
       DecodeCase{"funct3 010", make_er4(NpuDomain::acc, 2, 0, 0, 0, 0)},
       DecodeCase{"funct3 111", make_er4(NpuDomain::vec32, 7, 0, 0, 0, 0)},

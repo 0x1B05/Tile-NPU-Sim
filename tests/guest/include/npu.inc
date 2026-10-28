@@ -427,14 +427,9 @@
 #   [31:28] major4 = 3  [27:26] dom2  [25] 0  [24:22] funct3
 #   [21:17] M5/C5 (mask M / addend C)  [16:12] B5  [11:7] A5  [6:2] D5
 #   [1:0] q = 00
-# funct3: 0 select, 1 fmadd (Acc/Vec32 only).
+# funct3: 0 select, 1 fmadd; both Acc/Vec32 only.
 .macro E_R4 dom2, funct3, m5_c5, d5, a5, b5
     .word ((3 << 28) | (\dom2 << 26) | (\funct3 << 22) | (\m5_c5 << 17) | (\b5 << 12) | (\a5 << 7) | (\d5 << 2))
-.endm
-
-# select: asm operand order D, M, A, B; M5/C5 carries M.
-.macro TSELECT d5, m5, a5, b5
-    E_R4 0, 0, \m5, \d5, \a5, \b5
 .endm
 
 # select on the Vec32 domain: asm operand order D, M, A, B.
@@ -451,13 +446,13 @@
 #   [31:28] major4 = 4  [27:26] dom2  [25] FS  [24:22] funct3
 #   [21:17] xBound  [16:12] fill5 / xFill  [11:7] S5
 #   [6:2] D5  [1:0] q = 00
-# funct3: 0 tail, 1 tril, 2 triu (matrix-only). FS = 0: [16:12] is a fill5
+# funct3: 0 tail, 1 tril, 2 triu (tril/triu Acc-only). FS = 0: [16:12] is a fill5
 # code; FS = 1: [16:12] names the xFill Scalar register.
 .macro E_MASK dom2, fs, funct3, xb5, fill5, a5, d5
     .word ((4 << 28) | (\dom2 << 26) | (\fs << 25) | (\funct3 << 22) | (\xb5 << 17) | (\fill5 << 12) | (\a5 << 7) | (\d5 << 2))
 .endm
 
-# tril: asm operand order D, S, xDelta, fill5.
+# amask.tril: asm operand order D, S, xDelta, fill5.
 .macro AMASK_TRIL d5, s5, xd, fill5
     E_MASK 1, 0, 1, \xd, \fill5, \s5, \d5
 .endm
