@@ -16,7 +16,6 @@ namespace tile_npu {
 namespace {
 
 // fill5 codes 0-8, converted to f32 bit patterns.
-// clang-format off
 constexpr std::array<std::uint32_t, FILL5_MAX + 1> F32_BY_FILL5 = {
     0x00000000u, // +0
     0x3f800000u, // +1
@@ -28,7 +27,6 @@ constexpr std::array<std::uint32_t, FILL5_MAX + 1> F32_BY_FILL5 = {
     0x7f800000u, // +inf
     0xff800000u, // -inf
 };
-// clang-format on
 
 // fill5 codes 0-4 as integer constants.
 constexpr std::array<std::int8_t, FILL5_INT_MAX + 1> INT_BY_FILL5 = {0, 1, -1, 2, -2};
@@ -53,13 +51,18 @@ std::optional<Element> fill_value(const MaskInstr &instr, const State &state, DT
 // Whether a matrix mask keeps element (row, col): tail reads the packed
 // nRows/nCols bound, tril/triu the signed xDelta.
 bool keeps(MaskOp op, std::uint64_t bound, std::size_t row, std::size_t col) {
-  const auto signed_diff = static_cast<std::int64_t>(col) - static_cast<std::int64_t>(row);
-  const auto delta = static_cast<std::int64_t>(bound);
   switch (op) {
-  case MaskOp::tail:
-    return row < static_cast<std::uint32_t>(bound) && col < static_cast<std::uint32_t>(bound >> 32);
-  case MaskOp::tril: return signed_diff <= delta;
-  case MaskOp::triu: return signed_diff >= delta;
+  case MaskOp::tail: {
+    const auto n_rows = static_cast<std::uint32_t>(bound);
+    const auto n_cols = static_cast<std::uint32_t>(bound >> 32);
+    return row < n_rows && col < n_cols;
+  }
+  case MaskOp::tril:
+  case MaskOp::triu: {
+    const auto signed_diff = static_cast<std::int64_t>(col) - static_cast<std::int64_t>(row);
+    const auto delta = static_cast<std::int64_t>(bound);
+    return op == MaskOp::tril ? signed_diff <= delta : signed_diff >= delta;
+  }
   default: unreachable("invalid E_MASK op");
   }
 }
