@@ -1,6 +1,6 @@
 #include "execute.h"
 
-#include "rv64_util.h"
+#include "utils/bits.h"
 #include "utils/endian.h"
 
 #include <array>
@@ -169,15 +169,15 @@ ExecuteResult execute_rv64i(const DecodedScalarInstr &instr, ExecContext &ctx) {
   case ScalarOp::sra:     return write(static_cast<std::uint64_t>(signed_lhs >> shamt));
   case ScalarOp::bit_or:  return write(lhs | rhs);
   case ScalarOp::bit_and: return write(lhs & rhs);
-  case ScalarOp::addiw:   return write(signed_word(lhs_word + imm_word));
-  case ScalarOp::slliw:   return write(signed_word(lhs_word << instr.imm));
-  case ScalarOp::srliw:   return write(signed_word(lhs_word >> instr.imm));
-  case ScalarOp::sraiw:   return write(signed_word(signed_lhs_word >> instr.imm));
-  case ScalarOp::addw:    return write(signed_word(lhs_word + rhs_word));
-  case ScalarOp::subw:    return write(signed_word(lhs_word - rhs_word));
-  case ScalarOp::sllw:    return write(signed_word(lhs_word << word_shamt));
-  case ScalarOp::srlw:    return write(signed_word(lhs_word >> word_shamt));
-  case ScalarOp::sraw:    return write(signed_word(signed_lhs_word >> word_shamt));
+  case ScalarOp::addiw:   return write(sign_extend_word(lhs_word + imm_word));
+  case ScalarOp::slliw:   return write(sign_extend_word(lhs_word << instr.imm));
+  case ScalarOp::srliw:   return write(sign_extend_word(lhs_word >> instr.imm));
+  case ScalarOp::sraiw:   return write(sign_extend_word(signed_lhs_word >> instr.imm));
+  case ScalarOp::addw:    return write(sign_extend_word(lhs_word + rhs_word));
+  case ScalarOp::subw:    return write(sign_extend_word(lhs_word - rhs_word));
+  case ScalarOp::sllw:    return write(sign_extend_word(lhs_word << word_shamt));
+  case ScalarOp::srlw:    return write(sign_extend_word(lhs_word >> word_shamt));
+  case ScalarOp::sraw:    return write(sign_extend_word(signed_lhs_word >> word_shamt));
 
   case ScalarOp::fence:   return {.status = StepStatus::retired};
   case ScalarOp::ecall:   return {.status = StepStatus::environment_call};

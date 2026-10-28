@@ -15,9 +15,7 @@ template <typename... Ts> struct Overloaded : Ts... {
 template <typename... Ts> Overloaded(Ts...) -> Overloaded<Ts...>;
 
 // Marks a path that ISA- or implementation-level invariants make impossible
-// (e.g. an operation already validated as legal for the dtype). The check
-// stays active in release builds: a violated invariant aborts with its
-// location. Guest-visible error conditions report StepStatus.
+// (e.g. an operation already validated as legal for the dtype).
 [[noreturn]] inline void
 unreachable(std::string_view message,
             const std::source_location &loc = std::source_location::current()) {

@@ -1,6 +1,6 @@
 #include "execute.h"
 
-#include "rv64_util.h"
+#include "utils/bits.h"
 
 #include <bit>
 #include <cstdint>
@@ -75,17 +75,17 @@ ExecuteResult execute_rv64m(const DecodedScalarInstr &instr, ScalarState &scalar
                                   (signed_rhs < 0 ? lhs : 0); break;
   case ScalarOp::mulhsu: result = multiply_high_unsigned(lhs, rhs) -
                                   (signed_lhs < 0 ? rhs : 0); break;
-  case ScalarOp::mulw:   result = signed_word(lhs_word * rhs_word); break;
+  case ScalarOp::mulw:   result = sign_extend_word(lhs_word * rhs_word); break;
 
   case ScalarOp::div:    result = divide_signed(lhs, rhs); break;
   case ScalarOp::divu:   result = rhs == 0 ? UINT64_MAX : lhs / rhs; break;
-  case ScalarOp::divw:   result = signed_word(divide_signed_word(lhs_word, rhs_word)); break;
-  case ScalarOp::divuw:  result = signed_word(rhs_word == 0 ? UINT32_MAX : lhs_word / rhs_word); break;
+  case ScalarOp::divw:   result = sign_extend_word(divide_signed_word(lhs_word, rhs_word)); break;
+  case ScalarOp::divuw:  result = sign_extend_word(rhs_word == 0 ? UINT32_MAX : lhs_word / rhs_word); break;
 
   case ScalarOp::rem:    result = remainder_signed(lhs, rhs); break;
   case ScalarOp::remu:   result = rhs == 0 ? lhs : lhs % rhs; break;
-  case ScalarOp::remw:   result = signed_word(remainder_signed_word(lhs_word, rhs_word)); break;
-  case ScalarOp::remuw:  result = signed_word(rhs_word == 0 ? lhs_word : lhs_word % rhs_word); break;
+  case ScalarOp::remw:   result = sign_extend_word(remainder_signed_word(lhs_word, rhs_word)); break;
+  case ScalarOp::remuw:  result = sign_extend_word(rhs_word == 0 ? lhs_word : lhs_word % rhs_word); break;
 
   default: return {.status = StepStatus::execution_not_implemented};
   }

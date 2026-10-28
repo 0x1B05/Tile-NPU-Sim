@@ -12,7 +12,6 @@
 
 namespace tile_npu::monitor {
 
-// Monitor conventions.
 inline constexpr std::uint64_t MEMORY_BASE = 0x80000000;
 inline constexpr std::size_t DEFAULT_MEMORY_MIB = 1024;
 
@@ -47,8 +46,7 @@ struct Options {
 // does not retire and returns it, or until the step budget is spent.
 std::optional<StepResult> npu_exec(Simulator &sim, std::uint64_t step_limit);
 
-// Human-readable description of a stopped step, including the decoded
-// instruction word and fault address when present.
+// Human-readable description of a stopped step.
 std::string halt_message(const StepResult &result);
 
 // An image argument is "path" (loaded at the entry address) or
