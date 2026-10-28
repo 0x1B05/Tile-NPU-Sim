@@ -20,7 +20,7 @@ TEST_CASE(ebcast_acc_byrow) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // amulv.byrow a0, a1, v2 (i32).
-  load_one(sim, memory, make_ebcast(true, false, 2, 0, 1, 2));
+  load_one(sim, memory, make_ebcast(false, 2, 0, 1, 2));
   auto &state = sim.state();
   for (auto index : {0, 1})
     acc_cfg(state, index, DType::i32, 2, 2);
@@ -44,7 +44,7 @@ TEST_CASE(ebcast_acc_bycol_f32_mul) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // amulv.bycol a0, a1, v2 (f32).
-  load_one(sim, memory, make_ebcast(true, true, 2, 0, 1, 2));
+  load_one(sim, memory, make_ebcast(true, 2, 0, 1, 2));
   auto &state = sim.state();
   for (auto index : {0, 1})
     acc_cfg(state, index, DType::f32, 1, 2);
@@ -64,7 +64,7 @@ TEST_CASE(ebcast_acc_shift_by_vector) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // ashlv.byrow a0, a1, v2; shift amounts take the low 5 bits.
-  load_one(sim, memory, make_ebcast(true, false, 11, 0, 1, 2));
+  load_one(sim, memory, make_ebcast(false, 11, 0, 1, 2));
   auto &state = sim.state();
   for (auto index : {0, 1})
     acc_cfg(state, index, DType::u32, 2, 1);
@@ -86,7 +86,7 @@ TEST_CASE(ebcast_rejects_invalid) {
   auto &state = sim.state();
 
   // The vector length must equal rows (byrow) / cols (bycol).
-  load_one(sim, memory, make_ebcast(true, false, 0, 0, 1, 2));
+  load_one(sim, memory, make_ebcast(false, 0, 0, 1, 2));
   for (auto index : {0, 1})
     acc_cfg(state, index, DType::i32, 2, 2);
   state.vc[2].dtype = DType::i32;
@@ -95,7 +95,7 @@ TEST_CASE(ebcast_rejects_invalid) {
   check_eq(sim.step().status, StepStatus::invalid_configuration, "byrow rejects len != rows");
   check_eq(state.a[0][0], std::uint32_t{0xee}, "non-mutating");
 
-  load_one(sim, memory, make_ebcast(true, true, 0, 0, 1, 2));
+  load_one(sim, memory, make_ebcast(true, 0, 0, 1, 2));
   for (auto index : {0, 1})
     acc_cfg(state, index, DType::i32, 2, 2);
   state.vc[2].dtype = DType::i32;
@@ -103,7 +103,7 @@ TEST_CASE(ebcast_rejects_invalid) {
   check_eq(sim.step().status, StepStatus::invalid_configuration, "bycol rejects len != cols");
 
   // The vector dtype must match the matrix dtype.
-  load_one(sim, memory, make_ebcast(true, false, 0, 0, 1, 2));
+  load_one(sim, memory, make_ebcast(false, 0, 0, 1, 2));
   for (auto index : {0, 1})
     acc_cfg(state, index, DType::i32, 1, 2);
   state.vc[2].dtype = DType::f32; // matrix is i32
@@ -112,7 +112,7 @@ TEST_CASE(ebcast_rejects_invalid) {
            "ebcast rejects a vector dtype mismatch");
 
   // Matrix source and destination share dtype and shape.
-  load_one(sim, memory, make_ebcast(true, false, 0, 0, 1, 2));
+  load_one(sim, memory, make_ebcast(false, 0, 0, 1, 2));
   acc_cfg(state, 0, DType::i32, 1, 2);
   acc_cfg(state, 1, DType::i32, 1, 3); // shape mismatch
   state.vc[2].dtype = DType::i32;

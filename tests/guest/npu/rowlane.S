@@ -35,7 +35,7 @@ _start:
     # aextract.row v0, a0[x9]: a0 = {1, 2, 3, 4} (2x2), x9 = 1 -> v0 = {3, 4}.
     ALOAD     0
     li        x9, 1
-    ROW_MOVE  1, 1, 1, 9, 0, 0   # aextract.row v0, a0[x9]
+    ROW_MOVE  1, 1, 9, 0, 0   # aextract.row v0, a0[x9]
     VSTORE    0
     lla       x3, dstbuf32
     FENCE_MEM
@@ -69,7 +69,7 @@ _start:
     bne       x5, x7, fail
     li        x6, -1
     li        x9, 1
-    LANE_MOVE 1, 1, 1, 9, 6, 0   # vinsert v0[x9], x6
+    LANE_MOVE 1, 1, 9, 6, 0   # vinsert v0[x9], x6
     VSTORE    0
     lla       x3, dstbuf32
     FENCE_MEM

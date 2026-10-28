@@ -82,15 +82,15 @@ DecodeResult decode_ecmp(std::uint32_t word) {
 
 // E_BCAST (R3): major4 = 0101, q = 00.
 // 31    28  27  26   25   24    21 20       17 16      12 11       7 6        2 1   0
-// [major4] [0] [EW] [DIR] [funct4] [reserved4] [   S5   ] [   A5   ] [   D5   ] [ q ]
-// EW: 0 reserved, 1 = Acc/Vec32; A5/D5 are matrices, S5 is a vector.
+// [major4] [0] [0] [DIR] [funct4] [reserved4] [   S5   ] [   A5   ] [   D5   ] [ q ]
+// [27:26] reserved, must be 0; A5/D5 are Acc, S5 is Vec32.
 // DIR: 0 = byrow, 1 = bycol. funct4 = {G, op3}, shared with E_BIN.
 DecodeResult decode_ebcast(std::uint32_t word) {
   const auto f = encoding::NpuR3::from(word);
   constexpr auto MATRIX_DOMAIN = NpuDomain::acc;
   constexpr auto VECTOR_DOMAIN = NpuDomain::vec32;
   const auto op = static_cast<EbinOp>(f.funct4);
-  if ((f.sel3 & 0b010) == 0 || !ebin_legal(op, MATRIX_DOMAIN)) {
+  if (!ebin_legal(op, MATRIX_DOMAIN)) {
     return DecodeError::illegal;
   }
   return DecodedNpuInstr{BcastInstr{

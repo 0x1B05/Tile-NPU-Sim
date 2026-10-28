@@ -91,8 +91,8 @@ DecodeResult decode_move_copy(std::uint32_t word) {
 
 // ROW_MOVE (R4): major4 = 0011, q = 01.
 // 31    28  27  26   25  24    22 21       17 16      12 11       7 6        2 1   0
-// [major4] [0] [EW] [IS] [funct3] [reserved5] [ index5 ] [   S5   ] [   D5   ] [ q ]
-// EW: must be 1 (32-bit Acc/Vec32); 0 is reserved.
+// [major4] [0] [0] [IS] [funct3] [reserved5] [ index5 ] [   S5   ] [   D5   ] [ q ]
+// [27:26] reserved, must be 0.
 // IS: 0 = immediate row, 1 = Scalar register in index5.
 // funct3: 000 insert.row (vector S5 -> matrix D5),
 //         001 extract.row (matrix S5 -> vector D5); 010..111 reserved.
@@ -118,8 +118,8 @@ DecodeResult decode_row_extract(std::uint32_t word) {
 
 // LANE_MOVE (R4): major4 = 0100, q = 01.
 // 31    28  27  26   25  24    22 21       17 16      12 11       7 6        2 1   0
-// [major4] [0] [EW] [IS] [funct3] [reserved5] [ index5 ] [   S5   ] [   D5   ] [ q ]
-// EW: must be 1 (Vec32); 0 is reserved.
+// [major4] [0] [0] [IS] [funct3] [reserved5] [ index5 ] [   S5   ] [   D5   ] [ q ]
+// [27:26] reserved, must be 0.
 // IS: 0 = immediate lane, 1 = Scalar register in index5.
 // funct3: 000 extract (vector S5 -> Scalar D5), 001 insert (Scalar S5 -> vector D5),
 //         010 broadcast (vector S5 -> vector D5)

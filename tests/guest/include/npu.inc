@@ -289,42 +289,40 @@
 .endm
 
 # ROW_MOVE (R4), mirroring NpuR4 in src/decode/encoding.h:
-#   [31:28] major4 = 3  [27] 0  [26] EW  [25] IS  [24:22] funct3
+#   [31:28] major4 = 3  [27:26] reserved(0)  [25] IS  [24:22] funct3
 #   [21:17] reserved(0)  [16:12] index5  [11:7] S5  [6:2] D5  [1:0] q = 01
-# EW must be 1 (Acc <-> Vec32); EW = 0 is reserved.
 # funct3: 0 = insert.row (D5 = matrix, S5 = vector),
 #         1 = extract.row (D5 = vector, S5 = matrix).
 # IS = 0: index5 is an immediate row number; IS = 1: index5 names xS.
-.macro ROW_MOVE ew, is, funct3, index5, s5, d5
-    .word ((3 << 28) | (\ew << 26) | (\is << 25) | (\funct3 << 22) | (\index5 << 12) | (\s5 << 7) | (\d5 << 2) | 1)
+.macro ROW_MOVE is, funct3, index5, s5, d5
+    .word ((3 << 28) | (\is << 25) | (\funct3 << 22) | (\index5 << 12) | (\s5 << 7) | (\d5 << 2) | 1)
 .endm
 
 .macro AINSROW d5, idx, s5
-    ROW_MOVE 1, 0, 0, \idx, \s5, \d5
+    ROW_MOVE 0, 0, \idx, \s5, \d5
 .endm
 
 .macro AEXROW d5, s5, idx
-    ROW_MOVE 1, 0, 1, \idx, \s5, \d5
+    ROW_MOVE 0, 1, \idx, \s5, \d5
 .endm
 
 # LANE_MOVE (R4): major4 = 4, same layout as ROW_MOVE.
-# EW must be 1 (Vec32); EW = 0 is reserved.
 # funct3: 0 = extract (D5 = xD, S5 = vector), 1 = insert (D5 = vector,
 #         S5 = xS), 2 = broadcast (D5/S5 vectors).
-.macro LANE_MOVE ew, is, funct3, index5, s5, d5
-    .word ((4 << 28) | (\ew << 26) | (\is << 25) | (\funct3 << 22) | (\index5 << 12) | (\s5 << 7) | (\d5 << 2) | 1)
+.macro LANE_MOVE is, funct3, index5, s5, d5
+    .word ((4 << 28) | (\is << 25) | (\funct3 << 22) | (\index5 << 12) | (\s5 << 7) | (\d5 << 2) | 1)
 .endm
 
 .macro VEXTRACT xd, s5, idx
-    LANE_MOVE 1, 0, 0, \idx, \s5, \xd
+    LANE_MOVE 0, 0, \idx, \s5, \xd
 .endm
 
 .macro VINSERT d5, idx, xs
-    LANE_MOVE 1, 0, 1, \idx, \xs, \d5
+    LANE_MOVE 0, 1, \idx, \xs, \d5
 .endm
 
 .macro VBROADCAST d5, s5, idx
-    LANE_MOVE 1, 0, 2, \idx, \s5, \d5
+    LANE_MOVE 0, 2, \idx, \s5, \d5
 .endm
 
 # E_UNARY (R2), mirroring NpuR2 in src/decode/encoding.h:
@@ -397,23 +395,23 @@
 .endm
 
 # E_BCAST (R3), mirroring NpuR3 in src/decode/encoding.h:
-#   [31:28] major4 = 5  [27] 0  [26] EW  [25] DIR  [24:21] funct4
+#   [31:28] major4 = 5  [27:26] reserved(0)  [25] DIR  [24:21] funct4
 #   [20:17] reserved(0)  [16:12] S5  [11:7] A5  [6:2] D5  [1:0] q = 00
-# EW: 0 = reserved, 1 = Acc + Vec32. DIR: 0 = byrow, 1 = bycol.
-.macro E_BCAST ew, dir, funct4, d5, a5, s5
-    .word ((5 << 28) | (\ew << 26) | (\dir << 25) | (\funct4 << 21) | (\s5 << 12) | (\a5 << 7) | (\d5 << 2))
+# DIR: 0 = byrow, 1 = bycol.
+.macro E_BCAST dir, funct4, d5, a5, s5
+    .word ((5 << 28) | (\dir << 25) | (\funct4 << 21) | (\s5 << 12) | (\a5 << 7) | (\d5 << 2))
 .endm
 
 .macro AADDV_BYROW d5, a5, s5
-    E_BCAST 1, 0, 0, \d5, \a5, \s5
+    E_BCAST 0, 0, \d5, \a5, \s5
 .endm
 
 .macro AMULV_BYCOL d5, a5, s5
-    E_BCAST 1, 1, 2, \d5, \a5, \s5
+    E_BCAST 1, 2, \d5, \a5, \s5
 .endm
 
 .macro AMULV_BYROW d5, a5, s5
-    E_BCAST 1, 0, 2, \d5, \a5, \s5
+    E_BCAST 0, 2, \d5, \a5, \s5
 .endm
 
 # E_R4 (R4), mirroring NpuR4 in src/decode/encoding.h:

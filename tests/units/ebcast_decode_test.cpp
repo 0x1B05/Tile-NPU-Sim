@@ -50,7 +50,7 @@ template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
 TEST_CASE(ebcast_decode) {
   constexpr std::array cases{
       Case{.name = "aaddv.byrow a0, a1, v2",
-           .word = make_ebcast(true, false, 0, 0, 1, 2),
+           .word = make_ebcast(false, 0, 0, 1, 2),
            .op = EbinOp::add,
            .matrix_domain = NpuDomain::acc,
            .vector_domain = NpuDomain::vec32,
@@ -59,7 +59,7 @@ TEST_CASE(ebcast_decode) {
            .vec = 2,
            .by_col = false},
       Case{.name = "amulv.byrow a0, a1, v2",
-           .word = make_ebcast(true, false, 2, 0, 1, 2),
+           .word = make_ebcast(false, 2, 0, 1, 2),
            .op = EbinOp::mul,
            .matrix_domain = NpuDomain::acc,
            .vector_domain = NpuDomain::vec32,
@@ -68,7 +68,7 @@ TEST_CASE(ebcast_decode) {
            .vec = 2,
            .by_col = false},
       Case{.name = "amulv.bycol a31, a30, v31",
-           .word = make_ebcast(true, true, 2, 31, 30, 31),
+           .word = make_ebcast(true, 2, 31, 30, 31),
            .op = EbinOp::mul,
            .matrix_domain = NpuDomain::acc,
            .vector_domain = NpuDomain::vec32,
@@ -77,7 +77,7 @@ TEST_CASE(ebcast_decode) {
            .vec = 31,
            .by_col = true},
       Case{.name = "ashlv.byrow a3, a4, v5",
-           .word = make_ebcast(true, false, 11, 3, 4, 5),
+           .word = make_ebcast(false, 11, 3, 4, 5),
            .op = EbinOp::shl,
            .matrix_domain = NpuDomain::acc,
            .vector_domain = NpuDomain::vec32,
@@ -91,15 +91,15 @@ TEST_CASE(ebcast_decode) {
 
 TEST_CASE(ebcast_decode_rejects_reserved) {
   constexpr std::array cases{
-      // EW = 0, sel3 bit 2, and reserved4 must be 0.
-      DecodeCase{"EW=0 reserved", make_ebcast(false, false, 0, 0, 1, 2)},
-      DecodeCase{"EW=0 bycol reserved", make_ebcast(false, true, 0, 0, 1, 2)},
-      DecodeCase{"sel3 bit2", make_ebcast(true, false, 0, 0, 0, 0) | (1u << 27)},
-      DecodeCase{"reserved4", make_ebcast(true, false, 0, 0, 0, 0) | (1u << 17)},
+      // [27:26] are reserved and reserved4 must be 0.
+      DecodeCase{"bit26 reserved", make_ebcast(false, 0, 0, 1, 2) | (1u << 26)},
+      DecodeCase{"bit26 bycol reserved", make_ebcast(true, 0, 0, 1, 2) | (1u << 26)},
+      DecodeCase{"bit27 reserved", make_ebcast(false, 0, 0, 0, 0) | (1u << 27)},
+      DecodeCase{"reserved4", make_ebcast(false, 0, 0, 0, 0) | (1u << 17)},
       // Unassigned funct4 codes are reserved (shared E_BIN table).
-      DecodeCase{"funct4 0110", make_ebcast(true, false, 6, 0, 0, 0)},
-      DecodeCase{"funct4 1111", make_ebcast(true, false, 15, 0, 0, 0)},
-      DecodeCase{"reserved funct4 0011", make_ebcast(true, true, 3, 0, 0, 0)},
+      DecodeCase{"funct4 0110", make_ebcast(false, 6, 0, 0, 0)},
+      DecodeCase{"funct4 1111", make_ebcast(false, 15, 0, 0, 0)},
+      DecodeCase{"reserved funct4 0011", make_ebcast(true, 3, 0, 0, 0)},
   };
   expect_illegal(cases);
 }

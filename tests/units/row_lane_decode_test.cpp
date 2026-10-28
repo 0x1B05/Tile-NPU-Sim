@@ -88,7 +88,7 @@ void check_lane_cases(const std::array<LaneCase, N> &cases) {
 TEST_CASE(row_move_decode) {
   constexpr std::array cases{
       RowCase{.name = "ainsert.row a31[0], v0",
-              .word = make_row_move(true, false, 0, 0, 0, 31),
+              .word = make_row_move(false, 0, 0, 0, 31),
               .op = RowOp::insert,
               .matrix_domain = NpuDomain::acc,
               .matrix = 31,
@@ -96,7 +96,7 @@ TEST_CASE(row_move_decode) {
               .vector = 0,
               .index = 0},
       RowCase{.name = "aextract.row v31, a2[31]",
-              .word = make_row_move(true, false, 1, 31, 2, 31),
+              .word = make_row_move(false, 1, 31, 2, 31),
               .op = RowOp::extract,
               .matrix_domain = NpuDomain::acc,
               .matrix = 2,
@@ -110,7 +110,7 @@ TEST_CASE(row_move_decode) {
 TEST_CASE(lane_move_decode) {
   constexpr std::array extract_cases{
       LaneCase{.name = "vextract x3, v4[2]",
-               .word = make_lane_move(true, false, 0, 2, 4, 3),
+               .word = make_lane_move(false, 0, 2, 4, 3),
                .vector_domain = NpuDomain::vec32,
                .dst = 3,
                .src = 4,
@@ -118,7 +118,7 @@ TEST_CASE(lane_move_decode) {
   };
   constexpr std::array insert_cases{
       LaneCase{.name = "vinsert v5[6], x9",
-               .word = make_lane_move(true, false, 1, 6, 9, 5),
+               .word = make_lane_move(false, 1, 6, 9, 5),
                .vector_domain = NpuDomain::vec32,
                .dst = 5,
                .src = 9,
@@ -126,7 +126,7 @@ TEST_CASE(lane_move_decode) {
   };
   constexpr std::array broadcast_cases{
       LaneCase{.name = "vbroadcast v3, v4[x8]",
-               .word = make_lane_move(true, true, 2, 8, 4, 3),
+               .word = make_lane_move(true, 2, 8, 4, 3),
                .vector_domain = NpuDomain::vec32,
                .dst = 3,
                .src = 4,
@@ -140,18 +140,14 @@ TEST_CASE(lane_move_decode) {
 
 TEST_CASE(row_lane_decode_rejects_reserved) {
   constexpr std::array cases{
-      // ROW_MOVE requires EW = 1; EW = 0 encodings are reserved.
-      DecodeCase{"row EW 0 insert", make_row_move(false, false, 0, 0, 0, 0)},
-      DecodeCase{"row EW 0 extract", make_row_move(false, false, 1, 0, 0, 0)},
-      // sel3 bit 27 and reserved5 must be 0.
-      DecodeCase{"row sel3 bit27", make_row_move(true, false, 0, 0, 0, 0) | (1u << 27)},
-      DecodeCase{"lane reserved5", make_lane_move(true, false, 0, 0, 0, 0) | (1u << 17)},
+      // [27:26] are reserved and must be 0; reserved5 must be 0.
+      DecodeCase{"row bit26 reserved", make_row_move(false, 0, 0, 0, 0) | (1u << 26)},
+      DecodeCase{"row bit27 reserved", make_row_move(false, 0, 0, 0, 0) | (1u << 27)},
+      DecodeCase{"lane bit26 reserved", make_lane_move(false, 0, 0, 0, 0) | (1u << 26)},
+      DecodeCase{"lane reserved5", make_lane_move(false, 0, 0, 0, 0) | (1u << 17)},
       // ROW_MOVE has only funct3 000/001; LANE_MOVE stops at 010.
-      DecodeCase{"row funct3 010", make_row_move(true, false, 2, 0, 0, 0)},
-      DecodeCase{"lane funct3 011", make_lane_move(true, false, 3, 0, 0, 0)},
-      // LANE_MOVE also requires EW = 1.
-      DecodeCase{"lane EW 0 extract", make_lane_move(false, false, 0, 0, 0, 0)},
-      DecodeCase{"lane EW 0 insert", make_lane_move(false, true, 1, 0, 0, 0)},
+      DecodeCase{"row funct3 010", make_row_move(false, 2, 0, 0, 0)},
+      DecodeCase{"lane funct3 011", make_lane_move(false, 3, 0, 0, 0)},
   };
   expect_illegal(cases);
 }
