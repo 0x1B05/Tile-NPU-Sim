@@ -1,13 +1,12 @@
 -- Guest image artifacts: in-repo C/.S sources under tests/guest/ cross-compiled
--- to flat binaries in <buildir>/guest/. C programs link the shared crt0;
+-- to flat binaries in <builddir>/guest/. C programs link the shared crt0;
 -- bare .S images provide their own _start. Images are build products of
 -- in-repo sources, never committed. tests/run.py consumes the outputs.
 
 local guest_srcdir = path.join(os.projectdir(), "tests", "guest")
--- Anchor at the project root: path.absolute alone would resolve against the
--- included script's own directory.
-local buildir = get_config("buildir") or "build"
-local guest_bindir = path.join(path.is_absolute(buildir) and buildir or path.join(os.projectdir(), buildir), "guest")
+-- Anchor a relative --builddir at the project root; keep an absolute one as-is.
+local builddir = get_config("builddir") or "build"
+local guest_bindir = path.join(path.absolute(builddir, os.projectdir()), "guest")
 
 target("guest_images", function()
 	set_kind("phony")
@@ -32,10 +31,16 @@ target("guest_images", function()
 		-- anchors on the outputs: a missing one (mtime 0) forces a rebuild.
 		local function build_guest_image(src, extra, deps)
 			local elf, bin = guestimg.output_paths(bindir, path.basename(src))
+			-- A fresh build directory may not have the target dependency directory yet.
+			local dependfile = target:dependfile(path.basename(src))
+			local depend_dir = path.directory(path.normalize(dependfile))
+			if not os.isdir(depend_dir) then
+				os.mkdir(depend_dir)
+			end
 			depend.on_changed(function()
 				guestimg.build_guest_image(gcc, objcopy, linkscript, src, elf, bin, extra)
 			end, {
-				dependfile = target:dependfile(path.basename(src)),
+				dependfile = dependfile,
 				files = deps,
 				changed = target:is_rebuilt(),
 				lastmtime = math.min(os.mtime(elf), os.mtime(bin)),

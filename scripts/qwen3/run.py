@@ -10,6 +10,7 @@ from pathlib import Path
 from prompt import encode_prompt, write_prompt
 from tokenizer import Tokenizer
 
+ROOT = Path(__file__).resolve().parents[2]
 EOS_IDS = {151643, 151645}
 
 
@@ -35,23 +36,23 @@ def build_parser():
     parser.add_argument(
         "--model",
         type=Path,
-        default=Path("build/apps/qwen3/model.q3b"),
+        default=ROOT / "build/apps/qwen3/model.q3b",
         metavar="MODEL_Q3B",
-        help="Q3B model blob (default: build/apps/qwen3/model.q3b)",
+        help="Q3B model blob (default: build/apps/qwen3/model.q3b under the project root)",
     )
     parser.add_argument(
         "--tokenizer",
         type=Path,
-        default=Path("external/qwen3/tokenizer.json"),
+        default=ROOT / "external/qwen3/tokenizer.json",
         metavar="TOKENIZER_JSON",
-        help="tokenizer.json (default: external/qwen3/tokenizer.json)",
+        help="tokenizer.json (default: external/qwen3/tokenizer.json under the project root)",
     )
     parser.add_argument(
         "--prompt-out",
         type=Path,
-        default=Path("build/apps/qwen3/prompt.bin"),
+        default=ROOT / "build/apps/qwen3/prompt.bin",
         metavar="PROMPT",
-        help="Q3P image path (default: build/apps/qwen3/prompt.bin)",
+        help="Q3P image path (default: build/apps/qwen3/prompt.bin under the project root)",
     )
     parser.add_argument(
         "--max-pos",

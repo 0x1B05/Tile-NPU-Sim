@@ -8,11 +8,9 @@
 -- or xmake test.
 
 local rvtests_srcdir = path.join(os.projectdir(), "external", "riscv-tests")
-local buildir = get_config("buildir") or "build"
-local rvtests_bindir = path.join(
-	path.join(path.is_absolute(buildir) and buildir or path.join(os.projectdir(), buildir), "guest"),
-	"riscv-tests"
-)
+-- Anchor a relative --builddir at the project root; keep an absolute one as-is.
+local builddir = get_config("builddir") or "build"
+local rvtests_bindir = path.join(path.absolute(builddir, os.projectdir()), "guest", "riscv-tests")
 
 local rvtests = {}
 if os.isdir(rvtests_srcdir) then
@@ -55,6 +53,12 @@ target("riscv_tests", function()
 		for _, name in ipairs(names) do
 			local src = path.join(srcdir, "isa", name .. ".S")
 			local elf, bin = guestimg.output_paths(bindir, name:gsub("/", "-"))
+			-- A fresh build directory may not have the target dependency directory yet.
+			local dependfile = target:dependfile(name:gsub("/", "-"))
+			local depend_dir = path.directory(path.normalize(dependfile))
+			if not os.isdir(depend_dir) then
+				os.mkdir(depend_dir)
+			end
 			-- lastmtime anchors on the outputs: a missing one rebuilds.
 			depend.on_changed(function()
 				guestimg.build_guest_image(
@@ -67,7 +71,7 @@ target("riscv_tests", function()
 					{ "-I", target:values("envdir"), "-I", macrosdir }
 				)
 			end, {
-				dependfile = target:dependfile(name:gsub("/", "-")),
+				dependfile = dependfile,
 				files = {
 					src,
 					linkscript,

@@ -11,6 +11,8 @@ from pathlib import Path
 
 from prompt import encode_prompt, write_prompt
 
+ROOT = Path(__file__).resolve().parents[2]
+
 
 def build_parser():
     parser = argparse.ArgumentParser(
@@ -20,9 +22,9 @@ def build_parser():
     parser.add_argument(
         "--tokenizer",
         type=Path,
-        default=Path("external/qwen3/tokenizer.json"),
+        default=ROOT / "external/qwen3/tokenizer.json",
         metavar="TOKENIZER_JSON",
-        help="tokenizer.json (default: external/qwen3/tokenizer.json)",
+        help="tokenizer.json (default: external/qwen3/tokenizer.json under the project root)",
     )
     parser.add_argument(
         "--out",

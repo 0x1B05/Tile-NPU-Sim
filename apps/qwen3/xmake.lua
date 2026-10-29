@@ -1,12 +1,12 @@
 -- The Qwen3 inference app: apps/qwen3 cross-compiled to a flat binary in
--- <buildir>/apps/qwen3/. Built explicitly (xmake build qwen3_app); running it
+-- <builddir>/apps/qwen3/. Built explicitly (xmake build qwen3_app); running it
 -- needs a converted model blob, so it is not part of xmake test.
 
 local app_srcdir = os.scriptdir()
-local project_root = path.directory(path.directory(app_srcdir))
+local project_root = os.projectdir()
 local app_includedir = path.join(app_srcdir, "include")
-local buildir = get_config("buildir") or "build"
-local base = path.absolute(buildir, os.projectdir())
+local builddir = get_config("builddir") or "build"
+local base = path.absolute(builddir, project_root)
 local app_bindir = path.join(base, "apps", "qwen3")
 
 local function define_qwen3_app(name, base_name, snapshot)
@@ -23,6 +23,12 @@ local function define_qwen3_app(name, base_name, snapshot)
 			table.join2(sources, os.files(path.join(app_srcdir, "*.S")))
 			local elf = path.join(app_bindir, base_name .. ".elf")
 			local bin = path.join(app_bindir, base_name .. ".bin")
+			-- A fresh build directory may not have the target dependency directory yet.
+			local dependfile = target:dependfile(base_name)
+			local depend_dir = path.directory(path.normalize(dependfile))
+			if not os.isdir(depend_dir) then
+				os.mkdir(depend_dir)
+			end
 			-- Shared NPU bindings live with the guest tests (see xmake/guest.lua).
 			local guest_incdir = path.join(project_root, "tests", "guest", "include")
 			local deps = { linkscript, path.join(guest_incdir, "npu.inc") }
@@ -54,7 +60,7 @@ local function define_qwen3_app(name, base_name, snapshot)
 				os.vrunv(gcc, args)
 				os.vrunv(objcopy, { "-O", "binary", elf, bin })
 			end, {
-				dependfile = target:dependfile(base_name),
+				dependfile = dependfile,
 				files = deps,
 				changed = target:is_rebuilt(),
 				lastmtime = math.min(os.mtime(elf), os.mtime(bin)),

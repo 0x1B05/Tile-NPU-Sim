@@ -21,6 +21,7 @@ from pathlib import Path
 from prompt import encode_prompt, write_prompt
 from tokenizer import Tokenizer
 
+ROOT = Path(__file__).resolve().parents[2]
 BLOB_BASE = "0x81000000"
 PROMPT_BASE = "0x80F00000"
 
@@ -161,13 +162,20 @@ def build_parser():
     )
     parser.add_argument("text", nargs="?", help="prompt text (or use --prompt-image)")
     parser.add_argument("--prompt-image", type=Path, help="existing Q3P prompt image")
-    parser.add_argument("--prompt-out", type=Path, default=Path("build/apps/qwen3/bench_prompt.bin"))
-    parser.add_argument("--tokenizer", type=Path, default=Path("external/qwen3/tokenizer.json"))
+    parser.add_argument(
+        "--prompt-out", type=Path, default=ROOT / "build/apps/qwen3/bench_prompt.bin"
+    )
+    parser.add_argument(
+        "--tokenizer", type=Path, default=ROOT / "external/qwen3/tokenizer.json"
+    )
     parser.add_argument("--max-pos", type=int)
     parser.add_argument("--sim-run", type=Path, required=True, help="simulator executable")
     parser.add_argument("--app", type=Path, required=True, help="qwen3 guest binary")
     parser.add_argument(
-        "--model", type=Path, default=Path("build/apps/qwen3/model.q3b"), help="Q3B model blob"
+        "--model",
+        type=Path,
+        default=ROOT / "build/apps/qwen3/model.q3b",
+        help="Q3B model blob",
     )
     parser.add_argument("--memory-mib", type=int, default=1024)
     parser.add_argument("--runs", type=int, default=3)
