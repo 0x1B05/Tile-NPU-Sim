@@ -1,8 +1,10 @@
 #include "monitor.h"
 
-#include "format.h"
+#ifdef CONFIG_ITRACE
+#include "decode/disasm.h"
+#endif
 #include "parse.h"
-#ifdef TILE_NPU_ENABLE_SDB
+#ifdef CONFIG_SDB
 #include "sdb.h"
 #endif
 
@@ -12,6 +14,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -49,6 +52,15 @@ bool load_image(const Image &image, Ram &memory) {
   }
   return true;
 }
+
+#ifdef CONFIG_ITRACE
+std::string itrace_path(const Options &options) {
+  if (!options.itrace_log.empty()) return options.itrace_log;
+  if (options.images.empty()) return "itrace.log";
+  const std::filesystem::path image(options.images.front().path);
+  return (image.parent_path() / "itrace.log").string();
+}
+#endif
 
 bool write_dump(const Ram &memory, const DumpRange &range) {
   std::vector<std::byte> bytes(range.size);
@@ -113,10 +125,34 @@ int run_images(const Options &options) {
   tile_npu::SerialConsole serial(std::cout);
   tile_npu::SystemBus bus(
       ram, {{&serial, tile_npu::SerialConsole::BASE, tile_npu::SerialConsole::SIZE}});
+#ifdef CONFIG_ITRACE
+  std::ofstream itrace_log;
+  if (options.itrace) {
+    const auto path = itrace_path(options);
+    itrace_log.open(path, std::ios::out | std::ios::trunc);
+    if (!itrace_log) {
+      std::cerr << "cannot open itrace log: " << path << '\n';
+      return 1;
+    }
+  }
+#endif
   tile_npu::Simulator sim(bus);
+#ifdef CONFIG_ITRACE
+  if (options.itrace) {
+    sim.set_itrace_callback([&itrace_log](std::uint64_t pc, std::uint32_t instr,
+                                          const DecodeResult &decoded, StepStatus status) {
+      itrace_log << "[ITRACE] " << hex64(pc) << ": " << hex32(instr) << "  "
+                 << disassemble(pc, decoded);
+      if (status != StepStatus::retired) {
+        itrace_log << "  ; " << status_name(status);
+      }
+      itrace_log << '\n' << std::flush;
+    });
+  }
+#endif
   sim.reset(MEMORY_BASE);
 
-#ifdef TILE_NPU_ENABLE_SDB
+#ifdef CONFIG_SDB
   if (options.interactive) {
     std::cout << "tile-npu monitor: entry " << hex64(MEMORY_BASE) << ", type 'help'\n";
     for (const auto &image : options.images) {

@@ -2,8 +2,8 @@
 
 #include "execute/execute.h"
 #include "tile_npu/decode.h"
-#include "utils/endian.h"
 #include "utils/common.h"
+#include "utils/endian.h"
 
 #include <array>
 #include <cstddef>
@@ -28,12 +28,18 @@ StepResult Simulator::step() {
 
   // decode && execute
   ExecContext ctx{state_, memory_};
+  const auto decoded = decode(instr);
   const auto execution = std::visit(
       Overloaded{
           [](DecodeError) { return ExecuteResult{.status = StepStatus::illegal_instruction}; },
           [&ctx](const DecodedScalarInstr &decoded) { return exec_scalar_instr(decoded, ctx); },
           [&ctx](const DecodedNpuInstr &decoded) { return exec_npu_instr(decoded, ctx); }},
-      decode(instr));
+      decoded);
+#ifdef CONFIG_ITRACE
+  if (itrace_callback_) {
+    itrace_callback_(pc, instr, decoded, execution.status);
+  }
+#endif
   if (execution.status == StepStatus::retired) {
     state_.scalar.pc = execution.redirect.value_or(pc + INSTR_BYTES);
   }

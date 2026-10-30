@@ -18,3 +18,6 @@ __pycache__/
 # Generated Qwen3 model artifacts
 *.q3b
 *.npz
+
+# Generated instruction traces
+itrace.log

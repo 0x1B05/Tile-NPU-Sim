@@ -1,10 +1,13 @@
 #pragma once
 
+#include "tile_npu/decode.h"
 #include "tile_npu/platform/address_space.h"
 #include "tile_npu/state.h"
 
 #include <cstdint>
+#include <functional>
 #include <optional>
+#include <utility>
 
 namespace tile_npu {
 
@@ -45,6 +48,12 @@ struct StepResult {
   std::optional<std::uint64_t> fault_address = std::nullopt;
 };
 
+#ifdef CONFIG_ITRACE
+// Called for every fetched instruction after execution when itrace is enabled.
+using ItraceCallback = std::function<void(std::uint64_t pc, std::uint32_t instr,
+                                          const DecodeResult &decoded, StepStatus status)>;
+#endif
+
 class Simulator {
 public:
   explicit Simulator(AddressSpace &memory) : memory_(memory) {}
@@ -58,9 +67,16 @@ public:
   void reset(std::uint64_t entry_pc);
   StepResult step();
 
+#ifdef CONFIG_ITRACE
+  void set_itrace_callback(ItraceCallback callback) { itrace_callback_ = std::move(callback); }
+#endif
+
 private:
   AddressSpace &memory_;
   State state_{};
+#ifdef CONFIG_ITRACE
+  ItraceCallback itrace_callback_;
+#endif
 };
 
 } // namespace tile_npu

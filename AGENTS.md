@@ -25,11 +25,19 @@ xmake project -k compile_commands        # 为 clangd 生成 compile_commands.js
 ```
 
 - 修改后至少运行 `xmake test`。`sim_tests/core` 只包含 host 用例；guest 测试在独立二进制 `sim_guest_tests` 中，由 `tests/run.py` 调用。
-- 构建选项在 `xmake.lua`，使用 `xmake f --xxx=y/n`；编译器缓存位于仓库内 `.cache/ccache`。
+- 构建选项在 `xmake.lua`，使用 `xmake f --xxx=y/n`；编译器缓存位于仓库内 `.cache/ccache`。`--itrace=y` 启用 ITRACE 与反汇编；默认写入首个镜像同目录的 `itrace.log`，可用 `--itrace-log PATH` 覆盖。
 - 宿主构建启用 `set_warnings("all", "error")`，所有已启用的警告都按错误处理。
 - guest 镜像需要 RISC-V 交叉工具链，默认前缀 `riscv64-linux-gnu-`，可用 `xmake f --riscv_cross=<prefix>` 覆盖；构建 `sim` 和 `sim_tests` 本身不需要交叉工具链。
 - Qwen3 的 Q3B/Q3P 格式、prompt 分词与 `qwen3_run` 用法见 `README.md`。tiny 回归由 `tests/run.py qwen3` 驱动：`qwen3_snapshot_app`、模型、prompt 与 NumPy 参考均由脚本生成。
 - `tests/run.py` 负责 suite 选择、过滤、构建缺失 artifact 和结果汇总；xmake 只负责生成 `sim_tests`、`sim_guest_tests`、`guest_images` 及可选 app/image artifact。
+
+### 调试功能的编译门控
+
+- 调试功能统一使用小写 xmake option (如 `itrace`、`sdb`) 和 `CONFIG_<NAME>` 编译宏；不要新增 `ENABLE_*` 或 `TILE_NPU_ENABLE_*` 风格的开关。
+- 如果开关控制的 API 或状态位于 `sim_core`，并且会被 `sim`/测试引用，就在 `sim_core` 上用 `add_defines(..., { public = true })` 传播宏；只服务 `sim`/monitor 的实现保持 private，避免无谓扩大核心接口。
+- 关闭开关时必须同时排除实现源文件、核心 API/成员、CLI 参数、monitor 分支和 host/guest 测试；关闭后的构建不能暴露对应命令行选项，也不能留下未定义符号。
+- `CONFIG_ITRACE` 是 `sim_core` public define，启用时编译 `disasm.cpp`、打开 `ItraceCallback`/`set_itrace_callback`、`--itrace`/`--itrace-log` 和 monitor 日志路径。
+- `CONFIG_SDB` 只在 `sim` target 私有定义，启用时编译 `sdb.cpp`、打开 `-i/--interactive` 与 monitor 的 sdb 分支；`sim_core` 不提供 SDB API。
 
 ## 模块导航
 
@@ -39,24 +47,23 @@ xmake project -k compile_commands        # 为 clangd 生成 compile_commands.js
 | `include/tile_npu/instruction.h` | 按功能组织的标量/NPU 语义 IR 与操作数类型，语义类型不要求与 major 一一对应 |
 | `src/op_info.h` | 译码与结构检查共享的操作元数据：操作/数据域合法性与 funct 表 |
 | `include/tile_npu/decode.h` | `DecodeResult` 与译码接口 |
-| `include/tile_npu/simulator.h`、`src/simulator.cpp` | `Simulator::reset` / `step`、取指与步进状态词表 `StepStatus` |
+| `include/tile_npu/simulator.h`、`src/simulator.cpp` | `Simulator::reset` / `step`、`StepStatus`；启用 ITRACE 时提供 `ItraceCallback` / `set_itrace_callback` |
 | `src/config.h`、`src/config.cpp` | 配置字段编号映射、字段读写、值转换与写入校验 |
 | `src/execute/matrix_view.h` | 固定大小矩阵寄存器的非拥有视图，只负责物理坐标映射 |
 | `src/execute/descriptor_view.h` | 描述符地址计算、保留位检查及访存后基地址自增 |
 | `include/tile_npu/platform/`、`src/platform/` | `AddressSpace` 接口、`Ram`、`SystemBus` 与 `SerialConsole` |
 | `src/decode/encoding.h`、`pattern.h` | 位段提取、格式解析、编译期 pattern 解析与按序匹配 |
 | `src/decode/decode*.cpp` | 顶层 q 分派，以及 RV64IM / NPU 译码表与 IR 构造 |
+| `src/decode/disasm.*` | ITRACE 用反汇编：从解码 IR 生成 RV64IM 与 NPU 汇编文本 |
 | `src/execute/execute.h`、`execute.cpp` | 执行上下文、结果类型及标量/NPU 分派 |
 | `src/execute/validate.h`、`validate.cpp` | IR 的统一结构合法性检查，头文件仅声明 `valid_structure(const DecodedNpuInstr &)` |
 | `src/execute/config_check.h` | dtype、shape、layout 等配置约束与配置匹配 |
-| `src/execute/execute_*.cpp` | 按指令族实现执行语义；`execute_cfg.cpp` 负责配置指令取值和执行结果转换 |
-| `src/execute/execute_move.cpp` | `FillInstr` 执行立即数/Scalar 填充，`MoveInstr` 执行同域复制 |
+| `src/execute/execute_*.cpp` | 按指令族实现执行语义；`execute_cfg.cpp` 负责配置指令取值和执行结果转换，`execute_move.cpp` 负责 fill/copy |
 | `src/domain.h` | 数据域工具、寄存器堆/配置/描述符绑定、域分派与有效区域遍历 |
 | `src/execute/elementwise_op.h`、`operand.h` | 执行域共享的元素运算、操作数读取和浮点工具 |
 | `src/execute/reduce_util.h` | 规约树、absmax 叶映射与跨指令族共享的规约工具 |
-| `src/utils/bits.h` | f32 位模式解释、整数/浮点存储位转换与符号扩展工具 |
-| `src/utils/` | 通用内部工具：位模式、小端转换、variant visitor 与 `unreachable`；十六进制格式化位于 `src/monitor/format.h` |
-| `src/main.cpp`、`src/monitor/` | CLI、镜像装载、`npu_exec` 步进循环和 sdb 命令 |
+| `src/utils/` | 通用内部工具：`bits.h` 位模式与符号扩展、`format.h` 十六进制格式化、小端转换、variant visitor 与 `unreachable` |
+| `src/main.cpp`、`src/monitor/` | CLI、镜像装载、`npu_exec` 步进循环、sdb 命令与 itrace 文件输出 |
 | `tests/` | `units/` host 用例与入口、`guest/` guest driver 与 guest 源码、`include/` 测试头文件 |
 | `tests/run.py` | host/guest/riscv-tests/Qwen3 suite runner |
 | `apps/qwen3/`、`scripts/qwen3/` | Qwen3 guest、Q3B/Q3P 输入、权重转换、分词、NumPy 参考、运行与对齐检查工具 |
@@ -115,4 +122,4 @@ xmake project -k compile_commands        # 为 clangd 生成 compile_commands.js
 - `tests/guest/riscv-tests-env/riscv_test.h` 的宏体是 GNU as 汇编，保留其 `/* clang-format off */` 保护。对齐的译码表、位段表和元数据表用 `// clang-format off/on` 保持排版。
 - 指令位段通过 `encoding::field<Hi,Lo>` 与格式解析器提取，避免重复魔数位移。译码位图按 Rivet 的具体字段命名 (如 `dom2`、`IS`、`BX`)，与实际位段对齐。
 - 主分支为 `main`，开发使用特性分支；提交遵循英文 Conventional Commits：`<type>(<scope>): <imperative summary>`，摘要简短、不以句号结尾。
-- 不提交构建产物和下载内容：`.xmake/`、`build/`、`.cache/`、`compile_commands.json`、`external/` 已忽略。推送远端需用户明确要求。
+- 不提交构建产物和下载内容：`.xmake/`、`build/`、`.cache/`、`compile_commands.json`、`external/` 已忽略；ITRACE 生成的 `itrace.log` 同样不提交。推送远端需用户明确要求。

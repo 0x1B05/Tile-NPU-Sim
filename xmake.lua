@@ -23,7 +23,11 @@ end
 target("sim_core", function()
 	set_kind("static")
 	set_default(false)
-	add_files("src/*.cpp|main.cpp", "src/decode/*.cpp", "src/execute/*.cpp", "src/platform/*.cpp")
+	add_files("src/*.cpp|main.cpp", "src/decode/*.cpp|disasm.cpp", "src/execute/*.cpp", "src/platform/*.cpp")
+	if has_config("itrace") then
+		add_defines("CONFIG_ITRACE", { public = true })
+		add_files("src/decode/disasm.cpp")
+	end
 	add_includedirs("include", { public = true })
 	add_includedirs("src")
 end)
@@ -40,7 +44,7 @@ target("sim", function()
 	add_packages("cli11")
 	if has_config("sdb") then
 		add_files("src/monitor/sdb.cpp")
-		add_defines("TILE_NPU_ENABLE_SDB")
+		add_defines("CONFIG_SDB")
 	end
 end)
 
@@ -49,6 +53,13 @@ option("sdb", function()
 	set_showmenu(true)
 	set_category("Debug")
 	set_description("Enable the interactive sdb debugger in sim")
+end)
+
+option("itrace", function()
+	set_default(false)
+	set_showmenu(true)
+	set_category("Debug")
+	set_description("Enable instruction tracing with disassembly (--itrace)")
 end)
 
 target("sim_tests", function()
