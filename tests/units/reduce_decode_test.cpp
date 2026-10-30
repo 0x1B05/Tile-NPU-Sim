@@ -13,6 +13,7 @@ using namespace tile_npu::test;
 
 namespace {
 
+using tile_npu::AreduceArgmaxInstr;
 using tile_npu::AreduceInstr;
 using tile_npu::NpuDomain;
 using tile_npu::ReduceOp;
@@ -64,11 +65,6 @@ TEST_CASE(reduce_decode) {
                  .op = ReduceOp::absmax,
                  .src_domain = NpuDomain::acc,
                  .src = 3},
-      ReduceCase{.name = "areduce.rows.argmax v31, a31",
-                 .word = make_areduce(4, 31, 31),
-                 .op = ReduceOp::argmax,
-                 .src_domain = NpuDomain::acc,
-                 .src = 31},
   };
   check_areduce_cases(areduce_cases);
 
@@ -85,6 +81,18 @@ TEST_CASE(reduce_decode) {
                  .src = 9},
   };
   check_vreduce_cases(vreduce_cases);
+
+  const auto areduce_argmax = tile_npu::decode(make_areduce_argmax(10, 11, 12));
+  const auto &areduce_argmax_instr =
+      expect_npu<AreduceArgmaxInstr>(areduce_argmax, "areduce.rows.argmax");
+  check_eq(areduce_argmax_instr.index_dest.domain, NpuDomain::vec32,
+           "areduce.rows.argmax vIdx domain");
+  check_eq(areduce_argmax_instr.index_dest.index, std::uint8_t{10}, "areduce.rows.argmax vIdx");
+  check_eq(areduce_argmax_instr.value_dest.domain, NpuDomain::vec32,
+           "areduce.rows.argmax vVal domain");
+  check_eq(areduce_argmax_instr.value_dest.index, std::uint8_t{11}, "areduce.rows.argmax vVal");
+  check_eq(areduce_argmax_instr.src.domain, NpuDomain::acc, "areduce.rows.argmax src domain");
+  check_eq(areduce_argmax_instr.src.index, std::uint8_t{12}, "areduce.rows.argmax src");
 
   const auto argmax = tile_npu::decode(make_vreduce_argmax(10, 11, 12));
   const auto &argmax_instr = expect_npu<VreduceArgmaxInstr>(argmax, "vreduce.argmax");
@@ -108,6 +116,11 @@ TEST_CASE(reduce_decode_operands) {
   check_eq(vr_instr.dest.domain, NpuDomain::vec32, "vreduce dest domain");
   check_eq(vr_instr.dest.index, std::uint8_t{6}, "vreduce dest index");
 
+  const auto aax = tile_npu::decode(make_areduce_argmax(10, 11, 12));
+  const auto &aax_instr = expect_npu<AreduceArgmaxInstr>(aax, "areduce.rows.argmax");
+  check_eq(aax_instr.index_dest.index, std::uint8_t{10}, "areduce.rows.argmax vIdx");
+  check_eq(aax_instr.value_dest.index, std::uint8_t{11}, "areduce.rows.argmax vVal");
+
   const auto ax = tile_npu::decode(make_vreduce_argmax(10, 11, 12));
   const auto &ax_instr = expect_npu<VreduceArgmaxInstr>(ax, "vreduce.argmax");
   check_eq(ax_instr.index_dest.index, std::uint8_t{10}, "vreduce.argmax vIdx");
@@ -125,7 +138,8 @@ TEST_CASE(reduce_decode_rejects_reserved) {
       DecodeCase{"areduce reserved3", make_areduce(0, 0, 0) | (1u << 25)},
       DecodeCase{"areduce reserved10", make_areduce(0, 0, 0) | (1u << 12)},
       DecodeCase{"vreduce reserved10", make_vreduce(0, 0, 0) | (1u << 12)},
-      DecodeCase{"argmax reserved5", make_vreduce_argmax(0, 0, 0) | (1u << 17)},
+      DecodeCase{"areduce.argmax reserved5", make_areduce_argmax(0, 0, 0) | (1u << 17)},
+      DecodeCase{"vreduce.argmax reserved5", make_vreduce_argmax(0, 0, 0) | (1u << 17)},
   };
   expect_illegal(cases);
 }

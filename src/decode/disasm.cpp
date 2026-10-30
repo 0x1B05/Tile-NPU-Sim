@@ -116,7 +116,6 @@ std::string_view reduce_name(ReduceOp op) {
   case ReduceOp::max: return "max";
   case ReduceOp::min: return "min";
   case ReduceOp::sumsq: return "sumsq";
-  case ReduceOp::argmax: return "argmax";
   case ReduceOp::absmax: return "absmax";
   }
   return "?";

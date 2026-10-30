@@ -58,6 +58,7 @@ ExecuteResult execute(const LaneBroadcastInstr &instr, State &state);
 // Numeric operations
 ExecuteResult execute(const CvtInstr &instr, State &state);
 ExecuteResult execute(const AreduceInstr &instr, State &state);
+ExecuteResult execute(const AreduceArgmaxInstr &instr, State &state);
 ExecuteResult execute(const VreduceInstr &instr, State &state);
 ExecuteResult execute(const VreduceArgmaxInstr &instr, State &state);
 ExecuteResult execute(const AquantInstr &instr, State &state);

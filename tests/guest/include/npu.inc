@@ -485,9 +485,15 @@
 # AREDUCE (R2), mirroring NpuR2 in src/decode/encoding.h:
 #   [31:28] major4 = 1  [27:25] reserved(0)  [24:22] funct3
 #   [21:12] reserved(0)  [11:7] S5 (aS)  [6:2] D5 (vD)  [1:0] q = 10
-# funct3: 0 sum, 1 max, 2 min, 3 sumsq, 4 argmax, 5 absmax.
+# funct3: 0 sum, 1 max, 2 min, 3 sumsq, 5 absmax; 4 argmax uses R4 below.
 .macro AREDUCE funct3, vd, as
     .word ((1 << 28) | (\funct3 << 22) | (\as << 7) | (\vd << 2) | 2)
+.endm
+
+# areduce.rows.argmax (R4 two-destination variant): vVal5 in the src2 slot,
+# reserved3/reserved5 = 0, D5 = vIdx.
+.macro AREDUCE_ARGMAX vidx, vval, as
+    .word ((1 << 28) | (4 << 22) | (\vval << 12) | (\as << 7) | (\vidx << 2) | 2)
 .endm
 
 # VREDUCE (R2): major4 = 2, D5 = vD, S5 = vS; same layout as AREDUCE.

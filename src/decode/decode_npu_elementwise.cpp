@@ -28,7 +28,7 @@ DecodeResult decode_ebin(std::uint32_t word) {
   const auto f = encoding::NpuR3::from(word);
   const auto domain = sel3_domain(f.sel3);
   const auto op = static_cast<EbinOp>(f.funct4);
-  if (!ebin_legal(op, domain)) {
+  if (!is_ebin_op(op, domain)) {
     return DecodeError::illegal;
   }
   return DecodedNpuInstr{EbinInstr{
@@ -49,7 +49,7 @@ DecodeResult decode_eun(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = sel3_domain(f.sel3);
   const auto op = static_cast<EunOp>(f.funct3);
-  if (!eun_legal(op, domain)) {
+  if (!is_eun_op(op, domain)) {
     return DecodeError::illegal;
   }
   return DecodedNpuInstr{EunInstr{
@@ -90,7 +90,7 @@ DecodeResult decode_ebcast(std::uint32_t word) {
   constexpr auto MATRIX_DOMAIN = NpuDomain::acc;
   constexpr auto VECTOR_DOMAIN = NpuDomain::vec32;
   const auto op = static_cast<EbinOp>(f.funct4);
-  if (!ebin_legal(op, MATRIX_DOMAIN)) {
+  if (!is_ebin_op(op, MATRIX_DOMAIN)) {
     return DecodeError::illegal;
   }
   return DecodedNpuInstr{BcastInstr{
@@ -112,7 +112,7 @@ DecodeResult decode_er4(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domain = sel3_domain(f.sel3);
   const auto op = static_cast<Er4Op>(f.funct3);
-  if (!er4_legal(op, domain)) {
+  if (!is_er4_op(op, domain)) {
     return DecodeError::illegal;
   }
   return DecodedNpuInstr{Er4Instr{
@@ -136,7 +136,7 @@ DecodeResult decode_emask(std::uint32_t word) {
   const auto domain = sel3_domain(f.sel3);
   const bool fill_is_scalar = (f.sel3 & 1) != 0;
   const auto op = static_cast<MaskOp>(f.funct3);
-  if (!mask_legal(op, domain) || (!fill_is_scalar && f.src2 > FILL5_MAX)) {
+  if (!is_mask_op(op, domain) || (!fill_is_scalar && f.src2 > FILL5_MAX)) {
     return DecodeError::illegal;
   }
   const auto fill =

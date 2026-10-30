@@ -236,14 +236,19 @@ enum class ReduceOp : std::uint8_t {
   max = 0b001,
   min = 0b010,
   sumsq = 0b011,
-  argmax = 0b100,
-  absmax = 0b101,
+  absmax = 0b101, // 0b100 is the R4 argmax form, represented separately.
 };
 
 struct AreduceInstr {
   ReduceOp op = ReduceOp::sum;
   NpuRegister dest{}; // Vec32
   NpuRegister src{};  // Acc
+};
+
+struct AreduceArgmaxInstr {
+  NpuRegister index_dest{}; // Vec32 u32
+  NpuRegister value_dest{}; // Vec32 f32
+  NpuRegister src{};        // Acc
 };
 
 struct VreduceInstr {

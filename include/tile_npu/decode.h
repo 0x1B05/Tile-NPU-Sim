@@ -22,7 +22,7 @@ using DecodedNpuInstr = std::variant<
     MmaInstr, VmmaInstr,
     EbinInstr, EunInstr, CmpInstr, BcastInstr, Er4Instr, MaskInstr,
     // Reductions, conversions, and quantization.
-    AreduceInstr, VreduceInstr, VreduceArgmaxInstr,
+    AreduceInstr, AreduceArgmaxInstr, VreduceInstr, VreduceArgmaxInstr,
     CvtInstr,
     AquantInstr, TdequantInstr,
     // Configuration and system control.

@@ -23,6 +23,7 @@ using namespace tile_npu::test;
 namespace {
 
 using tile_npu::AquantInstr;
+using tile_npu::AreduceArgmaxInstr;
 using tile_npu::AreduceInstr;
 using tile_npu::BcastInstr;
 using tile_npu::CfgCopyInstr;
@@ -135,11 +136,13 @@ TEST_CASE(validate_rejects_bad_ecmp) {
 TEST_CASE(validate_rejects_bad_ebcast) {
   check_illegal(BcastInstr{static_cast<EbinOp>(3), A(0), A(1), V(0), false},
                 "reserved funct4 code");
-  check_illegal(BcastInstr{EbinOp::add, T(0), T(1), V(0), false}, "tile bcast reserved");
-  check_illegal(BcastInstr{EbinOp::add, T(0), T(1), V(0), false}, "tile paired with vec32");
+  check_illegal(BcastInstr{EbinOp::add, T(0), T(1), V(0), false}, "tile destination");
+  check_illegal(BcastInstr{EbinOp::add, A(0), V(1), V(0), false}, "vec32 matrix source");
+  check_illegal(BcastInstr{EbinOp::add, A(0), A(1), T(0), false}, "tile broadcast source");
   check_illegal(BcastInstr{EbinOp::add, V(0), V(1), V(0), false}, "vector destination");
+  check_illegal(BcastInstr{EbinOp::add, A(32), A(1), V(0), false}, "destination index 32");
+  check_illegal(BcastInstr{EbinOp::add, A(0), A(32), V(0), false}, "source index 32");
   check_illegal(BcastInstr{EbinOp::add, A(0), A(1), V(32), false}, "vector index 32");
-  check_illegal(BcastInstr{EbinOp::mul, T(0), T(1), V(0), false}, "tile mul");
 }
 
 TEST_CASE(validate_rejects_bad_er4) {
@@ -256,7 +259,11 @@ TEST_CASE(validate_rejects_bad_cvt) {
 
 TEST_CASE(validate_rejects_bad_reduce) {
   check_illegal(AreduceInstr{static_cast<ReduceOp>(6), V(0), A(0)}, "reserved areduce op");
+  check_illegal(AreduceInstr{static_cast<ReduceOp>(4), V(0), A(0)}, "areduce argmax uses R4");
   check_illegal(AreduceInstr{ReduceOp::sum, V(0), V(1)}, "areduce source domain");
+  check_illegal(AreduceArgmaxInstr{V(0), V(32), A(0)}, "areduce.argmax vVal index 32");
+  check_illegal(AreduceArgmaxInstr{V(0), R(1), A(0)}, "areduce.argmax vVal domain");
+  check_illegal(AreduceArgmaxInstr{V(0), V(1), V(0)}, "areduce.argmax source domain");
   check_illegal(VreduceInstr{static_cast<ReduceOp>(4), V(0), V(1)}, "vreduce argmax op");
   check_illegal(VreduceInstr{ReduceOp::sum, V(32), V(0)}, "vreduce vD index 32");
   check_illegal(VreduceInstr{ReduceOp::sum, T(0), V(1)}, "vreduce destination domain");

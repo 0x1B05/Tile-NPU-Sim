@@ -1,6 +1,7 @@
 #include "decode_npu.h"
 
 #include "encoding.h"
+#include "op_info.h"
 
 #include <cstdint>
 
@@ -26,17 +27,34 @@ DecodeResult decode_cvt(std::uint32_t word) {
 // AREDUCE (R2): major4 = 0001, q = 10.
 // 31    28 27       25 24    22 21                12 11       7 6        2 1   0
 // [major4] [reserved3] [funct3] [    reserved10    ] [   S5   ] [   D5   ] [ q ]
-// funct3: 000 sum, 001 max, 010 min, 011 sumsq, 100 argmax, 101 absmax;
-//         110/111 reserved. S5 is Acc; D5 is Vec32.
+// funct3: 000 sum, 001 max, 010 min, 011 sumsq, 101 absmax; 100 uses the
+// R4 argmax form below; 110/111 reserved. S5 is Acc; D5 is Vec32.
 DecodeResult decode_areduce(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
-  if (f.funct3 > 0b101) {
+  if (!is_areduce_op(static_cast<ReduceOp>(f.funct3))) {
     return DecodeError::illegal;
   }
   return DecodedNpuInstr{AreduceInstr{
       .op = static_cast<ReduceOp>(f.funct3),
       .dest = {.domain = NpuDomain::vec32, .index = f.dest},
       .src = {.domain = NpuDomain::acc, .index = f.src2},
+  }};
+}
+
+// AREDUCE argmax (R4): major4 = 0001, q = 10.
+// 31    28 27       25 24    22 21       17 16      12 11       7 6        2 1   0
+// [major4] [reserved3] [funct3] [reserved5] [ vVal5  ] [   S5   ] [   D5   ] [ q ]
+// funct3 = 100. S5 is the Acc source; D5/vVal5 are the Vec32 vIdx/vVal
+// destinations.
+DecodeResult decode_areduce_argmax(std::uint32_t word) {
+  const auto f = encoding::NpuR4::from(word);
+  if (f.funct3 != 0b100) {
+    return DecodeError::illegal;
+  }
+  return DecodedNpuInstr{AreduceArgmaxInstr{
+      .index_dest = {.domain = NpuDomain::vec32, .index = f.dest},
+      .value_dest = {.domain = NpuDomain::vec32, .index = f.src2},
+      .src = {.domain = NpuDomain::acc, .index = f.src1},
   }};
 }
 
@@ -47,6 +65,9 @@ DecodeResult decode_areduce(std::uint32_t word) {
 // funct3 = 100 uses the argmax layout below; 101..111 are reserved.
 DecodeResult decode_vreduce(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
+  if (!is_vreduce_op(static_cast<ReduceOp>(f.funct3))) {
+    return DecodeError::illegal;
+  }
   return DecodedNpuInstr{VreduceInstr{
       .op = static_cast<ReduceOp>(f.funct3),
       .dest = {.domain = NpuDomain::vec32, .index = f.dest},
