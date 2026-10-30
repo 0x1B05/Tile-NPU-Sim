@@ -1,10 +1,10 @@
 #include "disasm.h"
 
 #include "utils/common.h"
+#include "utils/format.h"
 
 #include <array>
 #include <cstdint>
-#include <iomanip>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -20,24 +20,6 @@ constexpr std::array<std::string_view, 32> ABI_NAMES = {
     "a1",   "a2", "a3", "a4", "a5",  "a6",  "a7", "s2", "s3", "s4", "s5",
     "s6",   "s7", "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6",
 };
-
-std::string hex_u16(std::uint16_t value) {
-  std::ostringstream out;
-  out << "0x" << std::hex << std::setw(4) << std::setfill('0') << value;
-  return out.str();
-}
-
-std::string hex_u32(std::uint32_t value) {
-  std::ostringstream out;
-  out << "0x" << std::hex << std::setw(8) << std::setfill('0') << value;
-  return out.str();
-}
-
-std::string hex_u64(std::uint64_t value) {
-  std::ostringstream out;
-  out << "0x" << std::hex << std::setw(16) << std::setfill('0') << value;
-  return out.str();
-}
 
 std::string abi_reg(RegisterIndex index) {
   return index < ABI_NAMES.size() ? std::string(ABI_NAMES[index]) : "x?";
@@ -198,13 +180,13 @@ std::string scalar_instr(const DecodedScalarInstr &instr, std::uint64_t pc) {
 
   switch (instr.op) {
   case ScalarOp::lui:
-    out << "lui " << rd << ", " << hex_u32(static_cast<std::uint32_t>(instr.imm));
+    out << "lui " << rd << ", " << hex32(static_cast<std::uint32_t>(instr.imm));
     break;
   case ScalarOp::auipc:
-    out << "auipc " << rd << ", " << hex_u32(static_cast<std::uint32_t>(instr.imm));
+    out << "auipc " << rd << ", " << hex32(static_cast<std::uint32_t>(instr.imm));
     break;
   case ScalarOp::jal:
-    out << "jal " << rd << ", " << hex_u64(pc + static_cast<std::uint64_t>(imm));
+    out << "jal " << rd << ", " << hex64(pc + static_cast<std::uint64_t>(imm));
     break;
   case ScalarOp::jalr: out << "jalr " << rd << ", " << imm << "(" << rs1 << ")"; break;
   case ScalarOp::lb:
@@ -245,7 +227,7 @@ std::string scalar_instr(const DecodedScalarInstr &instr, std::uint64_t pc) {
             : instr.op == ScalarOp::bge  ? "bge"
             : instr.op == ScalarOp::bltu ? "bltu"
                                          : "bgeu")
-        << " " << rs1 << ", " << rs2 << ", " << hex_u64(pc + static_cast<std::uint64_t>(imm));
+        << " " << rs1 << ", " << rs2 << ", " << hex64(pc + static_cast<std::uint64_t>(imm));
     break;
   case ScalarOp::addi:
   case ScalarOp::slti:
@@ -340,7 +322,7 @@ std::string npu_instr(const DecodedNpuInstr &instr) {
             if (scalar) {
               out << x_reg(std::get<ScalarRegister>(i.value).index);
             } else {
-              out << hex_u16(std::get<FillImm16>(i.value).bits);
+              out << hex16(std::get<FillImm16>(i.value).bits);
             }
             return out.str();
           },

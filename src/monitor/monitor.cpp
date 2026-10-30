@@ -3,7 +3,6 @@
 #ifdef CONFIG_ITRACE
 #include "decode/disasm.h"
 #endif
-#include "format.h"
 #include "parse.h"
 #ifdef CONFIG_SDB
 #include "sdb.h"

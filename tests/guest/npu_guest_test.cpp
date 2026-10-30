@@ -14,7 +14,6 @@
 #include <vector>
 
 #include "guest/guest_image.h"
-#include "monitor/format.h"
 #include "monitor/monitor.h"
 #include "utils/endian.h"
 
@@ -74,7 +73,8 @@ void check_guest_image(std::string_view name, std::uint64_t memory_size,
   sim.reset(IMAGE_BASE);
   const auto result = run_until_stop(sim, memory);
   check(result.status == stop, std::string(name) + " image stops (status=" +
-                                   std::string(tile_npu::status_name(result.status)) + ")");
+                                   std::string(tile_npu::monitor::status_name(result.status)) +
+                                   ")");
   check_eq(hex(sim.state().scalar.read_x(tile_npu::monitor::EXIT_CODE_REG)), hex(0x0u),
            std::string(name) + " image reports success via a0");
 }
@@ -202,7 +202,7 @@ TEST_CASE(npu_guest_ebin) {
   const auto result = run_until_stop(sim, memory);
   check(result.status == tile_npu::StepStatus::breakpoint,
         std::string("ebin image reaches ebreak (status=") +
-            std::string(tile_npu::status_name(result.status)) + ")");
+            std::string(tile_npu::monitor::status_name(result.status)) + ")");
   check_eq(hex(state.scalar.read_x(tile_npu::monitor::EXIT_CODE_REG)), hex(0x0u),
            "ebin image reports success via a0");
 
