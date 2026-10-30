@@ -4,7 +4,7 @@
 #include "decode/disasm.h"
 #endif
 #ifdef CONFIG_MTRACE
-#include "mtrace_writer.h"
+#include "trace/mtrace_writer.h"
 #endif
 #include "parse.h"
 #ifdef CONFIG_SDB

@@ -1,7 +1,5 @@
 #pragma once
 
-#ifdef CONFIG_MTRACE
-
 #include "tile_npu/mtrace.h"
 
 #include <cstdint>
@@ -27,5 +25,3 @@ private:
 };
 
 } // namespace tile_npu::monitor
-
-#endif // CONFIG_MTRACE

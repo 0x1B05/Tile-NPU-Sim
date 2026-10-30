@@ -63,7 +63,7 @@ xmake project -k compile_commands        # 为 clangd 生成 compile_commands.js
 | `src/domain.h` | 数据域工具、寄存器堆/配置/描述符绑定、域分派与有效区域遍历 |
 | `src/execute/elementwise_op.h`、`operand.h` | 执行域共享的元素运算、操作数读取和浮点工具 |
 | `src/execute/reduce_util.h` | 规约树、absmax 叶映射与跨指令族共享的规约工具 |
-| `include/tile_npu/mtrace.h`、`src/trace/` | MTRACE 事件模型、数据流分类器与访存/寄存器数据路径事件 |
+| `include/tile_npu/mtrace.h`、`src/trace/` | MTRACE 事件模型、数据流分类器、访存/寄存器数据路径事件与 JSONL writer |
 | `src/utils/` | 通用内部工具：`bits.h` 位模式与符号扩展、`format.h` 十六进制格式化、小端转换、variant visitor 与 `unreachable` |
 | `src/main.cpp`、`src/monitor/` | CLI、镜像装载、`npu_exec` 步进循环、sdb 命令与 trace 文件输出 |
 | `tests/` | `units/` host 用例与入口、`guest/` guest driver 与 guest 源码、`include/` 测试头文件 |

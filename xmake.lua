@@ -51,7 +51,7 @@ target("sim", function()
 		add_defines("CONFIG_SDB")
 	end
 	if has_config("mtrace") then
-		add_files("src/monitor/mtrace_writer.cpp")
+		add_files("src/trace/mtrace_writer.cpp")
 	end
 end)
 

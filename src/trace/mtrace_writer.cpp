@@ -1,7 +1,5 @@
 #include "mtrace_writer.h"
 
-#ifdef CONFIG_MTRACE
-
 #include "utils/format.h"
 
 #include <ostream>
@@ -134,5 +132,3 @@ void MtraceWriter::operator()(const TraceEvent &event) {
 }
 
 } // namespace tile_npu::monitor
-
-#endif // CONFIG_MTRACE

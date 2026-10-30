@@ -1,7 +1,5 @@
 #pragma once
 
-#ifdef CONFIG_MTRACE
-
 #include "tile_npu/decode.h"
 #include "tile_npu/mtrace.h"
 
@@ -36,5 +34,3 @@ void trace_gather_vector(MtraceRecorder &trace, const MblkInstr &instr,
                          std::uint8_t elem, const Vec32 &index);
 
 } // namespace tile_npu
-
-#endif // CONFIG_MTRACE
