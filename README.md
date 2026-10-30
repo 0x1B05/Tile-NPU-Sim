@@ -29,7 +29,7 @@ python3 tests/run.py all --build
 
 `sim` loads a flat binary at `0x80000000` into 1 GiB of RAM and starts execution there. A guest stops at `ebreak` (or `kernel.end` on the NPU side) with `a0` as the process exit code, 0 meaning success. A 16550-lite serial console is MMIO-mapped at `0x10000000`: storing a byte prints it on the host, and the status register always reads ready.
 
-`--itrace` prints each fetched instruction as `[ITRACE] pc: encoding  disassembly` on stderr. Guest serial output stays on stdout, so the trace can be redirected independently. Build the simulator with `xmake f --itrace=y` to enable the option and its disassembler.
+`--itrace` writes each fetched instruction as `[ITRACE] pc: encoding  disassembly` to `itrace.log`. Guest serial output stays on stdout. Build the simulator with `xmake f --itrace=y` to enable the option and its disassembler.
 
 ```sh
 xmake run sim path/to/program.bin [data.bin@0xADDR ...]

@@ -115,18 +115,28 @@ int run_images(const Options &options) {
   tile_npu::SerialConsole serial(std::cout);
   tile_npu::SystemBus bus(
       ram, {{&serial, tile_npu::SerialConsole::BASE, tile_npu::SerialConsole::SIZE}});
+#ifdef CONFIG_ITRACE
+  std::ofstream itrace_log;
+  if (options.itrace) {
+    itrace_log.open("itrace.log", std::ios::out | std::ios::trunc);
+    if (!itrace_log) {
+      std::cerr << "cannot open itrace log: itrace.log\n";
+      return 1;
+    }
+  }
+#endif
   tile_npu::Simulator sim(bus);
 #ifdef CONFIG_ITRACE
   if (options.itrace) {
-    sim.set_trace(
-        [](std::uint64_t pc, std::uint32_t instr, const DecodeResult &decoded, StepStatus status) {
-          std::cerr << "[ITRACE] " << hex64(pc) << ": " << hex32(instr) << "  "
-                    << disassemble(pc, decoded);
-          if (status != StepStatus::retired) {
-            std::cerr << "  ; " << status_name(status);
-          }
-          std::cerr << '\n';
-        });
+    sim.set_trace([&itrace_log](std::uint64_t pc, std::uint32_t instr, const DecodeResult &decoded,
+                                StepStatus status) {
+      itrace_log << "[ITRACE] " << hex64(pc) << ": " << hex32(instr) << "  "
+                 << disassemble(pc, decoded);
+      if (status != StepStatus::retired) {
+        itrace_log << "  ; " << status_name(status);
+      }
+      itrace_log << '\n' << std::flush;
+    });
   }
 #endif
   sim.reset(MEMORY_BASE);

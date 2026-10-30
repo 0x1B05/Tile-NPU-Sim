@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
   app.add_option("-m,--memory"   , options.memory_mib , "RAM size in MiB")->check(CLI::PositiveNumber);
   app.add_option("-s,--steps"    , steps              , "Retired-instruction limit (-1: unlimited)");
 #ifdef CONFIG_ITRACE
-  app.add_flag("--itrace"        , options.itrace     , "Trace executed instructions to stderr");
+  app.add_flag("--itrace"        , options.itrace     , "Trace executed instructions to itrace.log");
 #endif
   app.add_option("--dump-range"  , dump_range         , "Dump FILE@0xADDR:0xSIZE after the run");
   app.add_option("images"        , image_args         , "Program and data images (path[@0xADDR])") ->required();
