@@ -39,7 +39,7 @@ inline constexpr std::array<std::optional<EbinInfo>, 16> EBIN_BY_FUNCT4 = [] {
 
 // E_BIN/E_BCAST op legality on a destination domain: an assigned funct4 code,
 // a defined domain, and no Tile mul.
-inline constexpr bool ebin_legal(EbinOp op, NpuDomain domain) {
+inline constexpr bool is_ebin_op(EbinOp op, NpuDomain domain) {
   const auto code = static_cast<std::uint8_t>(op);
   if (code >= EBIN_BY_FUNCT4.size() || !EBIN_BY_FUNCT4[code]) return false;
   return domain != NpuDomain::reserved &&
@@ -47,7 +47,7 @@ inline constexpr bool ebin_legal(EbinOp op, NpuDomain domain) {
 }
 
 // Tile only has `not`.
-inline constexpr bool eun_legal(EunOp op, NpuDomain domain) {
+inline constexpr bool is_eun_op(EunOp op, NpuDomain domain) {
   if (domain == NpuDomain::reserved) return false;
   switch (op) {
   case EunOp::bit_not: return true;
@@ -81,7 +81,7 @@ inline constexpr std::array<std::optional<CmpInfo>, 8> CMP_BY_FUNCT3 = [] {
 }();
 
 // select and fmadd are Acc/Vec32 only; Tile is reserved.
-inline constexpr bool er4_legal(Er4Op op, NpuDomain domain) {
+inline constexpr bool is_er4_op(Er4Op op, NpuDomain domain) {
   if (domain == NpuDomain::reserved) return false;
   switch (op) {
   case Er4Op::select:
@@ -91,7 +91,7 @@ inline constexpr bool er4_legal(Er4Op op, NpuDomain domain) {
 }
 
 // tril/triu are Acc-only; tail exists on all data domains.
-inline constexpr bool mask_legal(MaskOp op, NpuDomain domain) {
+inline constexpr bool is_mask_op(MaskOp op, NpuDomain domain) {
   if (domain == NpuDomain::reserved) return false;
   switch (op) {
   case MaskOp::tail: return true;
@@ -102,7 +102,7 @@ inline constexpr bool mask_legal(MaskOp op, NpuDomain domain) {
 }
 
 // AREDUCE sum/max/min/sumsq/absmax; funct3 100 is the R4 argmax form.
-inline constexpr bool areduce_legal(ReduceOp op) {
+inline constexpr bool is_areduce_op(ReduceOp op) {
   switch (op) {
   case ReduceOp::sum:
   case ReduceOp::max:
@@ -114,7 +114,7 @@ inline constexpr bool areduce_legal(ReduceOp op) {
 }
 
 // VREDUCE sum/max/min/sumsq; argmax has its own R4 form.
-inline constexpr bool vreduce_legal(ReduceOp op) {
+inline constexpr bool is_vreduce_op(ReduceOp op) {
   switch (op) {
   case ReduceOp::sum:
   case ReduceOp::max:

@@ -50,13 +50,13 @@ bool assigned_op(Op op, const std::array<std::optional<Info>, Size> &table) {
 }
 
 bool valid_structure(const EbinInstr &instr) {
-  if (!ebin_legal(instr.op, instr.dest.domain)) return false;
+  if (!is_ebin_op(instr.op, instr.dest.domain)) return false;
   return instr.src1.domain == instr.dest.domain && in_range(instr.dest) && in_range(instr.src1) &&
          src2_in_range(instr.src2, instr.dest.domain);
 }
 
 bool valid_structure(const EunInstr &instr) {
-  if (!eun_legal(instr.op, instr.dest.domain)) return false;
+  if (!is_eun_op(instr.op, instr.dest.domain)) return false;
   return instr.src.domain == instr.dest.domain && in_range(instr.dest) && in_range(instr.src);
 }
 
@@ -70,7 +70,7 @@ bool valid_structure(const CmpInstr &instr) {
 
 bool valid_structure(const BcastInstr &instr) {
   if (instr.dest.domain != NpuDomain::acc || instr.vector.domain != NpuDomain::vec32 ||
-      !ebin_legal(instr.op, NpuDomain::acc)) {
+      !is_ebin_op(instr.op, NpuDomain::acc)) {
     return false;
   }
   return instr.src1.domain == instr.dest.domain && in_range(instr.dest) && in_range(instr.src1) &&
@@ -78,14 +78,14 @@ bool valid_structure(const BcastInstr &instr) {
 }
 
 bool valid_structure(const Er4Instr &instr) {
-  if (!er4_legal(instr.op, instr.dest.domain)) return false;
+  if (!is_er4_op(instr.op, instr.dest.domain)) return false;
   return instr.arg.domain == instr.dest.domain && instr.src1.domain == instr.dest.domain &&
          instr.src2.domain == instr.dest.domain && in_range(instr.dest) && in_range(instr.arg) &&
          in_range(instr.src1) && in_range(instr.src2);
 }
 
 bool valid_structure(const MaskInstr &instr) {
-  if (!mask_legal(instr.op, instr.dest.domain)) return false;
+  if (!is_mask_op(instr.op, instr.dest.domain)) return false;
   return fill_in_range(instr.fill) && in_range(ScalarRegister{instr.bound}) &&
          instr.src.domain == instr.dest.domain && in_range(instr.dest) && in_range(instr.src);
 }
@@ -197,7 +197,7 @@ bool valid_structure(const CvtInstr &instr) {
 }
 
 bool valid_structure(const AreduceInstr &instr) {
-  return areduce_legal(instr.op) && instr.dest.domain == NpuDomain::vec32 && in_range(instr.dest) &&
+  return is_areduce_op(instr.op) && instr.dest.domain == NpuDomain::vec32 && in_range(instr.dest) &&
          instr.src.domain == NpuDomain::acc && in_range(instr.src);
 }
 
@@ -208,7 +208,7 @@ bool valid_structure(const AreduceArgmaxInstr &instr) {
 }
 
 bool valid_structure(const VreduceInstr &instr) {
-  return vreduce_legal(instr.op) && instr.dest.domain == NpuDomain::vec32 && in_range(instr.dest) &&
+  return is_vreduce_op(instr.op) && instr.dest.domain == NpuDomain::vec32 && in_range(instr.dest) &&
          instr.src.domain == NpuDomain::vec32 && in_range(instr.src);
 }
 
