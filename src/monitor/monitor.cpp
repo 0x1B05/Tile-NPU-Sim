@@ -14,6 +14,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -51,6 +52,15 @@ bool load_image(const Image &image, Ram &memory) {
   }
   return true;
 }
+
+#ifdef CONFIG_ITRACE
+std::string itrace_path(const Options &options) {
+  if (!options.itrace_log.empty()) return options.itrace_log;
+  if (options.images.empty()) return "itrace.log";
+  const std::filesystem::path image(options.images.front().path);
+  return (image.parent_path() / "itrace.log").string();
+}
+#endif
 
 bool write_dump(const Ram &memory, const DumpRange &range) {
   std::vector<std::byte> bytes(range.size);
@@ -118,9 +128,10 @@ int run_images(const Options &options) {
 #ifdef CONFIG_ITRACE
   std::ofstream itrace_log;
   if (options.itrace) {
-    itrace_log.open("itrace.log", std::ios::out | std::ios::trunc);
+    const auto path = itrace_path(options);
+    itrace_log.open(path, std::ios::out | std::ios::trunc);
     if (!itrace_log) {
-      std::cerr << "cannot open itrace log: itrace.log\n";
+      std::cerr << "cannot open itrace log: " << path << '\n';
       return 1;
     }
   }

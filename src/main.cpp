@@ -21,13 +21,19 @@ int main(int argc, char **argv) {
   app.add_option("-m,--memory"   , options.memory_mib , "RAM size in MiB")->check(CLI::PositiveNumber);
   app.add_option("-s,--steps"    , steps              , "Retired-instruction limit (-1: unlimited)");
 #ifdef CONFIG_ITRACE
-  app.add_flag("--itrace"        , options.itrace     , "Trace executed instructions to itrace.log");
+  app.add_flag("--itrace"        , options.itrace     , "Trace executed instructions to a log file");
+  app.add_option("--itrace-log"  , options.itrace_log , "Trace output path (implies --itrace)");
 #endif
   app.add_option("--dump-range"  , dump_range         , "Dump FILE@0xADDR:0xSIZE after the run");
   app.add_option("images"        , image_args         , "Program and data images (path[@0xADDR])") ->required();
   // clang-format on
   CLI11_PARSE(app, argc, argv);
 
+#ifdef CONFIG_ITRACE
+  if (!options.itrace_log.empty()) {
+    options.itrace = true;
+  }
+#endif
   options.step_limit = static_cast<std::uint64_t>(steps);
   if (!dump_range.empty()) {
     tile_npu::monitor::DumpRange range{};
