@@ -236,8 +236,7 @@ enum class ReduceOp : std::uint8_t {
   max = 0b001,
   min = 0b010,
   sumsq = 0b011,
-  argmax = 0b100,
-  absmax = 0b101,
+  absmax = 0b101, // 0b100 is the R4 argmax form, represented separately.
 };
 
 struct AreduceInstr {

@@ -59,7 +59,6 @@ float reduce_f32(ReduceOp op, std::span<float> values) {
   case ReduceOp::max: return tree_reduce(values, pair_max);
   case ReduceOp::min: return tree_reduce(values, pair_min);
   case ReduceOp::absmax: return f32_absmax(values);
-  case ReduceOp::argmax: unreachable("reduce_f32 called with argmax");
   default: unreachable("reduce_f32 called with invalid reduce op");
   }
 }

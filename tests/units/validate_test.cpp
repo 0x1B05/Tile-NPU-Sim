@@ -257,7 +257,7 @@ TEST_CASE(validate_rejects_bad_cvt) {
 
 TEST_CASE(validate_rejects_bad_reduce) {
   check_illegal(AreduceInstr{static_cast<ReduceOp>(6), V(0), A(0)}, "reserved areduce op");
-  check_illegal(AreduceInstr{ReduceOp::argmax, V(0), A(0)}, "areduce argmax uses R4");
+  check_illegal(AreduceInstr{static_cast<ReduceOp>(4), V(0), A(0)}, "areduce argmax uses R4");
   check_illegal(AreduceInstr{ReduceOp::sum, V(0), V(1)}, "areduce source domain");
   check_illegal(AreduceArgmaxInstr{V(0), V(32), A(0)}, "areduce.argmax vVal index 32");
   check_illegal(AreduceArgmaxInstr{V(0), R(1), A(0)}, "areduce.argmax vVal domain");

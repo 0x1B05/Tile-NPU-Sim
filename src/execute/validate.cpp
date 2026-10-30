@@ -196,9 +196,29 @@ bool valid_structure(const CvtInstr &instr) {
   }
 }
 
+bool is_areduce_op(ReduceOp op) {
+  switch (op) {
+  case ReduceOp::sum:
+  case ReduceOp::max:
+  case ReduceOp::min:
+  case ReduceOp::sumsq:
+  case ReduceOp::absmax: return true;
+  default: return false;
+  }
+}
+
+bool is_vreduce_op(ReduceOp op) {
+  switch (op) {
+  case ReduceOp::sum:
+  case ReduceOp::max:
+  case ReduceOp::min:
+  case ReduceOp::sumsq: return true;
+  default: return false;
+  }
+}
+
 bool valid_structure(const AreduceInstr &instr) {
-  return instr.op <= ReduceOp::absmax && instr.op != ReduceOp::argmax &&
-         instr.dest.domain == NpuDomain::vec32 && in_range(instr.dest) &&
+  return is_areduce_op(instr.op) && instr.dest.domain == NpuDomain::vec32 && in_range(instr.dest) &&
          instr.src.domain == NpuDomain::acc && in_range(instr.src);
 }
 
@@ -209,8 +229,8 @@ bool valid_structure(const AreduceArgmaxInstr &instr) {
 }
 
 bool valid_structure(const VreduceInstr &instr) {
-  return instr.op <= ReduceOp::sumsq && instr.dest.domain == NpuDomain::vec32 &&
-         in_range(instr.dest) && instr.src.domain == NpuDomain::vec32 && in_range(instr.src);
+  return is_vreduce_op(instr.op) && instr.dest.domain == NpuDomain::vec32 && in_range(instr.dest) &&
+         instr.src.domain == NpuDomain::vec32 && in_range(instr.src);
 }
 
 bool valid_structure(const VreduceArgmaxInstr &instr) {
