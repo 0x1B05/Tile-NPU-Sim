@@ -31,6 +31,8 @@ python3 tests/run.py all --build
 
 `--itrace` writes each fetched instruction as `[ITRACE] pc: encoding  disassembly` to `itrace.log` next to the first loaded image (`build/guest/itrace.log`, `build/apps/qwen3/itrace.log`, and so on). Use `--itrace-log PATH` to choose another path; it implies `--itrace`. Guest serial output stays on stdout. Build the simulator with `xmake f --itrace=y` to enable the option and its disassembler.
 
+`--mtrace` writes the logical NPU data path as JSON Lines to `mtrace.jsonl` next to the first image; `--mtrace-log PATH` overrides the path and implies `--mtrace`. Each event is a `move` (memory/register transfer) or `compute` (NPU arithmetic) with per-endpoint byte counts, effective shapes, and a `linear`/`block` memory pattern. Scalar ALU, scalar registers, configuration writes, and instruction fetch are currently out of scope. Build with `xmake f --mtrace=y` to enable the option and writer.
+
 ```sh
 xmake run sim path/to/program.bin [data.bin@0xADDR ...]
 ```
