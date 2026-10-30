@@ -101,6 +101,29 @@ inline constexpr bool mask_legal(MaskOp op, NpuDomain domain) {
   }
 }
 
+// AREDUCE sum/max/min/sumsq/absmax; funct3 100 is the R4 argmax form.
+inline constexpr bool areduce_legal(ReduceOp op) {
+  switch (op) {
+  case ReduceOp::sum:
+  case ReduceOp::max:
+  case ReduceOp::min:
+  case ReduceOp::sumsq:
+  case ReduceOp::absmax: return true;
+  default: return false;
+  }
+}
+
+// VREDUCE sum/max/min/sumsq; argmax has its own R4 form.
+inline constexpr bool vreduce_legal(ReduceOp op) {
+  switch (op) {
+  case ReduceOp::sum:
+  case ReduceOp::max:
+  case ReduceOp::min:
+  case ReduceOp::sumsq: return true;
+  default: return false;
+  }
+}
+
 // The fill5 immediate table: codes 0-4 are the integer values 0/+1/-1/+2/-2,
 // codes 5-8 add the f32-only ±0.5/±inf; codes 9-31 are reserved.
 inline constexpr std::uint8_t FILL5_INT_MAX = 4;

@@ -1,6 +1,7 @@
 #include "decode_npu.h"
 
 #include "encoding.h"
+#include "op_info.h"
 
 #include <cstdint>
 
@@ -30,7 +31,7 @@ DecodeResult decode_cvt(std::uint32_t word) {
 // R4 argmax form below; 110/111 reserved. S5 is Acc; D5 is Vec32.
 DecodeResult decode_areduce(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
-  if (f.funct3 == 0b100 || f.funct3 > 0b101) {
+  if (!areduce_legal(static_cast<ReduceOp>(f.funct3))) {
     return DecodeError::illegal;
   }
   return DecodedNpuInstr{AreduceInstr{
@@ -64,6 +65,9 @@ DecodeResult decode_areduce_argmax(std::uint32_t word) {
 // funct3 = 100 uses the argmax layout below; 101..111 are reserved.
 DecodeResult decode_vreduce(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
+  if (!vreduce_legal(static_cast<ReduceOp>(f.funct3))) {
+    return DecodeError::illegal;
+  }
   return DecodedNpuInstr{VreduceInstr{
       .op = static_cast<ReduceOp>(f.funct3),
       .dest = {.domain = NpuDomain::vec32, .index = f.dest},
