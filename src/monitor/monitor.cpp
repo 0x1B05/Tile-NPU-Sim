@@ -139,8 +139,8 @@ int run_images(const Options &options) {
   tile_npu::Simulator sim(bus);
 #ifdef CONFIG_ITRACE
   if (options.itrace) {
-    sim.set_trace([&itrace_log](std::uint64_t pc, std::uint32_t instr, const DecodeResult &decoded,
-                                StepStatus status) {
+    sim.set_itrace_callback([&itrace_log](std::uint64_t pc, std::uint32_t instr,
+                                          const DecodeResult &decoded, StepStatus status) {
       itrace_log << "[ITRACE] " << hex64(pc) << ": " << hex32(instr) << "  "
                  << disassemble(pc, decoded);
       if (status != StepStatus::retired) {
