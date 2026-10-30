@@ -25,7 +25,7 @@ xmake project -k compile_commands        # 为 clangd 生成 compile_commands.js
 ```
 
 - 修改后至少运行 `xmake test`。`sim_tests/core` 只包含 host 用例；guest 测试在独立二进制 `sim_guest_tests` 中，由 `tests/run.py` 调用。
-- 构建选项在 `xmake.lua`，使用 `xmake f --xxx=y/n`；编译器缓存位于仓库内 `.cache/ccache`。
+- 构建选项在 `xmake.lua`，使用 `xmake f --xxx=y/n`；编译器缓存位于仓库内 `.cache/ccache`。`--itrace=y` 启用 ITRACE 与反汇编。
 - 宿主构建启用 `set_warnings("all", "error")`，所有已启用的警告都按错误处理。
 - guest 镜像需要 RISC-V 交叉工具链，默认前缀 `riscv64-linux-gnu-`，可用 `xmake f --riscv_cross=<prefix>` 覆盖；构建 `sim` 和 `sim_tests` 本身不需要交叉工具链。
 - Qwen3 的 Q3B/Q3P 格式、prompt 分词与 `qwen3_run` 用法见 `README.md`。tiny 回归由 `tests/run.py qwen3` 驱动：`qwen3_snapshot_app`、模型、prompt 与 NumPy 参考均由脚本生成。

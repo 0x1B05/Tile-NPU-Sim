@@ -15,12 +15,14 @@ int main(int argc, char **argv) {
   std::int64_t steps = -1;
   std::string dump_range;
   // clang-format off
-#ifdef TILE_NPU_ENABLE_SDB
+#ifdef CONFIG_SDB
   app.add_flag("-i,--interactive", options.interactive, "Open the sdb shell");
 #endif
   app.add_option("-m,--memory"   , options.memory_mib , "RAM size in MiB")->check(CLI::PositiveNumber);
   app.add_option("-s,--steps"    , steps              , "Retired-instruction limit (-1: unlimited)");
+#ifdef CONFIG_ITRACE
   app.add_flag("--itrace"        , options.itrace     , "Trace executed instructions to stderr");
+#endif
   app.add_option("--dump-range"  , dump_range         , "Dump FILE@0xADDR:0xSIZE after the run");
   app.add_option("images"        , image_args         , "Program and data images (path[@0xADDR])") ->required();
   // clang-format on
