@@ -5,7 +5,7 @@
 #include <ostream>
 #include <string_view>
 
-namespace tile_npu::monitor {
+namespace tile_npu::trace {
 namespace {
 
 std::string_view endpoint_name(TraceEndpointKind kind) {
@@ -131,4 +131,4 @@ void MtraceWriter::operator()(const TraceEvent &event) {
   if ((++events_ & 0xfff) == 0) out_.flush();
 }
 
-} // namespace tile_npu::monitor
+} // namespace tile_npu::trace

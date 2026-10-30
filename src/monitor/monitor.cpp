@@ -150,7 +150,7 @@ int run_images(const Options &options) {
 #endif
 #ifdef CONFIG_MTRACE
   std::ofstream mtrace_log;
-  std::optional<tile_npu::monitor::MtraceWriter> mtrace_writer;
+  std::optional<tile_npu::trace::MtraceWriter> mtrace_writer;
   if (options.mtrace) {
     const auto path = mtrace_path(options);
     mtrace_log.open(path, std::ios::out | std::ios::trunc);

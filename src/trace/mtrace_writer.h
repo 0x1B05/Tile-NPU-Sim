@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <fstream>
 
-namespace tile_npu::monitor {
+namespace tile_npu::trace {
 
 // Writes the logical MTRACE event stream as JSON Lines. Events are buffered by
 // the file stream and flushed periodically; the destructor flushes the tail.
@@ -24,4 +24,4 @@ private:
   std::uint64_t events_ = 0;
 };
 
-} // namespace tile_npu::monitor
+} // namespace tile_npu::trace
