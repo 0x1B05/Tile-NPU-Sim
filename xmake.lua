@@ -25,6 +25,7 @@ target("sim_core", function()
 	set_default(false)
 	add_files("src/*.cpp|main.cpp", "src/decode/*.cpp|disasm.cpp", "src/execute/*.cpp", "src/platform/*.cpp")
 	if has_config("itrace") then
+		add_defines("CONFIG_ITRACE", { public = true })
 		add_files("src/decode/disasm.cpp")
 	end
 	add_includedirs("include", { public = true })
@@ -41,9 +42,6 @@ target("sim", function()
 	add_files("src/main.cpp", "src/monitor/monitor.cpp")
 	add_includedirs("src")
 	add_packages("cli11")
-	if has_config("itrace") then
-		add_defines("CONFIG_ITRACE")
-	end
 	if has_config("sdb") then
 		add_files("src/monitor/sdb.cpp")
 		add_defines("CONFIG_SDB")

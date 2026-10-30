@@ -48,11 +48,11 @@ struct StepResult {
   std::optional<std::uint64_t> fault_address = std::nullopt;
 };
 
-// Called for every fetched instruction after execution when instruction
-// tracing is enabled. The decoded IR is valid only for the duration of the
-// callback.
+#ifdef CONFIG_ITRACE
+// Called for every fetched instruction after execution when itrace is enabled.
 using ItraceCallback = std::function<void(std::uint64_t pc, std::uint32_t instr,
                                           const DecodeResult &decoded, StepStatus status)>;
+#endif
 
 class Simulator {
 public:
@@ -67,12 +67,16 @@ public:
   void reset(std::uint64_t entry_pc);
   StepResult step();
 
+#ifdef CONFIG_ITRACE
   void set_itrace_callback(ItraceCallback callback) { itrace_callback_ = std::move(callback); }
+#endif
 
 private:
   AddressSpace &memory_;
   State state_{};
+#ifdef CONFIG_ITRACE
   ItraceCallback itrace_callback_;
+#endif
 };
 
 } // namespace tile_npu
