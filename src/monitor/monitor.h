@@ -65,26 +65,6 @@ bool parse_dump_range(std::string_view arg, DumpRange &range);
 // options.interactive, enters the sdb shell. Returns the process exit code.
 int run_images(const Options &options);
 
-inline std::string_view status_name(StepStatus status) {
-  // clang-format off
-  using enum StepStatus;
-  switch (status) {
-  case retired:                         return "retired";
-  case execution_not_implemented:       return "execution_not_implemented";
-  case illegal_instruction:             return "illegal_instruction";
-  case invalid_configuration:           return "invalid_configuration";
-  case fetch_fault:                     return "fetch_fault";
-  case instruction_address_misaligned:  return "instruction_address_misaligned";
-  case load_address_misaligned:         return "load_address_misaligned";
-  case store_address_misaligned:        return "store_address_misaligned";
-  case load_fault:                      return "load_fault";
-  case store_fault:                     return "store_fault";
-  case environment_call:                return "environment_call";
-  case breakpoint:                      return "breakpoint";
-  case kernel_end:                      return "kernel_end";
-  default:                              return "unknown";
-  }
-  // clang-format on
-}
+using tile_npu::status_name;
 
 } // namespace tile_npu::monitor

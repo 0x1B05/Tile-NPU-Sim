@@ -2,7 +2,7 @@
 
 #include "execute/execute.h"
 #ifdef CONFIG_MTRACE
-#include "trace/mtrace.h"
+#include "trace/mtrace/mtrace.h"
 #endif
 #include "tile_npu/decode.h"
 #include "utils/common.h"

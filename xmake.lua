@@ -26,11 +26,10 @@ target("sim_core", function()
 	add_files("src/*.cpp|main.cpp", "src/decode/*.cpp|disasm.cpp", "src/execute/*.cpp", "src/platform/*.cpp")
 	if has_config("itrace") then
 		add_defines("CONFIG_ITRACE", { public = true })
-		add_files("src/decode/disasm.cpp")
 	end
 	if has_config("mtrace") then
 		add_defines("CONFIG_MTRACE", { public = true })
-		add_files("src/trace/mtrace.cpp")
+		add_files("src/trace/mtrace/mtrace.cpp")
 	end
 	add_includedirs("include", { public = true })
 	add_includedirs("src")
@@ -50,8 +49,11 @@ target("sim", function()
 		add_files("src/monitor/sdb.cpp")
 		add_defines("CONFIG_SDB")
 	end
+	if has_config("itrace") then
+		add_files("src/trace/itrace/disasm.cpp", "src/trace/itrace/itrace_writer.cpp")
+	end
 	if has_config("mtrace") then
-		add_files("src/trace/mtrace_writer.cpp")
+		add_files("src/trace/mtrace/mtrace_writer.cpp")
 	end
 end)
 

@@ -1,10 +1,10 @@
 #include "monitor.h"
 
 #ifdef CONFIG_ITRACE
-#include "decode/disasm.h"
+#include "trace/itrace/itrace_writer.h"
 #endif
 #ifdef CONFIG_MTRACE
-#include "trace/mtrace_writer.h"
+#include "trace/mtrace/mtrace_writer.h"
 #endif
 #include "parse.h"
 #ifdef CONFIG_SDB
@@ -139,6 +139,7 @@ int run_images(const Options &options) {
       ram, {{&serial, tile_npu::SerialConsole::BASE, tile_npu::SerialConsole::SIZE}});
 #ifdef CONFIG_ITRACE
   std::ofstream itrace_log;
+  std::optional<tile_npu::trace::ItraceWriter> itrace_writer;
   if (options.itrace) {
     const auto path = itrace_path(options);
     itrace_log.open(path, std::ios::out | std::ios::trunc);
@@ -146,6 +147,7 @@ int run_images(const Options &options) {
       std::cerr << "cannot open itrace log: " << path << '\n';
       return 1;
     }
+    itrace_writer.emplace(itrace_log);
   }
 #endif
 #ifdef CONFIG_MTRACE
@@ -170,16 +172,10 @@ int run_images(const Options &options) {
   }
 #endif
 #ifdef CONFIG_ITRACE
-  if (options.itrace) {
-    sim.set_itrace_callback([&itrace_log](std::uint64_t pc, std::uint32_t instr,
-                                          const DecodeResult &decoded, StepStatus status) {
-      itrace_log << "[ITRACE] " << hex64(pc) << ": " << hex32(instr) << "  "
-                 << disassemble(pc, decoded);
-      if (status != StepStatus::retired) {
-        itrace_log << "  ; " << status_name(status);
-      }
-      itrace_log << '\n' << std::flush;
-    });
+  if (itrace_writer) {
+    sim.set_itrace_callback(
+        [&itrace_writer](std::uint64_t pc, std::uint32_t instr, const DecodeResult &decoded,
+                         StepStatus status) { (*itrace_writer)(pc, instr, decoded, status); });
   }
 #endif
   sim.reset(MEMORY_BASE);

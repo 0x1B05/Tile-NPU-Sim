@@ -37,7 +37,7 @@ xmake project -k compile_commands        # 为 clangd 生成 compile_commands.js
 - 如果开关控制的 API 或状态位于 `sim_core`，并且会被 `sim`/测试引用，就在 `sim_core` 上用 `add_defines(..., { public = true })` 传播宏；只服务 `sim`/monitor 的实现保持 private，避免无谓扩大核心接口。
 - 关闭开关时必须同时排除实现源文件、核心 API/成员、CLI 参数、monitor 分支和 host/guest 测试；关闭后的构建不能暴露对应命令行选项，也不能留下未定义符号。
 - `CONFIG_ITRACE` 是 `sim_core` public define，启用时编译 `disasm.cpp`、打开 `ItraceCallback`/`set_itrace_callback`、`--itrace`/`--itrace-log` 和 monitor 日志路径。
-- `CONFIG_MTRACE` 是 `sim_core` public define，启用时编译 `src/trace/mtrace.cpp`、打开 `MtraceRecorder`/`MtraceCallback`/`set_mtrace_callback`、`--mtrace`/`--mtrace-log` 和 monitor 的 JSONL writer。
+- `CONFIG_MTRACE` 是 `sim_core` public define，启用时编译 `src/trace/mtrace/mtrace.cpp`、打开 `MtraceRecorder`/`MtraceCallback`/`set_mtrace_callback`、`--mtrace`/`--mtrace-log` 和 monitor 的 JSONL writer。
 - `CONFIG_SDB` 只在 `sim` target 私有定义，启用时编译 `sdb.cpp`、打开 `-i/--interactive` 与 monitor 的 sdb 分支；`sim_core` 不提供 SDB API。
 
 ## 模块导航
@@ -55,7 +55,7 @@ xmake project -k compile_commands        # 为 clangd 生成 compile_commands.js
 | `include/tile_npu/platform/`、`src/platform/` | `AddressSpace` 接口、`Ram`、`SystemBus` 与 `SerialConsole` |
 | `src/decode/encoding.h`、`pattern.h` | 位段提取、格式解析、编译期 pattern 解析与按序匹配 |
 | `src/decode/decode*.cpp` | 顶层 q 分派，以及 RV64IM / NPU 译码表与 IR 构造 |
-| `src/decode/disasm.*` | ITRACE 用反汇编：从解码 IR 生成 RV64IM 与 NPU 汇编文本 |
+| `src/trace/itrace/disasm.*` | ITRACE 用反汇编：从解码 IR 生成 RV64IM 与 NPU 汇编文本 |
 | `src/execute/execute.h`、`execute.cpp` | 执行上下文、结果类型及标量/NPU 分派 |
 | `src/execute/validate.h`、`validate.cpp` | IR 的统一结构合法性检查，头文件仅声明 `valid_structure(const DecodedNpuInstr &)` |
 | `src/execute/config_check.h` | dtype、shape、layout 等配置约束与配置匹配 |
@@ -63,7 +63,7 @@ xmake project -k compile_commands        # 为 clangd 生成 compile_commands.js
 | `src/domain.h` | 数据域工具、寄存器堆/配置/描述符绑定、域分派与有效区域遍历 |
 | `src/execute/elementwise_op.h`、`operand.h` | 执行域共享的元素运算、操作数读取和浮点工具 |
 | `src/execute/reduce_util.h` | 规约树、absmax 叶映射与跨指令族共享的规约工具 |
-| `include/tile_npu/mtrace.h`、`src/trace/` | MTRACE 事件模型、数据流分类器、访存/寄存器数据路径事件与 JSONL writer |
+| `include/tile_npu/mtrace.h`、`src/trace/` | `itrace/` 的反汇编与文本 writer，`mtrace/` 的事件模型、数据流分类器与 JSONL writer |
 | `src/utils/` | 通用内部工具：`bits.h` 位模式与符号扩展、`format.h` 十六进制格式化、小端转换、variant visitor 与 `unreachable` |
 | `src/main.cpp`、`src/monitor/` | CLI、镜像装载、`npu_exec` 步进循环、sdb 命令与 trace 文件输出 |
 | `tests/` | `units/` host 用例与入口、`guest/` guest driver 与 guest 源码、`include/` 测试头文件 |

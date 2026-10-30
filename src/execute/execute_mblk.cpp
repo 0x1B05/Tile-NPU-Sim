@@ -6,7 +6,7 @@
 #include "matrix_view.h"
 #include "operand.h"
 #ifdef CONFIG_MTRACE
-#include "trace/mtrace.h"
+#include "trace/mtrace/mtrace.h"
 #endif
 #include "utils/common.h"
 #include "utils/endian.h"

@@ -10,7 +10,7 @@
 #include <string_view>
 #include <variant>
 
-namespace tile_npu {
+namespace tile_npu::trace {
 namespace {
 
 // RV64 ABI names are used for scalar instructions. NPU scalar operands use
@@ -403,6 +403,10 @@ std::string npu_instr(const DecodedNpuInstr &instr) {
             return "areduce.rows." + std::string(reduce_name(i.op)) + " " + npu_reg(i.dest) + ", " +
                    npu_reg(i.src);
           },
+          [](const AreduceArgmaxInstr &i) {
+            return "areduce.rows.argmax " + npu_reg(i.index_dest) + ", " + npu_reg(i.value_dest) +
+                   ", " + npu_reg(i.src);
+          },
           [](const VreduceInstr &i) {
             return "vreduce." + std::string(reduce_name(i.op)) + " " + npu_reg(i.dest) + ", " +
                    npu_reg(i.src);
@@ -488,4 +492,4 @@ std::string disassemble(std::uint64_t pc, const DecodeResult &decoded) {
                     decoded);
 }
 
-} // namespace tile_npu
+} // namespace tile_npu::trace
