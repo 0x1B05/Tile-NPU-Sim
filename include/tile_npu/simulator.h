@@ -1,6 +1,9 @@
 #pragma once
 
 #include "tile_npu/decode.h"
+#ifdef CONFIG_MTRACE
+#include "tile_npu/mtrace.h"
+#endif
 #include "tile_npu/platform/address_space.h"
 #include "tile_npu/state.h"
 
@@ -71,11 +74,20 @@ public:
   void set_itrace_callback(ItraceCallback callback) { itrace_callback_ = std::move(callback); }
 #endif
 
+#ifdef CONFIG_MTRACE
+  void set_mtrace_callback(MtraceCallback callback) {
+    mtrace_recorder_.set_callback(std::move(callback));
+  }
+#endif
+
 private:
   AddressSpace &memory_;
   State state_{};
 #ifdef CONFIG_ITRACE
   ItraceCallback itrace_callback_;
+#endif
+#ifdef CONFIG_MTRACE
+  MtraceRecorder mtrace_recorder_;
 #endif
 };
 

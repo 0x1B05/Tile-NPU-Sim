@@ -3,6 +3,9 @@
 #ifdef CONFIG_ITRACE
 #include "decode/disasm.h"
 #endif
+#ifdef CONFIG_MTRACE
+#include "mtrace_writer.h"
+#endif
 #include "parse.h"
 #ifdef CONFIG_SDB
 #include "sdb.h"
@@ -59,6 +62,15 @@ std::string itrace_path(const Options &options) {
   if (options.images.empty()) return "itrace.log";
   const std::filesystem::path image(options.images.front().path);
   return (image.parent_path() / "itrace.log").string();
+}
+#endif
+
+#ifdef CONFIG_MTRACE
+std::string mtrace_path(const Options &options) {
+  if (!options.mtrace_log.empty()) return options.mtrace_log;
+  if (options.images.empty()) return "mtrace.jsonl";
+  const std::filesystem::path image(options.images.front().path);
+  return (image.parent_path() / "mtrace.jsonl").string();
 }
 #endif
 
@@ -136,7 +148,27 @@ int run_images(const Options &options) {
     }
   }
 #endif
+#ifdef CONFIG_MTRACE
+  std::ofstream mtrace_log;
+  std::optional<tile_npu::monitor::MtraceWriter> mtrace_writer;
+  if (options.mtrace) {
+    const auto path = mtrace_path(options);
+    mtrace_log.open(path, std::ios::out | std::ios::trunc);
+    if (!mtrace_log) {
+      std::cerr << "cannot open mtrace log: " << path << '\n';
+      return 1;
+    }
+    mtrace_writer.emplace(mtrace_log);
+    mtrace_writer->write_header();
+  }
+#endif
   tile_npu::Simulator sim(bus);
+#ifdef CONFIG_MTRACE
+  if (mtrace_writer) {
+    sim.set_mtrace_callback(
+        [&mtrace_writer](const tile_npu::TraceEvent &event) { (*mtrace_writer)(event); });
+  }
+#endif
 #ifdef CONFIG_ITRACE
   if (options.itrace) {
     sim.set_itrace_callback([&itrace_log](std::uint64_t pc, std::uint32_t instr,

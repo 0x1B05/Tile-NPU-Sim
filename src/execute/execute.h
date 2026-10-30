@@ -25,6 +25,9 @@ struct ExecuteResult {
 struct ExecContext {
   State &state;
   AddressSpace &memory;
+#ifdef CONFIG_MTRACE
+  MtraceRecorder *trace = nullptr;
+#endif
 };
 
 inline ExecuteResult config_error() { return {.status = StepStatus::invalid_configuration}; }

@@ -19,5 +19,6 @@ __pycache__/
 *.q3b
 *.npz
 
-# Generated instruction traces
+# Generated traces
 itrace.log
+mtrace.jsonl

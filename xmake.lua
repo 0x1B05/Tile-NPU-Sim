@@ -28,6 +28,10 @@ target("sim_core", function()
 		add_defines("CONFIG_ITRACE", { public = true })
 		add_files("src/decode/disasm.cpp")
 	end
+	if has_config("mtrace") then
+		add_defines("CONFIG_MTRACE", { public = true })
+		add_files("src/trace/mtrace.cpp")
+	end
 	add_includedirs("include", { public = true })
 	add_includedirs("src")
 end)
@@ -46,6 +50,9 @@ target("sim", function()
 		add_files("src/monitor/sdb.cpp")
 		add_defines("CONFIG_SDB")
 	end
+	if has_config("mtrace") then
+		add_files("src/monitor/mtrace_writer.cpp")
+	end
 end)
 
 option("sdb", function()
@@ -60,6 +67,13 @@ option("itrace", function()
 	set_showmenu(true)
 	set_category("Debug")
 	set_description("Enable instruction tracing with disassembly (--itrace)")
+end)
+
+option("mtrace", function()
+	set_default(false)
+	set_showmenu(true)
+	set_category("Debug")
+	set_description("Enable NPU data-path tracing (--mtrace)")
 end)
 
 target("sim_tests", function()

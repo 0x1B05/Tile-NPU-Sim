@@ -5,6 +5,9 @@
 #include "domain.h"
 #include "matrix_view.h"
 #include "operand.h"
+#ifdef CONFIG_MTRACE
+#include "trace/mtrace.h"
+#endif
 #include "utils/common.h"
 #include "utils/endian.h"
 
@@ -214,6 +217,10 @@ template <NpuDomain Domain> ExecuteResult block_access(const MblkInstr &instr, E
 
   const bool transpose = desc.descriptor().transform;
   using Element = typename std::remove_reference_t<decltype(reg)>::value_type;
+#ifdef CONFIG_MTRACE
+  const auto trace_descriptor = desc.descriptor();
+  const auto trace_elem = static_cast<std::uint8_t>(sizeof(Element));
+#endif
 
   // A contiguous run per row is the common case and avoids the per-element
   // address-space calls. Multi-byte elements only take this path on a
@@ -224,6 +231,12 @@ template <NpuDomain Domain> ExecuteResult block_access(const MblkInstr &instr, E
       if (fast) {
         if (fast->status == StepStatus::retired) {
           desc.commit_base(*next_base);
+#ifdef CONFIG_MTRACE
+          if (ctx.trace) {
+            trace_matrix_move(*ctx.trace, instr, trace_descriptor, rows, cols, trace_elem,
+                              transpose);
+          }
+#endif
         }
         return *fast;
       }
@@ -245,6 +258,11 @@ template <NpuDomain Domain> ExecuteResult block_access(const MblkInstr &instr, E
     return result;
   }
   desc.commit_base(*next_base);
+#ifdef CONFIG_MTRACE
+  if (ctx.trace) {
+    trace_matrix_move(*ctx.trace, instr, trace_descriptor, rows, cols, trace_elem, transpose);
+  }
+#endif
   return result;
 }
 
@@ -271,6 +289,10 @@ template <NpuDomain Domain> ExecuteResult row_access(const MblkInstr &instr, Exe
   }
 
   using Element = typename std::remove_reference_t<decltype(reg)>::value_type;
+#ifdef CONFIG_MTRACE
+  const auto trace_descriptor = desc.descriptor();
+  const auto trace_elem = static_cast<std::uint8_t>(sizeof(Element));
+#endif
   auto view = matrix_view(reg);
   const auto visit = [&](auto &&fn) {
     for (std::size_t col = 0; col < cols; ++col) {
@@ -282,6 +304,12 @@ template <NpuDomain Domain> ExecuteResult row_access(const MblkInstr &instr, Exe
     return result;
   }
   desc.commit_base(*next_base);
+#ifdef CONFIG_MTRACE
+  if (ctx.trace) {
+    trace_matrix_row_move(*ctx.trace, instr, trace_descriptor, static_cast<std::uint8_t>(cols),
+                          trace_elem);
+  }
+#endif
   return result;
 }
 
@@ -314,8 +342,16 @@ ExecuteResult gather_tile_access(const MblkInstr &instr, ExecContext &ctx) {
   const auto element = [&](std::size_t row, std::size_t col) -> Tile::value_type & {
     return view.at(row, col);
   };
-  return gather_access<Tile::value_type>(ctx.memory, rows, cols, indexed_rows, row_address,
-                                         column_address, element);
+  const auto result = gather_access<Tile::value_type>(ctx.memory, rows, cols, indexed_rows,
+                                                      row_address, column_address, element);
+#ifdef CONFIG_MTRACE
+  if (result.status == StepStatus::retired && ctx.trace) {
+    trace_gather_tile(*ctx.trace, instr, desc.descriptor(), static_cast<std::uint8_t>(indexed_rows),
+                      static_cast<std::uint8_t>(cols),
+                      static_cast<std::uint8_t>(sizeof(Tile::value_type)), index_reg);
+  }
+#endif
+  return result;
 }
 
 ExecuteResult gather_vector_access(const MblkInstr &instr, ExecContext &ctx, VectorDescView &desc,
@@ -337,7 +373,15 @@ ExecuteResult gather_vector_access(const MblkInstr &instr, ExecContext &ctx, Vec
     return std::optional<std::uint64_t>{address};
   };
   const auto element = [&](std::size_t lane, std::size_t) -> Element & { return reg[lane]; };
-  return gather_access<Element>(ctx.memory, len, 1, indexed, row_address, column_address, element);
+  const auto result =
+      gather_access<Element>(ctx.memory, len, 1, indexed, row_address, column_address, element);
+#ifdef CONFIG_MTRACE
+  if (result.status == StepStatus::retired && ctx.trace) {
+    trace_gather_vector(*ctx.trace, instr, desc.descriptor(), static_cast<std::uint8_t>(indexed),
+                        static_cast<std::uint8_t>(sizeof(Element)), index_reg);
+  }
+#endif
+  return result;
 }
 
 ExecuteResult strided_vector_access(const MblkInstr &instr, ExecContext &ctx, VectorDescView &desc,
@@ -348,6 +392,10 @@ ExecuteResult strided_vector_access(const MblkInstr &instr, ExecContext &ctx, Ve
   }
 
   using Element = Vec32::value_type;
+#ifdef CONFIG_MTRACE
+  const auto trace_descriptor = desc.descriptor();
+  const auto trace_elem = static_cast<std::uint8_t>(sizeof(Element));
+#endif
   const auto visit = [&](auto &&fn) {
     for (std::size_t lane = 0; lane < len; ++lane) {
       fn(desc.vector_element_addr(lane), reg[lane]);
@@ -358,6 +406,12 @@ ExecuteResult strided_vector_access(const MblkInstr &instr, ExecContext &ctx, Ve
     return result;
   }
   desc.commit_base(*next_base);
+#ifdef CONFIG_MTRACE
+  if (ctx.trace) {
+    trace_vector_move(*ctx.trace, instr, trace_descriptor, static_cast<std::uint8_t>(len),
+                      trace_elem);
+  }
+#endif
   return result;
 }
 
