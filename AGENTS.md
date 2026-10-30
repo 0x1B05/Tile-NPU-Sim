@@ -46,6 +46,7 @@ xmake project -k compile_commands        # 为 clangd 生成 compile_commands.js
 | `include/tile_npu/platform/`、`src/platform/` | `AddressSpace` 接口、`Ram`、`SystemBus` 与 `SerialConsole` |
 | `src/decode/encoding.h`、`pattern.h` | 位段提取、格式解析、编译期 pattern 解析与按序匹配 |
 | `src/decode/decode*.cpp` | 顶层 q 分派，以及 RV64IM / NPU 译码表与 IR 构造 |
+| `src/decode/disasm.*` | ITRACE 用反汇编：从解码 IR 生成 RV64IM 与 NPU 汇编文本 |
 | `src/execute/execute.h`、`execute.cpp` | 执行上下文、结果类型及标量/NPU 分派 |
 | `src/execute/validate.h`、`validate.cpp` | IR 的统一结构合法性检查，头文件仅声明 `valid_structure(const DecodedNpuInstr &)` |
 | `src/execute/config_check.h` | dtype、shape、layout 等配置约束与配置匹配 |

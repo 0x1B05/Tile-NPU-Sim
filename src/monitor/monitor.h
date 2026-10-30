@@ -35,6 +35,7 @@ struct DumpRange {
 
 struct Options {
   bool interactive = false;
+  bool itrace = false;
   std::size_t memory_mib = DEFAULT_MEMORY_MIB;
   std::uint64_t step_limit = UNLIMITED_STEPS;
   std::optional<DumpRange> dump_range;

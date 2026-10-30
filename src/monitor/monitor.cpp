@@ -1,5 +1,6 @@
 #include "monitor.h"
 
+#include "decode/disasm.h"
 #include "format.h"
 #include "parse.h"
 #ifdef TILE_NPU_ENABLE_SDB
@@ -114,6 +115,17 @@ int run_images(const Options &options) {
   tile_npu::SystemBus bus(
       ram, {{&serial, tile_npu::SerialConsole::BASE, tile_npu::SerialConsole::SIZE}});
   tile_npu::Simulator sim(bus);
+  if (options.itrace) {
+    sim.set_trace(
+        [](std::uint64_t pc, std::uint32_t instr, const DecodeResult &decoded, StepStatus status) {
+          std::cerr << "[ITRACE] " << hex64(pc) << ": " << hex32(instr) << "  "
+                    << disassemble(pc, decoded);
+          if (status != StepStatus::retired) {
+            std::cerr << "  ; " << status_name(status);
+          }
+          std::cerr << '\n';
+        });
+  }
   sim.reset(MEMORY_BASE);
 
 #ifdef TILE_NPU_ENABLE_SDB

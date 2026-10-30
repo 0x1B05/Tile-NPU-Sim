@@ -1,10 +1,13 @@
 #pragma once
 
+#include "tile_npu/decode.h"
 #include "tile_npu/platform/address_space.h"
 #include "tile_npu/state.h"
 
 #include <cstdint>
+#include <functional>
 #include <optional>
+#include <utility>
 
 namespace tile_npu {
 
@@ -45,6 +48,11 @@ struct StepResult {
   std::optional<std::uint64_t> fault_address = std::nullopt;
 };
 
+// Called for every fetched instruction after execution. The decoded IR is
+// valid only for the duration of the callback.
+using TraceCallback = std::function<void(std::uint64_t pc, std::uint32_t instr,
+                                         const DecodeResult &decoded, StepStatus status)>;
+
 class Simulator {
 public:
   explicit Simulator(AddressSpace &memory) : memory_(memory) {}
@@ -58,9 +66,12 @@ public:
   void reset(std::uint64_t entry_pc);
   StepResult step();
 
+  void set_trace(TraceCallback trace) { trace_ = std::move(trace); }
+
 private:
   AddressSpace &memory_;
   State state_{};
+  TraceCallback trace_;
 };
 
 } // namespace tile_npu
