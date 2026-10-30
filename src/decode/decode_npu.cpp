@@ -91,8 +91,11 @@ constexpr DecodeEntry NPU_TABLE[] = {
     {"0011 ?10 000 0000000000 ????? ????? 10", decode_cvt},                           // acvt/vcvt
     {"0011 010 001 0000000000 ????? ????? 10", decode_cvt},                           // twiden
     {"0011 ??? ??? ????? ????? ????? ????? 10", illegal},                             // reserved CVT encodings
+    // AREDUCE argmax (R4): funct3 = 100, reserved5 pinned to 0; vVal5 in
+    // [16:12], Acc source, two Vec32 destinations.
+    {"0001 000 100 00000 ????? ????? ????? 10", decode_areduce_argmax},
     // AREDUCE (R2): reserved3/reserved10 pinned to 0; funct3 = 000 sum,
-    // 001 max, 010 min, 011 sumsq, 100 argmax, 101 absmax.
+    // 001 max, 010 min, 011 sumsq, 101 absmax; 100 is the R4 form above.
     {"0001 000 ??? 0000000000 ????? ????? 10", decode_areduce},
     {"0001 ??? ??? ????? ????? ????? ????? 10", illegal},                             // reserved AREDUCE encodings
     // VREDUCE (R2): funct3 = 000 sum, 001 max, 010 min, 011 sumsq; argmax

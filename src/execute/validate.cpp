@@ -197,8 +197,15 @@ bool valid_structure(const CvtInstr &instr) {
 }
 
 bool valid_structure(const AreduceInstr &instr) {
-  return instr.op <= ReduceOp::absmax && instr.dest.domain == NpuDomain::vec32 &&
-         in_range(instr.dest) && instr.src.domain == NpuDomain::acc && in_range(instr.src);
+  return instr.op <= ReduceOp::absmax && instr.op != ReduceOp::argmax &&
+         instr.dest.domain == NpuDomain::vec32 && in_range(instr.dest) &&
+         instr.src.domain == NpuDomain::acc && in_range(instr.src);
+}
+
+bool valid_structure(const AreduceArgmaxInstr &instr) {
+  return instr.index_dest.domain == NpuDomain::vec32 && in_range(instr.index_dest) &&
+         instr.value_dest.domain == NpuDomain::vec32 && in_range(instr.value_dest) &&
+         instr.src.domain == NpuDomain::acc && in_range(instr.src);
 }
 
 bool valid_structure(const VreduceInstr &instr) {

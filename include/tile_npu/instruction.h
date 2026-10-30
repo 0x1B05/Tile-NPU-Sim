@@ -246,6 +246,12 @@ struct AreduceInstr {
   NpuRegister src{};  // Acc
 };
 
+struct AreduceArgmaxInstr {
+  NpuRegister index_dest{}; // Vec32 u32
+  NpuRegister value_dest{}; // Vec32 f32
+  NpuRegister src{};        // Acc
+};
+
 struct VreduceInstr {
   ReduceOp op = ReduceOp::sum;
   NpuRegister dest{}; // Vec32; the result broadcasts to every effective lane

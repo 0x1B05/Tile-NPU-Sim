@@ -301,10 +301,10 @@ TEST_CASE(npu_guest_cvt) {
 
 TEST_CASE(npu_guest_reduce) {
   // tests/guest/npu/reduce.S self-configures configs and descriptors, then
-  // exercises an areduce.rows.sum (f32) and vreduce.argmax cases (NaN
-  // candidates are ignored; all-NaN falls back to index 0 / NaN value) with
-  // store-back and in-register checks. It reaches ebreak with a0 = 0 on
-  // success; a failing check reports its stage in a0.
+  // exercises areduce.rows.sum/argmax and vreduce.argmax cases (NaN candidates
+  // are ignored; all-NaN falls back to index 0 / NaN value) with store-back
+  // and in-register checks. It reaches ebreak with a0 = 0 on success; a
+  // failing check reports its stage in a0.
   check_guest_image("reduce", 1024);
 }
 

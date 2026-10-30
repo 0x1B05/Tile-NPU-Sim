@@ -91,12 +91,11 @@ ArgmaxCandidate reduce_argmax(std::span<const float> values) {
 }
 
 // areduce.rows.*: row-wise reductions of an f32 Acc into a Vec32 whose length
-// equals the source row count (u32 destination for argmax).
+// equals the source row count.
 ExecuteResult areduce(const AreduceInstr &instr, State &state) {
   const auto &src_config = state.ac[instr.src.index];
   const auto &dst_config = state.vc[instr.dest.index];
-  const auto dst_dtype = instr.op == ReduceOp::argmax ? DType::u32 : DType::f32;
-  if (!valid_config_of(src_config, DType::f32) || !valid_config_of(dst_config, dst_dtype) ||
+  if (!valid_config_of(src_config, DType::f32) || !valid_config_of(dst_config, DType::f32) ||
       dst_config.len != src_config.rows) {
     return config_error();
   }
@@ -108,14 +107,33 @@ ExecuteResult areduce(const AreduceInstr &instr, State &state) {
     for (std::size_t col = 0; col < src_config.cols; ++col) {
       values[col] = as_f32(src.at(row, col));
     }
-    const auto row_values = std::span(values).first(src_config.cols);
-    if (instr.op == ReduceOp::argmax) {
-      const auto best = reduce_argmax(row_values);
-      dst_reg[row] = best.index;
-    } else {
-      const auto result = as_u32(reduce_f32(instr.op, row_values));
-      dst_reg[row] = result;
+    const auto result = as_u32(reduce_f32(instr.op, std::span(values).first(src_config.cols)));
+    dst_reg[row] = result;
+  }
+  return {.status = StepStatus::retired};
+}
+
+// areduce.rows.argmax: the winning logical index and value of every source row
+// are written to the corresponding lane of vIdx and vVal.
+ExecuteResult areduce_argmax(const AreduceArgmaxInstr &instr, State &state) {
+  const auto &src_config = state.ac[instr.src.index];
+  const auto &index_config = state.vc[instr.index_dest.index];
+  const auto &value_config = state.vc[instr.value_dest.index];
+  if (!valid_config_of(src_config, DType::f32) || !valid_config_of(index_config, DType::u32) ||
+      !valid_config_of(value_config, DType::f32) || index_config.len != src_config.rows ||
+      value_config.len != src_config.rows) {
+    return config_error();
+  }
+  const FpEnvGuard fp_env;
+  auto src = matrix_view(std::as_const(state.a[instr.src.index]));
+  std::array<float, REDUCE_LEAVES> values{};
+  for (std::size_t row = 0; row < src_config.rows; ++row) {
+    for (std::size_t col = 0; col < src_config.cols; ++col) {
+      values[col] = as_f32(src.at(row, col));
     }
+    const auto best = reduce_argmax(std::span(values).first(src_config.cols));
+    state.v[instr.index_dest.index][row] = best.index;
+    state.v[instr.value_dest.index][row] = as_u32(best.value);
   }
   return {.status = StepStatus::retired};
 }
@@ -175,6 +193,10 @@ ExecuteResult vreduce_argmax(const VreduceArgmaxInstr &instr, State &state) {
 } // namespace
 
 ExecuteResult execute(const AreduceInstr &instr, State &state) { return areduce(instr, state); }
+
+ExecuteResult execute(const AreduceArgmaxInstr &instr, State &state) {
+  return areduce_argmax(instr, state);
+}
 
 ExecuteResult execute(const VreduceInstr &instr, State &state) { return vreduce(instr, state); }
 
