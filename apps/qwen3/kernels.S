@@ -904,56 +904,118 @@ qwen3_embed:
 # ---------------------------------------------------------------------------
 # uint32_t qwen3_argmax(const float *x, uint32_t n)   n % 32 == 0
 # Greedy index of the maximum with the ISA argmax rules: NaN candidates are
-# ignored, numeric ties keep the smaller index, and an all-NaN chunk contributes
-# index 0 with a NaN value. Chunk 0 seeds the running best; later chunks fold
-# in through vcmplt plus a mask that replaces an all-NaN best with the first
-# numeric candidate. The best index reaches a0 through a one-lane vstore +
-# fence + lwu.
+# ignored, numeric ties keep the smaller index, and an all-NaN block contributes
+# index 0 with a NaN value. Each 32x32 f32 Acc tile holds 32 chunks of 32
+# logits; areduce.rows.argmax reduces the rows and vreduce.argmax picks the
+# best row. The winning block keeps its row-index vector, best row, and base;
+# those are written to the stack once at the end and reloaded through scalar
+# loads to form the global index.
 # ---------------------------------------------------------------------------
     .globl qwen3_argmax
 qwen3_argmax:
-    addi    sp, sp, -16
+    addi    sp, sp, -160
+    sd      ra, 144(sp)
     LI_CWV  t6, DT_F32, 32
-    SETW    SEL_VC, 0, X_T6, 1   # vc0/vc1 f32: best value, chunk
+    SETW    SEL_VC, 0, X_T6      # v0: best value
+    SETW    SEL_VC, 4, X_T6      # v4: areduce value
+    SETW    SEL_VC, 6, X_T6      # v6: block value
     LI_CWV  t6, DT_U32, 32
-    SETW    SEL_VC, 2, X_T6, 1   # vc2/vc3 u32: best index, candidate index
-    LI_CWV  t6, DT_F32, 32
-    SETW    SEL_VC, 4, X_T6      # vc4 f32: candidate value
-    LI_CWV  t6, DT_U32, 32
-    SETW    SEL_VC, 5, X_T6, 2   # vc5..vc7 u32: compare/NaN masks
-    SETX    SEL_VM, CF_BASE, 1, X_A0
-    SETIV   SEL_VM, CF_STRIDE, 4, 1
-    SETIV   SEL_VM, CF_VFLAGS, 1, 1
-    li      t4, 32                        # next chunk base
-    srli    t6, a1, 5
-    VLOAD   1
-    VREDUCE_ARGMAX 2, 0, 1                # best = chunk 0 (index 0 if all NaN)
+    SETW    SEL_VC, 3, X_T6      # v3: areduce index
+    SETW    SEL_VC, 5, X_T6      # v5: block row
+    SETW    SEL_VC, 8, X_T6, 2   # v8..v10: compare/NaN masks
+    SETW    SEL_VC, 11, X_T6, 3  # v11..v14: winning index vector, row, base, current base
+
+    LI_CWM  t6, DT_F32, 32, 32
+    SETW    SEL_AC, 0, X_T6
+    SETIM   SEL_AM, CF_RSTRIDE, 128, 0
+    SETIM   SEL_AM, CF_CSTRIDE, 4, 0
+    SETIM   SEL_AM, CF_FLAGS, 0, 0
+
+    SETX    SEL_VM, CF_BASE, 12, X_SP
+    SETIV   SEL_VM, CF_STRIDE, 4, 12
+    SETIV   SEL_VM, CF_VFLAGS, 0, 12
+    addi    t5, sp, 4
+    SETX    SEL_VM, CF_BASE, 13, X_T5
+    SETIV   SEL_VM, CF_STRIDE, 4, 13
+    SETIV   SEL_VM, CF_VFLAGS, 0, 13
+    addi    t5, sp, 16
+    SETX    SEL_VM, CF_BASE, 11, X_T5
+    SETIV   SEL_VM, CF_STRIDE, 4, 11
+    SETIV   SEL_VM, CF_VFLAGS, 0, 11
+
+    li      t6, 0x7fc00000
+    VFILLX  0, X_T6               # all-NaN best
+    VFILL   11, 0                 # no winning block yet
+    VFILL   12, 0
+    VFILL   13, 0
+
+    srli    t6, a1, 10            # full 1024-logit blocks
+    andi    t3, a1, 1023
+    srli    t3, t3, 5             # tail rows
+    li      t4, 0                 # block base in elements
+    beqz    t6, .Lam_tail
+.Lam_full:
+    slli    t5, t4, 2
+    add     t5, a0, t5
+    SETX    SEL_AM, CF_BASE, 0, X_T5
+    jal     ra, .Lam_block
+    addi    t4, t4, 1024
     addi    t6, t6, -1
-    beqz    t6, .Lam_done
-.Lam_loop:
-    VLOAD   1
-    VREDUCE_ARGMAX 3, 4, 1                # v3 = chunk argmax (u32), v4 = value
-    VADDX   3, 3, X_T4                    # global candidate index
-    VCMPLT    5, 0, 4                     # numeric: best < candidate
-    VCMPUNORD 6, 0, 0                     # best is NaN (all-NaN chunk)
-    VCMPUNORD 7, 4, 4                     # candidate is NaN
-    VNOT      7, 7                        # candidate is numeric
-    VAND      6, 6, 7                     # replace an all-NaN best
-    VOR       5, 5, 6                     # greater numeric, or first numeric after NaN
-    VSELECT   0, 5, 4, 0
-    VSELECT   2, 5, 3, 2
-    addi    t4, t4, 32
-    addi    t6, t6, -1
-    bnez    t6, .Lam_loop
+    bnez    t6, .Lam_full
+
+.Lam_tail:
+    beqz    t3, .Lam_done
+    SETX    SEL_AC, CF_ROWS, 0, X_T3
+    SETX    SEL_VC, CF_LEN, 3, X_T3
+    SETX    SEL_VC, CF_LEN, 4, X_T3
+    slli    t5, t4, 2
+    add     t5, a0, t5
+    SETX    SEL_AM, CF_BASE, 0, X_T5
+    jal     ra, .Lam_tail_block
+
 .Lam_done:
     LI_CWV  t6, DT_U32, 1
-    SETW    SEL_VC, 5, X_T6      # vc5: len-1 exit store
-    SETX    SEL_VM, CF_BASE, 5, X_SP
-    SETIV   SEL_VM, CF_STRIDE, 4, 5
-    SETIV   SEL_VM, CF_VFLAGS, 0, 5
-    VBROADCAST 5, 2, 0
-    VSTORE  5
-    FENCE_MEM                   # the index store must be visible to the lwu
-    lwu     a0, 0(sp)
-    addi    sp, sp, 16
+    SETW    SEL_VC, 12, X_T6, 1  # exit row/base as one lane each
+    VSTORE  12
+    VSTORE  13
+    VSTORE  11                   # winning block's row-index vector
+    FENCE_MEM
+    lwu     t0, 0(sp)            # best row
+    lwu     t1, 4(sp)            # winning block base
+    slli    t2, t0, 2
+    add     t2, sp, t2
+    lwu     t2, 16(t2)           # column index of the best row
+    slli    t3, t0, 5
+    add     t1, t1, t3
+    add     a0, t1, t2
+    ld      ra, 144(sp)
+    addi    sp, sp, 160
+    ret
+
+# A full block already has rows=32 and vc3/vc4 length 32.
+.Lam_block:
+    ALOAD   0
+    AREDUCE_ARGMAX 3, 4, 0        # v3 = row col index, v4 = row max
+    j       .Lam_block_rest
+
+# The tail block reuses the full tournament after restoring vc3's length.
+.Lam_tail_block:
+    ALOAD   0
+    AREDUCE_ARGMAX 3, 4, 0
+    LI_CWV  t6, DT_U32, 32
+    SETW    SEL_VC, 3, X_T6
+
+.Lam_block_rest:
+    VREDUCE_ARGMAX 5, 6, 4        # v5 = best row, v6 = block max
+    VFILLX  14, X_T4              # v14 = current block base
+    VCMPLT    8, 0, 6
+    VCMPUNORD 9, 0, 0
+    VCMPUNORD 10, 6, 6
+    VNOT      10, 10
+    VAND      9, 9, 10
+    VOR       8, 8, 9
+    VSELECT   0, 8, 6, 0
+    VSELECT   11, 8, 3, 11
+    VSELECT   12, 8, 5, 12
+    VSELECT   13, 8, 14, 13
     ret
