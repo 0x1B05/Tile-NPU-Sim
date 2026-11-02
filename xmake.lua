@@ -19,14 +19,39 @@ if has_config("native") then
 	add_cxflags("-march=native", { tools = { "gcc", "gxx", "clang", "clangxx" } })
 end
 
+option("trace", function()
+	set_default("none")
+	set_values("none", "itrace", "mtrace", "all")
+	set_showmenu(true)
+	set_category("Debug")
+	set_description("Trace features: none, itrace, mtrace, or all")
+end)
+
+option("trace_flush_records", function()
+	set_default("4096")
+	set_showmenu(true)
+	set_category("Debug")
+	set_description("Batch trace flush interval in records")
+end)
+
+local trace_mode = get_config("trace") or "none"
+local trace_flush_records = tonumber(get_config("trace_flush_records") or "4096") or 0
+
 -- Internal static library shared by the runner and the host test binaries.
 target("sim_core", function()
 	set_kind("static")
 	set_default(false)
 	add_files("src/*.cpp|main.cpp", "src/decode/*.cpp|disasm.cpp", "src/execute/*.cpp", "src/platform/*.cpp")
-	if has_config("itrace") then
+	if trace_mode ~= "none" then
+		add_defines("CONFIG_TRACE", { public = true })
+		add_defines("TRACE_FLUSH_RECORDS=" .. trace_flush_records, { public = true })
+	end
+	if trace_mode == "itrace" or trace_mode == "all" then
 		add_defines("CONFIG_ITRACE", { public = true })
-		add_files("src/decode/disasm.cpp")
+	end
+	if trace_mode == "mtrace" or trace_mode == "all" then
+		add_defines("CONFIG_MTRACE", { public = true })
+		add_files("src/trace/mtrace/mtrace.cpp")
 	end
 	add_includedirs("include", { public = true })
 	add_includedirs("src")
@@ -46,6 +71,12 @@ target("sim", function()
 		add_files("src/monitor/sdb.cpp")
 		add_defines("CONFIG_SDB")
 	end
+	if trace_mode == "itrace" or trace_mode == "all" then
+		add_files("src/trace/itrace/disasm.cpp", "src/trace/itrace/itrace_writer.cpp")
+	end
+	if trace_mode == "mtrace" or trace_mode == "all" then
+		add_files("src/trace/mtrace/mtrace_writer.cpp")
+	end
 end)
 
 option("sdb", function()
@@ -53,13 +84,6 @@ option("sdb", function()
 	set_showmenu(true)
 	set_category("Debug")
 	set_description("Enable the interactive sdb debugger in sim")
-end)
-
-option("itrace", function()
-	set_default(false)
-	set_showmenu(true)
-	set_category("Debug")
-	set_description("Enable instruction tracing with disassembly (--itrace)")
 end)
 
 target("sim_tests", function()

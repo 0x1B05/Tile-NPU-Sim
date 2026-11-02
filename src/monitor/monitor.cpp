@@ -1,7 +1,10 @@
 #include "monitor.h"
 
 #ifdef CONFIG_ITRACE
-#include "decode/disasm.h"
+#include "trace/itrace/itrace_writer.h"
+#endif
+#ifdef CONFIG_MTRACE
+#include "trace/mtrace/mtrace_writer.h"
 #endif
 #include "parse.h"
 #ifdef CONFIG_SDB
@@ -53,12 +56,35 @@ bool load_image(const Image &image, Ram &memory) {
   return true;
 }
 
-#ifdef CONFIG_ITRACE
-std::string itrace_path(const Options &options) {
-  if (!options.itrace_log.empty()) return options.itrace_log;
-  if (options.images.empty()) return "itrace.log";
+#ifdef CONFIG_TRACE
+std::string trace_path(const Options &options, const char *filename) {
+  if (!options.trace_dir.empty()) {
+    return (std::filesystem::path(options.trace_dir) / filename).string();
+  }
+  if (options.images.empty()) return filename;
   const std::filesystem::path image(options.images.front().path);
-  return (image.parent_path() / "itrace.log").string();
+  return (image.parent_path() / filename).string();
+}
+#endif
+
+#ifdef CONFIG_ITRACE
+std::string itrace_path(const Options &options) { return trace_path(options, "itrace.log"); }
+#endif
+
+#ifdef CONFIG_MTRACE
+std::string mtrace_path(const Options &options) { return trace_path(options, "mtrace.jsonl"); }
+#endif
+
+#ifdef CONFIG_TRACE
+bool ensure_trace_dir(const Options &options) {
+  if (options.trace_dir.empty()) return true;
+  std::error_code error;
+  std::filesystem::create_directories(options.trace_dir, error);
+  if (error || !std::filesystem::is_directory(options.trace_dir)) {
+    std::cerr << "cannot create trace directory: " << options.trace_dir << '\n';
+    return false;
+  }
+  return true;
 }
 #endif
 
@@ -122,11 +148,22 @@ int run_images(const Options &options) {
   for (const auto &image : options.images) {
     if (!load_image(image, ram)) return 1;
   }
+#ifdef CONFIG_TRACE
+  bool tracing = false;
+#ifdef CONFIG_ITRACE
+  tracing = tracing || options.itrace;
+#endif
+#ifdef CONFIG_MTRACE
+  tracing = tracing || options.mtrace;
+#endif
+  if (tracing && !ensure_trace_dir(options)) return 1;
+#endif
   tile_npu::SerialConsole serial(std::cout);
   tile_npu::SystemBus bus(
       ram, {{&serial, tile_npu::SerialConsole::BASE, tile_npu::SerialConsole::SIZE}});
 #ifdef CONFIG_ITRACE
   std::ofstream itrace_log;
+  std::optional<tile_npu::trace::ItraceWriter> itrace_writer;
   if (options.itrace) {
     const auto path = itrace_path(options);
     itrace_log.open(path, std::ios::out | std::ios::trunc);
@@ -134,23 +171,44 @@ int run_images(const Options &options) {
       std::cerr << "cannot open itrace log: " << path << '\n';
       return 1;
     }
+    itrace_writer.emplace(itrace_log, options.trace_flush_line);
+  }
+#endif
+#ifdef CONFIG_MTRACE
+  std::ofstream mtrace_log;
+  std::optional<tile_npu::trace::MtraceWriter> mtrace_writer;
+  if (options.mtrace) {
+    const auto path = mtrace_path(options);
+    mtrace_log.open(path, std::ios::out | std::ios::trunc);
+    if (!mtrace_log) {
+      std::cerr << "cannot open mtrace log: " << path << '\n';
+      return 1;
+    }
+    mtrace_writer.emplace(mtrace_log, options.trace_flush_line);
+    mtrace_writer->write_header();
   }
 #endif
   tile_npu::Simulator sim(bus);
 #ifdef CONFIG_ITRACE
-  if (options.itrace) {
-    sim.set_itrace_callback([&itrace_log](std::uint64_t pc, std::uint32_t instr,
-                                          const DecodeResult &decoded, StepStatus status) {
-      itrace_log << "[ITRACE] " << hex64(pc) << ": " << hex32(instr) << "  "
-                 << disassemble(pc, decoded);
-      if (status != StepStatus::retired) {
-        itrace_log << "  ; " << status_name(status);
-      }
-      itrace_log << '\n' << std::flush;
-    });
+  if (itrace_writer) {
+    sim.set_itrace_callback(
+        [&itrace_writer](std::uint64_t pc, std::uint32_t instr, const DecodeResult &decoded,
+                         StepStatus status) { (*itrace_writer)(pc, instr, decoded, status); });
+  }
+#endif
+#ifdef CONFIG_MTRACE
+  if (mtrace_writer) {
+    sim.set_mtrace_callback(
+        [&mtrace_writer](const tile_npu::TraceEvent &event) { (*mtrace_writer)(event); });
   }
 #endif
   sim.reset(MEMORY_BASE);
+#ifdef CONFIG_ITRACE
+  if (itrace_writer) sim.set_itrace_pc_window(options.trace_pc_start, options.trace_pc_end);
+#endif
+#ifdef CONFIG_MTRACE
+  if (mtrace_writer) sim.set_mtrace_pc_window(options.trace_pc_start, options.trace_pc_end);
+#endif
 
 #ifdef CONFIG_SDB
   if (options.interactive) {
@@ -165,6 +223,13 @@ int run_images(const Options &options) {
 
   // A guest stops at ebreak or kernel.end with a0 as the process exit code.
   const auto halt_result = npu_exec(sim, options.step_limit);
+  // Make normal stop/error paths visible even when a writer is in batch mode.
+#ifdef CONFIG_ITRACE
+  if (itrace_writer) itrace_writer->flush();
+#endif
+#ifdef CONFIG_MTRACE
+  if (mtrace_writer) mtrace_writer->flush();
+#endif
   if (options.dump_range && !write_dump(ram, *options.dump_range)) {
     std::cerr << "cannot dump memory range to " << options.dump_range->path << '\n';
     return 1;

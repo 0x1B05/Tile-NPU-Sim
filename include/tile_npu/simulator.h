@@ -1,12 +1,19 @@
 #pragma once
 
 #include "tile_npu/decode.h"
+#ifdef CONFIG_ITRACE
+#include "trace/window.h"
+#endif
+#ifdef CONFIG_MTRACE
+#include "trace/mtrace/events.h"
+#endif
 #include "tile_npu/platform/address_space.h"
 #include "tile_npu/state.h"
 
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <string_view>
 #include <utility>
 
 namespace tile_npu {
@@ -48,8 +55,30 @@ struct StepResult {
   std::optional<std::uint64_t> fault_address = std::nullopt;
 };
 
+inline std::string_view status_name(StepStatus status) {
+  // clang-format off
+  using enum StepStatus;
+  switch (status) {
+  case retired:                         return "retired";
+  case execution_not_implemented:       return "execution_not_implemented";
+  case illegal_instruction:             return "illegal_instruction";
+  case invalid_configuration:           return "invalid_configuration";
+  case fetch_fault:                     return "fetch_fault";
+  case instruction_address_misaligned:  return "instruction_address_misaligned";
+  case load_address_misaligned:         return "load_address_misaligned";
+  case store_address_misaligned:        return "store_address_misaligned";
+  case load_fault:                      return "load_fault";
+  case store_fault:                     return "store_fault";
+  case environment_call:                return "environment_call";
+  case breakpoint:                      return "breakpoint";
+  case kernel_end:                      return "kernel_end";
+  default:                              return "unknown";
+  }
+  // clang-format on
+}
+
 #ifdef CONFIG_ITRACE
-// Called for every fetched instruction after execution when itrace is enabled.
+// Called after execution for each fetched instruction in the ITRACE PC window.
 using ItraceCallback = std::function<void(std::uint64_t pc, std::uint32_t instr,
                                           const DecodeResult &decoded, StepStatus status)>;
 #endif
@@ -69,6 +98,24 @@ public:
 
 #ifdef CONFIG_ITRACE
   void set_itrace_callback(ItraceCallback callback) { itrace_callback_ = std::move(callback); }
+
+  // Trace instructions whose PC is in [pc_start, pc_end); pc_end == 0 means no
+  // upper bound.
+  void set_itrace_pc_window(std::uint64_t pc_start, std::uint64_t pc_end) {
+    itrace_window_.set(pc_start, pc_end);
+  }
+#endif
+
+#ifdef CONFIG_MTRACE
+  void set_mtrace_callback(MtraceCallback callback) {
+    mtrace_recorder_.set_callback(std::move(callback));
+  }
+
+  // Trace instructions whose PC is in [pc_start, pc_end); pc_end == 0 means no
+  // upper bound.
+  void set_mtrace_pc_window(std::uint64_t pc_start, std::uint64_t pc_end) {
+    mtrace_recorder_.set_pc_window(pc_start, pc_end);
+  }
 #endif
 
 private:
@@ -76,6 +123,10 @@ private:
   State state_{};
 #ifdef CONFIG_ITRACE
   ItraceCallback itrace_callback_;
+  trace::TraceWindow itrace_window_;
+#endif
+#ifdef CONFIG_MTRACE
+  MtraceRecorder mtrace_recorder_;
 #endif
 };
 
