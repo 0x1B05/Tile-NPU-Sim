@@ -34,6 +34,9 @@ target("sim_core", function()
 	set_kind("static")
 	set_default(false)
 	add_files("src/*.cpp|main.cpp", "src/decode/*.cpp|disasm.cpp", "src/execute/*.cpp", "src/platform/*.cpp")
+	if trace_mode ~= "none" then
+		add_defines("CONFIG_TRACE", { public = true })
+	end
 	if trace_mode == "itrace" or trace_mode == "all" then
 		add_defines("CONFIG_ITRACE", { public = true })
 	end

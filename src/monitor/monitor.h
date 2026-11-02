@@ -41,7 +41,7 @@ struct Options {
   bool mtrace = false;
   bool mtrace_flush_line = false;
 #endif
-#if defined(CONFIG_ITRACE) || defined(CONFIG_MTRACE)
+#ifdef CONFIG_TRACE
   std::string trace_dir;
   std::uint64_t trace_start = 0;
   std::uint64_t trace_end = 0;

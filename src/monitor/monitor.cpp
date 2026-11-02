@@ -78,7 +78,7 @@ std::string mtrace_path(const Options &options) {
 }
 #endif
 
-#if defined(CONFIG_ITRACE) || defined(CONFIG_MTRACE)
+#ifdef CONFIG_TRACE
 bool ensure_trace_dir(const Options &options) {
   if (options.trace_dir.empty()) return true;
   std::error_code error;
@@ -151,7 +151,7 @@ int run_images(const Options &options) {
   for (const auto &image : options.images) {
     if (!load_image(image, ram)) return 1;
   }
-#if defined(CONFIG_ITRACE) || defined(CONFIG_MTRACE)
+#ifdef CONFIG_TRACE
   if (!ensure_trace_dir(options)) return 1;
 #endif
   tile_npu::SerialConsole serial(std::cout);

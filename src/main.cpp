@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
   std::vector<std::string> image_args;
   std::int64_t steps = -1;
   std::string dump_range;
-#if defined(CONFIG_ITRACE) || defined(CONFIG_MTRACE)
+#ifdef CONFIG_TRACE
   std::string trace_selection;
   std::string trace_dir;
 #endif
@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
   app.add_flag("--mtrace"        , options.mtrace     , "Trace NPU data movement to a log file");
   app.add_option("--mtrace-flush", mtrace_flush       , "Flush mode: batch (default) or line");
 #endif
-#if defined(CONFIG_ITRACE) || defined(CONFIG_MTRACE)
+#ifdef CONFIG_TRACE
   app.add_option("--trace"       , trace_selection    , "Select traces: itrace, mtrace, or all")
       ->check(CLI::IsMember({"itrace", "mtrace", "all"}));
   app.add_option("--trace-dir"   , trace_dir          , "Directory for default itrace/mtrace logs");
@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
     options.mtrace_flush_line = mtrace_flush == "line";
   }
 #endif
-#if defined(CONFIG_ITRACE) || defined(CONFIG_MTRACE)
+#ifdef CONFIG_TRACE
   if (!trace_selection.empty()) {
     const bool want_itrace = trace_selection == "itrace" || trace_selection == "all";
     const bool want_mtrace = trace_selection == "mtrace" || trace_selection == "all";
