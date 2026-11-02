@@ -56,7 +56,7 @@ StepResult Simulator::step() {
   }
 #endif
 #ifdef CONFIG_ITRACE
-  if (itrace_callback_) {
+  if (itrace_callback_ && itrace_window_.contains(pc)) {
     itrace_callback_(pc, instr, decoded, execution.status);
   }
 #endif

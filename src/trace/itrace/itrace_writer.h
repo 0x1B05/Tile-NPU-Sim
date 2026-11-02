@@ -1,20 +1,18 @@
 #pragma once
 
 #include "tile_npu/simulator.h"
-#include "trace/window.h"
 
 #include <cstdint>
 #include <fstream>
 
 namespace tile_npu::trace {
 
-// Formats executed instructions as the ITRACE text stream. The monitor owns
-// the file and installs this writer as the simulator callback.
+// Writes the executed-instruction stream as ITRACE text. Batch mode flushes
+// every 4096 records; line mode flushes each record for crash-adjacent debug.
 class ItraceWriter {
 public:
-  explicit ItraceWriter(std::ofstream &out, std::uint64_t pc_start = 0, std::uint64_t pc_end = 0,
-                        bool flush_each_line = false)
-      : out_(out), window_(pc_start, pc_end), flush_each_line_(flush_each_line) {}
+  explicit ItraceWriter(std::ofstream &out, bool flush_each_line = false)
+      : out_(out), flush_each_line_(flush_each_line) {}
 
   ~ItraceWriter();
 
@@ -25,9 +23,8 @@ public:
 
 private:
   std::ofstream &out_;
-  TraceWindow window_;
   bool flush_each_line_ = false;
-  std::uint64_t lines_ = 0;
+  std::uint64_t records_ = 0;
 };
 
 } // namespace tile_npu::trace

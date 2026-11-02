@@ -131,7 +131,7 @@ void MtraceWriter::operator()(const TraceEvent &event) {
 
   if (flush_each_line_) {
     out_.flush();
-  } else if ((++events_ & 0xfff) == 0) {
+  } else if ((++records_ & 0xfff) == 0) {
     out_.flush();
   }
 }

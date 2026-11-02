@@ -8,7 +8,7 @@
 namespace tile_npu::trace {
 
 // Writes the logical MTRACE event stream as JSON Lines. Batch mode flushes
-// every 4096 events; line mode flushes each record for crash-adjacent debug.
+// every 4096 records; line mode flushes each record for crash-adjacent debug.
 class MtraceWriter {
 public:
   explicit MtraceWriter(std::ofstream &out, bool flush_each_line = false)
@@ -25,7 +25,7 @@ public:
 private:
   std::ofstream &out_;
   bool flush_each_line_ = false;
-  std::uint64_t events_ = 0;
+  std::uint64_t records_ = 0;
 };
 
 } // namespace tile_npu::trace

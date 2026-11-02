@@ -167,8 +167,7 @@ int run_images(const Options &options) {
       std::cerr << "cannot open itrace log: " << path << '\n';
       return 1;
     }
-    itrace_writer.emplace(itrace_log, options.trace_pc_start, options.trace_pc_end,
-                          options.trace_flush_line);
+    itrace_writer.emplace(itrace_log, options.trace_flush_line);
   }
 #endif
 #ifdef CONFIG_MTRACE
@@ -186,12 +185,6 @@ int run_images(const Options &options) {
   }
 #endif
   tile_npu::Simulator sim(bus);
-#ifdef CONFIG_MTRACE
-  if (mtrace_writer) {
-    sim.set_mtrace_callback(
-        [&mtrace_writer](const tile_npu::TraceEvent &event) { (*mtrace_writer)(event); });
-  }
-#endif
 #ifdef CONFIG_ITRACE
   if (itrace_writer) {
     sim.set_itrace_callback(
@@ -199,7 +192,16 @@ int run_images(const Options &options) {
                          StepStatus status) { (*itrace_writer)(pc, instr, decoded, status); });
   }
 #endif
+#ifdef CONFIG_MTRACE
+  if (mtrace_writer) {
+    sim.set_mtrace_callback(
+        [&mtrace_writer](const tile_npu::TraceEvent &event) { (*mtrace_writer)(event); });
+  }
+#endif
   sim.reset(MEMORY_BASE);
+#ifdef CONFIG_ITRACE
+  if (itrace_writer) sim.set_itrace_pc_window(options.trace_pc_start, options.trace_pc_end);
+#endif
 #ifdef CONFIG_MTRACE
   if (mtrace_writer) sim.set_mtrace_pc_window(options.trace_pc_start, options.trace_pc_end);
 #endif
@@ -217,11 +219,11 @@ int run_images(const Options &options) {
 
   // A guest stops at ebreak or kernel.end with a0 as the process exit code.
   const auto halt_result = npu_exec(sim, options.step_limit);
+  // Make normal stop/error paths visible even when a writer is in batch mode.
 #ifdef CONFIG_ITRACE
   if (itrace_writer) itrace_writer->flush();
 #endif
 #ifdef CONFIG_MTRACE
-  // Make normal stop/error paths visible even when the writer is in batch mode.
   if (mtrace_writer) mtrace_writer->flush();
 #endif
   if (options.dump_range && !write_dump(ram, *options.dump_range)) {

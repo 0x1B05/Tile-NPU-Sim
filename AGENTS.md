@@ -37,8 +37,8 @@ xmake project -k compile_commands        # 为 clangd 生成 compile_commands.js
 - 如果开关控制的 API 或状态位于 `sim_core`，并且会被 `sim`/测试引用，就在 `sim_core` 上用 `add_defines(..., { public = true })` 传播宏；只服务 `sim`/monitor 的实现保持 private，避免无谓扩大核心接口。
 - 关闭开关时必须同时排除实现源文件、核心 API/成员、CLI 参数、monitor 分支和 host/guest 测试；关闭后的构建不能暴露对应命令行选项，也不能留下未定义符号。
 - `CONFIG_TRACE` 是 `sim_core` public define，`trace` 选择任一后端时定义；公共的 `--trace`/`--trace-dir`/`--trace-start`/`--trace-end`/`--trace-flush` 代码由它统一门控，新增或删除后端不需要改这些公共条件。
-- `CONFIG_ITRACE` 是 `sim_core` public define，启用时编译 `src/trace/itrace/` 下的反汇编与 writer、打开 `ItraceCallback`/`set_itrace_callback`、`--itrace` 和 `--trace=itrace`。
-- `CONFIG_MTRACE` 是 `sim_core` public define，启用时编译 `src/trace/mtrace/`、打开 `MtraceRecorder`/`MtraceCallback`/`set_mtrace_callback`、`--mtrace` 和 `--trace=mtrace`。
+- `CONFIG_ITRACE` 是 `sim_core` public define，启用时编译 `src/trace/itrace/` 下的反汇编与 writer、打开 `ItraceCallback`/`set_itrace_callback`/`set_itrace_pc_window`、`--itrace` 和 `--trace=itrace`。
+- `CONFIG_MTRACE` 是 `sim_core` public define，启用时编译 `src/trace/mtrace/`、打开 `MtraceRecorder`/`MtraceCallback`/`set_mtrace_callback`/`set_mtrace_pc_window`、`--mtrace` 和 `--trace=mtrace`。
 - `CONFIG_SDB` 只在 `sim` target 私有定义，启用时编译 `sdb.cpp`、打开 `-i/--interactive` 与 monitor 的 sdb 分支；`sim_core` 不提供 SDB API。
 
 ## 模块导航
@@ -49,7 +49,7 @@ xmake project -k compile_commands        # 为 clangd 生成 compile_commands.js
 | `include/tile_npu/instruction.h` | 按功能组织的标量/NPU 语义 IR 与操作数类型，语义类型不要求与 major 一一对应 |
 | `src/op_info.h` | 译码与结构检查共享的操作元数据：操作/数据域合法性与 funct 表 |
 | `include/tile_npu/decode.h` | `DecodeResult` 与译码接口 |
-| `include/tile_npu/simulator.h`、`src/simulator.cpp` | `Simulator::reset` / `step`、`StepStatus`；启用 ITRACE/MTRACE 时提供对应 callback |
+| `include/tile_npu/simulator.h`、`src/simulator.cpp` | `Simulator::reset` / `step`、`StepStatus`；启用 ITRACE/MTRACE 时提供对应 callback 与 PC 窗口 |
 | `src/config.h`、`src/config.cpp` | 配置字段编号映射、字段读写、值转换与写入校验 |
 | `src/execute/matrix_view.h` | 固定大小矩阵寄存器的非拥有视图，只负责物理坐标映射 |
 | `src/execute/descriptor_view.h` | 描述符地址计算、保留位检查及访存后基地址自增 |

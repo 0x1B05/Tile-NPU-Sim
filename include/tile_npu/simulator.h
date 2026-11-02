@@ -1,6 +1,9 @@
 #pragma once
 
 #include "tile_npu/decode.h"
+#ifdef CONFIG_ITRACE
+#include "trace/window.h"
+#endif
 #ifdef CONFIG_MTRACE
 #include "trace/mtrace/events.h"
 #endif
@@ -95,6 +98,12 @@ public:
 
 #ifdef CONFIG_ITRACE
   void set_itrace_callback(ItraceCallback callback) { itrace_callback_ = std::move(callback); }
+
+  // Trace instructions whose PC is in [pc_start, pc_end); pc_end == 0 means no
+  // upper bound.
+  void set_itrace_pc_window(std::uint64_t pc_start, std::uint64_t pc_end) {
+    itrace_window_.set(pc_start, pc_end);
+  }
 #endif
 
 #ifdef CONFIG_MTRACE
@@ -102,6 +111,8 @@ public:
     mtrace_recorder_.set_callback(std::move(callback));
   }
 
+  // Trace instructions whose PC is in [pc_start, pc_end); pc_end == 0 means no
+  // upper bound.
   void set_mtrace_pc_window(std::uint64_t pc_start, std::uint64_t pc_end) {
     mtrace_recorder_.set_pc_window(pc_start, pc_end);
   }
@@ -112,6 +123,7 @@ private:
   State state_{};
 #ifdef CONFIG_ITRACE
   ItraceCallback itrace_callback_;
+  trace::TraceWindow itrace_window_;
 #endif
 #ifdef CONFIG_MTRACE
   MtraceRecorder mtrace_recorder_;

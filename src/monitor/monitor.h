@@ -36,7 +36,9 @@ struct DumpRange {
 
 struct Options {
   bool interactive = false;
+#ifdef CONFIG_ITRACE
   bool itrace = false;
+#endif
 #ifdef CONFIG_MTRACE
   bool mtrace = false;
 #endif

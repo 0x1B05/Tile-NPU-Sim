@@ -78,7 +78,8 @@ public:
     pc_ = 0;
   }
 
-  // Trace instruction indexes in [start, end); end == 0 means no upper bound.
+  // Keep events from instructions whose PC is in [pc_start, pc_end);
+  // pc_end == 0 means no upper bound.
   void set_pc_window(std::uint64_t pc_start, std::uint64_t pc_end) {
     window_.set(pc_start, pc_end);
   }

@@ -70,7 +70,9 @@ int main(int argc, char **argv) {
       return 2;
     }
 #endif
+#ifdef CONFIG_ITRACE
     options.itrace = options.itrace || want_itrace;
+#endif
 #ifdef CONFIG_MTRACE
     options.mtrace = options.mtrace || want_mtrace;
 #endif
