@@ -7,6 +7,8 @@ namespace tile_npu::trace {
 
 void ItraceWriter::operator()(std::uint64_t pc, std::uint32_t instr, const DecodeResult &decoded,
                               StepStatus status) {
+  const auto index = next_++;
+  if (index < start_ || (end_ != 0 && index >= end_)) return;
   out_ << "[ITRACE] " << hex64(pc) << ": " << hex32(instr) << "  " << disassemble(pc, decoded);
   if (status != StepStatus::retired) {
     out_ << "  ; " << status_name(status);

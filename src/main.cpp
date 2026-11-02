@@ -38,6 +38,10 @@ int main(int argc, char **argv) {
   app.add_option("--trace"       , trace_selection    , "Select traces: itrace, mtrace, or all")
       ->check(CLI::IsMember({"itrace", "mtrace", "all"}));
   app.add_option("--trace-dir"   , trace_dir          , "Directory for default itrace/mtrace logs");
+  app.add_option("--trace-start" , options.trace_start, "First instruction index to trace")
+      ->check(CLI::NonNegativeNumber);
+  app.add_option("--trace-end"   , options.trace_end  , "One-past-last instruction index (0 = unlimited)")
+      ->check(CLI::NonNegativeNumber);
 #endif
   app.add_option("--dump-range"  , dump_range         , "Dump FILE@0xADDR:0xSIZE after the run");
   app.add_option("images"        , image_args         , "Program and data images (path[@0xADDR])") ->required();
@@ -76,6 +80,10 @@ int main(int argc, char **argv) {
 #endif
   }
   options.trace_dir = trace_dir;
+  if (options.trace_end != 0 && options.trace_end < options.trace_start) {
+    std::cerr << "trace end must be zero or no earlier than trace start\n";
+    return 2;
+  }
 #endif
   options.step_limit = static_cast<std::uint64_t>(steps);
   if (!dump_range.empty()) {

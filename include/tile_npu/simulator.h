@@ -101,6 +101,10 @@ public:
   void set_mtrace_callback(MtraceCallback callback) {
     mtrace_recorder_.set_callback(std::move(callback));
   }
+
+  void set_mtrace_window(std::uint64_t start, std::uint64_t end) {
+    mtrace_recorder_.set_window(start, end);
+  }
 #endif
 
 private:
