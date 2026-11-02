@@ -5,14 +5,19 @@
 #include "op_info.h"
 
 #include <cstdint>
+#include <optional>
 
 namespace tile_npu {
 namespace {
 
 // The BX bit selects the second source: BX = 0 a same-domain register, BX = 1
-// the Scalar register xS. Every 5-bit register number is now valid.
-NpuOperand decode_bx_src2(std::uint8_t sel3, std::uint8_t src2, NpuDomain domain) {
-  return (sel3 & 1) != 0 ? NpuOperand{ScalarRegister{src2}} : NpuOperand{NpuRegister{domain, src2}};
+// the Scalar register xS. The register form is reserved outside the domain's
+// register file.
+std::optional<NpuOperand> decode_bx_src2(std::uint8_t sel3, std::uint8_t src2,
+                                         NpuDomain domain) {
+  if ((sel3 & 1) != 0) return NpuOperand{ScalarRegister{src2}};
+  if (!domain_register_valid(domain, src2)) return std::nullopt;
+  return NpuOperand{NpuRegister{domain, src2}};
 }
 
 } // namespace
@@ -28,14 +33,17 @@ DecodeResult decode_ebin(std::uint32_t word) {
   const auto f = encoding::NpuR3::from(word);
   const auto domain = sel3_domain(f.sel3);
   const auto op = static_cast<EbinOp>(f.funct4);
-  if (!is_ebin_op(op, domain)) {
+  if (!is_ebin_op(op, domain) || !domain_register_valid(domain, f.dest) ||
+      !domain_register_valid(domain, f.src1)) {
     return DecodeError::illegal;
   }
+  const auto src2 = decode_bx_src2(f.sel3, f.src2, domain);
+  if (!src2) return DecodeError::illegal;
   return DecodedNpuInstr{EbinInstr{
       .op = op,
       .dest = {.domain = domain, .index = f.dest},
       .src1 = {.domain = domain, .index = f.src1},
-      .src2 = decode_bx_src2(f.sel3, f.src2, domain),
+      .src2 = *src2,
   }};
 }
 
@@ -49,7 +57,8 @@ DecodeResult decode_eun(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = sel3_domain(f.sel3);
   const auto op = static_cast<EunOp>(f.funct3);
-  if (!is_eun_op(op, domain)) {
+  if (!is_eun_op(op, domain) || !domain_register_valid(domain, f.dest) ||
+      !domain_register_valid(domain, f.src2)) {
     return DecodeError::illegal;
   }
   return DecodedNpuInstr{EunInstr{
@@ -68,15 +77,18 @@ DecodeResult decode_eun(std::uint32_t word) {
 DecodeResult decode_ecmp(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domain = sel3_domain(f.sel3);
-  if (domain != NpuDomain::vec32 || !CMP_BY_FUNCT3[f.funct3]) {
+  if (domain != NpuDomain::vec32 || !CMP_BY_FUNCT3[f.funct3] ||
+      !domain_register_valid(domain, f.dest) || !domain_register_valid(domain, f.src1)) {
     return DecodeError::illegal;
   }
   const auto op = static_cast<CmpOp>(f.funct3);
+  const auto src2 = decode_bx_src2(f.sel3, f.src2, domain);
+  if (!src2) return DecodeError::illegal;
   return DecodedNpuInstr{CmpInstr{
       .op = op,
       .dest = {.domain = domain, .index = f.dest},
       .src1 = {.domain = domain, .index = f.src1},
-      .src2 = decode_bx_src2(f.sel3, f.src2, domain),
+      .src2 = *src2,
   }};
 }
 
@@ -90,7 +102,9 @@ DecodeResult decode_ebcast(std::uint32_t word) {
   constexpr auto MATRIX_DOMAIN = NpuDomain::acc;
   constexpr auto VECTOR_DOMAIN = NpuDomain::vec32;
   const auto op = static_cast<EbinOp>(f.funct4);
-  if (!is_ebin_op(op, MATRIX_DOMAIN)) {
+  if (!is_ebin_op(op, MATRIX_DOMAIN) || !domain_register_valid(MATRIX_DOMAIN, f.dest) ||
+      !domain_register_valid(MATRIX_DOMAIN, f.src1) ||
+      !domain_register_valid(VECTOR_DOMAIN, f.src2)) {
     return DecodeError::illegal;
   }
   return DecodedNpuInstr{BcastInstr{
@@ -112,7 +126,9 @@ DecodeResult decode_er4(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domain = sel3_domain(f.sel3);
   const auto op = static_cast<Er4Op>(f.funct3);
-  if (!is_er4_op(op, domain)) {
+  if (!is_er4_op(op, domain) || !domain_register_valid(domain, f.dest) ||
+      !domain_register_valid(domain, f.arg) || !domain_register_valid(domain, f.src1) ||
+      !domain_register_valid(domain, f.src2)) {
     return DecodeError::illegal;
   }
   return DecodedNpuInstr{Er4Instr{
@@ -136,7 +152,8 @@ DecodeResult decode_emask(std::uint32_t word) {
   const auto domain = sel3_domain(f.sel3);
   const bool fill_is_scalar = (f.sel3 & 1) != 0;
   const auto op = static_cast<MaskOp>(f.funct3);
-  if (!is_mask_op(op, domain) || (!fill_is_scalar && f.src2 > FILL5_MAX)) {
+  if (!is_mask_op(op, domain) || !domain_register_valid(domain, f.dest) ||
+      !domain_register_valid(domain, f.src1) || (!fill_is_scalar && f.src2 > FILL5_MAX)) {
     return DecodeError::illegal;
   }
   const auto fill =

@@ -265,7 +265,7 @@ TEST_CASE(cfg_setw_writes_full_matrix_span) {
   Ram memory(CODE_BASE, 8);
   Simulator sim(memory);
   write_word(memory, CODE_BASE, cfg_setw(0, 0, 0, 5, 31));     // tc0..tc31 = x5
-  write_word(memory, CODE_BASE + 4, cfg_setw(1, 0, 0, 6, 31)); // ac0..ac31 = x6
+  write_word(memory, CODE_BASE + 4, cfg_setw(1, 0, 0, 6, 15)); // ac0..ac15 = x6
   sim.reset(CODE_BASE);
   // rows 8, cols 16, row-major; TC takes i8, AC takes f32.
   sim.state().scalar.write_x(5, 0x0000'1008ull);
@@ -276,8 +276,8 @@ TEST_CASE(cfg_setw_writes_full_matrix_span) {
   check_eq(sim.state().tc[31].dtype, DType::i8, "tc31 dtype");
   check_eq(sim.step().status, StepStatus::retired, "ac full span retires");
   check_eq(sim.state().ac[0].rows, std::uint8_t{8}, "ac0 rows");
-  check_eq(sim.state().ac[31].cols, std::uint8_t{16}, "ac31 cols");
-  check_eq(sim.state().ac[31].dtype, DType::f32, "ac31 dtype");
+  check_eq(sim.state().ac[15].cols, std::uint8_t{16}, "ac15 cols");
+  check_eq(sim.state().ac[15].dtype, DType::f32, "ac15 dtype");
 }
 
 TEST_CASE(cfg_setw_rejects_invalid_word) {

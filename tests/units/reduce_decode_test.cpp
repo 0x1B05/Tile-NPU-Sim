@@ -140,6 +140,9 @@ TEST_CASE(reduce_decode_rejects_reserved) {
       DecodeCase{"vreduce reserved10", make_vreduce(0, 0, 0) | (1u << 12)},
       DecodeCase{"areduce.argmax reserved5", make_areduce_argmax(0, 0, 0) | (1u << 17)},
       DecodeCase{"vreduce.argmax reserved5", make_vreduce_argmax(0, 0, 0) | (1u << 17)},
+      // Acc has 16 registers; a16+ is a reserved encoding.
+      DecodeCase{"areduce a16 source", make_areduce(0, 0, 16)},
+      DecodeCase{"areduce.argmax a16 source", make_areduce_argmax(0, 0, 16)},
   };
   expect_illegal(cases);
 }

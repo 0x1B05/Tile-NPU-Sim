@@ -4,6 +4,7 @@
 #include "utils/common.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <tuple>
 #include <utility>
 
@@ -16,6 +17,10 @@ inline constexpr std::size_t domain_register_count(NpuDomain domain) {
   case NpuDomain::vec32: return VECTOR_REGISTERS;
   default: return 0;
   }
+}
+
+inline constexpr bool domain_register_valid(NpuDomain domain, std::uint8_t index) {
+  return index < domain_register_count(domain);
 }
 
 template <NpuDomain Domain> auto &domain_regs(State &state) {

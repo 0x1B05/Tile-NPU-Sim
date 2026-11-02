@@ -67,13 +67,13 @@ TEST_CASE(ebcast_decode) {
            .src1 = 1,
            .vec = 2,
            .by_col = false},
-      Case{.name = "amulv.bycol a31, a30, v31",
-           .word = make_ebcast(true, 2, 31, 30, 31),
+      Case{.name = "amulv.bycol a15, a14, v31",
+           .word = make_ebcast(true, 2, 15, 14, 31),
            .op = EbinOp::mul,
            .matrix_domain = NpuDomain::acc,
            .vector_domain = NpuDomain::vec32,
-           .dest = 31,
-           .src1 = 30,
+           .dest = 15,
+           .src1 = 14,
            .vec = 31,
            .by_col = true},
       Case{.name = "ashlv.byrow a3, a4, v5",
@@ -100,6 +100,9 @@ TEST_CASE(ebcast_decode_rejects_reserved) {
       DecodeCase{"funct4 0110", make_ebcast(false, 6, 0, 0, 0)},
       DecodeCase{"funct4 1111", make_ebcast(false, 15, 0, 0, 0)},
       DecodeCase{"reserved funct4 0011", make_ebcast(true, 3, 0, 0, 0)},
+      // Acc has 16 registers; a16+ is a reserved encoding.
+      DecodeCase{"acc dest 16 out of range", make_ebcast(false, 0, 16, 1, 2)},
+      DecodeCase{"acc src1 16 out of range", make_ebcast(false, 0, 0, 16, 2)},
   };
   expect_illegal(cases);
 }

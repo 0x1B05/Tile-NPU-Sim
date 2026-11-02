@@ -62,12 +62,12 @@ TEST_CASE(eun_decode) {
            .domain = NpuDomain::vec32,
            .dest = 2,
            .src = 3},
-      Case{.name = "aneg a31, a30",
-           .word = make_eun(NpuDomain::acc, 2, 31, 30),
+      Case{.name = "aneg a15, a14",
+           .word = make_eun(NpuDomain::acc, 2, 15, 14),
            .op = EunOp::neg,
            .domain = NpuDomain::acc,
-           .dest = 31,
-           .src = 30},
+           .dest = 15,
+           .src = 14},
       Case{.name = "vexp2.approx v5, v6",
            .word = make_eun(NpuDomain::vec32, 3, 5, 6),
            .op = EunOp::exp2,
@@ -102,6 +102,9 @@ TEST_CASE(eun_decode_rejects_reserved) {
       // sel3 bit 0 and reserved10 must be 0.
       DecodeCase{"sel3 bit0", make_eun(NpuDomain::vec32, 0, 0, 0) | (1u << 25)},
       DecodeCase{"reserved10", make_eun(NpuDomain::vec32, 0, 0, 0) | (1u << 12)},
+      // Acc has 16 registers; a16+ is a reserved encoding.
+      DecodeCase{"aneg a16 destination", make_eun(NpuDomain::acc, 2, 16, 0)},
+      DecodeCase{"aneg a16 source", make_eun(NpuDomain::acc, 2, 0, 16)},
   };
   expect_illegal(cases);
 }

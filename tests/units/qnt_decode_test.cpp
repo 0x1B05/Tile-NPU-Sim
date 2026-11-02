@@ -62,6 +62,9 @@ TEST_CASE(qnt_decode_rejects_reserved) {
       // The matrix forms reserve IS and index5.
       DecodeCase{"aquant IS", make_qnt(NpuDomain::tile, 0, 0, 0, 0, 0, true)},
       DecodeCase{"tdequant index5", make_qnt(NpuDomain::acc, 0, 0, 0, 0, 1)},
+      // Acc has 16 registers; a16+ is a reserved encoding.
+      DecodeCase{"aquant a16 source", make_qnt(NpuDomain::tile, 0, 0, 16, 0)},
+      DecodeCase{"tdequant a16 destination", make_qnt(NpuDomain::acc, 0, 16, 0, 0)},
   };
   expect_illegal(cases);
 }

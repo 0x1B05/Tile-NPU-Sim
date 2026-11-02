@@ -140,8 +140,8 @@ TEST_CASE(validate_rejects_bad_ebcast) {
   check_illegal(BcastInstr{EbinOp::add, A(0), V(1), V(0), false}, "vec32 matrix source");
   check_illegal(BcastInstr{EbinOp::add, A(0), A(1), T(0), false}, "tile broadcast source");
   check_illegal(BcastInstr{EbinOp::add, V(0), V(1), V(0), false}, "vector destination");
-  check_illegal(BcastInstr{EbinOp::add, A(32), A(1), V(0), false}, "destination index 32");
-  check_illegal(BcastInstr{EbinOp::add, A(0), A(32), V(0), false}, "source index 32");
+  check_illegal(BcastInstr{EbinOp::add, A(16), A(1), V(0), false}, "destination index 16");
+  check_illegal(BcastInstr{EbinOp::add, A(0), A(16), V(0), false}, "source index 16");
   check_illegal(BcastInstr{EbinOp::add, A(0), A(1), V(32), false}, "vector index 32");
 }
 
@@ -190,7 +190,7 @@ TEST_CASE(validate_rejects_bad_row_move) {
   check_illegal(RowInstr{RowOp::insert, A(0), R(0), ImmediateIndex{0}}, "mismatched vector domain");
   check_illegal(RowInstr{RowOp::extract, T(0), V(0), ImmediateIndex{0}},
                 "mismatched matrix domain");
-  check_illegal(RowInstr{RowOp::insert, A(32), V(0), ImmediateIndex{0}}, "matrix index 32");
+  check_illegal(RowInstr{RowOp::insert, A(16), V(0), ImmediateIndex{0}}, "matrix index 16");
   check_illegal(RowInstr{RowOp::insert, A(0), V(32), ImmediateIndex{0}}, "vector index 32");
   check_illegal(RowInstr{static_cast<RowOp>(2), A(0), V(0), ImmediateIndex{0}}, "reserved op");
 }
@@ -212,8 +212,8 @@ TEST_CASE(validate_rejects_bad_cfg) {
                 "reserved register type");
   check_illegal(CfgSetiInstr{.dest = 32, .field = ConfigField::rows}, "seti dest index 32");
   check_illegal(CfgGetInstr{.dest = 32, .field = ConfigField::rows}, "get xD index 32");
-  check_illegal(CfgGetInstr{.reg_type = ConfigRegType::ac, .src = 32, .field = ConfigField::dtype},
-                "get ac32 out of range");
+  check_illegal(CfgGetInstr{.reg_type = ConfigRegType::ac, .src = 16, .field = ConfigField::dtype},
+                "get ac16 out of range");
   check_illegal(CfgCopyInstr{.src = 32}, "copy src index 32");
   check_illegal(CfgSetiInstr{.field = ConfigField::base_addr},
                 "tile config cannot use descriptor field");
@@ -246,8 +246,8 @@ TEST_CASE(validate_rejects_bad_cfg_word) {
   check_illegal(CfgGetwInstr{.reg_type = ConfigRegType::vm}, "getw on a descriptor");
   check_illegal(CfgSetwInstr{.reg_type = ConfigRegType::tc, .dest = 31, .n = 1},
                 "setw span past tc31");
-  check_illegal(CfgSetwInstr{.reg_type = ConfigRegType::ac, .dest = 31, .n = 1},
-                "setw span past ac31");
+  check_illegal(CfgSetwInstr{.reg_type = ConfigRegType::ac, .dest = 15, .n = 1},
+                "setw span past ac15");
 }
 
 TEST_CASE(validate_rejects_bad_cvt) {
@@ -288,8 +288,8 @@ TEST_CASE(validate_rejects_bad_mma) {
                 "unassigned mma op");
   check_illegal(MmaInstr{.op = MmaOp::nt_zero, .dest = V(0), .src_a = T(0), .src_b = T(1)},
                 "mma destination domain");
-  check_illegal(MmaInstr{.op = MmaOp::nt_zero, .dest = A(32), .src_a = T(0), .src_b = T(1)},
-                "mma destination index");
+  check_illegal(MmaInstr{.op = MmaOp::nt_zero, .dest = A(16), .src_a = T(0), .src_b = T(1)},
+                "mma destination index 16");
   check_illegal(MmaInstr{.op = MmaOp::nt_zero, .dest = A(0), .src_a = T(0), .src_b = A(1)},
                 "mma src_b domain");
 }
@@ -310,6 +310,20 @@ TEST_CASE(validate_rejects_bad_vmma) {
 
 TEST_CASE(validate_rejects_bad_sys) {
   check_illegal(SysInstr{static_cast<SysOp>(4)}, "reserved funct3");
+}
+
+TEST_CASE(validate_rejects_acc_index_16) {
+  check_illegal(EbinInstr{EbinOp::add, A(16), A(0), A(1)}, "ebin destination a16");
+  check_illegal(EunInstr{EunOp::neg, A(16), A(0)}, "eun destination a16");
+  check_illegal(Er4Instr{Er4Op::select, A(16), A(0), A(1), A(2)}, "er4 destination a16");
+  check_illegal(MaskInstr{MaskOp::tail, A(16), A(0), 0, Fill5Code{0}}, "mask destination a16");
+  check_illegal(MblkInstr{.op = MblkOp::load, .reg = A(16)}, "mblk destination a16");
+  check_illegal(FillInstr{A(16), FillImm16{1}}, "fill destination a16");
+  check_illegal(MoveInstr{A(16), A(0)}, "move destination a16");
+  check_illegal(CvtInstr{CvtOp::cvt, A(16), A(0)}, "cvt destination a16");
+  check_illegal(AreduceInstr{ReduceOp::sum, V(0), A(16)}, "areduce source a16");
+  check_illegal(AquantInstr{.dest = T(0), .src = A(16), .scale = 0}, "aquant source a16");
+  check_illegal(TdequantInstr{.dest = A(16), .src = T(0), .scale = 0}, "tdequant destination a16");
 }
 
 TEST_CASE(validate_accepts_legal_hand_built_ebin) {
@@ -343,10 +357,10 @@ TEST_CASE(validate_accepts_high_index_cfg) {
   check_eq(env.state.tc[31].rows, 4, "tc31 rows written");
 
   const CfgSetiInstr ac{
-      .reg_type = ConfigRegType::ac, .dest = 31, .field = ConfigField::rows, .imm = 4};
+      .reg_type = ConfigRegType::ac, .dest = 15, .field = ConfigField::rows, .imm = 4};
   const auto ac_result = exec_npu_instr(DecodedNpuInstr{ac}, env.ctx);
-  check_eq(ac_result.status, StepStatus::retired, "hand-built cfg.seti ac31 retires");
-  check_eq(env.state.ac[31].rows, 4, "ac31 rows written");
+  check_eq(ac_result.status, StepStatus::retired, "hand-built cfg.seti ac15 retires");
+  check_eq(env.state.ac[15].rows, 4, "ac15 rows written");
 
   const CfgSetiInstr tm{
       .reg_type = ConfigRegType::tm, .dest = 31, .field = ConfigField::row_stride_bytes, .imm = 8};
@@ -355,10 +369,10 @@ TEST_CASE(validate_accepts_high_index_cfg) {
   check_eq(env.state.tm[31].row_stride_bytes, 8, "tm31 row stride written");
 
   const CfgSetiInstr am{
-      .reg_type = ConfigRegType::am, .dest = 31, .field = ConfigField::row_stride_bytes, .imm = 8};
+      .reg_type = ConfigRegType::am, .dest = 15, .field = ConfigField::row_stride_bytes, .imm = 8};
   const auto am_result = exec_npu_instr(DecodedNpuInstr{am}, env.ctx);
-  check_eq(am_result.status, StepStatus::retired, "hand-built cfg.seti am31 retires");
-  check_eq(env.state.am[31].row_stride_bytes, 8, "am31 row stride written");
+  check_eq(am_result.status, StepStatus::retired, "hand-built cfg.seti am15 retires");
+  check_eq(env.state.am[15].row_stride_bytes, 8, "am15 row stride written");
 }
 
 TEST_CASE(validate_accepts_high_index_data_registers) {
@@ -375,15 +389,15 @@ TEST_CASE(validate_accepts_high_index_data_registers) {
   check_eq(env.state.t[31][0], i8_bits(8), "tile lane 0");
   check_eq(env.state.t[31][1], i8_bits(6), "tile lane 1");
 
-  for (auto index : {29, 30, 31})
+  for (auto index : {13, 14, 15})
     acc_cfg(env.state, index, DType::i32, 1, 2);
-  env.state.a[30][0] = static_cast<std::uint32_t>(-7);
-  env.state.a[30][1] = 9;
-  env.state.a[29][0] = 12;
-  env.state.a[29][1] = static_cast<std::uint32_t>(-3);
-  const EbinInstr acc_add{EbinOp::add, A(31), A(30), A(29)}; // aadd a31, a30, a29
+  env.state.a[14][0] = static_cast<std::uint32_t>(-7);
+  env.state.a[14][1] = 9;
+  env.state.a[13][0] = 12;
+  env.state.a[13][1] = static_cast<std::uint32_t>(-3);
+  const EbinInstr acc_add{EbinOp::add, A(15), A(14), A(13)}; // aadd a15, a14, a13
   const auto acc_result = exec_npu_instr(DecodedNpuInstr{acc_add}, env.ctx);
-  check_eq(acc_result.status, StepStatus::retired, "hand-built aadd a31 retires");
-  check_eq(env.state.a[31][0], 5u, "acc lane 0");
-  check_eq(env.state.a[31][1], 6u, "acc lane 1");
+  check_eq(acc_result.status, StepStatus::retired, "hand-built aadd a15 retires");
+  check_eq(env.state.a[15][0], 5u, "acc lane 0");
+  check_eq(env.state.a[15][1], 6u, "acc lane 1");
 }

@@ -131,7 +131,7 @@ TEST_CASE(cfg_decode_seti) {
            ConfigRegType::vm, 31, 0, ConfigField::flags, 1},
       Case{"seti tc31 (last tile)", cfg_i(0x5, 0, 0, 1, 31), Case::Kind::seti, ConfigRegType::tc,
            31, 0, ConfigField::dtype, 1},
-      Case{"seti ac31 (last acc)", cfg_i(0x5, 1, 0, 1, 31), Case::Kind::seti, ConfigRegType::ac, 31,
+      Case{"seti ac15 (last acc)", cfg_i(0x5, 1, 0, 1, 15), Case::Kind::seti, ConfigRegType::ac, 15,
            0, ConfigField::dtype, 1},
   };
   check_cases(cases);
@@ -228,7 +228,12 @@ TEST_CASE(cfg_decode_rejects_reserved) {
       DecodeCase{"get N5 nonzero", cfg_reg(0, 0, 2, 0, 0, 5) | (1u << 12)},
       DecodeCase{"setx tc31 + 2", cfg_reg(0, 0, 0, 1, 4, 31) | (1u << 12)},
       DecodeCase{"copy vc31 + 2", cfg_reg(2, 0, 1, 0, 0, 31) | (1u << 12)},
-      DecodeCase{"copy am31 + 2", cfg_reg(1, 1, 1, 0, 0, 31) | (1u << 12)},
+      DecodeCase{"copy am15 + 1", cfg_reg(1, 1, 1, 0, 0, 15) | (1u << 12)},
+      DecodeCase{"seti ac16 out of range", cfg_i(0x5, 1, 0, 1, 16)},
+      DecodeCase{"setx ac16 out of range", cfg_reg(1, 0, 0, 1, 4, 16)},
+      DecodeCase{"copy ac16 source out of range", cfg_reg(1, 0, 1, 0, 16, 0)},
+      DecodeCase{"get ac16 out of range", cfg_reg(1, 0, 2, 0, 16, 5)},
+      DecodeCase{"getw ac16 out of range", cfg_reg(1, 0, 4, 0, 16, 5)},
       DecodeCase{"funct3 = 101 reserved", cfg_reg(0, 0, 5, 0, 0, 0)},
       DecodeCase{"funct3 = 111 reserved", cfg_reg(0, 0, 7, 0, 0, 0)},
       // setw/getw: compute configs only, field5 zero, span within the type.
@@ -236,7 +241,7 @@ TEST_CASE(cfg_decode_rejects_reserved) {
       DecodeCase{"getw on vm", cfg_reg(2, 1, 4, 0, 0, 5)},
       DecodeCase{"setw field5 nonzero", cfg_reg(0, 0, 3, 1, 4, 0)},
       DecodeCase{"setw tc31 + 2", cfg_reg(0, 0, 3, 0, 4, 31) | (1u << 12)},
-      DecodeCase{"setw ac31 + 2", cfg_reg(1, 0, 3, 0, 4, 31) | (1u << 12)},
+      DecodeCase{"setw ac15 + 1", cfg_reg(1, 0, 3, 0, 4, 15) | (1u << 12)},
       DecodeCase{"getw N5 nonzero", cfg_reg(0, 0, 4, 0, 0, 5) | (1u << 12)},
       // sel2 = 11 is reserved in both config groups.
       DecodeCase{"mem seti sel2 11", cfg_i(0x6, 3, 0, 32, 0)},

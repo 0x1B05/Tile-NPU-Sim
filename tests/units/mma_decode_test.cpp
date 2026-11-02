@@ -121,6 +121,8 @@ TEST_CASE(mma_decode_rejects_reserved) {
       // reserved3 must be 0; row5 is reserved for mma.
       DecodeCase{"reserved3", 0x02003106u},
       DecodeCase{"mma row5", make_mma(0, 0, 1, 2, 1)},
+      // Acc has 16 registers; a16+ is a reserved encoding.
+      DecodeCase{"mma a16 destination", make_mma(0, 16, 1, 2)},
   };
   expect_illegal(cases);
 }

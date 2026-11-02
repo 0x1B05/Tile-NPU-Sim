@@ -87,11 +87,11 @@ void check_lane_cases(const std::array<LaneCase, N> &cases) {
 
 TEST_CASE(row_move_decode) {
   constexpr std::array cases{
-      RowCase{.name = "ainsert.row a31[0], v0",
-              .word = make_row_move(false, 0, 0, 0, 31),
+      RowCase{.name = "ainsert.row a15[0], v0",
+              .word = make_row_move(false, 0, 0, 0, 15),
               .op = RowOp::insert,
               .matrix_domain = NpuDomain::acc,
-              .matrix = 31,
+              .matrix = 15,
               .vector_domain = NpuDomain::vec32,
               .vector = 0,
               .index = 0},
@@ -148,6 +148,9 @@ TEST_CASE(row_lane_decode_rejects_reserved) {
       // ROW_MOVE has only funct3 000/001; LANE_MOVE stops at 010.
       DecodeCase{"row funct3 010", make_row_move(false, 2, 0, 0, 0)},
       DecodeCase{"lane funct3 011", make_lane_move(false, 3, 0, 0, 0)},
+      // Acc has 16 registers; a16+ is a reserved encoding.
+      DecodeCase{"ainsert.row a16", make_row_move(false, 0, 0, 0, 16)},
+      DecodeCase{"aextract.row a16", make_row_move(false, 1, 0, 16, 0)},
   };
   expect_illegal(cases);
 }

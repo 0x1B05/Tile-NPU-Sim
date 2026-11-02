@@ -1,5 +1,6 @@
 #include "decode_npu.h"
 
+#include "domain.h"
 #include "encoding.h"
 #include "op_info.h"
 
@@ -17,6 +18,9 @@ DecodeResult decode_cvt(std::uint32_t word) {
   const auto op = static_cast<CvtOp>(f.funct3);
   const auto domain = sel3_domain(f.sel3);
   const auto src_domain = op == CvtOp::widen ? NpuDomain::tile : domain;
+  if (!domain_register_valid(domain, f.dest) || !domain_register_valid(src_domain, f.src2)) {
+    return DecodeError::illegal;
+  }
   return DecodedNpuInstr{CvtInstr{
       .op = op,
       .dest = {.domain = domain, .index = f.dest},
@@ -31,7 +35,9 @@ DecodeResult decode_cvt(std::uint32_t word) {
 // R4 argmax form below; 110/111 reserved. S5 is Acc; D5 is Vec32.
 DecodeResult decode_areduce(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
-  if (!is_areduce_op(static_cast<ReduceOp>(f.funct3))) {
+  if (!is_areduce_op(static_cast<ReduceOp>(f.funct3)) ||
+      !domain_register_valid(NpuDomain::acc, f.src2) ||
+      !domain_register_valid(NpuDomain::vec32, f.dest)) {
     return DecodeError::illegal;
   }
   return DecodedNpuInstr{AreduceInstr{
@@ -48,7 +54,9 @@ DecodeResult decode_areduce(std::uint32_t word) {
 // destinations.
 DecodeResult decode_areduce_argmax(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
-  if (f.funct3 != 0b100) {
+  if (f.funct3 != 0b100 || !domain_register_valid(NpuDomain::acc, f.src1) ||
+      !domain_register_valid(NpuDomain::vec32, f.dest) ||
+      !domain_register_valid(NpuDomain::vec32, f.src2)) {
     return DecodeError::illegal;
   }
   return DecodedNpuInstr{AreduceArgmaxInstr{
@@ -108,7 +116,10 @@ DecodeResult decode_qnt(std::uint32_t word) {
   // Acc has exactly one form (funct3 = 000).
   const bool valid_funct3 = domain == NpuDomain::tile ? f.funct3 <= 0b001 : f.funct3 == 0b000;
   const bool index_is_scalar = (f.sel3 & 1) != 0;
-  if (!valid_funct3 || index_is_scalar || f.src2 != 0) {
+  if (!valid_funct3 || index_is_scalar || f.src2 != 0 ||
+      !domain_register_valid(domain, f.dest) ||
+      !domain_register_valid(src_domain, f.src1) ||
+      !domain_register_valid(NpuDomain::vec32, f.arg)) {
     return DecodeError::illegal;
   }
 
@@ -141,7 +152,11 @@ DecodeResult decode_qnt(std::uint32_t word) {
 DecodeResult decode_mma(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto make_mma = [&](MmaOp op) -> DecodeResult {
-    if (f.arg != 0) return DecodeError::illegal;
+    if (f.arg != 0 || !domain_register_valid(NpuDomain::acc, f.dest) ||
+        !domain_register_valid(NpuDomain::tile, f.src1) ||
+        !domain_register_valid(NpuDomain::tile, f.src2)) {
+      return DecodeError::illegal;
+    }
     return DecodedNpuInstr{MmaInstr{
         .op = op,
         .dest = {.domain = NpuDomain::acc, .index = f.dest},
@@ -150,6 +165,11 @@ DecodeResult decode_mma(std::uint32_t word) {
     }};
   };
   const auto make_vmma = [&](VmmaOp op) -> DecodeResult {
+    if (!domain_register_valid(NpuDomain::vec32, f.dest) ||
+        !domain_register_valid(NpuDomain::tile, f.src1) ||
+        !domain_register_valid(NpuDomain::tile, f.src2)) {
+      return DecodeError::illegal;
+    }
     return DecodedNpuInstr{VmmaInstr{
         .op = op,
         .dest = {.domain = NpuDomain::vec32, .index = f.dest},

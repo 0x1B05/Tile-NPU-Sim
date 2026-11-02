@@ -113,6 +113,10 @@ TEST_CASE(move_decode_rejects_reserved) {
       DecodeCase{"funct3 100", make_reg_move(NpuDomain::tile, 4, 0, 0)},
       DecodeCase{"funct3 111", make_reg_move(NpuDomain::tile, 7, 0, 0)},
       // Copy uses the domain's source register count; fillx uses Scalar.
+      DecodeCase{"afill a16 out of range", make_fill_imm(NpuDomain::acc, 16, 0)},
+      DecodeCase{"afillx a16 out of range", make_reg_move(NpuDomain::acc, 1, 16, 0)},
+      DecodeCase{"acopy a16 source out of range", make_reg_move(NpuDomain::acc, 2, 0, 16)},
+      DecodeCase{"acopy a16 destination out of range", make_reg_move(NpuDomain::acc, 2, 16, 0)},
       // FILL_IMM funct3 != 000 and REG_MOVE funct3 = 000 are reserved.
       DecodeCase{"fill funct3 010", 0x11000001u},
       DecodeCase{"REG_MOVE funct3 000", make_reg_move(NpuDomain::tile, 0, 0, 0)},

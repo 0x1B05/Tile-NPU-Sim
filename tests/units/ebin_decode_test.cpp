@@ -71,8 +71,8 @@ TEST_CASE(ebin_decode) {
            NpuDomain::tile, 6, 7, true, 8},
       Case{"amul a0, a1, a2", make_ebin(EbinOp::mul, NpuDomain::acc, false, 0, 1, 2), EbinOp::mul,
            NpuDomain::acc, 0, 1, false, 2},
-      Case{"aadd a31, a30, a29", make_ebin(EbinOp::add, NpuDomain::acc, false, 31, 30, 29),
-           EbinOp::add, NpuDomain::acc, 31, 30, false, 29},
+      Case{"aadd a15, a14, a13", make_ebin(EbinOp::add, NpuDomain::acc, false, 15, 14, 13),
+           EbinOp::add, NpuDomain::acc, 15, 14, false, 13},
       Case{"amin a6, a7, a8", make_ebin(EbinOp::min, NpuDomain::acc, false, 6, 7, 8), EbinOp::min,
            NpuDomain::acc, 6, 7, false, 8},
       Case{"amaxx a11, a10, x31", make_ebin(EbinOp::max, NpuDomain::acc, true, 11, 10, 31),
@@ -111,6 +111,13 @@ TEST_CASE(ebin_decode_rejects_reserved) {
                  make_ebin(EbinOp::add, NpuDomain::reserved, false, 0, 1, 2)},
       DecodeCase{"nonzero E_BIN reserved4",
                  make_ebin(EbinOp::add, NpuDomain::tile, false, 0, 1, 2) | (1u << 17)},
+      // Acc has 16 registers; a16+ is a reserved encoding.
+      DecodeCase{"acc dest 16 out of range",
+                 make_ebin(EbinOp::add, NpuDomain::acc, false, 16, 1, 2)},
+      DecodeCase{"acc src1 16 out of range",
+                 make_ebin(EbinOp::add, NpuDomain::acc, false, 0, 16, 2)},
+      DecodeCase{"acc src2 16 out of range",
+                 make_ebin(EbinOp::add, NpuDomain::acc, false, 0, 1, 16)},
   };
   expect_illegal(cases);
 }

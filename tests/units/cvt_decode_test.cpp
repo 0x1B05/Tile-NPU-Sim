@@ -66,11 +66,11 @@ TEST_CASE(cvt_decode) {
            .dest = 11,
            .src_domain = NpuDomain::tile,
            .src = 15},
-      Case{.name = "twiden.i8.i32 a31, t31",
-           .word = make_cvt(NpuDomain::acc, 1, 31, 31),
+      Case{.name = "twiden.i8.i32 a15, t31",
+           .word = make_cvt(NpuDomain::acc, 1, 15, 31),
            .op = CvtOp::widen,
            .dest_domain = NpuDomain::acc,
-           .dest = 31,
+           .dest = 15,
            .src_domain = NpuDomain::tile,
            .src = 31},
   };
@@ -89,6 +89,10 @@ TEST_CASE(cvt_decode_rejects_reserved) {
       // reserved10 and bit 25 must be 0.
       DecodeCase{"reserved10", make_cvt(NpuDomain::acc, 0, 0, 0) | (1u << 12)},
       DecodeCase{"sel3 bit0", make_cvt(NpuDomain::acc, 0, 0, 0) | (1u << 25)},
+      // Acc has 16 registers; a16+ is a reserved encoding.
+      DecodeCase{"acvt a16 destination", make_cvt(NpuDomain::acc, 0, 16, 0)},
+      DecodeCase{"acvt a16 source", make_cvt(NpuDomain::acc, 0, 0, 16)},
+      DecodeCase{"twiden a16 destination", make_cvt(NpuDomain::acc, 1, 16, 0)},
   };
   expect_illegal(cases);
 }

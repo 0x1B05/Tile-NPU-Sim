@@ -16,7 +16,9 @@ namespace tile_npu {
 template <MblkOp Op> DecodeResult decode_mblk(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = sel3_domain(f.sel3);
-  if (domain == NpuDomain::reserved || (Op == MblkOp::gather && domain == NpuDomain::acc)) {
+  if (domain == NpuDomain::reserved || (Op == MblkOp::gather && domain == NpuDomain::acc) ||
+      !domain_register_valid(domain, f.dest) ||
+      (Op == MblkOp::gather && !domain_register_valid(NpuDomain::vec32, f.src2))) {
     return DecodeError::illegal;
   }
   const NpuRegister reg{domain, f.dest};
@@ -37,6 +39,7 @@ DecodeResult decode_mblk_gather(std::uint32_t word) { return decode_mblk<MblkOp:
 template <MblkOp Op> DecodeResult decode_mblk_row(std::uint32_t word) {
   const auto f = encoding::NpuMR::from(word);
   const auto domain = sel3_domain(f.sel3);
+  if (!domain_register_valid(domain, f.reg)) return DecodeError::illegal;
   const NpuRegister reg{domain, f.reg};
   const auto index = decode_index(f.index, (f.sel3 & 1) != 0);
   return DecodedNpuInstr{MblkInstr{.op = Op, .reg = reg, .index = index}};
@@ -57,7 +60,9 @@ DecodeResult decode_mblk_row_store(std::uint32_t word) {
 DecodeResult decode_fill(std::uint32_t word) {
   const auto f = encoding::NpuI::from(word);
   const auto domain = static_cast<NpuDomain>(f.sel2);
-  if (domain == NpuDomain::reserved) return DecodeError::illegal;
+  if (domain == NpuDomain::reserved || !domain_register_valid(domain, f.dest)) {
+    return DecodeError::illegal;
+  }
   return DecodedNpuInstr{FillInstr{
       .dest = {.domain = domain, .index = f.dest},
       .value = FillImm16{static_cast<std::uint16_t>(f.imm)},
@@ -72,7 +77,9 @@ DecodeResult decode_fill(std::uint32_t word) {
 DecodeResult decode_fillx(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = sel3_domain(f.sel3);
-  if (domain == NpuDomain::reserved) return DecodeError::illegal;
+  if (domain == NpuDomain::reserved || !domain_register_valid(domain, f.dest)) {
+    return DecodeError::illegal;
+  }
   return DecodedNpuInstr{FillInstr{
       .dest = {.domain = domain, .index = f.dest},
       .value = ScalarRegister{f.src2},
@@ -82,7 +89,10 @@ DecodeResult decode_fillx(std::uint32_t word) {
 DecodeResult decode_move_copy(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = sel3_domain(f.sel3);
-  if (domain == NpuDomain::reserved) return DecodeError::illegal;
+  if (domain == NpuDomain::reserved || !domain_register_valid(domain, f.dest) ||
+      !domain_register_valid(domain, f.src2)) {
+    return DecodeError::illegal;
+  }
   return DecodedNpuInstr{MoveInstr{
       .dest = {.domain = domain, .index = f.dest},
       .src = {.domain = domain, .index = f.src2},
@@ -102,6 +112,10 @@ template <RowOp Op> DecodeResult decode_row_move(std::uint32_t word) {
   constexpr auto VECTOR_DOMAIN = NpuDomain::vec32;
   constexpr bool insert = Op == RowOp::insert;
   const auto matrix_index = insert ? f.dest : f.src1;
+  if (!domain_register_valid(MATRIX_DOMAIN, matrix_index) ||
+      !domain_register_valid(VECTOR_DOMAIN, insert ? f.src1 : f.dest)) {
+    return DecodeError::illegal;
+  }
   return DecodedNpuInstr{RowInstr{
       .op = Op,
       .matrix = {.domain = MATRIX_DOMAIN, .index = matrix_index},

@@ -98,6 +98,10 @@ TEST_CASE(er4_decode_rejects_reserved) {
       DecodeCase{"funct3 111", make_er4(NpuDomain::vec32, 7, 0, 0, 0, 0)},
       // sel3 bit 0 must be 0.
       DecodeCase{"sel3 bit0", make_er4(NpuDomain::acc, 0, 0, 0, 0, 0) | (1u << 25)},
+      // Acc has 16 registers; a16+ is a reserved encoding.
+      DecodeCase{"aselect a16 destination", make_er4(NpuDomain::acc, 0, 16, 0, 0, 0)},
+      DecodeCase{"aselect a16 mask", make_er4(NpuDomain::acc, 0, 0, 16, 0, 0)},
+      DecodeCase{"afmadd a16 source", make_er4(NpuDomain::acc, 1, 0, 0, 16, 0)},
   };
   expect_illegal(cases);
 }
