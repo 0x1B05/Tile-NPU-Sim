@@ -1,7 +1,5 @@
 #pragma once
 
-#ifdef CONFIG_MTRACE
-
 #include "tile_npu/state.h"
 
 #include <array>
@@ -153,5 +151,3 @@ inline TraceEndpoint trace_vector_endpoint(std::uint8_t index, const Vec32Config
 }
 
 } // namespace tile_npu
-
-#endif // CONFIG_MTRACE

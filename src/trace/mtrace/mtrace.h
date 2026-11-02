@@ -1,7 +1,7 @@
 #pragma once
 
 #include "tile_npu/decode.h"
-#include "tile_npu/mtrace.h"
+#include "events.h"
 
 #include <cstdint>
 

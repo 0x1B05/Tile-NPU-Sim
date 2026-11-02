@@ -2,7 +2,7 @@
 
 #include "tile_npu/decode.h"
 #ifdef CONFIG_MTRACE
-#include "tile_npu/mtrace.h"
+#include "trace/mtrace/events.h"
 #endif
 #include "tile_npu/platform/address_space.h"
 #include "tile_npu/state.h"

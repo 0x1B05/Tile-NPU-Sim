@@ -1,6 +1,6 @@
 #pragma once
 
-#include "tile_npu/mtrace.h"
+#include "events.h"
 
 #include <cstdint>
 #include <fstream>
