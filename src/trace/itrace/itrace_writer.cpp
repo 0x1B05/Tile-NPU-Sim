@@ -5,6 +5,8 @@
 
 namespace tile_npu::trace {
 
+ItraceWriter::~ItraceWriter() { out_.flush(); }
+
 void ItraceWriter::operator()(std::uint64_t pc, std::uint32_t instr, const DecodeResult &decoded,
                               StepStatus status) {
   if (!window_.contains(pc)) return;
@@ -12,7 +14,12 @@ void ItraceWriter::operator()(std::uint64_t pc, std::uint32_t instr, const Decod
   if (status != StepStatus::retired) {
     out_ << "  ; " << status_name(status);
   }
-  out_ << '\n' << std::flush;
+  out_ << '\n';
+  if (flush_each_line_) {
+    out_.flush();
+  } else if ((++lines_ & 0xfff) == 0) {
+    out_.flush();
+  }
 }
 
 } // namespace tile_npu::trace

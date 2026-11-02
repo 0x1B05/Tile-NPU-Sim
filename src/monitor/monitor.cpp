@@ -167,7 +167,8 @@ int run_images(const Options &options) {
       std::cerr << "cannot open itrace log: " << path << '\n';
       return 1;
     }
-    itrace_writer.emplace(itrace_log, options.trace_pc_start, options.trace_pc_end);
+    itrace_writer.emplace(itrace_log, options.trace_pc_start, options.trace_pc_end,
+                          options.trace_flush_line);
   }
 #endif
 #ifdef CONFIG_MTRACE
@@ -180,7 +181,7 @@ int run_images(const Options &options) {
       std::cerr << "cannot open mtrace log: " << path << '\n';
       return 1;
     }
-    mtrace_writer.emplace(mtrace_log, options.mtrace_flush_line);
+    mtrace_writer.emplace(mtrace_log, options.trace_flush_line);
     mtrace_writer->write_header();
   }
 #endif
@@ -216,6 +217,9 @@ int run_images(const Options &options) {
 
   // A guest stops at ebreak or kernel.end with a0 as the process exit code.
   const auto halt_result = npu_exec(sim, options.step_limit);
+#ifdef CONFIG_ITRACE
+  if (itrace_writer) itrace_writer->flush();
+#endif
 #ifdef CONFIG_MTRACE
   // Make normal stop/error paths visible even when the writer is in batch mode.
   if (mtrace_writer) mtrace_writer->flush();

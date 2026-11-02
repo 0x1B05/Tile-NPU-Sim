@@ -20,9 +20,7 @@ int main(int argc, char **argv) {
   std::string trace_dir;
   std::string trace_pc_start_arg;
   std::string trace_pc_end_arg;
-#endif
-#ifdef CONFIG_MTRACE
-  std::string mtrace_flush;
+  std::string trace_flush;
 #endif
   // clang-format off
 #ifdef CONFIG_SDB
@@ -35,31 +33,28 @@ int main(int argc, char **argv) {
 #endif
 #ifdef CONFIG_MTRACE
   app.add_flag("--mtrace"        , options.mtrace     , "Trace NPU data movement to a log file");
-  app.add_option("--mtrace-flush", mtrace_flush       , "Flush mode: batch (default) or line");
 #endif
 #ifdef CONFIG_TRACE
   app.add_option("--trace"       , trace_selection    , "Select traces: itrace, mtrace, or all")
       ->check(CLI::IsMember({"itrace", "mtrace", "all"}));
-  app.add_option("--trace-dir"    , trace_dir          , "Directory for default itrace/mtrace logs");
-  app.add_option("--trace-start", trace_pc_start_arg, "First PC to trace (hex or decimal)");
-  app.add_option("--trace-end"  , trace_pc_end_arg  , "One-past-last PC to trace (0 = unlimited)");
+  app.add_option("--trace-dir"   , trace_dir          , "Directory for default itrace/mtrace logs");
+  app.add_option("--trace-start" , trace_pc_start_arg , "First PC to trace (hex or decimal)");
+  app.add_option("--trace-end"   , trace_pc_end_arg   , "One-past-last PC to trace (0 = unlimited)");
+  app.add_option("--trace-flush" , trace_flush        , "Flush mode: batch (default) or line");
 #endif
   app.add_option("--dump-range"  , dump_range         , "Dump FILE@0xADDR:0xSIZE after the run");
   app.add_option("images"        , image_args         , "Program and data images (path[@0xADDR])") ->required();
   // clang-format on
   CLI11_PARSE(app, argc, argv);
 
-#ifdef CONFIG_MTRACE
-  if (!mtrace_flush.empty()) {
-    if (mtrace_flush != "batch" && mtrace_flush != "line") {
-      std::cerr << "invalid mtrace flush mode: " << mtrace_flush << '\n';
+#ifdef CONFIG_TRACE
+  if (!trace_flush.empty()) {
+    if (trace_flush != "batch" && trace_flush != "line") {
+      std::cerr << "invalid trace flush mode: " << trace_flush << '\n';
       return 2;
     }
-    options.mtrace = true;
-    options.mtrace_flush_line = mtrace_flush == "line";
+    options.trace_flush_line = trace_flush == "line";
   }
-#endif
-#ifdef CONFIG_TRACE
   if (!trace_selection.empty()) {
     const bool want_itrace = trace_selection == "itrace" || trace_selection == "all";
     const bool want_mtrace = trace_selection == "mtrace" || trace_selection == "all";

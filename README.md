@@ -31,7 +31,7 @@ python3 tests/run.py all --build
 
 `--itrace` writes each fetched instruction as `[ITRACE] pc: encoding  disassembly` to `itrace.log`; `--mtrace` writes the data path to `mtrace.jsonl`. Both default to the first image's directory; `--trace-dir DIR` writes them under DIR instead. `--trace=itrace|mtrace|all` is the combined runtime selector, while `--itrace` and `--mtrace` remain shortcuts. `--trace-start ADDR` and `--trace-end ADDR` restrict tracing to PCs `[pc_start, pc_end)`; addresses accept hex or decimal, the default start is 0, and end 0 means unlimited. Build the simulator with `xmake f --trace=itrace|mtrace|all` to compile the corresponding backends; guest serial output stays on stdout.
 
-Each MTRACE event is a `move` (memory/register transfer) or `compute` (NPU arithmetic) with per-endpoint byte counts, effective shapes, and a `linear`/`block` memory pattern. Scalar ALU, scalar registers, configuration writes, and instruction fetch are currently out of scope. `--mtrace-flush=batch` (default) flushes every 4096 events, bounding loss on a hard abort; `--mtrace-flush=line` flushes each record for crash-adjacent debugging.
+Each MTRACE event is a `move` (memory/register transfer) or `compute` (NPU arithmetic) with per-endpoint byte counts, effective shapes, and a `linear`/`block` memory pattern. Scalar ALU, scalar registers, configuration writes, and instruction fetch are currently out of scope. `--trace-flush=batch` (default) flushes both trace writers every 4096 records, bounding loss on a hard abort; `--trace-flush=line` flushes each record for crash-adjacent debugging.
 
 ```sh
 xmake run sim path/to/program.bin [data.bin@0xADDR ...]
