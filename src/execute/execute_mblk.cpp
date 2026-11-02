@@ -443,8 +443,6 @@ ExecuteResult execute(const MblkInstr &instr, ExecContext &ctx) {
     switch (instr.op) {
     case MblkOp::load:
     case MblkOp::store: return block_access<NpuDomain::tile>(instr, ctx);
-    case MblkOp::row_load:
-    case MblkOp::row_store: return row_access<NpuDomain::tile>(instr, ctx);
     case MblkOp::gather: return gather_tile_access(instr, ctx);
     default: unreachable("M_BLK op/domain combination rejected by validation");
     }

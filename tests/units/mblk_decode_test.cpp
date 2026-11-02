@@ -100,25 +100,6 @@ TEST_CASE(mblk_decode_block_and_gather) {
 
 TEST_CASE(mblk_decode_row_forms) {
   constexpr std::array cases{
-      Case{.name = "tload.row t0[3]",
-           .word = make_mrow(false, false, 4, 3, 0),
-           .op = MblkOp::row_load,
-           .domain = NpuDomain::tile,
-           .reg = 0,
-           .index = 3},
-      Case{.name = "tload.row t1[x5]",
-           .word = make_mrow(false, true, 4, 5, 1),
-           .op = MblkOp::row_load,
-           .domain = NpuDomain::tile,
-           .reg = 1,
-           .index = 5,
-           .index_is_scalar = true},
-      Case{.name = "tstore.row t2[0]",
-           .word = make_mrow(false, false, 5, 0, 2),
-           .op = MblkOp::row_store,
-           .domain = NpuDomain::tile,
-           .reg = 2,
-           .index = 0},
       Case{.name = "aload.row a15[x0]",
            .word = make_mrow(true, true, 4, 0, 15),
            .op = MblkOp::row_load,
@@ -140,8 +121,8 @@ TEST_CASE(mblk_decode_rejects_reserved) {
   constexpr std::array cases{
       // funct3 = 011 / 11x are reserved.
       DecodeCase{"funct3 011", block(NpuDomain::tile, 3, 0)},
-      DecodeCase{"funct3 110", make_mrow(false, false, 6, 0, 0)},
-      DecodeCase{"funct3 111", make_mrow(false, false, 7, 0, 0)},
+      DecodeCase{"funct3 110", make_mrow(true, false, 6, 0, 0)},
+      DecodeCase{"funct3 111", make_mrow(true, false, 7, 0, 0)},
       // Gather has no Acc form.
       DecodeCase{"aload.gather", block(NpuDomain::acc, 2, 0, 1)},
       // dom2 = 10 is reserved for block, store, and gather forms.
@@ -157,9 +138,12 @@ TEST_CASE(mblk_decode_rejects_reserved) {
       DecodeCase{"aload a16 out of range", block(NpuDomain::acc, 0, 16)},
       DecodeCase{"aload.row a16 out of range", make_mrow(true, false, 4, 0, 16)},
       // MR reserved fields must be 0.
-      DecodeCase{"row load reserved5[21:17]", 0x01020001u},
-      DecodeCase{"row load reserved5[11:7]", 0x01000081u},
-      DecodeCase{"row load bit27", 0x09000001u},
+      DecodeCase{"row load reserved5[21:17]", make_mrow(true, false, 4, 0, 0) | (1u << 17)},
+      DecodeCase{"row load reserved5[11:7]", make_mrow(true, false, 4, 0, 0) | (1u << 7)},
+      DecodeCase{"row load bit27", make_mrow(true, false, 4, 0, 0) | (1u << 27)},
+      // EW = 0 no longer selects a Tile row form.
+      DecodeCase{"tload.row reserved", make_mrow(false, false, 4, 0, 0)},
+      DecodeCase{"tstore.row reserved", make_mrow(false, false, 5, 0, 0)},
       // Unassigned data-movement majors are reserved.
       DecodeCase{"major4 0101", 0x50000001u},
   };

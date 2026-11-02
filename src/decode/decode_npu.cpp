@@ -55,9 +55,9 @@ constexpr DecodeEntry NPU_TABLE[] = {
     {"0000 ??0 000 0000000000 00000 ????? 01", decode_mblk_load},                    // block load
     {"0000 ??0 001 0000000000 00000 ????? 01", decode_mblk_store},                   // block store
     {"0000 ??0 010 0000000000 ????? ????? 01", decode_mblk_gather},                   // gather load
-    // M_BLK row forms (MR): sel3 = {0, EW, IS}, funct3 = 10x.
-    {"0000 0?? 100 00000 ????? 00000 ????? 01", decode_mblk_row_load},                // row load
-    {"0000 0?? 101 00000 ????? 00000 ????? 01", decode_mblk_row_store},               // row store
+    // M_BLK Acc row forms (MR): sel3 = {0, 1, IS}, funct3 = 10x.
+    {"0000 01? 100 00000 ????? 00000 ????? 01", decode_mblk_row_load},                // Acc row load
+    {"0000 01? 101 00000 ????? 00000 ????? 01", decode_mblk_row_store},               // Acc row store
     {"0000 ??? ??? ????? ????? ????? ????? 01", illegal},                             // reserved M_BLK encodings
     // FILL_IMM (I format): dom2 + funct3 = 000 + imm16; other funct3 values
     // are reserved.

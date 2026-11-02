@@ -34,12 +34,14 @@ DecodeResult decode_mblk_gather(std::uint32_t word) { return decode_mblk<MblkOp:
 // M_BLK row (MR): major4 = 0000, q = 01.
 // 31    28  27  26   25  24    22 21       17 16      12 11        7 6        2 1   0
 // [major4] [0] [EW] [IS] [funct3] [reserved5] [ index5 ] [reserved5] [  reg5  ] [ q ]
-// EW: 0 = Tile, 1 = Acc. IS: 0 = immediate row, 1 = Scalar register in index5.
+// EW: 0 reserved, 1 = Acc. IS: 0 = immediate row, 1 = Scalar register in index5.
 // funct3 = {form2, LS}: 100 row load, 101 row store.
 template <MblkOp Op> DecodeResult decode_mblk_row(std::uint32_t word) {
   const auto f = encoding::NpuMR::from(word);
   const auto domain = sel3_domain(f.sel3);
-  if (!domain_register_valid(domain, f.reg)) return DecodeError::illegal;
+  if (domain != NpuDomain::acc || !domain_register_valid(domain, f.reg)) {
+    return DecodeError::illegal;
+  }
   const NpuRegister reg{domain, f.reg};
   const auto index = decode_index(f.index, (f.sel3 & 1) != 0);
   return DecodedNpuInstr{MblkInstr{.op = Op, .reg = reg, .index = index}};

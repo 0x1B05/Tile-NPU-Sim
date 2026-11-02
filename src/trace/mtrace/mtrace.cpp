@@ -1,7 +1,7 @@
 #include "mtrace.h"
 
-#include "trace/names.h"
 #include "tile_npu/instruction.h"
+#include "trace/names.h"
 #include "utils/common.h"
 
 #include <cstddef>
@@ -124,8 +124,8 @@ std::string_view mblk_op_name(const MblkInstr &instr) {
   case MblkOp::load: return tile ? "tload" : acc ? "aload" : "vload";
   case MblkOp::store: return tile ? "tstore" : acc ? "astore" : "vstore";
   case MblkOp::gather: return tile ? "tload.gather" : "vload.gather";
-  case MblkOp::row_load: return tile ? "tload.row" : "aload.row";
-  case MblkOp::row_store: return tile ? "tstore.row" : "astore.row";
+  case MblkOp::row_load: return "aload.row";
+  case MblkOp::row_store: return "astore.row";
   }
   return "mblk";
 }

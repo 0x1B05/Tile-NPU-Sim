@@ -232,10 +232,10 @@ std::string npu_instr(const DecodedNpuInstr &instr) {
               out << d << "load.gather " << npu_reg(i.reg) << ", v" << int(i.gather_src);
               break;
             case MblkOp::row_load:
-              out << d << "load.row " << npu_reg(i.reg) << "[" << index_operand(i.index) << "]";
+              out << "aload.row " << npu_reg(i.reg) << "[" << index_operand(i.index) << "]";
               break;
             case MblkOp::row_store:
-              out << d << "store.row " << npu_reg(i.reg) << "[" << index_operand(i.index) << "]";
+              out << "astore.row " << npu_reg(i.reg) << "[" << index_operand(i.index) << "]";
               break;
             }
             return out.str();

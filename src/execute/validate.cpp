@@ -99,7 +99,7 @@ bool valid_structure(const MblkInstr &instr) {
   case MblkOp::load:
   case MblkOp::store: return true;
   case MblkOp::row_load:
-  case MblkOp::row_store: return reg.domain == NpuDomain::tile || reg.domain == NpuDomain::acc;
+  case MblkOp::row_store: return reg.domain == NpuDomain::acc;
   case MblkOp::gather: return reg.domain != NpuDomain::acc && instr.gather_src < VECTOR_REGISTERS;
   default: return false;
   }
