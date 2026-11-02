@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tile_npu/state.h"
+#include "trace/window.h"
 
 #include <array>
 #include <cstdint>
@@ -78,10 +79,7 @@ public:
   }
 
   // Trace instruction indexes in [start, end); end == 0 means no upper bound.
-  void set_window(std::uint64_t start, std::uint64_t end) {
-    start_ = start;
-    end_ = end;
-  }
+  void set_window(std::uint64_t start, std::uint64_t end) { window_.set(start, end); }
 
   void begin_instruction(std::uint64_t pc) {
     instr_ = next_instr_++;
@@ -93,7 +91,7 @@ public:
   std::uint64_t pc() const { return pc_; }
 
   void emit(TraceEvent event) {
-    if (!callback_ || instr_ < start_ || (end_ != 0 && instr_ >= end_)) return;
+    if (!callback_ || !window_.contains(instr_)) return;
     event.seq = seq_++;
     event.instr = instr_;
     event.pc = pc_;
@@ -104,8 +102,7 @@ private:
   MtraceCallback callback_;
   std::uint64_t instr_ = 0;
   std::uint64_t next_instr_ = 0;
-  std::uint64_t start_ = 0;
-  std::uint64_t end_ = 0;
+  trace::TraceWindow window_;
   std::uint64_t seq_ = 0;
   std::uint64_t pc_ = 0;
 };

@@ -127,4 +127,19 @@ TEST_CASE(mtrace_mma_accumulate_reads_destination) {
   check_eq(event.dst[0].bytes, std::uint32_t{16}, "new D bytes");
 }
 
+TEST_CASE(trace_window_bounds) {
+  using tile_npu::trace::TraceWindow;
+
+  const TraceWindow window{10, 20};
+  check(!window.contains(9), "below start");
+  check(window.contains(10), "start is inclusive");
+  check(window.contains(19), "last traced index");
+  check(!window.contains(20), "end is exclusive");
+
+  const TraceWindow unbounded{5, 0};
+  check(!unbounded.contains(4), "unbounded below start");
+  check(unbounded.contains(5), "unbounded includes start");
+  check(unbounded.contains(1000), "unbounded has no end");
+}
+
 #endif // CONFIG_MTRACE
