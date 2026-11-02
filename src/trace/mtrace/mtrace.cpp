@@ -1,11 +1,13 @@
 #include "mtrace.h"
 
+#include "trace/names.h"
 #include "tile_npu/instruction.h"
 #include "utils/common.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
+#include <utility>
 #include <variant>
 
 namespace tile_npu {
@@ -85,7 +87,7 @@ void emit_move(MtraceRecorder &trace, std::string_view op, TraceEndpoint src, Tr
   event.dst[0] = dst;
   event.dst_count = 1;
   event.mem = memory;
-  trace.emit(event);
+  trace.emit(std::move(event));
 }
 
 void emit_write(MtraceRecorder &trace, std::string_view op, TraceEndpoint dst) {
@@ -94,7 +96,7 @@ void emit_write(MtraceRecorder &trace, std::string_view op, TraceEndpoint dst) {
   event.op = op;
   event.dst[0] = dst;
   event.dst_count = 1;
-  trace.emit(event);
+  trace.emit(std::move(event));
 }
 
 void emit_read(MtraceRecorder &trace, std::string_view op, TraceEndpoint src) {
@@ -103,7 +105,7 @@ void emit_read(MtraceRecorder &trace, std::string_view op, TraceEndpoint src) {
   event.op = op;
   event.src[0] = src;
   event.src_count = 1;
-  trace.emit(event);
+  trace.emit(std::move(event));
 }
 
 void emit_compute(MtraceRecorder &trace, std::string_view op, const TraceEvent &event,
@@ -112,7 +114,7 @@ void emit_compute(MtraceRecorder &trace, std::string_view op, const TraceEvent &
   out.type = TraceEventType::compute;
   out.op = op;
   out.macs = macs;
-  trace.emit(out);
+  trace.emit(std::move(out));
 }
 
 std::string_view mblk_op_name(const MblkInstr &instr) {
@@ -165,7 +167,7 @@ std::uint64_t add_signed(std::uint64_t base, std::int64_t offset) {
 void trace_matrix_move(MtraceRecorder &trace, const MblkInstr &instr,
                        const MatrixDescriptor &descriptor, std::uint8_t rows, std::uint8_t cols,
                        std::uint8_t elem, bool transpose) {
-  if (!trace.enabled()) return;
+  if (!trace.has_callback()) return;
   const auto bytes = static_cast<std::uint32_t>(rows) * cols * elem;
   const auto memory = memory_endpoint(bytes, elem);
   const auto reg = matrix_endpoint(instr.reg.domain, instr.reg.index, rows, cols, elem,
@@ -181,7 +183,7 @@ void trace_matrix_move(MtraceRecorder &trace, const MblkInstr &instr,
 void trace_matrix_row_move(MtraceRecorder &trace, const MblkInstr &instr,
                            const MatrixDescriptor &descriptor, std::uint8_t cols,
                            std::uint8_t elem) {
-  if (!trace.enabled()) return;
+  if (!trace.has_callback()) return;
   const auto bytes = static_cast<std::uint32_t>(cols) * elem;
   const auto memory = memory_endpoint(bytes, elem);
   const auto reg = matrix_endpoint(instr.reg.domain, instr.reg.index, 1, cols, elem,
@@ -197,7 +199,7 @@ void trace_matrix_row_move(MtraceRecorder &trace, const MblkInstr &instr,
 
 void trace_vector_move(MtraceRecorder &trace, const MblkInstr &instr,
                        const VectorDescriptor &descriptor, std::uint8_t len, std::uint8_t elem) {
-  if (!trace.enabled()) return;
+  if (!trace.has_callback()) return;
   const auto bytes = static_cast<std::uint32_t>(len) * elem;
   const auto memory = memory_endpoint(bytes, elem);
   const auto reg = vector_endpoint(instr.reg.index, len, elem, is_store(instr.op) ? "src" : "dst");
@@ -213,7 +215,7 @@ void trace_vector_move(MtraceRecorder &trace, const MblkInstr &instr,
 void trace_gather_tile(MtraceRecorder &trace, const MblkInstr &instr,
                        const MatrixDescriptor &descriptor, std::uint8_t indexed_rows,
                        std::uint8_t cols, std::uint8_t elem, const Vec32 &index) {
-  if (!trace.enabled()) return;
+  if (!trace.has_callback()) return;
   const auto bytes = static_cast<std::uint32_t>(cols) * elem;
   for (std::uint8_t row = 0; row < indexed_rows; ++row) {
     const auto addr = add_signed(descriptor.base_addr, static_cast<std::int64_t>(index[row]) *
@@ -229,7 +231,7 @@ void trace_gather_tile(MtraceRecorder &trace, const MblkInstr &instr,
 void trace_gather_vector(MtraceRecorder &trace, const MblkInstr &instr,
                          const VectorDescriptor &descriptor, std::uint8_t indexed,
                          std::uint8_t elem, const Vec32 &index) {
-  if (!trace.enabled()) return;
+  if (!trace.has_callback()) return;
   for (std::uint8_t lane = 0; lane < indexed; ++lane) {
     const auto addr = add_signed(descriptor.base_addr,
                                  static_cast<std::int64_t>(index[lane]) * descriptor.stride_bytes);
@@ -241,27 +243,27 @@ void trace_gather_vector(MtraceRecorder &trace, const MblkInstr &instr,
 }
 
 void trace_npu_dataflow(const DecodedNpuInstr &instr, const State &state, MtraceRecorder &trace) {
-  if (!trace.enabled()) return;
+  if (!trace.has_callback()) return;
 
   std::visit(
       Overloaded{
           [&](const FillInstr &i) {
-            const auto op = std::holds_alternative<ScalarRegister>(i.value) ? "fillx" : "fill";
-            emit_write(trace, op, domain_endpoint(state, i.dest.domain, i.dest.index, "dst"));
+            const bool from_scalar = std::holds_alternative<ScalarRegister>(i.value);
+            emit_write(trace, trace::fill_mnemonic(i.dest.domain, from_scalar),
+                       domain_endpoint(state, i.dest.domain, i.dest.index, "dst"));
           },
           [&](const MoveInstr &i) {
-            emit_move(trace, "copy", domain_endpoint(state, i.src.domain, i.src.index, "src"),
+            emit_move(trace, trace::move_mnemonic(i.dest.domain),
+                      domain_endpoint(state, i.src.domain, i.src.index, "src"),
                       domain_endpoint(state, i.dest.domain, i.dest.index, "dst"));
           },
           [&](const RowInstr &i) {
             const auto &mconfig = state.ac[i.matrix.index];
             const auto &vconfig = state.vc[i.vector.index];
             const auto elem = trace_elem_bytes(mconfig.dtype);
-            const auto bytes = static_cast<std::uint32_t>(mconfig.cols) * elem;
             const auto matrix =
                 matrix_endpoint(NpuDomain::acc, i.matrix.index, 1, mconfig.cols, elem, "mat");
             const auto vector = vector_endpoint(i.vector.index, vconfig.len, elem, "vec");
-            (void)bytes;
             if (i.op == RowOp::insert) {
               emit_move(trace, "ainsert.row", vector, matrix);
             } else {
@@ -299,7 +301,7 @@ void trace_npu_dataflow(const DecodedNpuInstr &instr, const State &state, Mtrace
                                                       "acc_in"));
             }
             add_dest(event, trace_matrix_endpoint(TraceEndpointKind::acc, i.dest.index, dst, "d"));
-            emit_compute(trace, i.op == MmaOp::nt_acc ? "mma.nt.acc" : "mma.nt.zero", event,
+            emit_compute(trace, trace::mma_mnemonic(i.op), event,
                          static_cast<std::uint32_t>(lhs.rows) * rhs.rows * lhs.cols);
           },
           [&](const VmmaInstr &i) {
@@ -314,7 +316,7 @@ void trace_npu_dataflow(const DecodedNpuInstr &instr, const State &state, Mtrace
               add_source(event, trace_vector_endpoint(i.dest.index, dst, "acc_in"));
             }
             add_dest(event, trace_vector_endpoint(i.dest.index, dst, "d"));
-            emit_compute(trace, i.op == VmmaOp::nt_acc ? "vmma.nt.acc" : "vmma.nt.zero", event,
+            emit_compute(trace, trace::vmma_mnemonic(i.op), event,
                          static_cast<std::uint32_t>(rhs.rows) * rhs.cols);
           },
           [&](const EbinInstr &i) {
@@ -324,13 +326,14 @@ void trace_npu_dataflow(const DecodedNpuInstr &instr, const State &state, Mtrace
               add_source(event, domain_endpoint(state, src2->domain, src2->index, "s1"));
             }
             add_dest(event, domain_endpoint(state, i.dest.domain, i.dest.index, "d"));
-            emit_compute(trace, "ebin", event);
+            const bool from_scalar = std::holds_alternative<ScalarRegister>(i.src2);
+            emit_compute(trace, trace::ebin_mnemonic(i.dest.domain, i.op, from_scalar), event);
           },
           [&](const EunInstr &i) {
             TraceEvent event;
             add_source(event, domain_endpoint(state, i.src.domain, i.src.index, "s0"));
             add_dest(event, domain_endpoint(state, i.dest.domain, i.dest.index, "d"));
-            emit_compute(trace, "eun", event);
+            emit_compute(trace, trace::eun_mnemonic(i.dest.domain, i.op), event);
           },
           [&](const CmpInstr &i) {
             TraceEvent event;
@@ -339,7 +342,8 @@ void trace_npu_dataflow(const DecodedNpuInstr &instr, const State &state, Mtrace
               add_source(event, domain_endpoint(state, src2->domain, src2->index, "s1"));
             }
             add_dest(event, domain_endpoint(state, i.dest.domain, i.dest.index, "d"));
-            emit_compute(trace, "ecmp", event);
+            const bool from_scalar = std::holds_alternative<ScalarRegister>(i.src2);
+            emit_compute(trace, trace::cmp_mnemonic(i.op, from_scalar), event);
           },
           [&](const BcastInstr &i) {
             TraceEvent event;
@@ -347,7 +351,7 @@ void trace_npu_dataflow(const DecodedNpuInstr &instr, const State &state, Mtrace
             add_source(event,
                        trace_vector_endpoint(i.vector.index, state.vc[i.vector.index], "vec"));
             add_dest(event, domain_endpoint(state, i.dest.domain, i.dest.index, "d"));
-            emit_compute(trace, "ebcast", event);
+            emit_compute(trace, trace::bcast_mnemonic(i.op, i.by_col), event);
           },
           [&](const Er4Instr &i) {
             TraceEvent event;
@@ -355,45 +359,46 @@ void trace_npu_dataflow(const DecodedNpuInstr &instr, const State &state, Mtrace
             add_source(event, domain_endpoint(state, i.src1.domain, i.src1.index, "s0"));
             add_source(event, domain_endpoint(state, i.src2.domain, i.src2.index, "s1"));
             add_dest(event, domain_endpoint(state, i.dest.domain, i.dest.index, "d"));
-            emit_compute(trace, "er4", event);
+            emit_compute(trace, trace::er4_mnemonic(i.dest.domain, i.op), event);
           },
           [&](const MaskInstr &i) {
             TraceEvent event;
             add_source(event, domain_endpoint(state, i.src.domain, i.src.index, "s0"));
             add_dest(event, domain_endpoint(state, i.dest.domain, i.dest.index, "d"));
-            emit_compute(trace, "emask", event);
+            const bool from_scalar = std::holds_alternative<ScalarRegister>(i.fill);
+            emit_compute(trace, trace::mask_mnemonic(i.dest.domain, i.op, from_scalar), event);
           },
           [&](const AreduceInstr &i) {
             TraceEvent event;
             add_source(event, domain_endpoint(state, i.src.domain, i.src.index, "s0"));
             add_dest(event, domain_endpoint(state, i.dest.domain, i.dest.index, "d"));
-            emit_compute(trace, "areduce", event);
+            emit_compute(trace, trace::areduce_mnemonic(i.op), event);
           },
           [&](const AreduceArgmaxInstr &i) {
             TraceEvent event;
             add_source(event, domain_endpoint(state, i.src.domain, i.src.index, "s0"));
             add_dest(event, domain_endpoint(state, i.index_dest.domain, i.index_dest.index, "idx"));
             add_dest(event, domain_endpoint(state, i.value_dest.domain, i.value_dest.index, "val"));
-            emit_compute(trace, "areduce.argmax", event);
+            emit_compute(trace, trace::areduce_argmax_mnemonic(), event);
           },
           [&](const VreduceInstr &i) {
             TraceEvent event;
             add_source(event, domain_endpoint(state, i.src.domain, i.src.index, "s0"));
             add_dest(event, domain_endpoint(state, i.dest.domain, i.dest.index, "d"));
-            emit_compute(trace, "vreduce", event);
+            emit_compute(trace, trace::vreduce_mnemonic(i.op), event);
           },
           [&](const VreduceArgmaxInstr &i) {
             TraceEvent event;
             add_source(event, domain_endpoint(state, i.src.domain, i.src.index, "s0"));
             add_dest(event, domain_endpoint(state, i.index_dest.domain, i.index_dest.index, "idx"));
             add_dest(event, domain_endpoint(state, i.value_dest.domain, i.value_dest.index, "val"));
-            emit_compute(trace, "vreduce.argmax", event);
+            emit_compute(trace, trace::vreduce_argmax_mnemonic(), event);
           },
           [&](const CvtInstr &i) {
             TraceEvent event;
             add_source(event, domain_endpoint(state, i.src.domain, i.src.index, "s0"));
             add_dest(event, domain_endpoint(state, i.dest.domain, i.dest.index, "d"));
-            emit_compute(trace, i.op == CvtOp::widen ? "twiden" : "cvt", event);
+            emit_compute(trace, trace::cvt_mnemonic(i.dest.domain, i.op), event);
           },
           [&](const AquantInstr &i) {
             TraceEvent event;
@@ -405,14 +410,15 @@ void trace_npu_dataflow(const DecodedNpuInstr &instr, const State &state, Mtrace
             } else {
               add_source(event, scale);
             }
-            emit_compute(trace, "aquant", event);
+            emit_compute(trace, trace::aquant_mnemonic(i.scale_source == QntScaleSource::provided),
+                         event);
           },
           [&](const TdequantInstr &i) {
             TraceEvent event;
             add_source(event, domain_endpoint(state, i.src.domain, i.src.index, "s0"));
             add_source(event, trace_vector_endpoint(i.scale, state.vc[i.scale], "scale"));
             add_dest(event, domain_endpoint(state, i.dest.domain, i.dest.index, "d"));
-            emit_compute(trace, "tdequant", event);
+            emit_compute(trace, trace::tdequant_mnemonic(), event);
           },
           [](const auto &) {},
       },

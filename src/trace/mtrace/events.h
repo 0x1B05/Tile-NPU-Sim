@@ -6,6 +6,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -52,7 +53,8 @@ struct TraceEvent {
   std::uint64_t seq = 0;
   std::uint64_t instr = 0;
   std::uint64_t pc = 0;
-  std::string_view op;
+  std::string op; // Full ISA mnemonic.
+
   std::array<TraceEndpoint, 4> src{};
   std::uint8_t src_count = 0;
   std::array<TraceEndpoint, 2> dst{};
@@ -63,13 +65,18 @@ struct TraceEvent {
 
 using MtraceCallback = std::function<void(const TraceEvent &)>;
 
-// Assigns the event sequence and current instruction frame, then forwards the
-// event to the callback. A disabled recorder has no callback and emits nothing.
+// Assigns the event sequence and current instruction frame, then forwards
+// events from instructions in the PC window to the callback. A recorder
+// without a callback emits nothing.
 class MtraceRecorder {
 public:
   void set_callback(MtraceCallback callback) { callback_ = std::move(callback); }
 
-  bool enabled() const { return static_cast<bool>(callback_); }
+  bool has_callback() const { return static_cast<bool>(callback_); }
+
+  bool enabled() const { return has_callback(); }
+
+  bool should_trace(std::uint64_t pc) const { return callback_ && window_.contains(pc); }
 
   void reset() {
     instr_ = 0;
@@ -94,7 +101,7 @@ public:
   std::uint64_t pc() const { return pc_; }
 
   void emit(TraceEvent event) {
-    if (!callback_ || !window_.contains(pc_)) return;
+    if (!should_trace(pc_)) return;
     event.seq = seq_++;
     event.instr = instr_;
     event.pc = pc_;

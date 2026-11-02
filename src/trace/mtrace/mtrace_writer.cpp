@@ -1,5 +1,6 @@
 #include "mtrace_writer.h"
 
+#include "trace/flush.h"
 #include "utils/format.h"
 
 #include <ostream>
@@ -78,7 +79,7 @@ void write_memory(std::ostream &out, const TraceMemory &memory) {
 MtraceWriter::~MtraceWriter() { out_.flush(); }
 
 void MtraceWriter::write_header() {
-  out_ << "{\"t\":\"header\",\"v\":1,\"arch\":\"tile-npu\",\"format\":\"jsonl\","
+  out_ << "{\"t\":\"header\",\"v\":2,\"arch\":\"tile-npu\",\"format\":\"jsonl\","
           "\"time\":\"instruction\"}\n";
   if (flush_each_line_) out_.flush();
 }
@@ -86,44 +87,17 @@ void MtraceWriter::write_header() {
 void MtraceWriter::operator()(const TraceEvent &event) {
   out_ << "{\"t\":\"" << (event.type == TraceEventType::move ? "move" : "compute")
        << "\",\"seq\":" << event.seq << ",\"i\":" << event.instr << ",\"pc\":\"" << hex64(event.pc)
-       << "\",\"op\":\"" << event.op << '"';
-
-  if (event.type == TraceEventType::move) {
-    if (event.src_count == 1) {
-      out_ << ",\"src\":";
-      write_endpoint(out_, event.src[0]);
-    } else if (event.src_count > 1) {
-      out_ << ",\"src\":[";
-      for (std::uint8_t i = 0; i < event.src_count; ++i) {
-        if (i != 0) out_ << ',';
-        write_endpoint(out_, event.src[i]);
-      }
-      out_ << ']';
-    }
-    if (event.dst_count == 1) {
-      out_ << ",\"dst\":";
-      write_endpoint(out_, event.dst[0]);
-    } else if (event.dst_count > 1) {
-      out_ << ",\"dst\":[";
-      for (std::uint8_t i = 0; i < event.dst_count; ++i) {
-        if (i != 0) out_ << ',';
-        write_endpoint(out_, event.dst[i]);
-      }
-      out_ << ']';
-    }
-  } else {
-    out_ << ",\"src\":[";
-    for (std::uint8_t i = 0; i < event.src_count; ++i) {
-      if (i != 0) out_ << ',';
-      write_endpoint(out_, event.src[i]);
-    }
-    out_ << "],\"dst\":[";
-    for (std::uint8_t i = 0; i < event.dst_count; ++i) {
-      if (i != 0) out_ << ',';
-      write_endpoint(out_, event.dst[i]);
-    }
-    out_ << ']';
+       << "\",\"op\":\"" << event.op << "\",\"src\":[";
+  for (std::uint8_t i = 0; i < event.src_count; ++i) {
+    if (i != 0) out_ << ',';
+    write_endpoint(out_, event.src[i]);
   }
+  out_ << "],\"dst\":[";
+  for (std::uint8_t i = 0; i < event.dst_count; ++i) {
+    if (i != 0) out_ << ',';
+    write_endpoint(out_, event.dst[i]);
+  }
+  out_ << ']';
 
   write_memory(out_, event.mem);
   if (event.macs != 0) out_ << ",\"macs\":" << event.macs;
@@ -131,7 +105,7 @@ void MtraceWriter::operator()(const TraceEvent &event) {
 
   if (flush_each_line_) {
     out_.flush();
-  } else if ((++records_ & 0xfff) == 0) {
+  } else if ((++records_ % TRACE_FLUSH_RECORDS) == 0) {
     out_.flush();
   }
 }
