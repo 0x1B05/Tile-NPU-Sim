@@ -29,11 +29,9 @@ int main(int argc, char **argv) {
   app.add_option("-s,--steps"    , steps              , "Retired-instruction limit (-1: unlimited)");
 #ifdef CONFIG_ITRACE
   app.add_flag("--itrace"        , options.itrace     , "Trace executed instructions to a log file");
-  app.add_option("--itrace-log"  , options.itrace_log , "Trace output path (implies --itrace)");
 #endif
 #ifdef CONFIG_MTRACE
   app.add_flag("--mtrace"        , options.mtrace     , "Trace NPU data movement to a log file");
-  app.add_option("--mtrace-log"  , options.mtrace_log , "Data-path trace output path (implies --mtrace)");
   app.add_option("--mtrace-flush", mtrace_flush       , "Flush mode: batch (default) or line");
 #endif
 #if defined(CONFIG_ITRACE) || defined(CONFIG_MTRACE)
@@ -46,15 +44,7 @@ int main(int argc, char **argv) {
   // clang-format on
   CLI11_PARSE(app, argc, argv);
 
-#ifdef CONFIG_ITRACE
-  if (!options.itrace_log.empty()) {
-    options.itrace = true;
-  }
-#endif
 #ifdef CONFIG_MTRACE
-  if (!options.mtrace_log.empty()) {
-    options.mtrace = true;
-  }
   if (!mtrace_flush.empty()) {
     if (mtrace_flush != "batch" && mtrace_flush != "line") {
       std::cerr << "invalid mtrace flush mode: " << mtrace_flush << '\n';

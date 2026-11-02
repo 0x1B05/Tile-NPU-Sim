@@ -58,7 +58,6 @@ bool load_image(const Image &image, Ram &memory) {
 
 #ifdef CONFIG_ITRACE
 std::string itrace_path(const Options &options) {
-  if (!options.itrace_log.empty()) return options.itrace_log;
   if (!options.trace_dir.empty()) {
     return (std::filesystem::path(options.trace_dir) / "itrace.log").string();
   }
@@ -70,7 +69,6 @@ std::string itrace_path(const Options &options) {
 
 #ifdef CONFIG_MTRACE
 std::string mtrace_path(const Options &options) {
-  if (!options.mtrace_log.empty()) return options.mtrace_log;
   if (!options.trace_dir.empty()) {
     return (std::filesystem::path(options.trace_dir) / "mtrace.jsonl").string();
   }

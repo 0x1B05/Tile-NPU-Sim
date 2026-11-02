@@ -37,10 +37,8 @@ struct DumpRange {
 struct Options {
   bool interactive = false;
   bool itrace = false;
-  std::string itrace_log;
 #ifdef CONFIG_MTRACE
   bool mtrace = false;
-  std::string mtrace_log;
   bool mtrace_flush_line = false;
 #endif
 #if defined(CONFIG_ITRACE) || defined(CONFIG_MTRACE)
