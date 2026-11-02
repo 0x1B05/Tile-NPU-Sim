@@ -1,10 +1,11 @@
 #include "mtrace_writer.h"
 
-#include "trace/flush.h"
 #include "utils/format.h"
 
 #include <ostream>
 #include <string_view>
+
+static_assert(TRACE_FLUSH_RECORDS > 0, "TRACE_FLUSH_RECORDS must be positive");
 
 namespace tile_npu::trace {
 namespace {

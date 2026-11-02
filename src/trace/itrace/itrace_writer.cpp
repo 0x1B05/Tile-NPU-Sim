@@ -1,8 +1,9 @@
 #include "itrace_writer.h"
 
 #include "disasm.h"
-#include "trace/flush.h"
 #include "utils/format.h"
+
+static_assert(TRACE_FLUSH_RECORDS > 0, "TRACE_FLUSH_RECORDS must be positive");
 
 namespace tile_npu::trace {
 

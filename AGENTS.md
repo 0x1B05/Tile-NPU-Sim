@@ -25,7 +25,7 @@ xmake project -k compile_commands        # 为 clangd 生成 compile_commands.js
 ```
 
 - 修改后至少运行 `xmake test`。`sim_tests/core` 只包含 host 用例；guest 测试在独立二进制 `sim_guest_tests` 中，由 `tests/run.py` 调用。
-- 构建选项在 `xmake.lua`，使用 `xmake f --xxx=...`；编译器缓存位于仓库内 `.cache/ccache`。`--trace=none|itrace|mtrace|all` 选择 trace 后端；运行时用 `--trace=...` 选择构建时启用的后端 (`all` 仅在两个后端都编译时可用)，日志默认写到首个镜像同目录的 `itrace.log` / `mtrace.jsonl`，可用 `--trace-dir DIR` 改目录，`--trace-start/--trace-end` 限定 PC 窗口。
+- 构建选项在 `xmake.lua`，使用 `xmake f --xxx=...`；编译器缓存位于仓库内 `.cache/ccache`。`--trace=none|itrace|mtrace|all` 选择 trace 后端，`--trace_flush_records=N` 设置 batch flush 的记录间隔 (默认 4096)；运行时用 `--trace=...` 选择构建时启用的后端 (`all` 仅在两个后端都编译时可用)，日志默认写到首个镜像同目录的 `itrace.log` / `mtrace.jsonl`，可用 `--trace-dir DIR` 改目录，`--trace-start/--trace-end` 限定 PC 窗口。
 - 宿主构建启用 `set_warnings("all", "error")`，所有已启用的警告都按错误处理。
 - guest 镜像需要 RISC-V 交叉工具链，默认前缀 `riscv64-linux-gnu-`，可用 `xmake f --riscv_cross=<prefix>` 覆盖；构建 `sim` 和 `sim_tests` 本身不需要交叉工具链。
 - Qwen3 的 Q3B/Q3P 格式、prompt 分词与 `qwen3_run` 用法见 `README.md`。tiny 回归由 `tests/run.py qwen3` 驱动：`qwen3_snapshot_app`、模型、prompt 与 NumPy 参考均由脚本生成。
@@ -64,7 +64,7 @@ xmake project -k compile_commands        # 为 clangd 生成 compile_commands.js
 | `src/domain.h` | 数据域工具、寄存器堆/配置/描述符绑定、域分派与有效区域遍历 |
 | `src/execute/elementwise_op.h`、`operand.h` | 执行域共享的元素运算、操作数读取和浮点工具 |
 | `src/execute/reduce_util.h` | 规约树、absmax 叶映射与跨指令族共享的规约工具 |
-| `src/trace/` | `window.h` PC 窗口、`names.h` 助记符、`flush.h` flush 间隔；`itrace/` 的反汇编与文本 writer；`mtrace/` 的事件模型 (`events.h`)、数据流分类器与 JSONL writer |
+| `src/trace/` | `window.h` PC 窗口、`names.h` 助记符；`itrace/` 的反汇编与文本 writer；`mtrace/` 的事件模型 (`events.h`)、数据流分类器与 JSONL writer |
 | `src/utils/` | 通用内部工具：`bits.h` 位模式与符号扩展、`format.h` 十六进制格式化、小端转换、variant visitor 与 `unreachable` |
 | `src/main.cpp`、`src/monitor/` | CLI、镜像装载、`npu_exec` 步进循环、sdb 命令与 trace 文件输出 |
 | `tests/` | `units/` host 用例与入口、`guest/` guest driver 与 guest 源码、`include/` 测试头文件 |

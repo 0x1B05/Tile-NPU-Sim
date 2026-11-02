@@ -27,7 +27,15 @@ option("trace", function()
 	set_description("Trace features: none, itrace, mtrace, or all")
 end)
 
+option("trace_flush_records", function()
+	set_default("4096")
+	set_showmenu(true)
+	set_category("Debug")
+	set_description("Batch trace flush interval in records")
+end)
+
 local trace_mode = get_config("trace") or "none"
+local trace_flush_records = tonumber(get_config("trace_flush_records") or "4096") or 0
 
 -- Internal static library shared by the runner and the host test binaries.
 target("sim_core", function()
@@ -36,6 +44,7 @@ target("sim_core", function()
 	add_files("src/*.cpp|main.cpp", "src/decode/*.cpp|disasm.cpp", "src/execute/*.cpp", "src/platform/*.cpp")
 	if trace_mode ~= "none" then
 		add_defines("CONFIG_TRACE", { public = true })
+		add_defines("TRACE_FLUSH_RECORDS=" .. trace_flush_records, { public = true })
 	end
 	if trace_mode == "itrace" or trace_mode == "all" then
 		add_defines("CONFIG_ITRACE", { public = true })
