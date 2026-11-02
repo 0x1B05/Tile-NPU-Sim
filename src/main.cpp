@@ -14,6 +14,9 @@ int main(int argc, char **argv) {
   std::vector<std::string> image_args;
   std::int64_t steps = -1;
   std::string dump_range;
+#ifdef CONFIG_MTRACE
+  std::string mtrace_flush;
+#endif
   // clang-format off
 #ifdef CONFIG_SDB
   app.add_flag("-i,--interactive", options.interactive, "Open the sdb shell");
@@ -27,6 +30,7 @@ int main(int argc, char **argv) {
 #ifdef CONFIG_MTRACE
   app.add_flag("--mtrace"        , options.mtrace     , "Trace NPU data movement to a log file");
   app.add_option("--mtrace-log"  , options.mtrace_log , "Data-path trace output path (implies --mtrace)");
+  app.add_option("--mtrace-flush", mtrace_flush       , "Flush mode: batch (default) or line");
 #endif
   app.add_option("--dump-range"  , dump_range         , "Dump FILE@0xADDR:0xSIZE after the run");
   app.add_option("images"        , image_args         , "Program and data images (path[@0xADDR])") ->required();
@@ -41,6 +45,14 @@ int main(int argc, char **argv) {
 #ifdef CONFIG_MTRACE
   if (!options.mtrace_log.empty()) {
     options.mtrace = true;
+  }
+  if (!mtrace_flush.empty()) {
+    if (mtrace_flush != "batch" && mtrace_flush != "line") {
+      std::cerr << "invalid mtrace flush mode: " << mtrace_flush << '\n';
+      return 2;
+    }
+    options.mtrace = true;
+    options.mtrace_flush_line = mtrace_flush == "line";
   }
 #endif
   options.step_limit = static_cast<std::uint64_t>(steps);

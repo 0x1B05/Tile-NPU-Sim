@@ -80,6 +80,7 @@ MtraceWriter::~MtraceWriter() { out_.flush(); }
 void MtraceWriter::write_header() {
   out_ << "{\"t\":\"header\",\"v\":1,\"arch\":\"tile-npu\",\"format\":\"jsonl\","
           "\"time\":\"instruction\"}\n";
+  if (flush_each_line_) out_.flush();
 }
 
 void MtraceWriter::operator()(const TraceEvent &event) {
@@ -128,7 +129,11 @@ void MtraceWriter::operator()(const TraceEvent &event) {
   if (event.macs != 0) out_ << ",\"macs\":" << event.macs;
   out_ << "}\n";
 
-  if ((++events_ & 0xfff) == 0) out_.flush();
+  if (flush_each_line_) {
+    out_.flush();
+  } else if ((++events_ & 0xfff) == 0) {
+    out_.flush();
+  }
 }
 
 } // namespace tile_npu::trace
