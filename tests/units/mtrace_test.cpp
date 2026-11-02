@@ -130,16 +130,16 @@ TEST_CASE(mtrace_mma_accumulate_reads_destination) {
 TEST_CASE(trace_window_bounds) {
   using tile_npu::trace::TraceWindow;
 
-  const TraceWindow window{10, 20};
-  check(!window.contains(9), "below start");
-  check(window.contains(10), "start is inclusive");
-  check(window.contains(19), "last traced index");
-  check(!window.contains(20), "end is exclusive");
+  const TraceWindow window{0x80000010, 0x80000020};
+  check(!window.contains(0x8000000f), "below start");
+  check(window.contains(0x80000010), "start is inclusive");
+  check(window.contains(0x8000001f), "last traced PC");
+  check(!window.contains(0x80000020), "end is exclusive");
 
-  const TraceWindow unbounded{5, 0};
-  check(!unbounded.contains(4), "unbounded below start");
-  check(unbounded.contains(5), "unbounded includes start");
-  check(unbounded.contains(1000), "unbounded has no end");
+  const TraceWindow unbounded{0x80000010, 0};
+  check(!unbounded.contains(0x8000000f), "unbounded below start");
+  check(unbounded.contains(0x80000010), "unbounded includes start");
+  check(unbounded.contains(0x80001000), "unbounded has no end");
 }
 
 #endif // CONFIG_MTRACE

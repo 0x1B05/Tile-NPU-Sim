@@ -4,25 +4,26 @@
 
 namespace tile_npu::trace {
 
-// Instruction window [start, end). end == 0 means no upper bound.
+// PC window [pc_start, pc_end). pc_end == 0 means no upper bound.
 class TraceWindow {
 public:
   constexpr TraceWindow() = default;
 
-  constexpr TraceWindow(std::uint64_t start, std::uint64_t end) : start_(start), end_(end) {}
+  constexpr TraceWindow(std::uint64_t pc_start, std::uint64_t pc_end)
+      : pc_start_(pc_start), pc_end_(pc_end) {}
 
-  constexpr void set(std::uint64_t start, std::uint64_t end) {
-    start_ = start;
-    end_ = end;
+  constexpr void set(std::uint64_t pc_start, std::uint64_t pc_end) {
+    pc_start_ = pc_start;
+    pc_end_ = pc_end;
   }
 
-  constexpr bool contains(std::uint64_t index) const {
-    return index >= start_ && (end_ == 0 || index < end_);
+  constexpr bool contains(std::uint64_t pc) const {
+    return pc >= pc_start_ && (pc_end_ == 0 || pc < pc_end_);
   }
 
 private:
-  std::uint64_t start_ = 0;
-  std::uint64_t end_ = 0;
+  std::uint64_t pc_start_ = 0;
+  std::uint64_t pc_end_ = 0;
 };
 
 } // namespace tile_npu::trace

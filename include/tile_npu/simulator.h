@@ -102,8 +102,8 @@ public:
     mtrace_recorder_.set_callback(std::move(callback));
   }
 
-  void set_mtrace_window(std::uint64_t start, std::uint64_t end) {
-    mtrace_recorder_.set_window(start, end);
+  void set_mtrace_pc_window(std::uint64_t pc_start, std::uint64_t pc_end) {
+    mtrace_recorder_.set_pc_window(pc_start, pc_end);
   }
 #endif
 

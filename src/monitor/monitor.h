@@ -43,8 +43,8 @@ struct Options {
 #endif
 #ifdef CONFIG_TRACE
   std::string trace_dir;
-  std::uint64_t trace_start = 0;
-  std::uint64_t trace_end = 0;
+  std::uint64_t trace_pc_start = 0;
+  std::uint64_t trace_pc_end = 0;
 #endif
   std::size_t memory_mib = DEFAULT_MEMORY_MIB;
   std::uint64_t step_limit = UNLIMITED_STEPS;

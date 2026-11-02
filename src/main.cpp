@@ -1,4 +1,5 @@
 #include "monitor/monitor.h"
+#include "monitor/parse.h"
 
 #include <CLI/CLI.hpp>
 
@@ -17,6 +18,8 @@ int main(int argc, char **argv) {
 #ifdef CONFIG_TRACE
   std::string trace_selection;
   std::string trace_dir;
+  std::string trace_pc_start_arg;
+  std::string trace_pc_end_arg;
 #endif
 #ifdef CONFIG_MTRACE
   std::string mtrace_flush;
@@ -37,11 +40,9 @@ int main(int argc, char **argv) {
 #ifdef CONFIG_TRACE
   app.add_option("--trace"       , trace_selection    , "Select traces: itrace, mtrace, or all")
       ->check(CLI::IsMember({"itrace", "mtrace", "all"}));
-  app.add_option("--trace-dir"   , trace_dir          , "Directory for default itrace/mtrace logs");
-  app.add_option("--trace-start" , options.trace_start, "First instruction index to trace")
-      ->check(CLI::NonNegativeNumber);
-  app.add_option("--trace-end"   , options.trace_end  , "One-past-last instruction index (0 = unlimited)")
-      ->check(CLI::NonNegativeNumber);
+  app.add_option("--trace-dir"    , trace_dir          , "Directory for default itrace/mtrace logs");
+  app.add_option("--trace-start", trace_pc_start_arg, "First PC to trace (hex or decimal)");
+  app.add_option("--trace-end"  , trace_pc_end_arg  , "One-past-last PC to trace (0 = unlimited)");
 #endif
   app.add_option("--dump-range"  , dump_range         , "Dump FILE@0xADDR:0xSIZE after the run");
   app.add_option("images"        , image_args         , "Program and data images (path[@0xADDR])") ->required();
@@ -80,8 +81,19 @@ int main(int argc, char **argv) {
 #endif
   }
   options.trace_dir = trace_dir;
-  if (options.trace_end != 0 && options.trace_end < options.trace_start) {
-    std::cerr << "trace end must be zero or no earlier than trace start\n";
+  const auto parse_pc = [](const std::string &text, std::uint64_t &value) {
+    return !text.empty() && text.front() != '-' && tile_npu::monitor::parse_u64(text, value);
+  };
+  if (!trace_pc_start_arg.empty() && !parse_pc(trace_pc_start_arg, options.trace_pc_start)) {
+    std::cerr << "invalid trace PC start: " << trace_pc_start_arg << '\n';
+    return 2;
+  }
+  if (!trace_pc_end_arg.empty() && !parse_pc(trace_pc_end_arg, options.trace_pc_end)) {
+    std::cerr << "invalid trace PC end: " << trace_pc_end_arg << '\n';
+    return 2;
+  }
+  if (options.trace_pc_end != 0 && options.trace_pc_end <= options.trace_pc_start) {
+    std::cerr << "trace PC end must be zero or greater than trace PC start\n";
     return 2;
   }
 #endif

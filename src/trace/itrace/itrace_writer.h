@@ -12,8 +12,8 @@ namespace tile_npu::trace {
 // the file and installs this writer as the simulator callback.
 class ItraceWriter {
 public:
-  explicit ItraceWriter(std::ofstream &out, std::uint64_t start = 0, std::uint64_t end = 0)
-      : out_(out), window_(start, end) {}
+  explicit ItraceWriter(std::ofstream &out, std::uint64_t pc_start = 0, std::uint64_t pc_end = 0)
+      : out_(out), window_(pc_start, pc_end) {}
 
   void operator()(std::uint64_t pc, std::uint32_t instr, const DecodeResult &decoded,
                   StepStatus status);
@@ -21,7 +21,6 @@ public:
 private:
   std::ofstream &out_;
   TraceWindow window_;
-  std::uint64_t next_ = 0;
 };
 
 } // namespace tile_npu::trace

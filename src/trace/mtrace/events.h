@@ -79,7 +79,9 @@ public:
   }
 
   // Trace instruction indexes in [start, end); end == 0 means no upper bound.
-  void set_window(std::uint64_t start, std::uint64_t end) { window_.set(start, end); }
+  void set_pc_window(std::uint64_t pc_start, std::uint64_t pc_end) {
+    window_.set(pc_start, pc_end);
+  }
 
   void begin_instruction(std::uint64_t pc) {
     instr_ = next_instr_++;
@@ -91,7 +93,7 @@ public:
   std::uint64_t pc() const { return pc_; }
 
   void emit(TraceEvent event) {
-    if (!callback_ || !window_.contains(instr_)) return;
+    if (!callback_ || !window_.contains(pc_)) return;
     event.seq = seq_++;
     event.instr = instr_;
     event.pc = pc_;

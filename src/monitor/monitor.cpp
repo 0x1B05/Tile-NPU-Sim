@@ -167,7 +167,7 @@ int run_images(const Options &options) {
       std::cerr << "cannot open itrace log: " << path << '\n';
       return 1;
     }
-    itrace_writer.emplace(itrace_log, options.trace_start, options.trace_end);
+    itrace_writer.emplace(itrace_log, options.trace_pc_start, options.trace_pc_end);
   }
 #endif
 #ifdef CONFIG_MTRACE
@@ -200,7 +200,7 @@ int run_images(const Options &options) {
 #endif
   sim.reset(MEMORY_BASE);
 #ifdef CONFIG_MTRACE
-  if (mtrace_writer) sim.set_mtrace_window(options.trace_start, options.trace_end);
+  if (mtrace_writer) sim.set_mtrace_pc_window(options.trace_pc_start, options.trace_pc_end);
 #endif
 
 #ifdef CONFIG_SDB
