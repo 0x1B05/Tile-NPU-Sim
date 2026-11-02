@@ -43,6 +43,9 @@ struct Options {
   std::string mtrace_log;
   bool mtrace_flush_line = false;
 #endif
+#if defined(CONFIG_ITRACE) || defined(CONFIG_MTRACE)
+  std::string trace_dir;
+#endif
   std::size_t memory_mib = DEFAULT_MEMORY_MIB;
   std::uint64_t step_limit = UNLIMITED_STEPS;
   std::optional<DumpRange> dump_range;

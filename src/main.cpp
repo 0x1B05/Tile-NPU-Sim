@@ -14,6 +14,10 @@ int main(int argc, char **argv) {
   std::vector<std::string> image_args;
   std::int64_t steps = -1;
   std::string dump_range;
+#if defined(CONFIG_ITRACE) || defined(CONFIG_MTRACE)
+  std::string trace_selection;
+  std::string trace_dir;
+#endif
 #ifdef CONFIG_MTRACE
   std::string mtrace_flush;
 #endif
@@ -31,6 +35,11 @@ int main(int argc, char **argv) {
   app.add_flag("--mtrace"        , options.mtrace     , "Trace NPU data movement to a log file");
   app.add_option("--mtrace-log"  , options.mtrace_log , "Data-path trace output path (implies --mtrace)");
   app.add_option("--mtrace-flush", mtrace_flush       , "Flush mode: batch (default) or line");
+#endif
+#if defined(CONFIG_ITRACE) || defined(CONFIG_MTRACE)
+  app.add_option("--trace"       , trace_selection    , "Select traces: itrace, mtrace, or all")
+      ->check(CLI::IsMember({"itrace", "mtrace", "all"}));
+  app.add_option("--trace-dir"   , trace_dir          , "Directory for default itrace/mtrace logs");
 #endif
   app.add_option("--dump-range"  , dump_range         , "Dump FILE@0xADDR:0xSIZE after the run");
   app.add_option("images"        , image_args         , "Program and data images (path[@0xADDR])") ->required();
@@ -54,6 +63,29 @@ int main(int argc, char **argv) {
     options.mtrace = true;
     options.mtrace_flush_line = mtrace_flush == "line";
   }
+#endif
+#if defined(CONFIG_ITRACE) || defined(CONFIG_MTRACE)
+  if (!trace_selection.empty()) {
+    const bool want_itrace = trace_selection == "itrace" || trace_selection == "all";
+    const bool want_mtrace = trace_selection == "mtrace" || trace_selection == "all";
+#ifndef CONFIG_ITRACE
+    if (want_itrace) {
+      std::cerr << "itrace was not compiled; rebuild with --trace=itrace or --trace=all\n";
+      return 2;
+    }
+#endif
+#ifndef CONFIG_MTRACE
+    if (want_mtrace) {
+      std::cerr << "mtrace was not compiled; rebuild with --trace=mtrace or --trace=all\n";
+      return 2;
+    }
+#endif
+    options.itrace = options.itrace || want_itrace;
+#ifdef CONFIG_MTRACE
+    options.mtrace = options.mtrace || want_mtrace;
+#endif
+  }
+  options.trace_dir = trace_dir;
 #endif
   options.step_limit = static_cast<std::uint64_t>(steps);
   if (!dump_range.empty()) {

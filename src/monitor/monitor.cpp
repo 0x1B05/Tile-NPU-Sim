@@ -59,6 +59,9 @@ bool load_image(const Image &image, Ram &memory) {
 #ifdef CONFIG_ITRACE
 std::string itrace_path(const Options &options) {
   if (!options.itrace_log.empty()) return options.itrace_log;
+  if (!options.trace_dir.empty()) {
+    return (std::filesystem::path(options.trace_dir) / "itrace.log").string();
+  }
   if (options.images.empty()) return "itrace.log";
   const std::filesystem::path image(options.images.front().path);
   return (image.parent_path() / "itrace.log").string();
@@ -68,9 +71,25 @@ std::string itrace_path(const Options &options) {
 #ifdef CONFIG_MTRACE
 std::string mtrace_path(const Options &options) {
   if (!options.mtrace_log.empty()) return options.mtrace_log;
+  if (!options.trace_dir.empty()) {
+    return (std::filesystem::path(options.trace_dir) / "mtrace.jsonl").string();
+  }
   if (options.images.empty()) return "mtrace.jsonl";
   const std::filesystem::path image(options.images.front().path);
   return (image.parent_path() / "mtrace.jsonl").string();
+}
+#endif
+
+#if defined(CONFIG_ITRACE) || defined(CONFIG_MTRACE)
+bool ensure_trace_dir(const Options &options) {
+  if (options.trace_dir.empty()) return true;
+  std::error_code error;
+  std::filesystem::create_directories(options.trace_dir, error);
+  if (error || !std::filesystem::is_directory(options.trace_dir)) {
+    std::cerr << "cannot create trace directory: " << options.trace_dir << '\n';
+    return false;
+  }
+  return true;
 }
 #endif
 
@@ -134,6 +153,9 @@ int run_images(const Options &options) {
   for (const auto &image : options.images) {
     if (!load_image(image, ram)) return 1;
   }
+#if defined(CONFIG_ITRACE) || defined(CONFIG_MTRACE)
+  if (!ensure_trace_dir(options)) return 1;
+#endif
   tile_npu::SerialConsole serial(std::cout);
   tile_npu::SystemBus bus(
       ram, {{&serial, tile_npu::SerialConsole::BASE, tile_npu::SerialConsole::SIZE}});
