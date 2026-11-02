@@ -28,6 +28,7 @@ StepResult Simulator::step() {
   const std::uint64_t pc = state_.scalar.pc;
 #ifdef CONFIG_MTRACE
   mtrace_recorder_.begin_instruction(pc);
+  const bool mtrace_active = mtrace_recorder_.should_trace(pc);
 #endif
   std::array<std::byte, 4> instr_bytes{};
   if (!memory_.read(pc, instr_bytes)) {
@@ -37,7 +38,7 @@ StepResult Simulator::step() {
 
   // decode && execute
 #ifdef CONFIG_MTRACE
-  ExecContext ctx{state_, memory_, mtrace_recorder_.enabled() ? &mtrace_recorder_ : nullptr};
+  ExecContext ctx{state_, memory_, mtrace_active ? &mtrace_recorder_ : nullptr};
 #else
   ExecContext ctx{state_, memory_};
 #endif
@@ -49,7 +50,7 @@ StepResult Simulator::step() {
           [&ctx](const DecodedNpuInstr &decoded) { return exec_npu_instr(decoded, ctx); }},
       decoded);
 #ifdef CONFIG_MTRACE
-  if (execution.status == StepStatus::retired) {
+  if (execution.status == StepStatus::retired && mtrace_active) {
     if (const auto *npu = std::get_if<DecodedNpuInstr>(&decoded)) {
       trace_npu_dataflow(*npu, state_, mtrace_recorder_);
     }

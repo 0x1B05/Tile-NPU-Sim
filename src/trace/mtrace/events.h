@@ -74,8 +74,6 @@ public:
 
   bool has_callback() const { return static_cast<bool>(callback_); }
 
-  bool enabled() const { return has_callback(); }
-
   bool should_trace(std::uint64_t pc) const { return callback_ && window_.contains(pc); }
 
   void reset() {
