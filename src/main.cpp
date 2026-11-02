@@ -21,6 +21,7 @@ int main(int argc, char **argv) {
   std::string trace_pc_start_arg;
   std::string trace_pc_end_arg;
   std::string trace_flush;
+  std::vector<std::string> trace_choices;
 #endif
   // clang-format off
 #ifdef CONFIG_SDB
@@ -35,8 +36,20 @@ int main(int argc, char **argv) {
   app.add_flag("--mtrace"        , options.mtrace     , "Trace NPU data movement to a log file");
 #endif
 #ifdef CONFIG_TRACE
-  app.add_option("--trace"       , trace_selection    , "Select traces: itrace, mtrace, or all")
-      ->check(CLI::IsMember({"itrace", "mtrace", "all"}));
+#ifdef CONFIG_ITRACE
+  trace_choices.emplace_back("itrace");
+#endif
+#ifdef CONFIG_MTRACE
+  trace_choices.emplace_back("mtrace");
+#endif
+  if (trace_choices.size() > 1) trace_choices.emplace_back("all");
+  std::string trace_help = trace_choices.size() == 1 ? "Select trace: " : "Select traces: ";
+  for (std::size_t i = 0; i < trace_choices.size(); ++i) {
+    if (i != 0) trace_help += (i + 1 == trace_choices.size() ? ", or " : ", ");
+    trace_help += trace_choices[i];
+  }
+  app.add_option("--trace"       , trace_selection    , trace_help)
+      ->check(CLI::IsMember(trace_choices));
   app.add_option("--trace-dir"   , trace_dir          , "Directory for default itrace/mtrace logs");
   app.add_option("--trace-start" , trace_pc_start_arg , "First PC to trace (hex or decimal)");
   app.add_option("--trace-end"   , trace_pc_end_arg   , "One-past-last PC to trace (0 = unlimited)");
@@ -56,25 +69,12 @@ int main(int argc, char **argv) {
     options.trace_flush_line = trace_flush == "line";
   }
   if (!trace_selection.empty()) {
-    const bool want_itrace = trace_selection == "itrace" || trace_selection == "all";
-    const bool want_mtrace = trace_selection == "mtrace" || trace_selection == "all";
-#ifndef CONFIG_ITRACE
-    if (want_itrace) {
-      std::cerr << "itrace was not compiled; rebuild with --trace=itrace or --trace=all\n";
-      return 2;
-    }
-#endif
-#ifndef CONFIG_MTRACE
-    if (want_mtrace) {
-      std::cerr << "mtrace was not compiled; rebuild with --trace=mtrace or --trace=all\n";
-      return 2;
-    }
-#endif
+    const bool all = trace_selection == "all";
 #ifdef CONFIG_ITRACE
-    options.itrace = options.itrace || want_itrace;
+    options.itrace = options.itrace || all || trace_selection == "itrace";
 #endif
 #ifdef CONFIG_MTRACE
-    options.mtrace = options.mtrace || want_mtrace;
+    options.mtrace = options.mtrace || all || trace_selection == "mtrace";
 #endif
   }
   options.trace_dir = trace_dir;

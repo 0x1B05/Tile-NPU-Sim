@@ -78,7 +78,7 @@ inline std::string_view status_name(StepStatus status) {
 }
 
 #ifdef CONFIG_ITRACE
-// Called for every fetched instruction after execution when itrace is enabled.
+// Called after execution for each fetched instruction in the ITRACE PC window.
 using ItraceCallback = std::function<void(std::uint64_t pc, std::uint32_t instr,
                                           const DecodeResult &decoded, StepStatus status)>;
 #endif

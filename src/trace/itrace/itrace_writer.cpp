@@ -1,6 +1,7 @@
 #include "itrace_writer.h"
 
 #include "disasm.h"
+#include "trace/flush.h"
 #include "utils/format.h"
 
 namespace tile_npu::trace {
@@ -16,7 +17,7 @@ void ItraceWriter::operator()(std::uint64_t pc, std::uint32_t instr, const Decod
   out_ << '\n';
   if (flush_each_line_) {
     out_.flush();
-  } else if ((++records_ & 0xfff) == 0) {
+  } else if ((++records_ % TRACE_FLUSH_RECORDS) == 0) {
     out_.flush();
   }
 }

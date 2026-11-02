@@ -56,26 +56,23 @@ bool load_image(const Image &image, Ram &memory) {
   return true;
 }
 
-#ifdef CONFIG_ITRACE
-std::string itrace_path(const Options &options) {
+#ifdef CONFIG_TRACE
+std::string trace_path(const Options &options, const char *filename) {
   if (!options.trace_dir.empty()) {
-    return (std::filesystem::path(options.trace_dir) / "itrace.log").string();
+    return (std::filesystem::path(options.trace_dir) / filename).string();
   }
-  if (options.images.empty()) return "itrace.log";
+  if (options.images.empty()) return filename;
   const std::filesystem::path image(options.images.front().path);
-  return (image.parent_path() / "itrace.log").string();
+  return (image.parent_path() / filename).string();
 }
 #endif
 
+#ifdef CONFIG_ITRACE
+std::string itrace_path(const Options &options) { return trace_path(options, "itrace.log"); }
+#endif
+
 #ifdef CONFIG_MTRACE
-std::string mtrace_path(const Options &options) {
-  if (!options.trace_dir.empty()) {
-    return (std::filesystem::path(options.trace_dir) / "mtrace.jsonl").string();
-  }
-  if (options.images.empty()) return "mtrace.jsonl";
-  const std::filesystem::path image(options.images.front().path);
-  return (image.parent_path() / "mtrace.jsonl").string();
-}
+std::string mtrace_path(const Options &options) { return trace_path(options, "mtrace.jsonl"); }
 #endif
 
 #ifdef CONFIG_TRACE
@@ -152,7 +149,14 @@ int run_images(const Options &options) {
     if (!load_image(image, ram)) return 1;
   }
 #ifdef CONFIG_TRACE
-  if (!ensure_trace_dir(options)) return 1;
+  bool tracing = false;
+#ifdef CONFIG_ITRACE
+  tracing = tracing || options.itrace;
+#endif
+#ifdef CONFIG_MTRACE
+  tracing = tracing || options.mtrace;
+#endif
+  if (tracing && !ensure_trace_dir(options)) return 1;
 #endif
   tile_npu::SerialConsole serial(std::cout);
   tile_npu::SystemBus bus(

@@ -7,8 +7,9 @@
 
 namespace tile_npu::trace {
 
-// Writes the executed-instruction stream as ITRACE text. Batch mode flushes
-// every 4096 records; line mode flushes each record for crash-adjacent debug.
+// Writes the executed-instruction stream as ITRACE text. The simulator applies
+// the PC window before invoking this writer. Batch mode flushes every 4096
+// records; line mode flushes each record for crash-adjacent debug.
 class ItraceWriter {
 public:
   explicit ItraceWriter(std::ofstream &out, bool flush_each_line = false)
