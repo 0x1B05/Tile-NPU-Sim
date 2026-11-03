@@ -127,7 +127,9 @@ qwen3_quant_act:
 # W is stored as [n/32][k/32][32][32] tiles in [n][k] order, with per-row f32
 # scales. quant(x) is the tile panels t2..t4 left resident by qwen3_quant_act;
 # nothing between the two calls may clobber them. Cross-tile accumulation runs
-# in an i32 memory buffer (qwen3_accbuf). n % 32 == 0, 32 | k, k <= 3072.
+# in an i32 memory buffer (qwen3_accbuf); the last panel's last row uses
+# vmma.nt.dequant.acc to write f32 output directly. n % 32 == 0, 32 | k,
+# k <= 3072.
 # ---------------------------------------------------------------------------
 
 # Per-panel n-block loop. tile_a names the activation panel, which must be a
@@ -146,6 +148,7 @@ qwen3_quant_act:
     srli    s3, a4, 5           # n/32 blocks
     li      s2, 0
 2:
+    SETIV   SEL_VC, CF_DTYPE, DT_I32, 4
     # tm1 base = w + (nb*kblocks + panel*32)*1024; advance one kblock per
     # loaded tile, since the tiled layout is [nblock][kblock][32][32].
     srli    t0, a5, 5
@@ -170,11 +173,24 @@ qwen3_quant_act:
     bgeu    t5, t4, 5f
     SETX    SEL_TM, CF_BASE, 1, X_T0
     TLOAD   1
+    addi    t6, t4, -1
+    bne     t5, t6, 4f
+    addi    t6, s4, -1
+    bne     s5, t6, 4f
+    VLOAD   6
+    VMMA_NT_DEQUANT_ACC 4, \tile_a, \R, 1, 6
+    REG_MOVE 3, 2, 8, 4
+    VSTORE  8
+    j       5f
+4:
     VMMA_NT_ACC 4, \tile_a, \R, 1
+5:
     add     t0, t0, t1
     .endr
-5:
+    addi    t6, s4, -1
+    beq     s5, t6, 6f
     VSTORE  4
+6:
     addi    s2, s2, 1
     bltu    s2, s3, 2b
 .endm
@@ -200,6 +216,10 @@ qwen3_matvec_q:
     LI_CWV  t0, DT_F32, 32
     SETW    SEL_VC, 6, X_T0
     SETW    SEL_VC, 8, X_T0
+    SETIM   SEL_VC, CF_DTYPE, DT_F32, 7
+    SETIM   SEL_VC, CF_LEN, 1, 7
+    mv      t0, s6
+    VINSERT 7, 0, 5
 
     # phase B configs: one [n][k] weight tile in t1 (tile row_stride = 32)
     LI_CWM  t0, DT_I8, 32, 32
@@ -237,24 +257,6 @@ qwen3_matvec_q:
 .Lmv_panel_done:
     addi    s5, s5, 1
     bltu    s5, s4, .Lmv_panel
-
-    # epilogue: i32 -> f32, per-row weight scales, activation scale
-    SETIV   SEL_VM, CF_VFLAGS, 1, 4       # accbuf descriptor now advances
-    la      t0, qwen3_accbuf
-    SETX    SEL_VM, CF_BASE, 4, X_T0
-    srli    s3, a4, 5
-    li      s2, 0
-.Lmv_epi:
-    SETIV   SEL_VC, CF_DTYPE, DT_I32, 4
-    VLOAD   4
-    VCVT    4, 4                          # i32 -> f32, vc4 becomes f32
-    VLOAD   6                             # 32 weight scales
-    VMUL    4, 4, 6
-    VMULX   4, 4, X_S6
-    REG_MOVE 3, 2, 8, 4                    # vcopy v8, v4
-    VSTORE  8
-    addi    s2, s2, 1
-    bltu    s2, s3, .Lmv_epi
 
     ld      s2, 0(sp)
     ld      s3, 8(sp)
