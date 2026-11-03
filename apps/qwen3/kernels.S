@@ -396,7 +396,9 @@ qwen3_matmul_q:
     bne     a7, t0, .Lmm_nblock  # grouping only pays off for a full xq tile
 .Lmm_group:
     # Reset the eight i32 accumulators for the next group; a8 stays f32.
-    LI_CWM  t0, DT_I32, 32, 32
+    # Keep the runtime row count (a7) and the 32-column output shape.
+    li      t0, (DT_I32 << 16) | (32 << 8)
+    or      t0, t0, a7
     SETW    SEL_AC, 0, X_T0, 7
 
     sub     t0, s3, s2
