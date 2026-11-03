@@ -527,6 +527,20 @@
     MMA 3, \d5, \a5, \b5, \row
 .endm
 
+# VMMA_DEQUANT (R5), major4 = 1010, q = 10:
+#   [27] acc  [26:22] scale pair base  [21:17] row  [16:12] B5  [11:7] A5  [6:2] D5
+.macro VMMA_DEQUANT acc, d5, a5, row, b5, vpair
+    .word ((10 << 28) | ((\acc & 1) << 27) | ((\vpair & 31) << 22) | ((\row & 31) << 17) | (\b5 << 12) | (\a5 << 7) | (\d5 << 2) | 2)
+.endm
+
+.macro VMMA_NT_DEQUANT_ZERO d5, a5, row, b5, vpair
+    VMMA_DEQUANT 0, \d5, \a5, \row, \b5, \vpair
+.endm
+
+.macro VMMA_NT_DEQUANT_ACC d5, a5, row, b5, vpair
+    VMMA_DEQUANT 1, \d5, \a5, \row, \b5, \vpair
+.endm
+
 # MMA_DEQUANT (R5), major4 = 1001, q = 10:
 #   [27] acc  [26:22] vCol  [21:17] vRow  [16:12] B5  [11:7] A5  [6:2] D5
 .macro MMA_DEQUANT acc, d5, a5, b5, vcol, vrow
