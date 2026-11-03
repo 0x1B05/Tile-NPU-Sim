@@ -341,10 +341,10 @@ qwen3_quant_rows:
 # the [n/32][k/32][32][32] layout and mma.nt accumulates the k/32 chunks in
 # acc. The last k chunk uses mma.nt.dequant.acc to apply v29 (weight scales,
 # by column) and v30 (token scales, by row) on the drain and write f32 in
-# place; the result is copied to a8 and stored via am8 (auto-advances one
-# block per store). A single k chunk uses mma.nt.dequant.zero. Full groups of
-# eight nblocks keep accelerators a0..a7 and reuse one xq tile across the
-# group. n % 32 == 0, 32 | k, k <= 3072.
+# place; each accumulator is stored directly via its own amG descriptor.
+# A single k chunk uses mma.nt.dequant.zero. Full groups of eight nblocks
+# keep accelerators a0..a7 and reuse one xq tile across the group.
+# n % 32 == 0, 32 | k, k <= 3072.
 # ---------------------------------------------------------------------------
     .text
     .globl qwen3_matmul_q
@@ -370,14 +370,14 @@ qwen3_matmul_q:
     SETIM   SEL_TM, CF_CSTRIDE, 1, 1
     SETIM   SEL_TM, CF_FLAGS, 0, 1
     LI_CWM  t0, DT_I32, 32, 32
-    SETW    SEL_AC, 0, X_T0, 8
-    SETX    SEL_AC, CF_ROWS, 0, X_A7, 8
-    SETIM   SEL_AC, CF_DTYPE, DT_F32, 8
-    SETX    SEL_AM, CF_BASE, 8, X_A4
+    SETW    SEL_AC, 0, X_T0, 7
+    SETX    SEL_AC, CF_ROWS, 0, X_A7, 7
+    SETX    SEL_AM, CF_BASE, 0, X_A4
     slli    t0, a5, 2
-    SETX    SEL_AM, CF_RSTRIDE, 8, X_T0
-    SETIM   SEL_AM, CF_CSTRIDE, 4, 8
-    SETIM   SEL_AM, CF_FLAGS, 2, 8      # inc along cols: += 32 * 4
+    SETX    SEL_AM, CF_RSTRIDE, 0, X_T0
+    SETIM   SEL_AM, CF_CSTRIDE, 4, 0
+    SETIM   SEL_AM, CF_FLAGS, 0, 0      # every block sets its own base
+    COPY    SEL_AM, 1, 0, 6
     LI_CWV  s3, DT_F32, 32
     SETW    SEL_VC, 29, X_S3, 1    # vc29 (ws stream), vc30 (xs)
     SETX    SEL_VC, CF_LEN, 30, X_A7
@@ -395,7 +395,7 @@ qwen3_matmul_q:
     li      t0, 32
     bne     a7, t0, .Lmm_nblock  # grouping only pays off for a full xq tile
 .Lmm_group:
-    # Reset the eight i32 accumulators for the next group; a8 stays f32.
+    # Reset the eight i32 accumulators for the next group.
     # Keep the runtime row count (a7) and the 32-column output shape.
     li      t0, (DT_I32 << 16) | (32 << 8)
     or      t0, t0, a7
@@ -462,10 +462,12 @@ qwen3_matmul_q:
     .endr
 
 .Lmm_group_epi:
-    # a8 is the f32 staging register for the auto-incrementing am8 store.
+    slli    t0, s2, 7
+    add     t0, a4, t0
     .irp G,0,1,2,3,4,5,6,7
-    REG_MOVE 1, 2, 8, \G
-    ASTORE  8
+    addi    t1, t0, \G*128
+    SETX    SEL_AM, CF_BASE, \G, X_T1
+    ASTORE  \G
     .endr
     addi    s2, s2, 8
     bltu    s2, s3, .Lmm_group
@@ -508,9 +510,10 @@ qwen3_matmul_q:
     VLOAD   29
     MMA_NT_DEQUANT_ZERO 0, 0, 1, 29, 30
 .Lmm_tail_epi:
-    # a8 is the f32 staging register for the auto-incrementing am8 store.
-    REG_MOVE 1, 2, 8, 0
-    ASTORE  8
+    slli    t0, s2, 7
+    add     t0, a4, t0
+    SETX    SEL_AM, CF_BASE, 0, X_T0
+    ASTORE  0
     addi    s2, s2, 1
     bltu    s2, s3, .Lmm_nblock
 .Lmm_done:
