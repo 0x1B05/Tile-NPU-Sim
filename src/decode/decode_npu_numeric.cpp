@@ -193,4 +193,25 @@ DecodeResult decode_mma_dequant(std::uint32_t word) {
   }};
 }
 
+// VMMA_DEQUANT (R5): major4 = 1010, q = 10.
+// [31:28] major4 [27] ACC [26:22] scale pair base [21:17] row
+// [16:12] B [11:7] A [6:2] D [1:0] q
+DecodeResult decode_vmma_dequant(std::uint32_t word) {
+  const auto f = encoding::NpuR5::from(word);
+  if (static_cast<std::size_t>(f.scalar) >= VECTOR_REGISTERS - 1 ||
+      !domain_register_valid(NpuDomain::vec32, f.dest) ||
+      !domain_register_valid(NpuDomain::tile, f.src1) ||
+      !domain_register_valid(NpuDomain::tile, f.src2)) {
+    return DecodeError::illegal;
+  }
+  return DecodedNpuInstr{VmmaDequantInstr{
+      .op = f.acc != 0 ? VmmaOp::nt_acc : VmmaOp::nt_zero,
+      .dest = {.domain = NpuDomain::vec32, .index = f.dest},
+      .src_a = {.domain = NpuDomain::tile, .index = f.src1},
+      .src_b = {.domain = NpuDomain::tile, .index = f.src2},
+      .row = f.scalar2,
+      .scale_pair = f.scalar,
+  }};
+}
+
 } // namespace tile_npu

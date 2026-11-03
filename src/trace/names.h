@@ -114,6 +114,12 @@ inline std::string vmma_mnemonic(VmmaOp op) {
   return name;
 }
 
+inline std::string vmma_dequant_mnemonic(VmmaOp op) {
+  std::string name = "vmma.nt.dequant.";
+  name += vmma_suffix(op);
+  return name;
+}
+
 inline std::string ebin_mnemonic(NpuDomain domain, EbinOp op, bool from_scalar) {
   std::string name(1, domain_char(domain));
   name += ebin_name(op);

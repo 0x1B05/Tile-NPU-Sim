@@ -171,6 +171,45 @@ ExecuteResult vmma(const VmmaInstr &instr, State &state) {
   return {.status = StepStatus::retired};
 }
 
+// vmma.nt.dequant.zero/acc: VMMA into an internal i32 sum, then apply the
+// adjacent vCol/vRow pair and write f32 back to the Vec32 destination.
+ExecuteResult vmma_dequant(const VmmaDequantInstr &instr, State &state) {
+  const auto &dst_config = state.vc[instr.dest.index];
+  const auto &lhs_config = state.tc[instr.src_a.index];
+  const auto &rhs_config = state.tc[instr.src_b.index];
+  const auto &col_config = state.vc[instr.scale_pair];
+  const auto &row_config = state.vc[instr.scale_pair + 1];
+  if (!valid_config_of(dst_config, DType::i32) || !valid_config_of(lhs_config, DType::i8) ||
+      !valid_config_of(rhs_config, DType::i8) || !valid_config_of(col_config, DType::f32) ||
+      !valid_config_of(row_config, DType::f32)) {
+    return config_error();
+  }
+  const auto k_size = rhs_config.cols;
+  const auto n_size = rhs_config.rows;
+  if (dst_config.len != n_size || lhs_config.cols != k_size || instr.row >= lhs_config.rows ||
+      col_config.len != n_size || row_config.len != 1) {
+    return config_error();
+  }
+
+  const auto *lhs = state.t[instr.src_a.index].data() + std::size_t{instr.row} * MATRIX_EXTENT;
+  auto rhs = matrix_view(std::as_const(state.t[instr.src_b.index]));
+  auto &dst = state.v[instr.dest.index];
+  const auto &col_scale = state.v[instr.scale_pair];
+  const auto &row_scale = state.v[instr.scale_pair + 1];
+  const FpEnvGuard fp_env;
+  for (std::size_t j = 0; j < n_size; ++j) {
+    std::int32_t sum = instr.op == VmmaOp::nt_acc ? std::bit_cast<std::int32_t>(dst[j]) : 0;
+    for (std::size_t k = 0; k < k_size; ++k) {
+      sum += i8_product(lhs[k], rhs.at(j, k));
+    }
+    const float value = as_f32(i32_to_f32_bits(std::bit_cast<std::uint32_t>(sum)));
+    const float t = value * as_f32(col_scale[j]);
+    dst[j] = as_u32(t * as_f32(row_scale[0]));
+  }
+  state.vc[instr.dest.index].dtype = DType::f32;
+  return {.status = StepStatus::retired};
+}
+
 } // namespace
 
 ExecuteResult execute(const MmaInstr &instr, State &state) { return mma(instr, state); }
@@ -180,5 +219,9 @@ ExecuteResult execute(const MmaDequantInstr &instr, State &state) {
 }
 
 ExecuteResult execute(const VmmaInstr &instr, State &state) { return vmma(instr, state); }
+
+ExecuteResult execute(const VmmaDequantInstr &instr, State &state) {
+  return vmma_dequant(instr, state);
+}
 
 } // namespace tile_npu

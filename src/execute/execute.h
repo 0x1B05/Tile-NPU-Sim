@@ -69,6 +69,7 @@ ExecuteResult execute(const TdequantInstr &instr, State &state);
 ExecuteResult execute(const MmaInstr &instr, State &state);
 ExecuteResult execute(const MmaDequantInstr &instr, State &state);
 ExecuteResult execute(const VmmaInstr &instr, State &state);
+ExecuteResult execute(const VmmaDequantInstr &instr, State &state);
 
 // Configuration and system
 ExecuteResult execute(const CfgSetiInstr &instr, ExecContext &ctx);

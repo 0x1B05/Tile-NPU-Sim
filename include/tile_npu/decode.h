@@ -19,7 +19,7 @@ using DecodedNpuInstr = std::variant<
     // Memory access and movement.
     MblkInstr, FillInstr, MoveInstr, RowInstr, LaneExtractInstr, LaneInsertInstr, LaneBroadcastInstr,
     // Matrix and elementwise arithmetic.
-    MmaInstr, MmaDequantInstr, VmmaInstr,
+    MmaInstr, MmaDequantInstr, VmmaInstr, VmmaDequantInstr,
     EbinInstr, EunInstr, CmpInstr, BcastInstr, Er4Instr, MaskInstr,
     // Reductions, conversions, and quantization.
     AreduceInstr, AreduceArgmaxInstr, VreduceInstr, VreduceArgmaxInstr,

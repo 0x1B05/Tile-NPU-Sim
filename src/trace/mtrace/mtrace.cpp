@@ -321,6 +321,25 @@ void trace_npu_dataflow(const DecodedNpuInstr &instr, const State &state, Mtrace
             emit_compute(trace, trace::vmma_mnemonic(i.op), event,
                          static_cast<std::uint32_t>(rhs.rows) * rhs.cols);
           },
+          [&](const VmmaDequantInstr &i) {
+            const auto &lhs = state.tc[i.src_a.index];
+            const auto &rhs = state.tc[i.src_b.index];
+            const auto &dst = state.vc[i.dest.index];
+            const auto &col = state.vc[i.scale_pair];
+            const auto &row = state.vc[i.scale_pair + 1];
+            TraceEvent event;
+            add_source(event, matrix_endpoint(NpuDomain::tile, i.src_a.index, 1, lhs.cols, 1, "a"));
+            add_source(event,
+                       trace_matrix_endpoint(TraceEndpointKind::tile, i.src_b.index, rhs, "b"));
+            add_source(event, trace_vector_endpoint(i.scale_pair, col, "vcol"));
+            add_source(event, trace_vector_endpoint(i.scale_pair + 1, row, "vrow"));
+            if (i.op == VmmaOp::nt_acc) {
+              add_source(event, trace_vector_endpoint(i.dest.index, dst, "acc_in"));
+            }
+            add_dest(event, trace_vector_endpoint(i.dest.index, dst, "d"));
+            emit_compute(trace, trace::vmma_dequant_mnemonic(i.op), event,
+                         static_cast<std::uint32_t>(rhs.rows) * rhs.cols);
+          },
           [&](const EbinInstr &i) {
             TraceEvent event;
             add_source(event, domain_endpoint(state, i.src1.domain, i.src1.index, "s0"));

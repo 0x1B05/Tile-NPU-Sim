@@ -85,6 +85,9 @@ constexpr DecodeEntry NPU_TABLE[] = {
     // MMA_DEQUANT (R5): major4 = 1001, q = 10; [27] zero/acc, [26:22] vCol,
     // [21:17] vRow, then the usual B/A/D slots.
     {"1001 ? ????? ????? ????? ????? ????? 10", decode_mma_dequant},
+    // VMMA_DEQUANT (R5): major4 = 1010, q = 10; [27] zero/acc,
+    // [26:22] scale pair base, [21:17] Tile A row.
+    {"1010 ? ????? ????? ????? ????? ????? 10", decode_vmma_dequant},
     // CVT (R2): sel3 = {dom2, 0}, dom2 = Acc/Vec32 only. funct3 = 000 cvt,
     // 001 twiden (Acc destination only).
     {"0011 ?10 000 0000000000 ????? ????? 10", decode_cvt},                           // acvt/vcvt

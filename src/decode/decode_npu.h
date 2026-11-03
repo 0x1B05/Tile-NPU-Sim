@@ -22,6 +22,7 @@ DecodeResult decode_emask(std::uint32_t word);
 // Numeric decoders.
 DecodeResult decode_mma(std::uint32_t word);
 DecodeResult decode_mma_dequant(std::uint32_t word);
+DecodeResult decode_vmma_dequant(std::uint32_t word);
 DecodeResult decode_cvt(std::uint32_t word);
 DecodeResult decode_areduce(std::uint32_t word);
 DecodeResult decode_areduce_argmax(std::uint32_t word);

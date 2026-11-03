@@ -31,6 +31,11 @@ void vec32_f32(tile_npu::State &state, std::size_t index, std::uint8_t len) {
   state.vc[index].len = len;
 }
 
+void vec32_i32(tile_npu::State &state, std::size_t index, std::uint8_t len) {
+  state.vc[index].dtype = DType::i32;
+  state.vc[index].len = len;
+}
+
 // The shared left operand: 2x3 i8 {{1, 2, 3}, {4, -5, 6}}.
 void poke_lhs(tile_npu::State &state, std::size_t index) {
   const std::uint8_t data[6] = {1, 2, 3, 4, 0xfb, 6};
@@ -88,6 +93,108 @@ TEST_CASE(mma_nt_acc) {
   check_eq(state.a[0][1], std::uint32_t{70}, "D[0,1] = 2 + 68");
   check_eq(state.a[0][32], std::uint32_t{45}, "D[1,0] = 3 + 42");
   check_eq(state.a[0][33], std::uint32_t{61}, "D[1,1] = 4 + 57");
+}
+
+TEST_CASE(vmma_dequant_zero) {
+  Ram memory(CODE_BASE, 4);
+  Simulator sim(memory);
+  load_one(sim, memory, make_vmma_dequant(0, 0, 1, 2, 1, 6));
+  auto &state = sim.state();
+  vec32_i32(state, 0, 2);
+  tile_i8(state, 1, 2, 3);
+  tile_i8(state, 2, 2, 3);
+  vec32_f32(state, 6, 2);
+  vec32_f32(state, 7, 1);
+  poke_lhs(state, 1);
+  poke_rhs_nt(state, 2);
+  state.v[6][0] = as_u32(2.0f);
+  state.v[6][1] = as_u32(3.0f);
+  state.v[7][0] = as_u32(0.5f);
+
+  check_eq(sim.step().status, StepStatus::retired, "vmma.nt.dequant.zero retires");
+  check_eq(hex(state.v[0][0]), hex(as_u32(42.0f)), "vD[0] = (42 * 2) * 0.5");
+  check_eq(hex(state.v[0][1]), hex(as_u32(85.5f)), "vD[1] = (57 * 3) * 0.5");
+  check_eq(state.vc[0].dtype, DType::f32, "destination dtype becomes f32");
+}
+
+TEST_CASE(vmma_dequant_acc) {
+  Ram memory(CODE_BASE, 4);
+  Simulator sim(memory);
+  load_one(sim, memory, make_vmma_dequant(1, 0, 1, 2, 1, 6));
+  auto &state = sim.state();
+  vec32_i32(state, 0, 2);
+  tile_i8(state, 1, 2, 3);
+  tile_i8(state, 2, 2, 3);
+  vec32_f32(state, 6, 2);
+  vec32_f32(state, 7, 1);
+  poke_lhs(state, 1);
+  poke_rhs_nt(state, 2);
+  state.v[0][0] = 50;
+  state.v[0][1] = 68;
+  state.v[6][0] = as_u32(2.0f);
+  state.v[6][1] = as_u32(3.0f);
+  state.v[7][0] = as_u32(0.5f);
+
+  check_eq(sim.step().status, StepStatus::retired, "vmma.nt.dequant.acc retires");
+  check_eq(hex(state.v[0][0]), hex(as_u32(92.0f)), "vD[0] = (50 + 42) * 2 * 0.5");
+  check_eq(hex(state.v[0][1]), hex(as_u32(187.5f)), "vD[1] = (68 + 57) * 3 * 0.5");
+  check_eq(state.vc[0].dtype, DType::f32, "destination dtype becomes f32");
+}
+
+TEST_CASE(vmma_dequant_rejects_invalid) {
+  {
+    Ram memory(CODE_BASE, 4);
+    Simulator sim(memory);
+    load_one(sim, memory, make_vmma_dequant(0, 0, 1, 2, 1, 6));
+    auto &state = sim.state();
+    vec32_i32(state, 0, 2);
+    tile_i8(state, 1, 2, 3);
+    tile_i8(state, 2, 2, 3);
+    vec32_f32(state, 6, 2);
+    vec32_f32(state, 7, 1);
+    state.vc[0].dtype = DType::f32;
+    check_eq(sim.step().status, StepStatus::invalid_configuration,
+             "vmma.dequant rejects an f32 destination");
+  }
+  {
+    Ram memory(CODE_BASE, 4);
+    Simulator sim(memory);
+    load_one(sim, memory, make_vmma_dequant(0, 0, 1, 2, 1, 6));
+    auto &state = sim.state();
+    vec32_i32(state, 0, 2);
+    tile_i8(state, 1, 2, 3);
+    tile_i8(state, 2, 2, 3);
+    vec32_f32(state, 6, 3);
+    vec32_f32(state, 7, 1);
+    check_eq(sim.step().status, StepStatus::invalid_configuration,
+             "vmma.dequant rejects a vCol length mismatch");
+  }
+  {
+    Ram memory(CODE_BASE, 4);
+    Simulator sim(memory);
+    load_one(sim, memory, make_vmma_dequant(0, 0, 1, 2, 1, 6));
+    auto &state = sim.state();
+    vec32_i32(state, 0, 2);
+    tile_i8(state, 1, 2, 3);
+    tile_i8(state, 2, 2, 3);
+    vec32_f32(state, 6, 2);
+    vec32_f32(state, 7, 2);
+    check_eq(sim.step().status, StepStatus::invalid_configuration,
+             "vmma.dequant rejects a vRow length other than one");
+  }
+  {
+    Ram memory(CODE_BASE, 4);
+    Simulator sim(memory);
+    load_one(sim, memory, make_vmma_dequant(0, 0, 1, 2, 2, 6));
+    auto &state = sim.state();
+    vec32_i32(state, 0, 2);
+    tile_i8(state, 1, 2, 3);
+    tile_i8(state, 2, 2, 3);
+    vec32_f32(state, 6, 2);
+    vec32_f32(state, 7, 1);
+    check_eq(sim.step().status, StepStatus::invalid_configuration,
+             "vmma.dequant rejects an out-of-range Tile row");
+  }
 }
 
 TEST_CASE(mma_dequant_zero) {
