@@ -385,14 +385,8 @@ void trace_npu_dataflow(const DecodedNpuInstr &instr, const State &state, Mtrace
             TraceEvent event;
             add_source(event, domain_endpoint(state, i.src.domain, i.src.index, "s0"));
             add_dest(event, domain_endpoint(state, i.dest.domain, i.dest.index, "d"));
-            const auto scale = trace_vector_endpoint(i.scale, state.vc[i.scale], "scale");
-            if (i.scale_source == QntScaleSource::computed) {
-              add_dest(event, scale);
-            } else {
-              add_source(event, scale);
-            }
-            emit_compute(trace, trace::aquant_mnemonic(i.scale_source == QntScaleSource::provided),
-                         event);
+            add_source(event, trace_vector_endpoint(i.scale, state.vc[i.scale], "scale"));
+            emit_compute(trace, trace::aquant_mnemonic(), event);
           },
           [&](const TdequantInstr &i) {
             TraceEvent event;

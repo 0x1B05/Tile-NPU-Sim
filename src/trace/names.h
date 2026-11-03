@@ -173,9 +173,7 @@ inline std::string cvt_mnemonic(NpuDomain domain, CvtOp op) {
   return name;
 }
 
-inline std::string aquant_mnemonic(bool external_scale) {
-  return external_scale ? "aquant.rows.scale.q8s32" : "aquant.rows.q8s32";
-}
+inline std::string aquant_mnemonic() { return "aquant.rows.scale.q8s32"; }
 
 inline std::string tdequant_mnemonic() { return "tdequant.rows.f32"; }
 

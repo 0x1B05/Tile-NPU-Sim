@@ -2,7 +2,6 @@
 
 #include <array>
 #include <cfenv>
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
 
@@ -37,72 +36,13 @@ void vec32_f32(tile_npu::State &state, std::size_t index, std::uint8_t len) {
 
 } // namespace
 
-TEST_CASE(qnt_aquant_dynamic) {
+TEST_CASE(qnt_aquant) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
-  // 2x2 f32 source: row0 {127.0, -63.5} -> amax 127.0, scale 1.0,
-  //   bits {127, RNE(-63.5) = -64}; row1 {0.0, -0.0} -> amax 0.0, scale +0.0,
-  //   every 0/0 quotient is NaN and quantizes to 0.
-  load_one(sim, memory, make_qnt(NpuDomain::tile, 0, 0, 1, 0));
-  auto &state = sim.state();
-  tile_i8(state, 0, 2, 2);
-  acc_f32(state, 1, 2, 2);
-  vec32_f32(state, 0, 2);
-  state.a[1][0] = as_u32(127.0f);
-  state.a[1][1] = as_u32(-63.5f);
-  state.a[1][32] = as_u32(0.0f);
-  state.a[1][33] = as_u32(-0.0f);
-
-  check_eq(sim.step().status, StepStatus::retired, "aquant.rows.q8s32 retires");
-  check_eq(hex(state.t[0][0]), hex(0x7fu), "row0 col0 saturates at 127");
-  check_eq(hex(state.t[0][1]), hex(0xc0u), "row0 col1 rounds to -64");
-  check_eq(hex(state.t[0][32]), hex(0x00u), "row1 col0 NaN quotient -> 0");
-  check_eq(hex(state.t[0][33]), hex(0x00u), "row1 col1 NaN quotient -> 0");
-  check_eq(hex(state.v[0][0]), hex(as_u32(1.0f)), "row0 dynamic scale");
-  check_eq(hex(state.v[0][1]), hex(0x00000000u), "row1 scale is +0.0");
-}
-
-TEST_CASE(qnt_aquant_nan_absmax) {
-  Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
-  // A NaN-only row uses the same absmax tree as areduce.rows.absmax: NaN
-  // becomes +0, so the derived scale is +0 and every quotient quantizes to 0.
-  load_one(sim, memory, make_qnt(NpuDomain::tile, 0, 0, 1, 0));
-  auto &state = sim.state();
-  tile_i8(state, 0, 1, 1);
-  acc_f32(state, 1, 1, 1);
-  vec32_f32(state, 0, 1);
-  state.a[1][0] = as_u32(std::nanf(""));
-
-  check_eq(sim.step().status, StepStatus::retired, "aquant NaN row retires");
-  check_eq(hex(state.t[0][0]), hex(0x00u), "NaN quotient quantizes to 0");
-  check_eq(hex(state.v[0][0]), hex(0x00000000u), "NaN absmax yields a +0 scale");
-}
-
-TEST_CASE(qnt_aquant_single_negative) {
-  Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
-  // A single negative element uses the absmax tree leaf mapping: amax = 3,
-  // scale = 3/127, and the quantized value is -127.
-  load_one(sim, memory, make_qnt(NpuDomain::tile, 0, 0, 1, 0));
-  auto &state = sim.state();
-  tile_i8(state, 0, 1, 1);
-  acc_f32(state, 1, 1, 1);
-  vec32_f32(state, 0, 1);
-  state.a[1][0] = as_u32(-3.0f);
-
-  check_eq(sim.step().status, StepStatus::retired, "aquant single negative retires");
-  check_eq(hex(state.t[0][0]), hex(0x81u), "single negative quantizes to -127");
-  check_eq(hex(state.v[0][0]), hex(as_u32(3.0f / 127.0f)), "single negative absmax scale");
-}
-
-TEST_CASE(qnt_aquant_external_scale) {
-  Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
-  // 1x3 f32 source {64.0, -33.0, 10.0} with external scale 0.5:
+  // 1x3 f32 source {64.0, -33.0, 10.0} with scale 0.5:
   //   64.0/0.5 = 128 saturates to 127, -33.0/0.5 = -66, 10.0/0.5 = 20;
-  // the external form never writes vScale.
-  load_one(sim, memory, make_qnt(NpuDomain::tile, 1, 0, 1, 0));
+  // vScale is read-only.
+  load_one(sim, memory, make_qnt(0, 0, 0, 1, 0));
   auto &state = sim.state();
   tile_i8(state, 0, 1, 3);
   acc_f32(state, 1, 1, 3);
@@ -123,7 +63,7 @@ TEST_CASE(qnt_tdequant) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
   // 1x2 i8 source {100, -2} with per-row scale 0.5 -> {50.0, -1.0}.
-  load_one(sim, memory, make_qnt(NpuDomain::acc, 0, 2, 1, 0));
+  load_one(sim, memory, make_qnt(1, 0, 2, 1, 0));
   auto &state = sim.state();
   acc_f32(state, 2, 1, 2);
   tile_i8(state, 1, 1, 2);
@@ -143,7 +83,7 @@ TEST_CASE(qnt_rejects_invalid) {
   auto &state = sim.state();
 
   // The Tile destination must be i8.
-  load_one(sim, memory, make_qnt(NpuDomain::tile, 0, 0, 1, 0));
+  load_one(sim, memory, make_qnt(0, 0, 0, 1, 0));
   state.tc[0].dtype = DType::u8;
   state.tc[0].rows = 2;
   state.tc[0].cols = 2;
@@ -154,7 +94,7 @@ TEST_CASE(qnt_rejects_invalid) {
   check_eq(hex(state.t[0][0]), hex(0xaau), "non-mutating");
 
   // vScale's length must equal the source row count.
-  load_one(sim, memory, make_qnt(NpuDomain::tile, 0, 0, 1, 0));
+  load_one(sim, memory, make_qnt(0, 0, 0, 1, 0));
   tile_i8(state, 0, 2, 2);
   acc_f32(state, 1, 2, 2);
   vec32_f32(state, 0, 3);
@@ -163,12 +103,12 @@ TEST_CASE(qnt_rejects_invalid) {
 }
 
 TEST_CASE(qnt_rounding_ignores_host_fp_mode) {
-  // +0.5 and -0.5 with an external scale of 1.0 are exact RNE ties; both
+  // +0.5 and -0.5 with a scale of 1.0 are exact RNE ties; both
   // quantize to 0 whatever rounding mode the host program left active.
   const auto quantize_ties = [](int rounding_mode) {
     Ram memory(CODE_BASE, 4);
     Simulator sim(memory);
-    load_one(sim, memory, make_qnt(NpuDomain::tile, 1, 0, 1, 0));
+    load_one(sim, memory, make_qnt(0, 0, 0, 1, 0));
     auto &state = sim.state();
     tile_i8(state, 0, 1, 2);
     acc_f32(state, 1, 1, 2);

@@ -336,13 +336,8 @@ std::string npu_instr(const DecodedNpuInstr &instr) {
           },
           [](const AquantInstr &i) {
             std::ostringstream out;
-            out << aquant_mnemonic(i.scale_source == QntScaleSource::provided) << ' '
-                << npu_reg(i.dest) << ", ";
-            if (i.scale_source == QntScaleSource::provided) {
-              out << npu_reg(i.src) << ", v" << int(i.scale);
-            } else {
-              out << "v" << int(i.scale) << ", " << npu_reg(i.src);
-            }
+            out << aquant_mnemonic() << ' ' << npu_reg(i.dest) << ", " << npu_reg(i.src) << ", v"
+                << int(i.scale);
             return out.str();
           },
           [](const TdequantInstr &i) {

@@ -98,50 +98,34 @@ DecodeResult decode_vreduce_argmax(std::uint32_t word) {
 }
 
 // QNT (R4): major4 = 0100, q = 10.
-// 31    28 27  26  25  24    22 21      17 16      12 11       7 6        2 1   0
-// [major4] [dom2] [IS] [funct3] [vScale5 ] [ index5 ] [   S5   ] [   D5   ] [ q ]
-// dom2: 00 aquant (Tile), 01 tdequant (Acc); 10/11 reserved.
-// funct3: 000 quant/dequant, 001 external-scale aquant; 010..111 reserved.
-// vScale5 is an output for dynamic quant, an input for external-scale quant/dequant.
-// IS and index5 are reserved and must be 0.
+// 31    28 27     25 24     22 21      17 16      12 11       7 6        2 1   0
+// [major4] [sel3] [funct3] [qf5] [vScale5]   [S5]     [D5]     [ q ]
+// sel3 is reserved; funct3 = {0, 0, QD}: 0 = Acc -> Tile, 1 = Tile -> Acc.
+// The decode pattern pins sel3 = 000 and qf5 = 00000 (q8s32).
 DecodeResult decode_qnt(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
-  const auto domain = sel3_domain(f.sel3);
-  if (domain != NpuDomain::tile && domain != NpuDomain::acc) {
-    return DecodeError::illegal;
-  }
-  const auto src_domain = domain == NpuDomain::tile ? NpuDomain::acc : NpuDomain::tile;
-
-  // Tile has two forms: dynamic (funct3 = 000) and external scale (001).
-  // Acc has exactly one form (funct3 = 000).
-  const bool valid_funct3 = domain == NpuDomain::tile ? f.funct3 <= 0b001 : f.funct3 == 0b000;
-  const bool index_is_scalar = (f.sel3 & 1) != 0;
-  if (!valid_funct3 || index_is_scalar || f.src2 != 0 ||
-      !domain_register_valid(domain, f.dest) ||
-      !domain_register_valid(src_domain, f.src1) ||
-      !domain_register_valid(NpuDomain::vec32, f.arg)) {
+  const auto qd = static_cast<std::uint8_t>(f.funct3 & 1);
+  const auto dest_domain = qd == 0 ? NpuDomain::tile : NpuDomain::acc;
+  const auto src_domain = qd == 0 ? NpuDomain::acc : NpuDomain::tile;
+  if (!domain_register_valid(dest_domain, f.dest) || !domain_register_valid(src_domain, f.src1)) {
     return DecodeError::illegal;
   }
 
-  const NpuRegister dest{domain, f.dest};
+  const NpuRegister dest{dest_domain, f.dest};
   const NpuRegister src{src_domain, f.src1};
 
-  switch (domain) {
-  case NpuDomain::tile:
+  if (qd == 0) {
     return DecodedNpuInstr{AquantInstr{
         .dest = dest,
         .src = src,
-        .scale = f.arg,
-        .scale_source = f.funct3 == 0b000 ? QntScaleSource::computed : QntScaleSource::provided,
+        .scale = f.src2,
     }};
-  case NpuDomain::acc:
-    return DecodedNpuInstr{TdequantInstr{
-        .dest = dest,
-        .src = src,
-        .scale = f.arg,
-    }};
-  default: return DecodeError::illegal;
   }
+  return DecodedNpuInstr{TdequantInstr{
+      .dest = dest,
+      .src = src,
+      .scale = f.src2,
+  }};
 }
 
 // MMA (R4): major4 = 0000, q = 10.

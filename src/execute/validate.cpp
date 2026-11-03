@@ -223,8 +223,7 @@ bool valid_matrix_quant(const NpuRegister &dest, const NpuRegister &src, Registe
 }
 
 bool valid_structure(const AquantInstr &instr) {
-  return instr.scale_source <= QntScaleSource::provided &&
-         valid_matrix_quant<NpuDomain::tile, NpuDomain::acc>(instr.dest, instr.src, instr.scale);
+  return valid_matrix_quant<NpuDomain::tile, NpuDomain::acc>(instr.dest, instr.src, instr.scale);
 }
 
 bool valid_structure(const TdequantInstr &instr) {

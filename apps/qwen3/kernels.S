@@ -63,7 +63,7 @@ qwen3_quant_act:
     addi    t6, t6, -1
     bnez    t6, .Lqa_amax
     # v2 = absmax * (1/127): the uniform scale reduces into the len-1
-    # scratch v30, broadcasts back as aquantx's external scale, and leaves
+    # scratch v30, broadcasts back as aquantx's scale, and leaves
     # the vector domain through a one-lane store.
     VREDUCE 1, 30, 0            # v30[0] = absmax
     li      t1, 0x3C010204      # f32 bits of 1/127
@@ -272,7 +272,7 @@ qwen3_matvec_q:
 # Chunked sibling of qwen3_quant_act: x is [rows, k] f32 row-major (rows are
 # tokens, up to 32). Pass 1 folds per-row absmax over the k/32 chunks
 # (areduce.absmax + vmax) and stores xs = absmax * (1/127) as rows f32 scales;
-# pass 2 quantizes each rows x 32 chunk with the per-row external scales into
+# pass 2 quantizes each rows x 32 chunk with the per-row scales into
 # xq, [rows, k] i8 row-major. Rows whose absmax is 0 quantize to 0 (NaN
 # quotient rule).
 # ---------------------------------------------------------------------------

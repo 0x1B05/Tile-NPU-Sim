@@ -63,7 +63,6 @@ using tile_npu::MmaOp;
 using tile_npu::MoveInstr;
 using tile_npu::NpuDomain;
 using tile_npu::NpuRegister;
-using tile_npu::QntScaleSource;
 using tile_npu::Ram;
 using tile_npu::ReduceOp;
 using tile_npu::RowInstr;
@@ -274,10 +273,6 @@ TEST_CASE(validate_rejects_bad_reduce) {
 TEST_CASE(validate_rejects_bad_qnt) {
   check_illegal(AquantInstr{.dest = T(0), .src = A(0), .scale = 32}, "aquant scale index 32");
   check_illegal(AquantInstr{.dest = A(0), .src = T(0), .scale = 0}, "aquant destination domain");
-  check_illegal(
-      AquantInstr{
-          .dest = T(0), .src = A(0), .scale = 0, .scale_source = static_cast<QntScaleSource>(2)},
-      "aquant scale source");
   check_illegal(TdequantInstr{.dest = T(0), .src = A(0), .scale = 0},
                 "tdequant destination domain");
 }

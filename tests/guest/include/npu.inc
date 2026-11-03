@@ -479,29 +479,24 @@
     .word ((2 << 28) | (4 << 22) | (\vval << 12) | (\vs << 7) | (\vidx << 2) | 2)
 .endm
 
-# QNT (R4), mirroring NpuR4 in src/decode/encoding.h:
-#   [31:28] major4 = 4 (0100)  [27:26] dom2  [25] IS  [24:22] funct3
-#   [21:17] vScale5  [16:12] index5  [11:7] S5  [6:2] D5  [1:0] q = 10
-# dom2: 0 aquant (Tile dst), 1 tdequant (Acc dst); 2/3 reserved.
-# funct3: 0 = quant/dequant, 1 = aquant with external scale (Tile dst only).
-# index5/IS are reserved (0).
-.macro QNT dom2, is, funct3, vscale5, index5, s5, d5
-    .word ((4 << 28) | (\dom2 << 26) | (\is << 25) | (\funct3 << 22) | (\vscale5 << 17) | (\index5 << 12) | (\s5 << 7) | (\d5 << 2) | 2)
-.endm
-
-# aquant.rows.q8s32: asm operand order tD, vScale, aS.
-.macro AQUANT d5, vscale, as
-    QNT 0, 0, 0, \vscale, 0, \as, \d5
+# QNT (R4), mirroring the QNT definition in the ISA:
+#   [31:28] major4 = 4 (0100)  [27:25] sel3 = 000
+#   [24:22] funct3 = {0, 0, QD}  [21:17] qf5  [16:12] vScale5
+#   [11:7] S5  [6:2] D5  [1:0] q = 10
+# QD: 0 aquant (Acc -> Tile), 1 tdequant (Tile -> Acc).
+# qf5: 00000 = q8s32; funct3 values other than 000/001 are reserved.
+.macro QNT funct3, qf5, vscale5, s5, d5
+    .word ((4 << 28) | ((\funct3 & 7) << 22) | ((\qf5 & 31) << 17) | (\vscale5 << 12) | (\s5 << 7) | (\d5 << 2) | 2)
 .endm
 
 # aquant.rows.scale.q8s32: asm operand order tD, aS, vScale.
 .macro AQUANTX d5, as, vscale
-    QNT 0, 0, 1, \vscale, 0, \as, \d5
+    QNT 0, 0, \vscale, \as, \d5
 .endm
 
 # tdequant.rows.f32: asm operand order aD, tS, vScale.
 .macro TDEQUANT d5, s5, vscale
-    QNT 1, 0, 0, \vscale, 0, \s5, \d5
+    QNT 1, 0, \vscale, \s5, \d5
 .endm
 
 # MMA (R4), mirroring NpuR4 in src/decode/encoding.h:

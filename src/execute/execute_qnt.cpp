@@ -4,22 +4,18 @@
 #include "fp_env.h"
 #include "matrix_view.h"
 #include "operand.h"
-#include "reduce_util.h"
 #include "utils/bits.h"
 
-#include <array>
 #include <bit>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <span>
 #include <utility>
 
 namespace tile_npu {
 namespace {
 
-// Symmetric q8 maps [-absmax, absmax] onto [-127, 127]: the saturation bound
-// and the dynamic-scale denominator are one magnitude.
+// Symmetric q8 saturates at one magnitude below the int8 minimum.
 constexpr std::int8_t Q8_MAX_MAGNITUDE = 127;
 
 bool valid_matrix_quant_configs(const TileConfig &quantized, const AccConfig &floating,
@@ -47,20 +43,8 @@ std::int8_t quantize_lane(float value, float scale) {
   return static_cast<std::int8_t>(rounded);
 }
 
-// The absmax tree of one source row. NaN is treated as +0, so an all-zero or
-// all-NaN row yields +0.0, whose derived scale quantizes every element to 0
-// through the NaN quotient rule.
-float row_amax(MatrixView<const std::uint32_t> src, std::size_t row, std::size_t cols) {
-  std::array<float, REDUCE_LEAVES> values{};
-  for (std::size_t col = 0; col < cols; ++col) {
-    values[col] = as_f32(src.at(row, col));
-  }
-  return f32_absmax(std::span(values).first(cols));
-}
-
-// aquant.rows[.scale].q8s32: per-row quantization of an f32 Acc into an i8
-// Tile of the same shape; the dynamic form also writes each row's scale
-// into vScale.
+// aquant.rows.scale.q8s32: per-row quantization of an f32 Acc into an i8
+// Tile of the same shape using the Vec32 scale.
 ExecuteResult aquant(const AquantInstr &instr, State &state) {
   const auto &dst_config = state.tc[instr.dest.index];
   const auto &src_config = state.ac[instr.src.index];
@@ -69,18 +53,11 @@ ExecuteResult aquant(const AquantInstr &instr, State &state) {
     return config_error();
   }
   const FpEnvGuard fp_env;
-  const bool external_scale = instr.scale_source == QntScaleSource::provided;
   auto dst = matrix_view(state.t[instr.dest.index]);
   auto src = matrix_view(std::as_const(state.a[instr.src.index]));
-  auto &scale_reg = state.v[instr.scale];
+  const auto &scale_reg = state.v[instr.scale];
   for (std::size_t row = 0; row < dst_config.rows; ++row) {
-    float scale;
-    if (external_scale) {
-      scale = as_f32(scale_reg[row]);
-    } else {
-      scale = row_amax(src, row, src_config.cols) / Q8_MAX_MAGNITUDE;
-      scale_reg[row] = as_u32(scale);
-    }
+    const float scale = as_f32(scale_reg[row]);
     for (std::size_t col = 0; col < dst_config.cols; ++col) {
       dst.at(row, col) = static_cast<std::uint8_t>(quantize_lane(as_f32(src.at(row, col)), scale));
     }
