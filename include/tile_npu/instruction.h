@@ -124,7 +124,7 @@ struct MmaInstr {
   NpuRegister src_b{}; // Tile.
 };
 
-// mma.nt.dequant.zero/acc.i8.i32.f32: fused MMA that dequantizes in place.
+// mma.nt.dequant.zero/acc: fused MMA that dequantizes in place.
 struct MmaDequantInstr {
   MmaOp op = MmaOp::nt_zero;
   NpuRegister dest{};          // Acc; i32 before, f32 after.

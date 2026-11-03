@@ -90,7 +90,7 @@ ExecuteResult mma(const MmaInstr &instr, State &state) {
   return {.status = StepStatus::retired};
 }
 
-// mma.nt.dequant.zero/acc.i8.i32.f32: MMA into an internal i32 partial, then
+// mma.nt.dequant.zero/acc: MMA into an internal i32 partial, then
 // dequantize on the drain and write the result back to the same Acc in place.
 ExecuteResult mma_dequant(const MmaDequantInstr &instr, State &state) {
   const auto &dst_config = state.ac[instr.dest.index];
