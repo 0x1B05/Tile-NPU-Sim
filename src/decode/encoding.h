@@ -175,6 +175,27 @@ struct NpuR4 {
   }
 };
 
+// MMA_DEQUANT (R5): major4 + ACC + five 5-bit fields + q.
+struct NpuR5 {
+  std::uint8_t major4;
+  std::uint8_t acc;     // [27]
+  std::uint8_t scalar;  // [26:22], vCol for MMA_DEQUANT
+  std::uint8_t scalar2; // [21:17], vRow for MMA_DEQUANT
+  std::uint8_t src2;    // [16:12]
+  std::uint8_t src1;    // [11:7]
+  std::uint8_t dest;    // [6:2]
+
+  static constexpr NpuR5 from(std::uint32_t word) {
+    return {static_cast<std::uint8_t>(field<31, 28>(word)),
+            static_cast<std::uint8_t>(field<27, 27>(word)),
+            static_cast<std::uint8_t>(field<26, 22>(word)),
+            static_cast<std::uint8_t>(field<21, 17>(word)),
+            static_cast<std::uint8_t>(field<16, 12>(word)),
+            static_cast<std::uint8_t>(field<11, 7>(word)),
+            static_cast<std::uint8_t>(field<6, 2>(word))};
+  }
+};
+
 // M_BLK block/gather forms (R2): sel3 = {dom2, 0}, reserved10 pinned by the
 // patterns; src2 names the u32 gather index vector (S5).
 struct NpuR2 {

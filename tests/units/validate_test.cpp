@@ -58,6 +58,7 @@ using tile_npu::MaskInstr;
 using tile_npu::MaskOp;
 using tile_npu::MblkInstr;
 using tile_npu::MblkOp;
+using tile_npu::MmaDequantInstr;
 using tile_npu::MmaInstr;
 using tile_npu::MmaOp;
 using tile_npu::MoveInstr;
@@ -286,6 +287,58 @@ TEST_CASE(validate_rejects_bad_mma) {
                 "mma destination index 16");
   check_illegal(MmaInstr{.op = MmaOp::nt_zero, .dest = A(0), .src_a = T(0), .src_b = A(1)},
                 "mma src_b domain");
+}
+
+TEST_CASE(validate_rejects_bad_mma_dequant) {
+  check_illegal(MmaDequantInstr{.op = static_cast<MmaOp>(2),
+                                .dest = A(0),
+                                .src_a = T(0),
+                                .src_b = T(1),
+                                .scale_col = 0,
+                                .scale_row = 0},
+                "unassigned mma.dequant op");
+  check_illegal(MmaDequantInstr{.op = MmaOp::nt_zero,
+                                .dest = V(0),
+                                .src_a = T(0),
+                                .src_b = T(1),
+                                .scale_col = 0,
+                                .scale_row = 0},
+                "mma.dequant destination domain");
+  check_illegal(MmaDequantInstr{.op = MmaOp::nt_zero,
+                                .dest = A(16),
+                                .src_a = T(0),
+                                .src_b = T(1),
+                                .scale_col = 0,
+                                .scale_row = 0},
+                "mma.dequant destination a16");
+  check_illegal(MmaDequantInstr{.op = MmaOp::nt_zero,
+                                .dest = A(0),
+                                .src_a = R(0),
+                                .src_b = T(1),
+                                .scale_col = 0,
+                                .scale_row = 0},
+                "mma.dequant src_a domain");
+  check_illegal(MmaDequantInstr{.op = MmaOp::nt_zero,
+                                .dest = A(0),
+                                .src_a = T(0),
+                                .src_b = A(1),
+                                .scale_col = 0,
+                                .scale_row = 0},
+                "mma.dequant src_b domain");
+  check_illegal(MmaDequantInstr{.op = MmaOp::nt_zero,
+                                .dest = A(0),
+                                .src_a = T(0),
+                                .src_b = T(1),
+                                .scale_col = 32,
+                                .scale_row = 0},
+                "mma.dequant vCol 32");
+  check_illegal(MmaDequantInstr{.op = MmaOp::nt_zero,
+                                .dest = A(0),
+                                .src_a = T(0),
+                                .src_b = T(1),
+                                .scale_col = 0,
+                                .scale_row = 32},
+                "mma.dequant vRow 32");
 }
 
 TEST_CASE(validate_rejects_bad_vmma) {

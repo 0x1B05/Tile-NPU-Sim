@@ -124,6 +124,16 @@ struct MmaInstr {
   NpuRegister src_b{}; // Tile.
 };
 
+// mma.nt.dequant.zero/acc.i8.i32.f32: fused MMA that dequantizes in place.
+struct MmaDequantInstr {
+  MmaOp op = MmaOp::nt_zero;
+  NpuRegister dest{};          // Acc; i32 before, f32 after.
+  NpuRegister src_a{};         // Tile.
+  NpuRegister src_b{};         // Tile.
+  RegisterIndex scale_col = 0; // Vec32 f32.
+  RegisterIndex scale_row = 0; // Vec32 f32.
+};
+
 enum class VmmaOp : std::uint8_t {
   nt_zero,
   nt_acc,
@@ -270,7 +280,7 @@ struct CvtInstr {
   NpuRegister src{};
 };
 
-// aquant.rows.scale.q8s32: per-row quantization with a Vec32 scale.
+// aquant.rows.q8s32: per-row quantization with a Vec32 scale.
 struct AquantInstr {
   NpuRegister dest{};      // Tile
   NpuRegister src{};       // Acc

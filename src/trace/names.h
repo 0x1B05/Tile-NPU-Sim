@@ -99,14 +99,18 @@ inline std::string move_mnemonic(NpuDomain domain) {
 inline std::string mma_mnemonic(MmaOp op) {
   std::string name = "mma.nt.";
   name += mma_suffix(op);
-  name += ".i8.i32";
+  return name;
+}
+
+inline std::string mma_dequant_mnemonic(MmaOp op) {
+  std::string name = "mma.nt.dequant.";
+  name += mma_suffix(op);
   return name;
 }
 
 inline std::string vmma_mnemonic(VmmaOp op) {
   std::string name = "vmma.nt.";
   name += vmma_suffix(op);
-  name += ".i8.i32";
   return name;
 }
 
@@ -173,7 +177,7 @@ inline std::string cvt_mnemonic(NpuDomain domain, CvtOp op) {
   return name;
 }
 
-inline std::string aquant_mnemonic() { return "aquant.rows.scale.q8s32"; }
+inline std::string aquant_mnemonic() { return "aquant.rows.q8s32"; }
 
 inline std::string tdequant_mnemonic() { return "tdequant.rows.f32"; }
 

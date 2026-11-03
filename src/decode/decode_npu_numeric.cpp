@@ -172,4 +172,25 @@ DecodeResult decode_mma(std::uint32_t word) {
   }
 }
 
+// MMA_DEQUANT (R5): major4 = 1001, q = 10.
+// [31:28] major4 [27] ACC [26:22] vCol [21:17] vRow [16:12] B [11:7] A [6:2] D [1:0] q
+DecodeResult decode_mma_dequant(std::uint32_t word) {
+  const auto f = encoding::NpuR5::from(word);
+  if (!domain_register_valid(NpuDomain::acc, f.dest) ||
+      !domain_register_valid(NpuDomain::tile, f.src1) ||
+      !domain_register_valid(NpuDomain::tile, f.src2) ||
+      !domain_register_valid(NpuDomain::vec32, f.scalar) ||
+      !domain_register_valid(NpuDomain::vec32, f.scalar2)) {
+    return DecodeError::illegal;
+  }
+  return DecodedNpuInstr{MmaDequantInstr{
+      .op = f.acc != 0 ? MmaOp::nt_acc : MmaOp::nt_zero,
+      .dest = {.domain = NpuDomain::acc, .index = f.dest},
+      .src_a = {.domain = NpuDomain::tile, .index = f.src1},
+      .src_b = {.domain = NpuDomain::tile, .index = f.src2},
+      .scale_col = f.scalar,
+      .scale_row = f.scalar2,
+  }};
+}
+
 } // namespace tile_npu
