@@ -21,7 +21,7 @@ TEST_CASE(qnt_decode) {
     // qf5 = 00000, vScale = 1, S5 = 2, D5 = 0.
     const auto word = 0x40001102u;
     const auto result = tile_npu::decode(word);
-    const auto &decoded = expect_npu<AquantInstr>(result, "aquant.rows.scale.q8s32");
+    const auto &decoded = expect_npu<AquantInstr>(result, "aquant.rows.q8s32");
     check_eq(decoded.dest.domain, tile_npu::NpuDomain::tile, "aquant destination domain");
     check_eq(decoded.dest.index, 0, "aquant destination");
     check_eq(decoded.src.domain, tile_npu::NpuDomain::acc, "aquant source domain");

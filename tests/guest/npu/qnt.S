@@ -38,7 +38,7 @@ _start:
     CFG_SETI  5, 2, 1, 2, 3
     CFG_SETI  6, 2, 1, 4, 3
 
-    # Stage 1 - aquant.rows.scale.q8s32 t0, a0, v3 over
+    # Stage 1 - aquant.rows.q8s32 t0, a0, v3 over
     #   {127.5, -63.5}, {0.0, 0.0} with scales {2.0, 1.0} ->
     #   t0 bytes {64, -32, 0, 0}; v3 must stay unchanged.
     lla       x3, src_m

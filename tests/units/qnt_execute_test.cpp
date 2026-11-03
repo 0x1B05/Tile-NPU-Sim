@@ -52,7 +52,7 @@ TEST_CASE(qnt_aquant) {
   state.a[1][2] = as_u32(10.0f);
   state.v[0][0] = as_u32(0.5f);
 
-  check_eq(sim.step().status, StepStatus::retired, "aquant.rows.scale.q8s32 retires");
+  check_eq(sim.step().status, StepStatus::retired, "aquant.rows.q8s32 retires");
   check_eq(hex(state.t[0][0]), hex(0x7fu), "col0 saturates at 127");
   check_eq(hex(state.t[0][1]), hex(0xbeu), "col1 is -66");
   check_eq(hex(state.t[0][2]), hex(0x14u), "col2 is 20");

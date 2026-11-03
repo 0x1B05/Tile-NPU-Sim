@@ -43,7 +43,7 @@ std::int8_t quantize_lane(float value, float scale) {
   return static_cast<std::int8_t>(rounded);
 }
 
-// aquant.rows.scale.q8s32: per-row quantization of an f32 Acc into an i8
+// aquant.rows.q8s32: per-row quantization of an f32 Acc into an i8
 // Tile of the same shape using the Vec32 scale.
 ExecuteResult aquant(const AquantInstr &instr, State &state) {
   const auto &dst_config = state.tc[instr.dest.index];

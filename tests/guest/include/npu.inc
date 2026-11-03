@@ -489,7 +489,7 @@
     .word ((4 << 28) | ((\funct3 & 7) << 22) | ((\qf5 & 31) << 17) | (\vscale5 << 12) | (\s5 << 7) | (\d5 << 2) | 2)
 .endm
 
-# aquant.rows.scale.q8s32: asm operand order tD, aS, vScale.
+# aquant.rows.q8s32: asm operand order tD, aS, vScale.
 .macro AQUANTX d5, as, vscale
     QNT 0, 0, \vscale, \as, \d5
 .endm
