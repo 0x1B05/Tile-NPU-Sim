@@ -124,8 +124,6 @@ std::string_view mblk_op_name(const MblkInstr &instr) {
   case MblkOp::load: return tile ? "tload" : acc ? "aload" : "vload";
   case MblkOp::store: return tile ? "tstore" : acc ? "astore" : "vstore";
   case MblkOp::gather: return tile ? "tload.gather" : "vload.gather";
-  case MblkOp::row_load: return "aload.row";
-  case MblkOp::row_store: return "astore.row";
   }
   return "mblk";
 }
@@ -173,23 +171,6 @@ void trace_matrix_move(MtraceRecorder &trace, const MblkInstr &instr,
   const auto reg = matrix_endpoint(instr.reg.domain, instr.reg.index, rows, cols, elem,
                                    is_store(instr.op) ? "src" : "dst");
   const auto mem = block_memory(instr, descriptor, rows, cols, elem, transpose);
-  if (is_store(instr.op)) {
-    emit_move(trace, mblk_op_name(instr), reg, memory, mem);
-  } else {
-    emit_move(trace, mblk_op_name(instr), memory, reg, mem);
-  }
-}
-
-void trace_matrix_row_move(MtraceRecorder &trace, const MblkInstr &instr,
-                           const MatrixDescriptor &descriptor, std::uint8_t cols,
-                           std::uint8_t elem) {
-  if (!trace.has_callback()) return;
-  const auto bytes = static_cast<std::uint32_t>(cols) * elem;
-  const auto memory = memory_endpoint(bytes, elem);
-  const auto reg = matrix_endpoint(instr.reg.domain, instr.reg.index, 1, cols, elem,
-                                   is_store(instr.op) ? "src" : "dst");
-  const auto mem = linear_memory(instr, descriptor.base_addr, cols, descriptor.col_stride_bytes,
-                                 elem, descriptor_kind(instr.reg.domain));
   if (is_store(instr.op)) {
     emit_move(trace, mblk_op_name(instr), reg, memory, mem);
   } else {

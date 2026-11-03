@@ -231,12 +231,6 @@ std::string npu_instr(const DecodedNpuInstr &instr) {
             case MblkOp::gather:
               out << d << "load.gather " << npu_reg(i.reg) << ", v" << int(i.gather_src);
               break;
-            case MblkOp::row_load:
-              out << "aload.row " << npu_reg(i.reg) << "[" << index_operand(i.index) << "]";
-              break;
-            case MblkOp::row_store:
-              out << "astore.row " << npu_reg(i.reg) << "[" << index_operand(i.index) << "]";
-              break;
             }
             return out.str();
           },

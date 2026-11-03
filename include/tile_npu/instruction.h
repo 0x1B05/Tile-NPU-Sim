@@ -60,16 +60,15 @@ struct ImmediateIndex {
 
 using IndexOperand = std::variant<ImmediateIndex, ScalarRegister>;
 
-enum class MblkOp : std::uint8_t { load, store, gather, row_load, row_store };
+enum class MblkOp : std::uint8_t { load, store, gather };
 
 struct MblkInstr {
   MblkOp op = MblkOp::load;
-  NpuRegister reg{};                     // Load/gather destination or store source.
-  IndexOperand index = ImmediateIndex{}; // Row forms only.
-  RegisterIndex gather_src = 0;          // Vec32 index vector.
+  NpuRegister reg{};            // Load/gather destination or store source.
+  RegisterIndex gather_src = 0; // Vec32 index vector.
 };
 
-inline constexpr bool is_store(MblkOp op) { return op == MblkOp::store || op == MblkOp::row_store; }
+inline constexpr bool is_store(MblkOp op) { return op == MblkOp::store; }
 
 struct FillImm16 {
   std::uint16_t bits = 0;

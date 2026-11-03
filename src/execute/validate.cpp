@@ -92,14 +92,12 @@ bool valid_structure(const MaskInstr &instr) {
 
 bool valid_structure(const MblkInstr &instr) {
   const auto &reg = instr.reg;
-  if (!in_range(reg) || !index_in_range(instr.index)) {
+  if (!in_range(reg)) {
     return false;
   }
   switch (instr.op) {
   case MblkOp::load:
   case MblkOp::store: return true;
-  case MblkOp::row_load:
-  case MblkOp::row_store: return reg.domain == NpuDomain::acc;
   case MblkOp::gather: return reg.domain != NpuDomain::acc && instr.gather_src < VECTOR_REGISTERS;
   default: return false;
   }

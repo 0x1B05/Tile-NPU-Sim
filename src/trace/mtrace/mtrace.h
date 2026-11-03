@@ -1,7 +1,7 @@
 #pragma once
 
-#include "tile_npu/decode.h"
 #include "events.h"
+#include "tile_npu/decode.h"
 
 #include <cstdint>
 
@@ -17,10 +17,6 @@ void trace_npu_dataflow(const DecodedNpuInstr &instr, const State &state, Mtrace
 void trace_matrix_move(MtraceRecorder &trace, const MblkInstr &instr,
                        const MatrixDescriptor &descriptor, std::uint8_t rows, std::uint8_t cols,
                        std::uint8_t elem, bool transpose);
-
-void trace_matrix_row_move(MtraceRecorder &trace, const MblkInstr &instr,
-                           const MatrixDescriptor &descriptor, std::uint8_t cols,
-                           std::uint8_t elem);
 
 void trace_vector_move(MtraceRecorder &trace, const MblkInstr &instr,
                        const VectorDescriptor &descriptor, std::uint8_t len, std::uint8_t elem);

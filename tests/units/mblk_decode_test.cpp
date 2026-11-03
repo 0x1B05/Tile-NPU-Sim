@@ -7,7 +7,6 @@
 
 #include "framework.h"
 #include "units/decode_helpers.h"
-#include "units/index_helpers.h"
 #include "units/mblk_helpers.h"
 
 using namespace tile_npu::test;
@@ -24,9 +23,7 @@ struct Case {
   MblkOp op;
   NpuDomain domain;
   std::uint8_t reg;
-  std::uint8_t index = 0;
   std::uint8_t gather_src = 0;
-  bool index_is_scalar = false;
 };
 
 template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
@@ -37,7 +34,6 @@ template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
     check_eq(decoded.op, test.op, what + ": op");
     check_eq(decoded.reg.domain, test.domain, what + ": domain");
     check_eq(decoded.reg.index, test.reg, what + ": reg");
-    check_index(decoded.index, test.index, test.index_is_scalar, what);
     check_eq(decoded.gather_src, test.gather_src, what + ": gather_src");
   }
 }
@@ -98,31 +94,14 @@ TEST_CASE(mblk_decode_block_and_gather) {
   check_cases(cases);
 }
 
-TEST_CASE(mblk_decode_row_forms) {
-  constexpr std::array cases{
-      Case{.name = "aload.row a15[x0]",
-           .word = make_mrow(true, true, 4, 0, 15),
-           .op = MblkOp::row_load,
-           .domain = NpuDomain::acc,
-           .reg = 15,
-           .index = 0,
-           .index_is_scalar = true},
-      Case{.name = "astore.row a2[31]",
-           .word = make_mrow(true, false, 5, 31, 2),
-           .op = MblkOp::row_store,
-           .domain = NpuDomain::acc,
-           .reg = 2,
-           .index = 31},
-  };
-  check_cases(cases);
-}
-
 TEST_CASE(mblk_decode_rejects_reserved) {
   constexpr std::array cases{
       // funct3 = 011 / 11x are reserved.
       DecodeCase{"funct3 011", block(NpuDomain::tile, 3, 0)},
-      DecodeCase{"funct3 110", make_mrow(true, false, 6, 0, 0)},
-      DecodeCase{"funct3 111", make_mrow(true, false, 7, 0, 0)},
+      DecodeCase{"funct3 100", block(NpuDomain::tile, 4, 0)},
+      DecodeCase{"funct3 101", block(NpuDomain::tile, 5, 0)},
+      DecodeCase{"funct3 110", block(NpuDomain::tile, 6, 0)},
+      DecodeCase{"funct3 111", block(NpuDomain::tile, 7, 0)},
       // Gather has no Acc form.
       DecodeCase{"aload.gather", block(NpuDomain::acc, 2, 0, 1)},
       // dom2 = 10 is reserved for block, store, and gather forms.
@@ -136,14 +115,6 @@ TEST_CASE(mblk_decode_rejects_reserved) {
       DecodeCase{"block load sel3 bit0", 0x02000001u},
       // Acc has 16 registers; a16+ is a reserved encoding.
       DecodeCase{"aload a16 out of range", block(NpuDomain::acc, 0, 16)},
-      DecodeCase{"aload.row a16 out of range", make_mrow(true, false, 4, 0, 16)},
-      // MR reserved fields must be 0.
-      DecodeCase{"row load reserved5[21:17]", make_mrow(true, false, 4, 0, 0) | (1u << 17)},
-      DecodeCase{"row load reserved5[11:7]", make_mrow(true, false, 4, 0, 0) | (1u << 7)},
-      DecodeCase{"row load bit27", make_mrow(true, false, 4, 0, 0) | (1u << 27)},
-      // EW = 0 no longer selects a Tile row form.
-      DecodeCase{"tload.row reserved", make_mrow(false, false, 4, 0, 0)},
-      DecodeCase{"tstore.row reserved", make_mrow(false, false, 5, 0, 0)},
       // Unassigned data-movement majors are reserved.
       DecodeCase{"major4 0101", 0x50000001u},
   };

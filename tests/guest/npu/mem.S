@@ -2,8 +2,8 @@
 
 # Self-checking M_BLK image: programs configs and descriptors with
 # cfg.seti/cfg.setx, then exercises block load/store, a transposed tload,
-# row load/store (immediate and scalar row forms), and a gather through a u32
-# index vector loaded from memory. Every stage stores results back to memory
+# and a gather through a u32 index vector loaded from memory. Every stage
+# stores results back to memory
 # and checks them with scalar loads; the descriptor auto-increment is read
 # back with cfg.get. Ends with ebreak: a0 = 0 pass, a0 = N identifies the
 # failing check.
@@ -31,10 +31,6 @@ _start:
     CFG_REG   0, 1, 0, 0, 3, 0
     CFG_SETI  6, 0, 1, 2, 0
     CFG_SETI  6, 0, 2, 1, 0
-    # tm1: base = srcbuf + 2 (row 1 of the source), col_stride = 1
-    lla       x3, srcbuf + 2
-    CFG_REG   0, 1, 0, 0, 3, 1
-    CFG_SETI  6, 0, 2, 1, 1
     # tm2: base = gthbuf, row_stride = 2, col_stride = 1
     lla       x3, gthbuf
     CFG_REG   0, 1, 0, 0, 3, 2
@@ -71,18 +67,6 @@ _start:
     li        a0, 2
     bne       x4, x5, fail
 
-    # Row access: tloadr t1, #1 loads the memory row into register row 1;
-    # tstorer t1, x9 (x9 = 1) stores register row 1 back to rowbuf.
-    TLOADR    1, 1
-    lla       x3, rowbuf
-    CFG_REG   0, 1, 0, 0, 3, 1
-    li        x9, 1
-    TSTORERX  1, 9
-    lhu       x4, 0(x3)
-    li        x5, 0x0403  # bytes {3, 4}
-    li        a0, 3
-    bne       x4, x5, fail
-
     # Ordinary load and gather share tm2 unchanged. Copy the ordinary
     # result to t0, whose descriptor already points at dstbuf.
     TLOAD     2
@@ -92,7 +76,7 @@ _start:
     FENCE_MEM
     lw        x4, 0(x3)
     li        x5, 0x281e140a  # bytes {10, 20, 30, 40}
-    li        a0, 4
+    li        a0, 3
     bne       x4, x5, fail
 
     # Gather: vload v2 = {1, 0}, then tload.gather t2, v2 picks rows
@@ -105,7 +89,7 @@ _start:
     FENCE_MEM
     lw        x4, 0(x3)
     li        x5, 0x140a281e  # bytes {30, 40, 10, 20}
-    li        a0, 5
+    li        a0, 4
     bne       x4, x5, fail
 
     # Negative strides with u32 indices: base = gthbuf + 3, row_stride = -2,
@@ -124,7 +108,7 @@ _start:
     FENCE_MEM
     lw        x4, 0(x3)
     li        x5, 0x1e280a14  # bytes {20, 10, 40, 30}
-    li        a0, 6
+    li        a0, 5
     bne       x4, x5, fail
 
     # Auto-increment along rows: base advances by rows * row_stride = 4.
@@ -135,7 +119,7 @@ _start:
     TLOAD     0
     CFG_REG   0, 1, 2, 0, 0, 5  # cfg.get x5, tm0, base_addr
     lla       x6, srcbuf + 4
-    li        a0, 7
+    li        a0, 6
     bne       x5, x6, fail
 
     li        a0, 0
@@ -149,6 +133,5 @@ srcbuf: .byte 1, 2, 3, 4
 idxbuf: .word 1, 0
 gthbuf: .byte 10, 20, 30, 40
 dstbuf: .space 4
-rowbuf: .space 2
     .balign 4
 gthdst: .space 4

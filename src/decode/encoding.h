@@ -193,22 +193,4 @@ struct NpuR2 {
   }
 };
 
-// M_BLK row forms (MR): sel3 = {0, EW, IS}; index5 is the row immediate or a
-// Scalar register number, selected by IS.
-struct NpuMR {
-  std::uint8_t major4;
-  std::uint8_t sel3;
-  std::uint8_t funct3;
-  std::uint8_t index; // [16:12]
-  std::uint8_t reg;   // [6:2]
-
-  static constexpr NpuMR from(std::uint32_t word) {
-    return {static_cast<std::uint8_t>(field<31, 28>(word)),
-            static_cast<std::uint8_t>(field<27, 25>(word)),
-            static_cast<std::uint8_t>(field<24, 22>(word)),
-            static_cast<std::uint8_t>(field<16, 12>(word)),
-            static_cast<std::uint8_t>(field<6, 2>(word))};
-  }
-};
-
 } // namespace tile_npu::encoding

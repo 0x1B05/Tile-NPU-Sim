@@ -12,7 +12,6 @@ using namespace tile_npu::test;
 
 namespace {
 using tile_npu::DType;
-using tile_npu::MblkOp;
 using tile_npu::NpuDomain;
 using tile_npu::Ram;
 using tile_npu::Simulator;
@@ -249,57 +248,6 @@ TEST_CASE(mblk_transform_restrictions) {
     state.am[0].transform = 1;
     check_eq(run.sim.step().status, StepStatus::invalid_configuration, "aload rejects transform");
   }
-  {
-    MblkRun run(make_mrow(true, false, 5, 0, 1)); // astore.row a1[0] with transform
-    auto &state = run.sim.state();
-    config_acc_2x2(state, 1);
-    stride_desc(state.am[1], DATA, 8, 4);
-    state.am[1].transform = 1;
-    check_eq(run.sim.step().status, StepStatus::invalid_configuration,
-             "row form rejects transform");
-  }
-}
-
-TEST_CASE(mblk_acc_row_load_forms) {
-  MblkRun run(make_mrow(true, false, 4, 1, 0)); // aload.row a0[1]
-  auto &state = run.sim.state();
-  config_acc_2x2(state, 0);
-  stride_desc(state.am[0], DATA, 8, 4);
-  poke(run.memory, DATA, {5, 0, 0, 0, 6, 0, 0, 0});
-  state.a[0][tile_index(0, 0)] = 0xaaaa'aaaa; // row 0 must survive the row load
-  state.a[0][tile_index(0, 1)] = 0xbbbb'bbbb;
-
-  check_eq(run.sim.step().status, StepStatus::retired, "aload.row imm retires");
-  check_eq(state.a[0][tile_index(1, 0)], 5u, "a0(1,0)");
-  check_eq(state.a[0][tile_index(1, 1)], 6u, "a0(1,1)");
-  check_eq(hex(state.a[0][tile_index(0, 0)]), hex(0xaaaa'aaaau), "row 0 is untouched");
-  check_eq(hex(state.a[0][tile_index(0, 1)]), hex(0xbbbb'bbbbu), "row 0 is untouched");
-
-  MblkRun scalar_run(make_mrow(true, true, 4, 5, 0)); // aload.row a0[x5]
-  auto &scalar_state = scalar_run.sim.state();
-  config_acc_2x2(scalar_state, 0);
-  stride_desc(scalar_state.am[0], DATA, 8, 4);
-  scalar_state.scalar.write_x(5, 1);
-  poke(scalar_run.memory, DATA, {7, 0, 0, 0, 8, 0, 0, 0});
-
-  check_eq(scalar_run.sim.step().status, StepStatus::retired, "aload.row scalar index retires");
-  check_eq(scalar_state.a[0][tile_index(1, 0)], 7u, "a0(1,0)");
-  check_eq(scalar_state.a[0][tile_index(1, 1)], 8u, "a0(1,1)");
-}
-
-TEST_CASE(mblk_acc_row_store) {
-  MblkRun run(make_mrow(true, false, 5, 0, 1)); // astore.row a1[0]
-  auto &state = run.sim.state();
-  config_acc_2x2(state, 1);
-  stride_desc(state.am[1], DATA, 8, 4);
-  state.a[1][tile_index(0, 0)] = 3;
-  state.a[1][tile_index(0, 1)] = 4;
-  state.a[1][tile_index(1, 0)] = 0xee; // row 1 is not part of the access
-
-  check_eq(run.sim.step().status, StepStatus::retired, "astore.row retires");
-  const auto bytes = peek<8>(run.memory, DATA);
-  const std::array<std::uint8_t, 8> expected{3, 0, 0, 0, 4, 0, 0, 0};
-  check(bytes == expected, "only row 0 is written to memory");
 }
 
 TEST_CASE(mblk_vector_load_store) {
@@ -438,16 +386,6 @@ TEST_CASE(mblk_post_increment) {
   check_eq(run.sim.step().status, StepStatus::retired, "tload retires");
   check_eq(hex(state.tm[0].base_addr), hex(DATA + 2 * 4), "base_addr += rows * row_stride_bytes");
 
-  MblkRun row_run(make_mrow(true, false, 4, 0, 1)); // aload.row a1[0]
-  auto &row_state = row_run.sim.state();
-  config_acc_2x2(row_state, 1);
-  stride_desc(row_state.am[1], DATA, 4, 4);
-  row_state.am[1].flags = 1;
-  poke(row_run.memory, DATA, {1, 0, 0, 0, 2, 0, 0, 0});
-
-  check_eq(row_run.sim.step().status, StepStatus::retired, "aload.row retires");
-  check_eq(hex(row_state.am[1].base_addr), hex(DATA + 4), "row load increments by one row stride");
-
   MblkRun vec_run(block(NpuDomain::vec32, 1, 1)); // vstore v1
   auto &vec_state = vec_run.sim.state();
   vec_state.vc[1].dtype = DType::u32;
@@ -461,45 +399,6 @@ TEST_CASE(mblk_post_increment) {
 }
 
 TEST_CASE(mblk_rejects_invalid_configs) {
-  struct Scenario {
-    const char *name;
-    std::uint32_t word;
-  };
-
-  // Each scenario starts from a valid 2x2 i32 Acc setup and breaks one rule.
-  constexpr std::array scenarios{
-      Scenario{"transform on row load", make_mrow(true, false, 4, 0, 0)},
-  };
-  for (const auto &test : scenarios) {
-    MblkRun run(test.word);
-    auto &state = run.sim.state();
-    config_acc_2x2(state, 0);
-    stride_desc(state.am[0], DATA, 8, 4);
-    state.am[0].transform = 1;
-    poke(run.memory, DATA, {1, 0, 0, 0, 2, 0, 0, 0});
-    check_eq(run.sim.step().status, StepStatus::invalid_configuration,
-             std::string(test.name) + " rejects transform != 0");
-  }
-
-  {
-    MblkRun run(make_mrow(true, false, 4, 2, 0)); // aload.row a0[2]
-    auto &state = run.sim.state();
-    config_acc_2x2(state, 0); // rows = 2, so row 2 is out of range
-    stride_desc(state.am[0], DATA, 8, 4);
-    poke(run.memory, DATA, {1, 0, 0, 0, 2, 0, 0, 0});
-    check_eq(run.sim.step().status, StepStatus::invalid_configuration,
-             "row index beyond the effective shape rejects");
-  }
-  {
-    MblkRun run(make_mrow(true, true, 4, 5, 0)); // aload.row a0[x5]
-    auto &state = run.sim.state();
-    config_acc_2x2(state, 0);
-    stride_desc(state.am[0], DATA, 8, 4);
-    state.scalar.write_x(5, 7);
-    poke(run.memory, DATA, {1, 0, 0, 0, 2, 0, 0, 0});
-    check_eq(run.sim.step().status, StepStatus::invalid_configuration,
-             "scalar row index beyond the effective shape rejects");
-  }
   {
     MblkRun run(block(NpuDomain::tile, 0, 0));
     auto &state = run.sim.state();
@@ -641,46 +540,6 @@ TEST_CASE(mblk_faults_leave_state_unchanged) {
     check_eq(hex(*result.fault_address), hex(MEM_END), "fault address");
     const auto byte = peek<1>(run.memory, MEM_END - 1);
     check_eq(byte[0], std::uint8_t{0xee}, "range probe prevents partial memory writes");
-  }
-}
-
-TEST_CASE(mblk_row_faults_leave_state_unchanged) {
-  // Row form with increment enabled: addr(0, 1) = MEM_END faults.
-  {
-    MblkRun run(make_mrow(true, false, 4, 0, 0)); // aload.row a0[0]
-    auto &state = run.sim.state();
-    config_acc_2x2(state, 0);
-    stride_desc(state.am[0], MEM_END - 4, 4, 4);
-    state.am[0].flags = 1; // increment along rows
-    state.a[0][tile_index(0, 0)] = 0x5a5a'5a5a;
-    state.a[0][tile_index(0, 1)] = 0xa5a5'a5a5;
-
-    const auto result = run.sim.step();
-    check_eq(result.status, StepStatus::load_fault, "mid-row load faults");
-    check_eq(hex(*result.fault_address), hex(MEM_END), "fault address");
-    check_eq(hex(state.a[0][tile_index(0, 0)]), hex(0x5a5a'5a5au),
-             "staged row elements are discarded on fault");
-    check_eq(hex(state.a[0][tile_index(0, 1)]), hex(0xa5a5'a5a5u),
-             "staged row elements are discarded on fault");
-    check_eq(hex(state.am[0].base_addr), hex(MEM_END - 4), "fault leaves base_addr unincremented");
-  }
-  {
-    MblkRun run(make_mrow(true, false, 5, 0, 0)); // astore.row a0[0]
-    auto &state = run.sim.state();
-    config_acc_2x2(state, 0);
-    stride_desc(state.am[0], MEM_END - 4, 4, 4);
-    state.am[0].flags = 1;
-    state.a[0][tile_index(0, 0)] = 0x11;
-    state.a[0][tile_index(0, 1)] = 0x22;
-    poke(run.memory, MEM_END - 4, {0xee, 0xee, 0xee, 0xee});
-
-    const auto result = run.sim.step();
-    check_eq(result.status, StepStatus::store_fault, "mid-row store faults");
-    check_eq(hex(*result.fault_address), hex(MEM_END), "fault address");
-    const auto bytes = peek<4>(run.memory, MEM_END - 4);
-    const std::array<std::uint8_t, 4> expected{0xee, 0xee, 0xee, 0xee};
-    check(bytes == expected, "range probe prevents partial memory writes");
-    check_eq(hex(state.am[0].base_addr), hex(MEM_END - 4), "fault leaves base_addr unincremented");
   }
 }
 

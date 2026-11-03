@@ -20,7 +20,6 @@ namespace {
 //   I:  major4 sel2 field3 imm16(4x4)  C5   q
 //   R4: major4 sel3 funct3 [21:17] src2 src1 dest q
 //   R2: major4 sel3 funct3 reserved10  S5   D5  q
-//   MR: major4 sel3 funct3 reserved5 index5 reserved5 reg5 q
 // E_BIN reads sel3 as {dom2, BX}: dom tile=00 acc=01 reserved=10 vec32=11.
 constexpr DecodeEntry NPU_TABLE[] = {
     {"0000 00? ???? 0000 ????? ????? ????? 00", decode_ebin},                         // tile
@@ -55,9 +54,6 @@ constexpr DecodeEntry NPU_TABLE[] = {
     {"0000 ??0 000 0000000000 00000 ????? 01", decode_mblk_load},                    // block load
     {"0000 ??0 001 0000000000 00000 ????? 01", decode_mblk_store},                   // block store
     {"0000 ??0 010 0000000000 ????? ????? 01", decode_mblk_gather},                   // gather load
-    // M_BLK Acc row forms (MR): sel3 = {0, 1, IS}, funct3 = 10x.
-    {"0000 01? 100 00000 ????? 00000 ????? 01", decode_mblk_row_load},                // Acc row load
-    {"0000 01? 101 00000 ????? 00000 ????? 01", decode_mblk_row_store},               // Acc row store
     {"0000 ??? ??? ????? ????? ????? ????? 01", illegal},                             // reserved M_BLK encodings
     // FILL_IMM (I format): dom2 + funct3 = 000 + imm16; other funct3 values
     // are reserved.

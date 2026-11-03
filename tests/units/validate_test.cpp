@@ -165,8 +165,6 @@ TEST_CASE(validate_rejects_bad_emask) {
 
 TEST_CASE(validate_rejects_bad_mblk) {
   check_illegal(MblkInstr{.op = MblkOp::gather, .reg = A(0)}, "gather on acc");
-  check_illegal(MblkInstr{.op = MblkOp::row_load, .reg = R(0)}, "row form on reserved");
-  check_illegal(MblkInstr{.op = MblkOp::row_load, .reg = T(0)}, "row form on tile");
   check_illegal(MblkInstr{.op = MblkOp::load, .reg = R(0)}, "block form on reserved");
   check_illegal(MblkInstr{.op = MblkOp::gather, .reg = T(0), .gather_src = 32},
                 "gather_src index 32");

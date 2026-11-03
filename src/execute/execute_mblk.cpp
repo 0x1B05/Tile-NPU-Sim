@@ -4,7 +4,6 @@
 #include "descriptor_view.h"
 #include "domain.h"
 #include "matrix_view.h"
-#include "operand.h"
 #ifdef CONFIG_MTRACE
 #include "trace/mtrace/mtrace.h"
 #endif
@@ -266,53 +265,6 @@ template <NpuDomain Domain> ExecuteResult block_access(const MblkInstr &instr, E
   return result;
 }
 
-template <NpuDomain Domain> ExecuteResult row_access(const MblkInstr &instr, ExecContext &ctx) {
-  static_assert(Domain == NpuDomain::tile || Domain == NpuDomain::acc);
-  auto [reg, config, descriptor] = bind_register<Domain>(ctx.state, instr.reg.index);
-  if (!valid_domain_config(config)) {
-    return config_error();
-  }
-  MatrixDescView desc(descriptor);
-  if (!desc.is_valid() || !transform_legal(instr, desc.descriptor())) {
-    return config_error();
-  }
-
-  const auto row = resolve_index(instr.index, ctx.state);
-  // Row numbers outside the effective shape are rejected.
-  if (row >= config.rows) {
-    return config_error();
-  }
-  const auto cols = std::size_t{config.cols};
-  const auto next_base = desc.incremented_base(1, cols);
-  if (!next_base) {
-    return config_error();
-  }
-
-  using Element = typename std::remove_reference_t<decltype(reg)>::value_type;
-#ifdef CONFIG_MTRACE
-  const auto trace_descriptor = desc.descriptor();
-  const auto trace_elem = static_cast<std::uint8_t>(sizeof(Element));
-#endif
-  auto view = matrix_view(reg);
-  const auto visit = [&](auto &&fn) {
-    for (std::size_t col = 0; col < cols; ++col) {
-      fn(desc.matrix_element_addr(0, col), view.at(row, col));
-    }
-  };
-  const auto result = probe_and_transfer<Element>(ctx.memory, visit, is_store(instr.op));
-  if (result.status != StepStatus::retired) {
-    return result;
-  }
-  desc.commit_base(*next_base);
-#ifdef CONFIG_MTRACE
-  if (ctx.trace) {
-    trace_matrix_row_move(*ctx.trace, instr, trace_descriptor, static_cast<std::uint8_t>(cols),
-                          trace_elem);
-  }
-#endif
-  return result;
-}
-
 // tload.gather
 ExecuteResult gather_tile_access(const MblkInstr &instr, ExecContext &ctx) {
   const auto index = instr.reg.index;
@@ -450,8 +402,6 @@ ExecuteResult execute(const MblkInstr &instr, ExecContext &ctx) {
     switch (instr.op) {
     case MblkOp::load:
     case MblkOp::store: return block_access<NpuDomain::acc>(instr, ctx);
-    case MblkOp::row_load:
-    case MblkOp::row_store: return row_access<NpuDomain::acc>(instr, ctx);
     case MblkOp::gather: // gather has no Acc-domain encoding
     default: unreachable("M_BLK op/domain combination rejected by validation");
     }

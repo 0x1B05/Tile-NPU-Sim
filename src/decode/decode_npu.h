@@ -32,8 +32,6 @@ DecodeResult decode_qnt(std::uint32_t word);
 DecodeResult decode_mblk_load(std::uint32_t word);
 DecodeResult decode_mblk_store(std::uint32_t word);
 DecodeResult decode_mblk_gather(std::uint32_t word);
-DecodeResult decode_mblk_row_load(std::uint32_t word);
-DecodeResult decode_mblk_row_store(std::uint32_t word);
 DecodeResult decode_fill(std::uint32_t word);
 DecodeResult decode_fillx(std::uint32_t word);
 DecodeResult decode_move_copy(std::uint32_t word);

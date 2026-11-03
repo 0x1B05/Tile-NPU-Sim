@@ -131,16 +131,6 @@
     .word ((\dom2 << 26) | (\funct3 << 22) | (\s5 << 7) | (\d5 << 2) | 1)
 .endm
 
-# M_BLK row form (MR format), mirroring NpuMR in src/decode/encoding.h:
-#   [31:28] major4 = 0000  [27] 0  [26] EW  [25] IS  [24:22] funct3
-#   [21:17] reserved(0)  [16:12] index5  [11:7] reserved(0)
-#   [6:2] reg5  [1:0] q = 01
-# EW: 0 = Tile, 1 = Acc. funct3: 100 = row load, 101 = row store. IS = 0: index5 is an immediate
-# row number; IS = 1: index5 names xS holding the row number.
-.macro M_ROW ew, is, funct3, index5, reg5
-    .word ((\ew << 26) | (\is << 25) | (\funct3 << 22) | (\index5 << 12) | (\reg5 << 2) | 1)
-.endm
-
 .macro TLOAD d5
     M_BLK 0, 0, \d5, 0
 .endm
@@ -156,24 +146,6 @@
 
 .macro VLOAD d5
     M_BLK 3, 0, \d5, 0
-.endm
-
-# Row load/store: the index5 row number is an immediate (plain name) or a
-# scalar register (X suffix).
-.macro TLOADR reg5, index5
-    M_ROW 0, 0, 4, \index5, \reg5
-.endm
-
-.macro TLOADRX reg5, xs
-    M_ROW 0, 1, 4, \xs, \reg5
-.endm
-
-.macro TSTORER reg5, index5
-    M_ROW 0, 0, 5, \index5, \reg5
-.endm
-
-.macro TSTORERX reg5, xs
-    M_ROW 0, 1, 5, \xs, \reg5
 .endm
 
 # I format (cfg.seti), mirroring NpuI in src/decode/encoding.h:
