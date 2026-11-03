@@ -527,6 +527,20 @@
     MMA 3, \d5, \a5, \b5, \row
 .endm
 
+# MMA_DEQUANT (R5), major4 = 1001, q = 10:
+#   [27] acc  [26:22] vCol  [21:17] vRow  [16:12] B5  [11:7] A5  [6:2] D5
+.macro MMA_DEQUANT acc, d5, a5, b5, vcol, vrow
+    .word ((9 << 28) | ((\acc & 1) << 27) | ((\vcol & 31) << 22) | ((\vrow & 31) << 17) | (\b5 << 12) | (\a5 << 7) | (\d5 << 2) | 2)
+.endm
+
+.macro MMA_NT_DEQUANT_ZERO d5, a5, b5, vcol, vrow
+    MMA_DEQUANT 0, \d5, \a5, \b5, \vcol, \vrow
+.endm
+
+.macro MMA_NT_DEQUANT_ACC d5, a5, b5, vcol, vrow
+    MMA_DEQUANT 1, \d5, \a5, \b5, \vcol, \vrow
+.endm
+
 # SYS (Z format):
 #   [31:28] major4 = 1000  [27:25] funct3  [24:2] reserved23  [1:0] q = 10
 # funct3: 000 fence.mem, 001 fence.sa, 010 fence.all, 011 kernel.end.
