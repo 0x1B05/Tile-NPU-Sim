@@ -179,8 +179,8 @@ struct NpuR4 {
 struct NpuR5 {
   std::uint8_t major4;
   std::uint8_t acc;     // [27]
-  std::uint8_t scalar;  // [26:22], vCol for MMA_DEQUANT
-  std::uint8_t scalar2; // [21:17], vRow for MMA_DEQUANT
+  std::uint8_t scalar;  // [26:22], vPair5 for MMA_DEQUANT / VMMA_DEQUANT
+  std::uint8_t scalar2; // [21:17], reserved5 for MMA_DEQUANT / row5 for VMMA_DEQUANT
   std::uint8_t src2;    // [16:12]
   std::uint8_t src1;    // [11:7]
   std::uint8_t dest;    // [6:2]

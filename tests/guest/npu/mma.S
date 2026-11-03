@@ -125,7 +125,7 @@ _start:
     li        x5, 125
     bne       x4, x5, fail
 
-    # Stage 5 - mma.nt.dequant.zero a2, t0, t2, v6, v7:
+    # Stage 5 - mma.nt.dequant.zero a2, t0, t2, v6 (vScalePair v6/v7):
     # product {{50,68},{42,57}}, vCol {2,3}, vRow {0.5,0.25}
     # -> {{50,102},{21,42.75}}.
     li        x5, 0x40000000     # 2.0
@@ -137,7 +137,7 @@ _start:
     li        x5, 0x3E800000     # 0.25
     VINSERT   7, 1, 5
     li        a0, 5
-    MMA_NT_DEQUANT_ZERO 2, 0, 2, 6, 7
+    MMA_NT_DEQUANT_ZERO 2, 0, 2, 6
     lla       x3, dstbuf
     CFG_REG   1, 1, 0, 0, 3, 2
     ASTORE    2
@@ -154,7 +154,7 @@ _start:
     addi      x6, x6, -1
     bnez      x6, 5b
 
-    # Stage 6 - vmma.nt.dequant.zero v4, t0[1], t2, v8/v9:
+    # Stage 6 - vmma.nt.dequant.zero v4, t0[1], t2, v8 (vScalePair v8/v9):
     # product {42,57}, vCol {2,3}, vRow[0] = 0.5 -> {42.0, 85.5}.
     li        x5, 0x40000000     # 2.0
     VINSERT   8, 0, 5

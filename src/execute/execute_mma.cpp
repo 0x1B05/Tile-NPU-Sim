@@ -96,8 +96,8 @@ ExecuteResult mma_dequant(const MmaDequantInstr &instr, State &state) {
   const auto &dst_config = state.ac[instr.dest.index];
   const auto &lhs_config = state.tc[instr.src_a.index];
   const auto &rhs_config = state.tc[instr.src_b.index];
-  const auto &col_config = state.vc[instr.scale_col];
-  const auto &row_config = state.vc[instr.scale_row];
+  const auto &col_config = state.vc[instr.scale_pair];
+  const auto &row_config = state.vc[instr.scale_pair + 1];
   if (!valid_config_of(dst_config, DType::i32) || !valid_config_of(lhs_config, DType::i8) ||
       !valid_config_of(rhs_config, DType::i8) || !valid_config_of(col_config, DType::f32) ||
       !valid_config_of(row_config, DType::f32)) {
@@ -126,8 +126,8 @@ ExecuteResult mma_dequant(const MmaDequantInstr &instr, State &state) {
   }
 
   const FpEnvGuard fp_env;
-  const auto &col_scale = state.v[instr.scale_col];
-  const auto &row_scale = state.v[instr.scale_row];
+  const auto &col_scale = state.v[instr.scale_pair];
+  const auto &row_scale = state.v[instr.scale_pair + 1];
   auto &dst = state.a[instr.dest.index];
   for (std::size_t i = 0; i < m_size; ++i) {
     const float row = as_f32(row_scale[i]);

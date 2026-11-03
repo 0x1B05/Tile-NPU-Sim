@@ -289,15 +289,15 @@ void trace_npu_dataflow(const DecodedNpuInstr &instr, const State &state, Mtrace
             const auto &lhs = state.tc[i.src_a.index];
             const auto &rhs = state.tc[i.src_b.index];
             const auto &dst = state.ac[i.dest.index];
-            const auto &col = state.vc[i.scale_col];
-            const auto &row = state.vc[i.scale_row];
+            const auto &col = state.vc[i.scale_pair];
+            const auto &row = state.vc[i.scale_pair + 1];
             TraceEvent event;
             add_source(event,
                        trace_matrix_endpoint(TraceEndpointKind::tile, i.src_a.index, lhs, "a"));
             add_source(event,
                        trace_matrix_endpoint(TraceEndpointKind::tile, i.src_b.index, rhs, "b"));
-            add_source(event, trace_vector_endpoint(i.scale_col, col, "vcol"));
-            add_source(event, trace_vector_endpoint(i.scale_row, row, "vrow"));
+            add_source(event, trace_vector_endpoint(i.scale_pair, col, "vcol"));
+            add_source(event, trace_vector_endpoint(i.scale_pair + 1, row, "vrow"));
             if (i.op == MmaOp::nt_acc) {
               add_source(event, trace_matrix_endpoint(TraceEndpointKind::acc, i.dest.index, dst,
                                                       "acc_in"));

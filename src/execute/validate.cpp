@@ -240,7 +240,7 @@ bool valid_structure(const MmaDequantInstr &instr) {
   return instr.op <= MmaOp::nt_acc && instr.dest.domain == NpuDomain::acc && in_range(instr.dest) &&
          instr.src_a.domain == NpuDomain::tile && in_range(instr.src_a) &&
          instr.src_b.domain == NpuDomain::tile && in_range(instr.src_b) &&
-         instr.scale_col < VECTOR_REGISTERS && instr.scale_row < VECTOR_REGISTERS;
+         static_cast<std::size_t>(instr.scale_pair) + 1 < VECTOR_REGISTERS;
 }
 
 bool valid_structure(const VmmaInstr &instr) {

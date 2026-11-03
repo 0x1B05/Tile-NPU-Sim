@@ -277,8 +277,7 @@ std::string npu_instr(const DecodedNpuInstr &instr) {
           },
           [](const MmaDequantInstr &i) {
             return mma_dequant_mnemonic(i.op) + " " + npu_reg(i.dest) + ", " + npu_reg(i.src_a) +
-                   ", " + npu_reg(i.src_b) + ", v" + std::to_string(i.scale_col) + ", v" +
-                   std::to_string(i.scale_row);
+                   ", " + npu_reg(i.src_b) + ", v" + std::to_string(i.scale_pair);
           },
           [](const VmmaInstr &i) {
             return vmma_mnemonic(i.op) + " " + npu_reg(i.dest) + ", " + npu_reg(i.src_a) + "[" +

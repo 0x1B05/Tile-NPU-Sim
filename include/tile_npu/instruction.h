@@ -127,11 +127,10 @@ struct MmaInstr {
 // mma.nt.dequant.zero/acc: fused MMA that dequantizes in place.
 struct MmaDequantInstr {
   MmaOp op = MmaOp::nt_zero;
-  NpuRegister dest{};          // Acc; i32 before, f32 after.
-  NpuRegister src_a{};         // Tile.
-  NpuRegister src_b{};         // Tile.
-  RegisterIndex scale_col = 0; // Vec32 f32.
-  RegisterIndex scale_row = 0; // Vec32 f32.
+  NpuRegister dest{};           // Acc; i32 before, f32 after.
+  NpuRegister src_a{};          // Tile.
+  NpuRegister src_b{};          // Tile.
+  RegisterIndex scale_pair = 0; // vCol = v[base], vRow = v[base + 1].
 };
 
 enum class VmmaOp : std::uint8_t {

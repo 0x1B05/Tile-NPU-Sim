@@ -127,9 +127,9 @@ qwen3_quant_act:
 # W is stored as [n/32][k/32][32][32] tiles in [n][k] order, with per-row f32
 # scales. quant(x) is the quant blocks t2..t4 left resident by qwen3_quant_act;
 # nothing between the two calls may clobber them. Cross-tile accumulation runs
-# in an i32 memory buffer (qwen3_accbuf); the last activation block's last kblock uses
-# vmma.nt.dequant.acc to write f32 output directly. n % 32 == 0, 32 | k,
-# k <= 3072.
+# in an i32 memory buffer (qwen3_accbuf); the last activation block's last kblock
+# uses vmma.nt.dequant.acc with the vScalePair v6/v7 to write f32 output
+# directly. n % 32 == 0, 32 | k, k <= 3072.
 # ---------------------------------------------------------------------------
 
 # Per-activation-block n-block loop. tile_a names the activation block, which must be a
@@ -342,9 +342,10 @@ qwen3_quant_rows:
 # chunk. xq is [rows, k] i8 row-major (qwen3_quant_rows output), xs its rows
 # row scales. Per 32-column block of out: t1 holds one [n][k] weight tile from
 # the [n/32][k/32][32][32] layout and mma.nt accumulates the k/32 kblocks in
-# acc. The last kblock uses mma.nt.dequant.acc to apply v29 (weight scales,
-# by column) and v30 (token scales, by row) on the drain and write f32 in
-# place; each accumulator is stored directly via its own amG descriptor.
+# acc. The last kblock uses mma.nt.dequant.acc with the vScalePair based at
+# v29 (v29 = weight scales by column, v30 = token scales by row) on the drain
+# and writes f32 in place; each accumulator is stored directly via its own amG
+# descriptor.
 # A single kblock uses mma.nt.dequant.zero. Full groups of eight nblocks
 # keep accelerators a0..a7 and reuse one xq tile across the group.
 # n % 32 == 0, 32 | k, k <= 3072.
@@ -433,7 +434,7 @@ qwen3_matmul_q:
     SETX    SEL_TM, CF_BASE, 1, X_T4
     TLOAD   1
     VLOAD   29
-    MMA_NT_DEQUANT_ZERO \G, 0, 1, 29, 30
+    MMA_NT_DEQUANT_ZERO \G, 0, 1, 29
     add     t4, t4, t3
     .endr
     j       .Lmm_group_epi
@@ -460,7 +461,7 @@ qwen3_matmul_q:
     SETX    SEL_TM, CF_BASE, 1, X_T4
     TLOAD   1
     VLOAD   29
-    MMA_NT_DEQUANT_ACC \G, 0, 1, 29, 30
+    MMA_NT_DEQUANT_ACC \G, 0, 1, 29
     add     t4, t4, t3
     .endr
 
@@ -507,11 +508,11 @@ qwen3_matmul_q:
     TLOAD   0
     TLOAD   1
     VLOAD   29
-    MMA_NT_DEQUANT_ACC 0, 0, 1, 29, 30
+    MMA_NT_DEQUANT_ACC 0, 0, 1, 29
     j       .Lmm_tail_epi
 .Lmm_tail_single:
     VLOAD   29
-    MMA_NT_DEQUANT_ZERO 0, 0, 1, 29, 30
+    MMA_NT_DEQUANT_ZERO 0, 0, 1, 29
 .Lmm_tail_epi:
     slli    t0, s2, 7
     add     t0, a4, t0

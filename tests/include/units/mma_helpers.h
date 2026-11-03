@@ -18,12 +18,11 @@ constexpr std::uint32_t make_mma(std::uint32_t funct3, std::uint32_t dest, std::
 }
 
 // MMA_DEQUANT (R5): major4 = 1001, q = 10.
-//   [27] acc  [26:22] vCol  [21:17] vRow  [16:12] B  [11:7] A  [6:2] D
+//   [27] acc  [26:22] scale pair base  [21:17] reserved  [16:12] B  [11:7] A  [6:2] D
 constexpr std::uint32_t make_mma_dequant(std::uint32_t acc, std::uint32_t dest, std::uint32_t src_a,
-                                         std::uint32_t src_b, std::uint32_t scale_col,
-                                         std::uint32_t scale_row) {
-  return (9u << 28) | ((acc & 1u) << 27) | ((scale_col & 0x1fu) << 22) |
-         ((scale_row & 0x1fu) << 17) | (src_b << 12) | (src_a << 7) | (dest << 2) | 2u;
+                                         std::uint32_t src_b, std::uint32_t scale_pair) {
+  return (9u << 28) | ((acc & 1u) << 27) | ((scale_pair & 0x1fu) << 22) | (src_b << 12) |
+         (src_a << 7) | (dest << 2) | 2u;
 }
 
 // VMMA_DEQUANT (R5): major4 = 1010, q = 10.

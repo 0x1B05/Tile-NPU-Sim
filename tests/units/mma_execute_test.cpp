@@ -200,7 +200,7 @@ TEST_CASE(vmma_dequant_rejects_invalid) {
 TEST_CASE(mma_dequant_zero) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
-  load_one(sim, memory, make_mma_dequant(0, 0, 1, 2, 6, 7));
+  load_one(sim, memory, make_mma_dequant(0, 0, 1, 2, 6));
   auto &state = sim.state();
   acc_i32(state, 0, 2, 2);
   tile_i8(state, 1, 2, 3);
@@ -225,7 +225,7 @@ TEST_CASE(mma_dequant_zero) {
 TEST_CASE(mma_dequant_acc) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
-  load_one(sim, memory, make_mma_dequant(1, 0, 1, 2, 6, 7));
+  load_one(sim, memory, make_mma_dequant(1, 0, 1, 2, 6));
   auto &state = sim.state();
   acc_i32(state, 0, 2, 2);
   tile_i8(state, 1, 2, 3);
@@ -255,7 +255,7 @@ TEST_CASE(mma_dequant_rejects_invalid) {
   {
     Ram memory(CODE_BASE, 4);
     Simulator sim(memory);
-    load_one(sim, memory, make_mma_dequant(0, 0, 1, 2, 6, 7));
+    load_one(sim, memory, make_mma_dequant(0, 0, 1, 2, 6));
     auto &state = sim.state();
     acc_i32(state, 0, 2, 2);
     state.ac[0].dtype = DType::f32;
@@ -269,7 +269,7 @@ TEST_CASE(mma_dequant_rejects_invalid) {
   {
     Ram memory(CODE_BASE, 4);
     Simulator sim(memory);
-    load_one(sim, memory, make_mma_dequant(0, 0, 1, 2, 6, 7));
+    load_one(sim, memory, make_mma_dequant(0, 0, 1, 2, 6));
     auto &state = sim.state();
     acc_i32(state, 0, 2, 2);
     tile_i8(state, 1, 2, 3);
@@ -282,7 +282,7 @@ TEST_CASE(mma_dequant_rejects_invalid) {
   {
     Ram memory(CODE_BASE, 4);
     Simulator sim(memory);
-    load_one(sim, memory, make_mma_dequant(0, 0, 1, 2, 6, 7));
+    load_one(sim, memory, make_mma_dequant(0, 0, 1, 2, 6));
     auto &state = sim.state();
     acc_i32(state, 0, 2, 2);
     tile_i8(state, 1, 2, 3);

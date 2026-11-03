@@ -62,8 +62,7 @@ struct MmaDequantCase {
   std::uint8_t dest;
   std::uint8_t src_a;
   std::uint8_t src_b;
-  std::uint8_t scale_col;
-  std::uint8_t scale_row;
+  std::uint8_t scale_pair;
 };
 
 template <std::size_t N> void check_mma_dequant_cases(const std::array<MmaDequantCase, N> &cases) {
@@ -78,8 +77,7 @@ template <std::size_t N> void check_mma_dequant_cases(const std::array<MmaDequan
     check_eq(decoded.src_a.index, test.src_a, what + ": src_a");
     check_eq(decoded.src_b.domain, NpuDomain::tile, what + ": rhs domain");
     check_eq(decoded.src_b.index, test.src_b, what + ": src_b");
-    check_eq(decoded.scale_col, test.scale_col, what + ": vCol");
-    check_eq(decoded.scale_row, test.scale_row, what + ": vRow");
+    check_eq(decoded.scale_pair, test.scale_pair, what + ": vScalePair");
   }
 }
 
@@ -172,22 +170,20 @@ TEST_CASE(vmma_decode) {
 
 TEST_CASE(mma_dequant_decode) {
   constexpr std::array cases{
-      MmaDequantCase{.name = "mma.nt.dequant.zero a1, t2, t3, v4, v5",
-                     .word = make_mma_dequant(0, 1, 2, 3, 4, 5),
+      MmaDequantCase{.name = "mma.nt.dequant.zero a1, t2, t3, v4",
+                     .word = make_mma_dequant(0, 1, 2, 3, 4),
                      .op = MmaOp::nt_zero,
                      .dest = 1,
                      .src_a = 2,
                      .src_b = 3,
-                     .scale_col = 4,
-                     .scale_row = 5},
-      MmaDequantCase{.name = "mma.nt.dequant.acc a6, t7, t8, v9, v10",
-                     .word = make_mma_dequant(1, 6, 7, 8, 9, 10),
+                     .scale_pair = 4},
+      MmaDequantCase{.name = "mma.nt.dequant.acc a6, t7, t8, v9",
+                     .word = make_mma_dequant(1, 6, 7, 8, 9),
                      .op = MmaOp::nt_acc,
                      .dest = 6,
                      .src_a = 7,
                      .src_b = 8,
-                     .scale_col = 9,
-                     .scale_row = 10},
+                     .scale_pair = 9},
   };
   check_mma_dequant_cases(cases);
 }
@@ -226,7 +222,9 @@ TEST_CASE(mma_decode_rejects_reserved) {
       DecodeCase{"mma row5", make_mma(0, 0, 1, 2, 1)},
       // Acc has 16 registers; a16+ is a reserved encoding.
       DecodeCase{"mma a16 destination", make_mma(0, 16, 1, 2)},
-      DecodeCase{"mma.dequant a16 destination", make_mma_dequant(0, 16, 1, 2, 3, 4)},
+      DecodeCase{"mma.dequant a16 destination", make_mma_dequant(0, 16, 1, 2, 3)},
+      DecodeCase{"mma.dequant pair base 31", make_mma_dequant(0, 0, 1, 2, 31)},
+      DecodeCase{"mma.dequant reserved5", make_mma_dequant(0, 0, 1, 2, 3) | (1u << 17)},
       DecodeCase{"vmma.dequant pair base 31", make_vmma_dequant(0, 0, 1, 2, 0, 31)},
   };
   expect_illegal(cases);

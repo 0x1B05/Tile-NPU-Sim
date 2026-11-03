@@ -542,17 +542,17 @@
 .endm
 
 # MMA_DEQUANT (R5), major4 = 1001, q = 10:
-#   [27] acc  [26:22] vCol  [21:17] vRow  [16:12] B5  [11:7] A5  [6:2] D5
-.macro MMA_DEQUANT acc, d5, a5, b5, vcol, vrow
-    .word ((9 << 28) | ((\acc & 1) << 27) | ((\vcol & 31) << 22) | ((\vrow & 31) << 17) | (\b5 << 12) | (\a5 << 7) | (\d5 << 2) | 2)
+#   [27] acc  [26:22] scale pair base  [21:17] reserved  [16:12] B5  [11:7] A5  [6:2] D5
+.macro MMA_DEQUANT acc, d5, a5, b5, vpair
+    .word ((9 << 28) | ((\acc & 1) << 27) | ((\vpair & 31) << 22) | (\b5 << 12) | (\a5 << 7) | (\d5 << 2) | 2)
 .endm
 
-.macro MMA_NT_DEQUANT_ZERO d5, a5, b5, vcol, vrow
-    MMA_DEQUANT 0, \d5, \a5, \b5, \vcol, \vrow
+.macro MMA_NT_DEQUANT_ZERO d5, a5, b5, vpair
+    MMA_DEQUANT 0, \d5, \a5, \b5, \vpair
 .endm
 
-.macro MMA_NT_DEQUANT_ACC d5, a5, b5, vcol, vrow
-    MMA_DEQUANT 1, \d5, \a5, \b5, \vcol, \vrow
+.macro MMA_NT_DEQUANT_ACC d5, a5, b5, vpair
+    MMA_DEQUANT 1, \d5, \a5, \b5, \vpair
 .endm
 
 # SYS (Z format):
