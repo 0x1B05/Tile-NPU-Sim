@@ -1,9 +1,8 @@
 # MTRACE binary format (MTRB)
 
 `--mtrace` writes the logical MTRACE event stream as `mtrace.mtrb` in the
-versioned MTRB format. JSONL is no longer produced by the simulator; use
-`scripts/mtrace/analyze.py --dump-jsonl` when a text stream is needed for
-debugging.
+versioned MTRB format. The simulator emits only this binary format; the
+`scripts/mtrace/` reader and analysis CLI use the Python standard library.
 
 The format is little-endian, streaming, and self-describing. Integers use
 LEB128 varints; signed values use zigzag LEB128. There is no compression
