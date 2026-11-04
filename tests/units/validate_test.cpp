@@ -58,6 +58,7 @@ using tile_npu::MaskInstr;
 using tile_npu::MaskOp;
 using tile_npu::MblkInstr;
 using tile_npu::MblkOp;
+using tile_npu::MmaDequantInstr;
 using tile_npu::MmaInstr;
 using tile_npu::MmaOp;
 using tile_npu::MoveInstr;
@@ -73,6 +74,7 @@ using tile_npu::StepStatus;
 using tile_npu::SysInstr;
 using tile_npu::SysOp;
 using tile_npu::TdequantInstr;
+using tile_npu::VmmaDequantInstr;
 using tile_npu::VmmaInstr;
 using tile_npu::VmmaOp;
 using tile_npu::VreduceArgmaxInstr;
@@ -288,6 +290,33 @@ TEST_CASE(validate_rejects_bad_mma) {
                 "mma src_b domain");
 }
 
+TEST_CASE(validate_rejects_bad_mma_dequant) {
+  check_illegal(
+      MmaDequantInstr{
+          .op = static_cast<MmaOp>(2), .dest = A(0), .src_a = T(0), .src_b = T(1), .scale_pair = 0},
+      "unassigned mma.dequant op");
+  check_illegal(
+      MmaDequantInstr{
+          .op = MmaOp::nt_zero, .dest = V(0), .src_a = T(0), .src_b = T(1), .scale_pair = 0},
+      "mma.dequant destination domain");
+  check_illegal(
+      MmaDequantInstr{
+          .op = MmaOp::nt_zero, .dest = A(16), .src_a = T(0), .src_b = T(1), .scale_pair = 0},
+      "mma.dequant destination a16");
+  check_illegal(
+      MmaDequantInstr{
+          .op = MmaOp::nt_zero, .dest = A(0), .src_a = R(0), .src_b = T(1), .scale_pair = 0},
+      "mma.dequant src_a domain");
+  check_illegal(
+      MmaDequantInstr{
+          .op = MmaOp::nt_zero, .dest = A(0), .src_a = T(0), .src_b = A(1), .scale_pair = 0},
+      "mma.dequant src_b domain");
+  check_illegal(
+      MmaDequantInstr{
+          .op = MmaOp::nt_zero, .dest = A(0), .src_a = T(0), .src_b = T(1), .scale_pair = 31},
+      "mma.dequant scale pair 31");
+}
+
 TEST_CASE(validate_rejects_bad_vmma) {
   check_illegal(VmmaInstr{.op = static_cast<VmmaOp>(2), .dest = V(0), .src_a = T(0), .src_b = T(1)},
                 "unassigned vmma op");
@@ -300,6 +329,51 @@ TEST_CASE(validate_rejects_bad_vmma) {
   check_illegal(
       VmmaInstr{.op = VmmaOp::nt_zero, .dest = V(0), .src_a = T(0), .src_b = T(1), .row = 32},
       "vmma Tile row 32");
+}
+
+TEST_CASE(validate_rejects_bad_vmma_dequant) {
+  check_illegal(VmmaDequantInstr{.op = static_cast<VmmaOp>(2),
+                                 .dest = V(0),
+                                 .src_a = T(0),
+                                 .src_b = T(1),
+                                 .row = 0,
+                                 .scale_pair = 0},
+                "unassigned vmma.dequant op");
+  check_illegal(VmmaDequantInstr{.op = VmmaOp::nt_zero,
+                                 .dest = A(0),
+                                 .src_a = T(0),
+                                 .src_b = T(1),
+                                 .row = 0,
+                                 .scale_pair = 0},
+                "vmma.dequant destination domain");
+  check_illegal(VmmaDequantInstr{.op = VmmaOp::nt_zero,
+                                 .dest = V(0),
+                                 .src_a = R(0),
+                                 .src_b = T(1),
+                                 .row = 0,
+                                 .scale_pair = 0},
+                "vmma.dequant src_a domain");
+  check_illegal(VmmaDequantInstr{.op = VmmaOp::nt_zero,
+                                 .dest = V(0),
+                                 .src_a = T(0),
+                                 .src_b = A(1),
+                                 .row = 0,
+                                 .scale_pair = 0},
+                "vmma.dequant src_b domain");
+  check_illegal(VmmaDequantInstr{.op = VmmaOp::nt_zero,
+                                 .dest = V(0),
+                                 .src_a = T(0),
+                                 .src_b = T(1),
+                                 .row = 32,
+                                 .scale_pair = 0},
+                "vmma.dequant Tile row 32");
+  check_illegal(VmmaDequantInstr{.op = VmmaOp::nt_zero,
+                                 .dest = V(0),
+                                 .src_a = T(0),
+                                 .src_b = T(1),
+                                 .row = 0,
+                                 .scale_pair = 31},
+                "vmma.dequant scale pair base 31");
 }
 
 TEST_CASE(validate_rejects_bad_sys) {

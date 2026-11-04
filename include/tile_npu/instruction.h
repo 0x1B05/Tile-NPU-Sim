@@ -124,6 +124,15 @@ struct MmaInstr {
   NpuRegister src_b{}; // Tile.
 };
 
+// mma.nt.dequant.zero/acc: fused MMA that dequantizes in place.
+struct MmaDequantInstr {
+  MmaOp op = MmaOp::nt_zero;
+  NpuRegister dest{};           // Acc; i32 before, f32 after.
+  NpuRegister src_a{};          // Tile.
+  NpuRegister src_b{};          // Tile.
+  RegisterIndex scale_pair = 0; // vCol = v[base], vRow = v[base + 1].
+};
+
 enum class VmmaOp : std::uint8_t {
   nt_zero,
   nt_acc,
@@ -135,6 +144,16 @@ struct VmmaInstr {
   NpuRegister src_a{}; // Tile; the selected row is the vector operand.
   NpuRegister src_b{}; // Tile.
   std::uint8_t row = 0;
+};
+
+// vmma.nt.dequant.zero/acc: fused VMMA with an adjacent Vec32 scale pair.
+struct VmmaDequantInstr {
+  VmmaOp op = VmmaOp::nt_zero;
+  NpuRegister dest{};  // Vec32; i32 before, f32 after.
+  NpuRegister src_a{}; // Tile; the selected row is the vector operand.
+  NpuRegister src_b{}; // Tile.
+  std::uint8_t row = 0;
+  RegisterIndex scale_pair = 0; // vCol = v[base], vRow = v[base + 1].
 };
 
 enum class EbinOp : std::uint8_t {
@@ -270,7 +289,7 @@ struct CvtInstr {
   NpuRegister src{};
 };
 
-// aquant.rows.scale.q8s32: per-row quantization with a Vec32 scale.
+// aquant.rows.q8s32: per-row quantization with a Vec32 scale.
 struct AquantInstr {
   NpuRegister dest{};      // Tile
   NpuRegister src{};       // Acc

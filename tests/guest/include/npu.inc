@@ -489,7 +489,7 @@
     .word ((4 << 28) | ((\funct3 & 7) << 22) | ((\qf5 & 31) << 17) | (\vscale5 << 12) | (\s5 << 7) | (\d5 << 2) | 2)
 .endm
 
-# aquant.rows.scale.q8s32: asm operand order tD, aS, vScale.
+# aquant.rows.q8s32: asm operand order tD, aS, vScale.
 .macro AQUANTX d5, as, vscale
     QNT 0, 0, \vscale, \as, \d5
 .endm
@@ -525,6 +525,34 @@
 
 .macro VMMA_NT_ACC d5, a5, row, b5
     MMA 3, \d5, \a5, \b5, \row
+.endm
+
+# VMMA_DEQUANT (R5), major4 = 1010, q = 10:
+#   [27] acc  [26:22] scale pair base  [21:17] row  [16:12] B5  [11:7] A5  [6:2] D5
+.macro VMMA_DEQUANT acc, d5, a5, row, b5, vpair
+    .word ((10 << 28) | ((\acc & 1) << 27) | ((\vpair & 31) << 22) | ((\row & 31) << 17) | (\b5 << 12) | (\a5 << 7) | (\d5 << 2) | 2)
+.endm
+
+.macro VMMA_NT_DEQUANT_ZERO d5, a5, row, b5, vpair
+    VMMA_DEQUANT 0, \d5, \a5, \row, \b5, \vpair
+.endm
+
+.macro VMMA_NT_DEQUANT_ACC d5, a5, row, b5, vpair
+    VMMA_DEQUANT 1, \d5, \a5, \row, \b5, \vpair
+.endm
+
+# MMA_DEQUANT (R5), major4 = 1001, q = 10:
+#   [27] acc  [26:22] scale pair base  [21:17] reserved  [16:12] B5  [11:7] A5  [6:2] D5
+.macro MMA_DEQUANT acc, d5, a5, b5, vpair
+    .word ((9 << 28) | ((\acc & 1) << 27) | ((\vpair & 31) << 22) | (\b5 << 12) | (\a5 << 7) | (\d5 << 2) | 2)
+.endm
+
+.macro MMA_NT_DEQUANT_ZERO d5, a5, b5, vpair
+    MMA_DEQUANT 0, \d5, \a5, \b5, \vpair
+.endm
+
+.macro MMA_NT_DEQUANT_ACC d5, a5, b5, vpair
+    MMA_DEQUANT 1, \d5, \a5, \b5, \vpair
 .endm
 
 # SYS (Z format):

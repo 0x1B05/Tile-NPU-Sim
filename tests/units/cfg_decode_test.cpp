@@ -251,7 +251,7 @@ TEST_CASE(cfg_decode_rejects_reserved) {
       DecodeCase{"setw sel2 11", cfg_reg(3, 0, 3, 0, 4, 0)},
       DecodeCase{"getw sel2 11", cfg_reg(3, 1, 4, 0, 0, 5)},
       // Reserved major4 encodings report illegal.
-      DecodeCase{"reserved major4 1010", (0xau << 28) | 0x2u},
+      DecodeCase{"reserved major4 1011", (0xbu << 28) | 0x2u},
   };
   expect_illegal(cases);
 }

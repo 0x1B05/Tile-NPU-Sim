@@ -1,8 +1,11 @@
 #include "execute.h"
 
 #include "config_check.h"
+#include "fp_env.h"
 #include "matrix_view.h"
+#include "utils/bits.h"
 
+#include <algorithm>
 #include <bit>
 #include <cstddef>
 #include <cstdint>
@@ -58,7 +61,7 @@ void mma_generic(const Tile &lhs, const Tile &rhs, Acc &dst, std::size_t m_size,
   }
 }
 
-// mma.nt.{zero,acc}.i8.i32: D = A x B^T with B stored N x K; acc adds the
+// mma.nt.{zero,acc}: D = A x B^T with B stored N x K; acc adds the
 // i32 partial into the existing value.
 ExecuteResult mma(const MmaInstr &instr, State &state) {
   const auto &dst_config = state.ac[instr.dest.index];
@@ -87,7 +90,58 @@ ExecuteResult mma(const MmaInstr &instr, State &state) {
   return {.status = StepStatus::retired};
 }
 
-// vmma.nt.zero / vmma.nt.acc.i8.i32: vD[j] = dot(tA[row], tB row j); acc adds
+// mma.nt.dequant.zero/acc: MMA into an internal i32 partial, then
+// dequantize on the drain and write the result back to the same Acc in place.
+ExecuteResult mma_dequant(const MmaDequantInstr &instr, State &state) {
+  const auto &dst_config = state.ac[instr.dest.index];
+  const auto &lhs_config = state.tc[instr.src_a.index];
+  const auto &rhs_config = state.tc[instr.src_b.index];
+  const auto &col_config = state.vc[instr.scale_pair];
+  const auto &row_config = state.vc[instr.scale_pair + 1];
+  if (!valid_config_of(dst_config, DType::i32) || !valid_config_of(lhs_config, DType::i8) ||
+      !valid_config_of(rhs_config, DType::i8) || !valid_config_of(col_config, DType::f32) ||
+      !valid_config_of(row_config, DType::f32)) {
+    return config_error();
+  }
+  const auto m_size = std::size_t{lhs_config.rows};
+  const auto n_size = std::size_t{rhs_config.rows};
+  const auto k_size = std::size_t{lhs_config.cols};
+  if (dst_config.rows != m_size || dst_config.cols != n_size || rhs_config.cols != k_size ||
+      row_config.len != m_size || col_config.len != n_size) {
+    return config_error();
+  }
+
+  const auto &lhs = state.t[instr.src_a.index];
+  const auto &rhs = state.t[instr.src_b.index];
+  Acc partial{};
+  const bool accumulate = instr.op == MmaOp::nt_acc;
+  if (accumulate) {
+    const auto &old = state.a[instr.dest.index];
+    std::copy(old.begin(), old.end(), partial.begin());
+  }
+  if (m_size == MATRIX_EXTENT && n_size == MATRIX_EXTENT && k_size == MATRIX_EXTENT) {
+    mma_kernel<MATRIX_EXTENT, MATRIX_EXTENT, MATRIX_EXTENT>(lhs, rhs, partial, accumulate);
+  } else {
+    mma_generic(lhs, rhs, partial, m_size, n_size, k_size, accumulate);
+  }
+
+  const FpEnvGuard fp_env;
+  const auto &col_scale = state.v[instr.scale_pair];
+  const auto &row_scale = state.v[instr.scale_pair + 1];
+  auto &dst = state.a[instr.dest.index];
+  for (std::size_t i = 0; i < m_size; ++i) {
+    const float row = as_f32(row_scale[i]);
+    for (std::size_t j = 0; j < n_size; ++j) {
+      const auto idx = i * MATRIX_EXTENT + j;
+      const float value = as_f32(i32_to_f32_bits(partial[idx]));
+      dst[idx] = as_u32((value * as_f32(col_scale[j])) * row);
+    }
+  }
+  state.ac[instr.dest.index].dtype = DType::f32;
+  return {.status = StepStatus::retired};
+}
+
+// vmma.nt.zero / vmma.nt.acc: vD[j] = dot(tA[row], tB row j); acc adds
 // the i32 partial into the existing lane.
 ExecuteResult vmma(const VmmaInstr &instr, State &state) {
   const auto &dst_config = state.vc[instr.dest.index];
@@ -117,10 +171,57 @@ ExecuteResult vmma(const VmmaInstr &instr, State &state) {
   return {.status = StepStatus::retired};
 }
 
+// vmma.nt.dequant.zero/acc: VMMA into an internal i32 sum, then apply the
+// adjacent vCol/vRow pair and write f32 back to the Vec32 destination.
+ExecuteResult vmma_dequant(const VmmaDequantInstr &instr, State &state) {
+  const auto &dst_config = state.vc[instr.dest.index];
+  const auto &lhs_config = state.tc[instr.src_a.index];
+  const auto &rhs_config = state.tc[instr.src_b.index];
+  const auto &col_config = state.vc[instr.scale_pair];
+  const auto &row_config = state.vc[instr.scale_pair + 1];
+  if (!valid_config_of(dst_config, DType::i32) || !valid_config_of(lhs_config, DType::i8) ||
+      !valid_config_of(rhs_config, DType::i8) || !valid_config_of(col_config, DType::f32) ||
+      !valid_config_of(row_config, DType::f32)) {
+    return config_error();
+  }
+  const auto k_size = rhs_config.cols;
+  const auto n_size = rhs_config.rows;
+  if (dst_config.len != n_size || lhs_config.cols != k_size || instr.row >= lhs_config.rows ||
+      col_config.len != n_size || row_config.len != 1) {
+    return config_error();
+  }
+
+  const auto *lhs = state.t[instr.src_a.index].data() + std::size_t{instr.row} * MATRIX_EXTENT;
+  auto rhs = matrix_view(std::as_const(state.t[instr.src_b.index]));
+  auto &dst = state.v[instr.dest.index];
+  const auto &col_scale = state.v[instr.scale_pair];
+  const auto &row_scale = state.v[instr.scale_pair + 1];
+  const FpEnvGuard fp_env;
+  for (std::size_t j = 0; j < n_size; ++j) {
+    std::int32_t sum = instr.op == VmmaOp::nt_acc ? std::bit_cast<std::int32_t>(dst[j]) : 0;
+    for (std::size_t k = 0; k < k_size; ++k) {
+      sum += i8_product(lhs[k], rhs.at(j, k));
+    }
+    const float value = as_f32(i32_to_f32_bits(std::bit_cast<std::uint32_t>(sum)));
+    const float t = value * as_f32(col_scale[j]);
+    dst[j] = as_u32(t * as_f32(row_scale[0]));
+  }
+  state.vc[instr.dest.index].dtype = DType::f32;
+  return {.status = StepStatus::retired};
+}
+
 } // namespace
 
 ExecuteResult execute(const MmaInstr &instr, State &state) { return mma(instr, state); }
 
+ExecuteResult execute(const MmaDequantInstr &instr, State &state) {
+  return mma_dequant(instr, state);
+}
+
 ExecuteResult execute(const VmmaInstr &instr, State &state) { return vmma(instr, state); }
+
+ExecuteResult execute(const VmmaDequantInstr &instr, State &state) {
+  return vmma_dequant(instr, state);
+}
 
 } // namespace tile_npu

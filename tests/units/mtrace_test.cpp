@@ -92,7 +92,7 @@ TEST_CASE(mtrace_mma_compute) {
   check_eq(events.size(), std::size_t{1}, "one compute event");
   const auto &event = events[0];
   check_eq(event.type, TraceEventType::compute, "event type");
-  check(event.op == "mma.nt.zero.i8.i32", "op name");
+  check(event.op == "mma.nt.zero", "op name");
   check_eq(event.src_count, std::uint8_t{2}, "source count");
   check_eq(event.dst_count, std::uint8_t{1}, "destination count");
   check_eq(event.src[0].kind, TraceEndpointKind::tile, "A is tile");
