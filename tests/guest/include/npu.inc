@@ -479,24 +479,33 @@
     .word ((2 << 28) | (4 << 22) | (\vval << 12) | (\vs << 7) | (\vidx << 2) | 2)
 .endm
 
-# QNT_AT (R4), mirroring the QNT_AT definition in the ISA:
-#   [31:28] major4 = 4 (0100)  [27:25] sel3 = 000
-#   [24:22] funct3 = {0, 0, QD}  [21:17] qf5  [16:12] vScale5
-#   [11:7] S5  [6:2] D5  [1:0] q = 10
-# QD: 0 aquant (Acc -> Tile), 1 tdequant (Tile -> Acc).
-# qf5: 00000 = q8s32; funct3 values other than 000/001 are reserved.
-.macro QNT_AT funct3, qf5, vscale5, s5, d5
-    .word ((4 << 28) | ((\funct3 & 7) << 22) | ((\qf5 & 31) << 17) | (\vscale5 << 12) | (\s5 << 7) | (\d5 << 2) | 2)
+# QNT (R4), major4 = 0100, q = 10:
+#   [27:25] qf3  [24:22] DQ/FORM  [21:17] vCol5  [16:12] vRow5
+#   [11:7] S5  [6:2] D5
+# qf3 = 000: q8s32.
+# mode: 000 aquant, 100 tdequant, 101 adequant, 110 vdequant.
+.macro QNT qf3, mode, d5, s5, vcol, vrow
+    .word ((4 << 28) | ((\qf3 & 7) << 25) | ((\mode & 7) << 22) | ((\vcol & 31) << 17) | ((\vrow & 31) << 12) | (\s5 << 7) | (\d5 << 2) | 2)
 .endm
 
 # aquant.rows.q8s32: asm operand order tD, aS, vScale.
 .macro AQUANTX d5, as, vscale
-    QNT_AT 0, 0, \vscale, \as, \d5
+    QNT 0, 0, \d5, \as, 0, \vscale
 .endm
 
 # tdequant.rows.f32: asm operand order aD, tS, vScale.
 .macro TDEQUANT d5, s5, vscale
-    QNT_AT 1, 0, \vscale, \s5, \d5
+    QNT 0, 4, \d5, \s5, 0, \vscale
+.endm
+
+# adequant: asm operand order aD, aS, vCol, vRow.
+.macro ADEQUANT d5, s5, vcol, vrow
+    QNT 0, 5, \d5, \s5, \vcol, \vrow
+.endm
+
+# vdequant: asm operand order vD, vS, vCol, vRow.
+.macro VDEQUANT d5, s5, vcol, vrow
+    QNT 0, 6, \d5, \s5, \vcol, \vrow
 .endm
 
 # MMA (R4), mirroring NpuR4 in src/decode/encoding.h:
@@ -525,21 +534,6 @@
 
 .macro VMMA_NT_ACC d5, a5, row, b5
     MMA 3, \d5, \a5, \b5, \row
-.endm
-
-# QNT_DRAIN (R4), major4 = 1001, q = 10:
-#   [27:25] sel3 (010 Acc / 110 Vec32)  [24:22] funct3 = 000
-#   [21:17] vRow5  [16:12] vCol5  [11:7] S5  [6:2] D5
-.macro QNT_DRAIN sel3, d5, s5, vcol, vrow
-    .word ((9 << 28) | ((\sel3 & 7) << 25) | ((\vrow & 31) << 17) | ((\vcol & 31) << 12) | ((\s5 & 31) << 7) | ((\d5 & 31) << 2) | 2)
-.endm
-
-.macro ADEQUANT d5, s5, vcol, vrow
-    QNT_DRAIN 2, \d5, \s5, \vcol, \vrow
-.endm
-
-.macro VDEQUANT d5, s5, vcol, vrow
-    QNT_DRAIN 6, \d5, \s5, \vcol, \vrow
 .endm
 
 # SYS (Z format):
