@@ -527,32 +527,19 @@
     MMA 3, \d5, \a5, \b5, \row
 .endm
 
-# VMMA_DEQUANT (R5), major4 = 1010, q = 10:
-#   [27] acc  [26:22] scale pair base  [21:17] row  [16:12] B5  [11:7] A5  [6:2] D5
-.macro VMMA_DEQUANT acc, d5, a5, row, b5, vpair
-    .word ((10 << 28) | ((\acc & 1) << 27) | ((\vpair & 31) << 22) | ((\row & 31) << 17) | (\b5 << 12) | (\a5 << 7) | (\d5 << 2) | 2)
+# DEQUANT (R4), major4 = 1001, q = 10:
+#   [27:25] sel3 (010 Acc / 110 Vec32)  [24:22] funct3 = 000
+#   [21:17] vRow5  [16:12] vCol5  [11:7] S5  [6:2] D5
+.macro DEQUANT sel3, d5, s5, vcol, vrow
+    .word ((9 << 28) | ((\sel3 & 7) << 25) | ((\vrow & 31) << 17) | ((\vcol & 31) << 12) | ((\s5 & 31) << 7) | ((\d5 & 31) << 2) | 2)
 .endm
 
-.macro VMMA_NT_DEQUANT_ZERO d5, a5, row, b5, vpair
-    VMMA_DEQUANT 0, \d5, \a5, \row, \b5, \vpair
+.macro ADEQUANT d5, s5, vcol, vrow
+    DEQUANT 2, \d5, \s5, \vcol, \vrow
 .endm
 
-.macro VMMA_NT_DEQUANT_ACC d5, a5, row, b5, vpair
-    VMMA_DEQUANT 1, \d5, \a5, \row, \b5, \vpair
-.endm
-
-# MMA_DEQUANT (R5), major4 = 1001, q = 10:
-#   [27] acc  [26:22] scale pair base  [21:17] reserved  [16:12] B5  [11:7] A5  [6:2] D5
-.macro MMA_DEQUANT acc, d5, a5, b5, vpair
-    .word ((9 << 28) | ((\acc & 1) << 27) | ((\vpair & 31) << 22) | (\b5 << 12) | (\a5 << 7) | (\d5 << 2) | 2)
-.endm
-
-.macro MMA_NT_DEQUANT_ZERO d5, a5, b5, vpair
-    MMA_DEQUANT 0, \d5, \a5, \b5, \vpair
-.endm
-
-.macro MMA_NT_DEQUANT_ACC d5, a5, b5, vpair
-    MMA_DEQUANT 1, \d5, \a5, \b5, \vpair
+.macro VDEQUANT d5, s5, vcol, vrow
+    DEQUANT 6, \d5, \s5, \vcol, \vrow
 .endm
 
 # SYS (Z format):

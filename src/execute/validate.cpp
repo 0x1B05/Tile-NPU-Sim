@@ -236,11 +236,11 @@ bool valid_structure(const MmaInstr &instr) {
          instr.src_b.domain == NpuDomain::tile && in_range(instr.src_b);
 }
 
-bool valid_structure(const MmaDequantInstr &instr) {
-  return instr.op <= MmaOp::nt_acc && instr.dest.domain == NpuDomain::acc && in_range(instr.dest) &&
-         instr.src_a.domain == NpuDomain::tile && in_range(instr.src_a) &&
-         instr.src_b.domain == NpuDomain::tile && in_range(instr.src_b) &&
-         static_cast<std::size_t>(instr.scale_pair) + 1 < VECTOR_REGISTERS;
+bool valid_structure(const AdequantInstr &instr) {
+  return instr.dest.domain == NpuDomain::acc && in_range(instr.dest) &&
+         instr.src.domain == NpuDomain::acc && in_range(instr.src) &&
+         instr.col_scale < VECTOR_REGISTERS && instr.row_scale < VECTOR_REGISTERS &&
+         instr.dest.index != instr.src.index;
 }
 
 bool valid_structure(const VmmaInstr &instr) {
@@ -250,12 +250,11 @@ bool valid_structure(const VmmaInstr &instr) {
          instr.row < MATRIX_EXTENT;
 }
 
-bool valid_structure(const VmmaDequantInstr &instr) {
-  return instr.op <= VmmaOp::nt_acc && instr.dest.domain == NpuDomain::vec32 &&
-         in_range(instr.dest) && instr.src_a.domain == NpuDomain::tile && in_range(instr.src_a) &&
-         instr.src_b.domain == NpuDomain::tile && in_range(instr.src_b) &&
-         instr.row < MATRIX_EXTENT &&
-         static_cast<std::size_t>(instr.scale_pair) + 1 < VECTOR_REGISTERS;
+bool valid_structure(const VdequantInstr &instr) {
+  return instr.dest.domain == NpuDomain::vec32 && in_range(instr.dest) &&
+         instr.src.domain == NpuDomain::vec32 && in_range(instr.src) &&
+         instr.col_scale < VECTOR_REGISTERS && instr.row_scale < VECTOR_REGISTERS &&
+         instr.dest.index != instr.src.index;
 }
 
 bool valid_structure(const SysInstr &instr) { return instr.op <= SysOp::kernel_end; }

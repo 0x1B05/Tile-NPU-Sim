@@ -95,203 +95,110 @@ TEST_CASE(mma_nt_acc) {
   check_eq(state.a[0][33], std::uint32_t{61}, "D[1,1] = 4 + 57");
 }
 
-TEST_CASE(vmma_dequant_zero) {
+TEST_CASE(adequant_basic) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
-  load_one(sim, memory, make_vmma_dequant(0, 0, 1, 2, 1, 6));
-  auto &state = sim.state();
-  vec32_i32(state, 0, 2);
-  tile_i8(state, 1, 2, 3);
-  tile_i8(state, 2, 2, 3);
-  vec32_f32(state, 6, 2);
-  vec32_f32(state, 7, 1);
-  poke_lhs(state, 1);
-  poke_rhs_nt(state, 2);
-  state.v[6][0] = as_u32(2.0f);
-  state.v[6][1] = as_u32(3.0f);
-  state.v[7][0] = as_u32(0.5f);
-
-  check_eq(sim.step().status, StepStatus::retired, "vmma.nt.dequant.zero retires");
-  check_eq(hex(state.v[0][0]), hex(as_u32(42.0f)), "vD[0] = (42 * 2) * 0.5");
-  check_eq(hex(state.v[0][1]), hex(as_u32(85.5f)), "vD[1] = (57 * 3) * 0.5");
-  check_eq(state.vc[0].dtype, DType::f32, "destination dtype becomes f32");
-}
-
-TEST_CASE(vmma_dequant_acc) {
-  Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
-  load_one(sim, memory, make_vmma_dequant(1, 0, 1, 2, 1, 6));
-  auto &state = sim.state();
-  vec32_i32(state, 0, 2);
-  tile_i8(state, 1, 2, 3);
-  tile_i8(state, 2, 2, 3);
-  vec32_f32(state, 6, 2);
-  vec32_f32(state, 7, 1);
-  poke_lhs(state, 1);
-  poke_rhs_nt(state, 2);
-  state.v[0][0] = 50;
-  state.v[0][1] = 68;
-  state.v[6][0] = as_u32(2.0f);
-  state.v[6][1] = as_u32(3.0f);
-  state.v[7][0] = as_u32(0.5f);
-
-  check_eq(sim.step().status, StepStatus::retired, "vmma.nt.dequant.acc retires");
-  check_eq(hex(state.v[0][0]), hex(as_u32(92.0f)), "vD[0] = (50 + 42) * 2 * 0.5");
-  check_eq(hex(state.v[0][1]), hex(as_u32(187.5f)), "vD[1] = (68 + 57) * 3 * 0.5");
-  check_eq(state.vc[0].dtype, DType::f32, "destination dtype becomes f32");
-}
-
-TEST_CASE(vmma_dequant_rejects_invalid) {
-  {
-    Ram memory(CODE_BASE, 4);
-    Simulator sim(memory);
-    load_one(sim, memory, make_vmma_dequant(0, 0, 1, 2, 1, 6));
-    auto &state = sim.state();
-    vec32_i32(state, 0, 2);
-    tile_i8(state, 1, 2, 3);
-    tile_i8(state, 2, 2, 3);
-    vec32_f32(state, 6, 2);
-    vec32_f32(state, 7, 1);
-    state.vc[0].dtype = DType::f32;
-    check_eq(sim.step().status, StepStatus::invalid_configuration,
-             "vmma.dequant rejects an f32 destination");
-  }
-  {
-    Ram memory(CODE_BASE, 4);
-    Simulator sim(memory);
-    load_one(sim, memory, make_vmma_dequant(0, 0, 1, 2, 1, 6));
-    auto &state = sim.state();
-    vec32_i32(state, 0, 2);
-    tile_i8(state, 1, 2, 3);
-    tile_i8(state, 2, 2, 3);
-    vec32_f32(state, 6, 3);
-    vec32_f32(state, 7, 1);
-    check_eq(sim.step().status, StepStatus::invalid_configuration,
-             "vmma.dequant rejects a vCol length mismatch");
-  }
-  {
-    Ram memory(CODE_BASE, 4);
-    Simulator sim(memory);
-    load_one(sim, memory, make_vmma_dequant(0, 0, 1, 2, 1, 6));
-    auto &state = sim.state();
-    vec32_i32(state, 0, 2);
-    tile_i8(state, 1, 2, 3);
-    tile_i8(state, 2, 2, 3);
-    vec32_f32(state, 6, 2);
-    vec32_f32(state, 7, 2);
-    check_eq(sim.step().status, StepStatus::invalid_configuration,
-             "vmma.dequant rejects a vRow length other than one");
-  }
-  {
-    Ram memory(CODE_BASE, 4);
-    Simulator sim(memory);
-    load_one(sim, memory, make_vmma_dequant(0, 0, 1, 2, 2, 6));
-    auto &state = sim.state();
-    vec32_i32(state, 0, 2);
-    tile_i8(state, 1, 2, 3);
-    tile_i8(state, 2, 2, 3);
-    vec32_f32(state, 6, 2);
-    vec32_f32(state, 7, 1);
-    check_eq(sim.step().status, StepStatus::invalid_configuration,
-             "vmma.dequant rejects an out-of-range Tile row");
-  }
-}
-
-TEST_CASE(mma_dequant_zero) {
-  Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
-  load_one(sim, memory, make_mma_dequant(0, 0, 1, 2, 6));
+  load_one(sim, memory, make_adequant(1, 0, 6, 7));
   auto &state = sim.state();
   acc_i32(state, 0, 2, 2);
-  tile_i8(state, 1, 2, 3);
-  tile_i8(state, 2, 2, 3);
+  state.ac[1].dtype = DType::f32;
+  state.ac[1].rows = 2;
+  state.ac[1].cols = 2;
   vec32_f32(state, 6, 2);
   vec32_f32(state, 7, 2);
-  poke_lhs(state, 1);
-  poke_rhs_nt(state, 2);
+  state.a[0][0] = 50;
+  state.a[0][1] = 68;
+  state.a[0][32] = 42;
+  state.a[0][33] = 57;
   state.v[6][0] = as_u32(2.0f);
   state.v[6][1] = as_u32(3.0f);
   state.v[7][0] = as_u32(0.5f);
   state.v[7][1] = as_u32(0.25f);
 
-  check_eq(sim.step().status, StepStatus::retired, "mma.nt.dequant.zero retires");
-  check_eq(hex(state.a[0][0]), hex(as_u32(50.0f)), "D[0,0] = (50 * 2) * 0.5");
-  check_eq(hex(state.a[0][1]), hex(as_u32(102.0f)), "D[0,1] = (68 * 3) * 0.5");
-  check_eq(hex(state.a[0][32]), hex(as_u32(21.0f)), "D[1,0] = (42 * 2) * 0.25");
-  check_eq(hex(state.a[0][33]), hex(as_u32(42.75f)), "D[1,1] = (57 * 3) * 0.25");
-  check_eq(state.ac[0].dtype, DType::f32, "destination dtype becomes f32");
+  check_eq(sim.step().status, StepStatus::retired, "adequant retires");
+  check_eq(hex(state.a[1][0]), hex(as_u32(50.0f)), "aD[0,0] = (50 * 2) * 0.5");
+  check_eq(hex(state.a[1][1]), hex(as_u32(102.0f)), "aD[0,1] = (68 * 3) * 0.5");
+  check_eq(hex(state.a[1][32]), hex(as_u32(21.0f)), "aD[1,0] = (42 * 2) * 0.25");
+  check_eq(hex(state.a[1][33]), hex(as_u32(42.75f)), "aD[1,1] = (57 * 3) * 0.25");
+  check_eq(state.ac[0].dtype, DType::i32, "source dtype stays i32");
+  check_eq(state.ac[1].dtype, DType::f32, "destination dtype stays f32");
 }
 
-TEST_CASE(mma_dequant_acc) {
+TEST_CASE(vdequant_basic) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
-  load_one(sim, memory, make_mma_dequant(1, 0, 1, 2, 6));
+  load_one(sim, memory, make_vdequant(1, 0, 6, 7));
   auto &state = sim.state();
-  acc_i32(state, 0, 2, 2);
-  tile_i8(state, 1, 2, 3);
-  tile_i8(state, 2, 2, 3);
+  vec32_i32(state, 0, 2);
+  vec32_f32(state, 1, 2);
   vec32_f32(state, 6, 2);
-  vec32_f32(state, 7, 2);
-  poke_lhs(state, 1);
-  poke_rhs_nt(state, 2);
-  state.a[0][0] = 1;
-  state.a[0][1] = 2;
-  state.a[0][32] = 3;
-  state.a[0][33] = 4;
+  vec32_f32(state, 7, 1);
+  state.v[0][0] = 42;
+  state.v[0][1] = 57;
   state.v[6][0] = as_u32(2.0f);
   state.v[6][1] = as_u32(3.0f);
   state.v[7][0] = as_u32(0.5f);
-  state.v[7][1] = as_u32(0.25f);
 
-  check_eq(sim.step().status, StepStatus::retired, "mma.nt.dequant.acc retires");
-  check_eq(hex(state.a[0][0]), hex(as_u32(51.0f)), "D[0,0] = (51 * 2) * 0.5");
-  check_eq(hex(state.a[0][1]), hex(as_u32(105.0f)), "D[0,1] = (70 * 3) * 0.5");
-  check_eq(hex(state.a[0][32]), hex(as_u32(22.5f)), "D[1,0] = (45 * 2) * 0.25");
-  check_eq(hex(state.a[0][33]), hex(as_u32(45.75f)), "D[1,1] = (61 * 3) * 0.25");
-  check_eq(state.ac[0].dtype, DType::f32, "destination dtype becomes f32");
+  check_eq(sim.step().status, StepStatus::retired, "vdequant retires");
+  check_eq(hex(state.v[1][0]), hex(as_u32(42.0f)), "vD[0] = (42 * 2) * 0.5");
+  check_eq(hex(state.v[1][1]), hex(as_u32(85.5f)), "vD[1] = (57 * 3) * 0.5");
+  check_eq(state.vc[0].dtype, DType::i32, "source dtype stays i32");
+  check_eq(state.vc[1].dtype, DType::f32, "destination dtype stays f32");
 }
 
-TEST_CASE(mma_dequant_rejects_invalid) {
+TEST_CASE(adequant_rejects_invalid) {
   {
     Ram memory(CODE_BASE, 4);
     Simulator sim(memory);
-    load_one(sim, memory, make_mma_dequant(0, 0, 1, 2, 6));
+    load_one(sim, memory, make_adequant(1, 0, 6, 7));
     auto &state = sim.state();
     acc_i32(state, 0, 2, 2);
-    state.ac[0].dtype = DType::f32;
-    tile_i8(state, 1, 2, 3);
-    tile_i8(state, 2, 2, 3);
+    state.ac[1] = state.ac[0];
     vec32_f32(state, 6, 2);
     vec32_f32(state, 7, 2);
     check_eq(sim.step().status, StepStatus::invalid_configuration,
-             "mma.dequant rejects an f32 destination");
+             "adequant rejects an i32 destination");
   }
   {
     Ram memory(CODE_BASE, 4);
     Simulator sim(memory);
-    load_one(sim, memory, make_mma_dequant(0, 0, 1, 2, 6));
+    load_one(sim, memory, make_adequant(1, 0, 6, 7));
     auto &state = sim.state();
     acc_i32(state, 0, 2, 2);
-    tile_i8(state, 1, 2, 3);
-    tile_i8(state, 2, 2, 3);
+    state.ac[1].dtype = DType::f32;
+    state.ac[1].rows = 2;
+    state.ac[1].cols = 2;
     vec32_f32(state, 6, 3);
     vec32_f32(state, 7, 2);
     check_eq(sim.step().status, StepStatus::invalid_configuration,
-             "mma.dequant rejects a vCol length mismatch");
+             "adequant rejects a vCol length mismatch");
+  }
+}
+
+TEST_CASE(vdequant_rejects_invalid) {
+  {
+    Ram memory(CODE_BASE, 4);
+    Simulator sim(memory);
+    load_one(sim, memory, make_vdequant(1, 0, 6, 7));
+    auto &state = sim.state();
+    vec32_i32(state, 0, 2);
+    vec32_i32(state, 1, 2);
+    vec32_f32(state, 6, 2);
+    vec32_f32(state, 7, 1);
+    check_eq(sim.step().status, StepStatus::invalid_configuration,
+             "vdequant rejects an i32 destination");
   }
   {
     Ram memory(CODE_BASE, 4);
     Simulator sim(memory);
-    load_one(sim, memory, make_mma_dequant(0, 0, 1, 2, 6));
+    load_one(sim, memory, make_vdequant(1, 0, 6, 7));
     auto &state = sim.state();
-    acc_i32(state, 0, 2, 2);
-    tile_i8(state, 1, 2, 3);
-    tile_i8(state, 2, 2, 3);
+    vec32_i32(state, 0, 2);
+    vec32_f32(state, 1, 2);
     vec32_f32(state, 6, 2);
     vec32_f32(state, 7, 2);
-    state.vc[6].dtype = DType::i32;
     check_eq(sim.step().status, StepStatus::invalid_configuration,
-             "mma.dequant rejects a non-f32 vCol");
+             "vdequant rejects a vRow length other than one");
   }
 }
 

@@ -128,7 +128,7 @@ qwen3_quant_act:
 # scales. quant(x) is the quant blocks t2..t4 left resident by qwen3_quant_act;
 # nothing between the two calls may clobber them. Cross-tile accumulation runs
 # in an i32 memory buffer (qwen3_accbuf); the last activation block's last kblock
-# uses vmma.nt.dequant.acc with the vScalePair v6/v7 to write f32 output
+# uses vmma.nt.acc followed by vdequant (vCol v6, vRow v7) to write f32 output
 # directly. n % 32 == 0, 32 | k, k <= 3072.
 # ---------------------------------------------------------------------------
 
@@ -179,8 +179,8 @@ qwen3_quant_act:
     addi    t6, s4, -1
     bne     s5, t6, 4f
     VLOAD   6
-    VMMA_NT_DEQUANT_ACC 4, \tile_a, \R, 1, 6
-    REG_MOVE 3, 2, 8, 4        # vcopy v8, v4
+    VMMA_NT_ACC 4, \tile_a, \R, 1
+    VDEQUANT 8, 4, 6, 7
     VSTORE  8
     j       5f
 4:
@@ -342,13 +342,11 @@ qwen3_quant_rows:
 # chunk. xq is [rows, k] i8 row-major (qwen3_quant_rows output), xs its rows
 # row scales. Per 32-column block of out: t1 holds one [n][k] weight tile from
 # the [n/32][k/32][32][32] layout and mma.nt accumulates the k/32 kblocks in
-# acc. The last kblock uses mma.nt.dequant.acc with the vScalePair based at
-# v29 (v29 = weight scales by column, v30 = token scales by row) on the drain
-# and writes f32 in place; each accumulator is stored directly via its own amG
-# descriptor.
-# A single kblock uses mma.nt.dequant.zero. Full groups of eight nblocks
-# keep accelerators a0..a7 and reuse one xq tile across the group.
-# n % 32 == 0, 32 | k, k <= 3072.
+# acc. The last (or only) kblock loads the weight scales into v29 and issues
+# mma.nt.acc immediately followed by adequant (vCol v29, vRow v30), so the pair
+# can be detected/fused; the f32 result goes to a8 and is stored through am8.
+# Full groups of eight nblocks keep accelerators a0..a7 and reuse one xq tile
+# across the group. n % 32 == 0, 32 | k, k <= 3072.
 # ---------------------------------------------------------------------------
     .text
     .globl qwen3_matmul_q
@@ -381,7 +379,10 @@ qwen3_matmul_q:
     SETX    SEL_AM, CF_RSTRIDE, 0, X_T0
     SETIM   SEL_AM, CF_CSTRIDE, 4, 0
     SETIM   SEL_AM, CF_FLAGS, 0, 0      # every block sets its own base
-    COPY    SEL_AM, 1, 0, 6
+    LI_CWM  t0, DT_F32, 32, 32
+    SETW    SEL_AC, 8, X_T0
+    SETX    SEL_AC, CF_ROWS, 8, X_A7
+    COPY    SEL_AM, 1, 0, 7
     LI_CWV  s3, DT_F32, 32
     SETW    SEL_VC, 29, X_S3, 1    # vc29 (ws stream), vc30 (xs)
     SETX    SEL_VC, CF_LEN, 30, X_A7
@@ -430,11 +431,17 @@ qwen3_matmul_q:
     j       .Lmm_group_middle
 
 .Lmm_group_single:
+    slli    t0, s2, 7
+    add     t0, a4, t0
     .irp G,0,1,2,3,4,5,6,7
+    addi    t1, t0, \G*128
     SETX    SEL_TM, CF_BASE, 1, X_T4
     TLOAD   1
     VLOAD   29
-    MMA_NT_DEQUANT_ZERO \G, 0, 1, 29
+    MMA_NT_ZERO \G, 0, 1
+    ADEQUANT 8, \G, 29, 30
+    SETX    SEL_AM, CF_BASE, 8, X_T1
+    ASTORE  8
     add     t4, t4, t3
     .endr
     j       .Lmm_group_epi
@@ -457,22 +464,21 @@ qwen3_matmul_q:
 .Lmm_group_last:
     TLOAD   0
     mv      t4, t0
-    .irp G,0,1,2,3,4,5,6,7
-    SETX    SEL_TM, CF_BASE, 1, X_T4
-    TLOAD   1
-    VLOAD   29
-    MMA_NT_DEQUANT_ACC \G, 0, 1, 29
-    add     t4, t4, t3
-    .endr
-
-.Lmm_group_epi:
     slli    t0, s2, 7
     add     t0, a4, t0
     .irp G,0,1,2,3,4,5,6,7
     addi    t1, t0, \G*128
-    SETX    SEL_AM, CF_BASE, \G, X_T1
-    ASTORE  \G
+    SETX    SEL_TM, CF_BASE, 1, X_T4
+    TLOAD   1
+    VLOAD   29
+    MMA_NT_ACC \G, 0, 1
+    ADEQUANT 8, \G, 29, 30
+    SETX    SEL_AM, CF_BASE, 8, X_T1
+    ASTORE  8
+    add     t4, t4, t3
     .endr
+
+.Lmm_group_epi:
     addi    s2, s2, 8
     bltu    s2, s3, .Lmm_group
     j       .Lmm_done
@@ -508,16 +514,18 @@ qwen3_matmul_q:
     TLOAD   0
     TLOAD   1
     VLOAD   29
-    MMA_NT_DEQUANT_ACC 0, 0, 1, 29
-    j       .Lmm_tail_epi
+    MMA_NT_ACC 0, 0, 1
+    ADEQUANT 8, 0, 29, 30
+    j       .Lmm_tail_store
 .Lmm_tail_single:
     VLOAD   29
-    MMA_NT_DEQUANT_ZERO 0, 0, 1, 29
-.Lmm_tail_epi:
-    slli    t0, s2, 7
-    add     t0, a4, t0
-    SETX    SEL_AM, CF_BASE, 0, X_T0
-    ASTORE  0
+    MMA_NT_ZERO 0, 0, 1
+    ADEQUANT 8, 0, 29, 30
+.Lmm_tail_store:
+    slli    t1, s2, 7
+    add     t1, a4, t1
+    SETX    SEL_AM, CF_BASE, 8, X_T1
+    ASTORE  8
     addi    s2, s2, 1
     bltu    s2, s3, .Lmm_nblock
 .Lmm_done:

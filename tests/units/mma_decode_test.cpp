@@ -13,11 +13,11 @@ using namespace tile_npu::test;
 
 namespace {
 
-using tile_npu::MmaDequantInstr;
+using tile_npu::AdequantInstr;
 using tile_npu::MmaInstr;
 using tile_npu::MmaOp;
 using tile_npu::NpuDomain;
-using tile_npu::VmmaDequantInstr;
+using tile_npu::VdequantInstr;
 using tile_npu::VmmaInstr;
 using tile_npu::VmmaOp;
 
@@ -52,61 +52,6 @@ template <std::size_t N> void check_mma_cases(const std::array<MmaCase, N> &case
     check_eq(decoded.src_a.index, test.src_a, what + ": src_a");
     check_eq(decoded.src_b.domain, NpuDomain::tile, what + ": rhs domain");
     check_eq(decoded.src_b.index, test.src_b, what + ": src_b");
-  }
-}
-
-struct MmaDequantCase {
-  const char *name;
-  std::uint32_t word;
-  MmaOp op;
-  std::uint8_t dest;
-  std::uint8_t src_a;
-  std::uint8_t src_b;
-  std::uint8_t scale_pair;
-};
-
-template <std::size_t N> void check_mma_dequant_cases(const std::array<MmaDequantCase, N> &cases) {
-  for (const auto &test : cases) {
-    const auto result = tile_npu::decode(test.word);
-    const std::string what = std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
-    const auto &decoded = expect_npu<MmaDequantInstr>(result, what);
-    check_eq(decoded.op, test.op, what + ": op");
-    check_eq(decoded.dest.domain, NpuDomain::acc, what + ": dest domain");
-    check_eq(decoded.dest.index, test.dest, what + ": dest");
-    check_eq(decoded.src_a.domain, NpuDomain::tile, what + ": lhs domain");
-    check_eq(decoded.src_a.index, test.src_a, what + ": src_a");
-    check_eq(decoded.src_b.domain, NpuDomain::tile, what + ": rhs domain");
-    check_eq(decoded.src_b.index, test.src_b, what + ": src_b");
-    check_eq(decoded.scale_pair, test.scale_pair, what + ": vScalePair");
-  }
-}
-
-struct VmmaDequantCase {
-  const char *name;
-  std::uint32_t word;
-  VmmaOp op;
-  std::uint8_t dest;
-  std::uint8_t src_a;
-  std::uint8_t src_b;
-  std::uint8_t row;
-  std::uint8_t scale_pair;
-};
-
-template <std::size_t N>
-void check_vmma_dequant_cases(const std::array<VmmaDequantCase, N> &cases) {
-  for (const auto &test : cases) {
-    const auto result = tile_npu::decode(test.word);
-    const std::string what = std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
-    const auto &decoded = expect_npu<VmmaDequantInstr>(result, what);
-    check_eq(decoded.op, test.op, what + ": op");
-    check_eq(decoded.dest.domain, NpuDomain::vec32, what + ": dest domain");
-    check_eq(decoded.dest.index, test.dest, what + ": dest");
-    check_eq(decoded.src_a.domain, NpuDomain::tile, what + ": lhs domain");
-    check_eq(decoded.src_a.index, test.src_a, what + ": src_a");
-    check_eq(decoded.src_b.domain, NpuDomain::tile, what + ": rhs domain");
-    check_eq(decoded.src_b.index, test.src_b, what + ": src_b");
-    check_eq(decoded.row, test.row, what + ": Tile row");
-    check_eq(decoded.scale_pair, test.scale_pair, what + ": scale pair");
   }
 }
 
@@ -168,46 +113,28 @@ TEST_CASE(vmma_decode) {
   check_vmma_cases(cases);
 }
 
-TEST_CASE(mma_dequant_decode) {
-  constexpr std::array cases{
-      MmaDequantCase{.name = "mma.nt.dequant.zero a1, t2, t3, v4",
-                     .word = make_mma_dequant(0, 1, 2, 3, 4),
-                     .op = MmaOp::nt_zero,
-                     .dest = 1,
-                     .src_a = 2,
-                     .src_b = 3,
-                     .scale_pair = 4},
-      MmaDequantCase{.name = "mma.nt.dequant.acc a6, t7, t8, v9",
-                     .word = make_mma_dequant(1, 6, 7, 8, 9),
-                     .op = MmaOp::nt_acc,
-                     .dest = 6,
-                     .src_a = 7,
-                     .src_b = 8,
-                     .scale_pair = 9},
-  };
-  check_mma_dequant_cases(cases);
+TEST_CASE(adequant_decode) {
+  const auto result = tile_npu::decode(make_adequant(1, 2, 3, 4));
+  const std::string what = "decode adequant a1, a2, v3, v4";
+  const auto &decoded = expect_npu<AdequantInstr>(result, what);
+  check_eq(decoded.dest.domain, NpuDomain::acc, what + ": dest domain");
+  check_eq(decoded.dest.index, std::uint8_t{1}, what + ": dest");
+  check_eq(decoded.src.domain, NpuDomain::acc, what + ": src domain");
+  check_eq(decoded.src.index, std::uint8_t{2}, what + ": src");
+  check_eq(decoded.col_scale, std::uint8_t{3}, what + ": vCol");
+  check_eq(decoded.row_scale, std::uint8_t{4}, what + ": vRow");
 }
 
-TEST_CASE(vmma_dequant_decode) {
-  constexpr std::array cases{
-      VmmaDequantCase{.name = "vmma.nt.dequant.zero v1, t2[3], t4, v6",
-                      .word = make_vmma_dequant(0, 1, 2, 4, 3, 6),
-                      .op = VmmaOp::nt_zero,
-                      .dest = 1,
-                      .src_a = 2,
-                      .src_b = 4,
-                      .row = 3,
-                      .scale_pair = 6},
-      VmmaDequantCase{.name = "vmma.nt.dequant.acc v7, t8[9], t10, v11",
-                      .word = make_vmma_dequant(1, 7, 8, 10, 9, 11),
-                      .op = VmmaOp::nt_acc,
-                      .dest = 7,
-                      .src_a = 8,
-                      .src_b = 10,
-                      .row = 9,
-                      .scale_pair = 11},
-  };
-  check_vmma_dequant_cases(cases);
+TEST_CASE(vdequant_decode) {
+  const auto result = tile_npu::decode(make_vdequant(5, 6, 7, 8));
+  const std::string what = "decode vdequant v5, v6, v7, v8";
+  const auto &decoded = expect_npu<VdequantInstr>(result, what);
+  check_eq(decoded.dest.domain, NpuDomain::vec32, what + ": dest domain");
+  check_eq(decoded.dest.index, std::uint8_t{5}, what + ": dest");
+  check_eq(decoded.src.domain, NpuDomain::vec32, what + ": src domain");
+  check_eq(decoded.src.index, std::uint8_t{6}, what + ": src");
+  check_eq(decoded.col_scale, std::uint8_t{7}, what + ": vCol");
+  check_eq(decoded.row_scale, std::uint8_t{8}, what + ": vRow");
 }
 
 TEST_CASE(mma_decode_rejects_reserved) {
@@ -222,10 +149,9 @@ TEST_CASE(mma_decode_rejects_reserved) {
       DecodeCase{"mma row5", make_mma(0, 0, 1, 2, 1)},
       // Acc has 16 registers; a16+ is a reserved encoding.
       DecodeCase{"mma a16 destination", make_mma(0, 16, 1, 2)},
-      DecodeCase{"mma.dequant a16 destination", make_mma_dequant(0, 16, 1, 2, 3)},
-      DecodeCase{"mma.dequant pair base 31", make_mma_dequant(0, 0, 1, 2, 31)},
-      DecodeCase{"mma.dequant reserved5", make_mma_dequant(0, 0, 1, 2, 3) | (1u << 17)},
-      DecodeCase{"vmma.dequant pair base 31", make_vmma_dequant(0, 0, 1, 2, 0, 31)},
+      DecodeCase{"adequant a16 destination", make_adequant(16, 1, 2, 3)},
+      DecodeCase{"dequant sel3 000", make_dequant(0b000, 1, 2, 3, 4)},
+      DecodeCase{"dequant funct3 001", make_dequant(0b010, 1, 2, 3, 4) | (1u << 22)},
   };
   expect_illegal(cases);
 }

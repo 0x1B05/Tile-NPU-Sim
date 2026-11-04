@@ -172,44 +172,32 @@ DecodeResult decode_mma(std::uint32_t word) {
   }
 }
 
-// MMA_DEQUANT (R5): major4 = 1001, q = 10.
-// [31:28] major4 [27] ACC [26:22] vPair5 [21:17] reserved5 [16:12] B [11:7] A [6:2] D
-// [1:0] q
-DecodeResult decode_mma_dequant(std::uint32_t word) {
-  const auto f = encoding::NpuR5::from(word);
-  if (f.scalar >= VECTOR_REGISTERS - 1 || f.scalar2 != 0 ||
-      !domain_register_valid(NpuDomain::acc, f.dest) ||
-      !domain_register_valid(NpuDomain::tile, f.src1) ||
-      !domain_register_valid(NpuDomain::tile, f.src2)) {
+// DEQUANT (R4): major4 = 1001, q = 10.
+// [31:28] major4 [27:25] sel3 (010 Acc / 110 Vec32) [24:22] funct3 = 000
+// [21:17] vRow5 [16:12] vCol5 [11:7] S5 [6:2] D5 [1:0] q
+DecodeResult decode_dequant(std::uint32_t word) {
+  const auto f = encoding::NpuR4::from(word);
+  const bool acc = f.sel3 == 0b010;
+  const bool vec = f.sel3 == 0b110;
+  const auto domain = acc ? NpuDomain::acc : NpuDomain::vec32;
+  if ((!acc && !vec) || f.funct3 != 0 || !domain_register_valid(domain, f.dest) ||
+      !domain_register_valid(domain, f.src1) || !domain_register_valid(NpuDomain::vec32, f.src2) ||
+      !domain_register_valid(NpuDomain::vec32, f.arg)) {
     return DecodeError::illegal;
   }
-  return DecodedNpuInstr{MmaDequantInstr{
-      .op = f.acc != 0 ? MmaOp::nt_acc : MmaOp::nt_zero,
-      .dest = {.domain = NpuDomain::acc, .index = f.dest},
-      .src_a = {.domain = NpuDomain::tile, .index = f.src1},
-      .src_b = {.domain = NpuDomain::tile, .index = f.src2},
-      .scale_pair = f.scalar,
-  }};
-}
-
-// VMMA_DEQUANT (R5): major4 = 1010, q = 10.
-// [31:28] major4 [27] ACC [26:22] scale pair base [21:17] row
-// [16:12] B [11:7] A [6:2] D [1:0] q
-DecodeResult decode_vmma_dequant(std::uint32_t word) {
-  const auto f = encoding::NpuR5::from(word);
-  if (static_cast<std::size_t>(f.scalar) >= VECTOR_REGISTERS - 1 ||
-      !domain_register_valid(NpuDomain::vec32, f.dest) ||
-      !domain_register_valid(NpuDomain::tile, f.src1) ||
-      !domain_register_valid(NpuDomain::tile, f.src2)) {
-    return DecodeError::illegal;
+  if (acc) {
+    return DecodedNpuInstr{AdequantInstr{
+        .dest = {.domain = NpuDomain::acc, .index = f.dest},
+        .src = {.domain = NpuDomain::acc, .index = f.src1},
+        .col_scale = f.src2,
+        .row_scale = f.arg,
+    }};
   }
-  return DecodedNpuInstr{VmmaDequantInstr{
-      .op = f.acc != 0 ? VmmaOp::nt_acc : VmmaOp::nt_zero,
+  return DecodedNpuInstr{VdequantInstr{
       .dest = {.domain = NpuDomain::vec32, .index = f.dest},
-      .src_a = {.domain = NpuDomain::tile, .index = f.src1},
-      .src_b = {.domain = NpuDomain::tile, .index = f.src2},
-      .row = f.scalar2,
-      .scale_pair = f.scalar,
+      .src = {.domain = NpuDomain::vec32, .index = f.src1},
+      .col_scale = f.src2,
+      .row_scale = f.arg,
   }};
 }
 

@@ -102,23 +102,15 @@ inline std::string mma_mnemonic(MmaOp op) {
   return name;
 }
 
-inline std::string mma_dequant_mnemonic(MmaOp op) {
-  std::string name = "mma.nt.dequant.";
-  name += mma_suffix(op);
-  return name;
-}
-
 inline std::string vmma_mnemonic(VmmaOp op) {
   std::string name = "vmma.nt.";
   name += vmma_suffix(op);
   return name;
 }
 
-inline std::string vmma_dequant_mnemonic(VmmaOp op) {
-  std::string name = "vmma.nt.dequant.";
-  name += vmma_suffix(op);
-  return name;
-}
+inline std::string adequant_mnemonic() { return "adequant"; }
+
+inline std::string vdequant_mnemonic() { return "vdequant"; }
 
 inline std::string ebin_mnemonic(NpuDomain domain, EbinOp op, bool from_scalar) {
   std::string name(1, domain_char(domain));

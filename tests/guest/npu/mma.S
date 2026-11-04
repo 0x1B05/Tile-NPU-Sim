@@ -2,10 +2,9 @@
 
 # Self-checking MMA image: programs configs and descriptors, loads a
 # shared 2x3 left Tile and a 2x3 right Tile in N x K order, then runs
-# mma.nt.zero, mma.nt.acc (accumulating onto the first result), and the
-# Tile-row vmma.nt.zero and vmma.nt.acc forms over the same left Tile. Results are
-# stored back and compared word-wise. Ends with ebreak: a0 = 0 pass, a0 = N
-# identifies the failing check.
+# mma.nt.zero/acc and vmma.nt.zero/acc over the same left Tile, followed by
+# the adequant/vdequant drain checks. Results are stored back and compared
+# word-wise. Ends with ebreak: a0 = 0 pass, a0 = N identifies the failing check.
 #
 # Buffer addresses go through lla (pc-relative): the image is loaded at
 # 0x80000000, where medlow's %hi/%lo expansion would sign-extend bit 31.
@@ -30,10 +29,20 @@ _start:
     CFG_SETI  5, 1, 2, 2, 2
     CFG_SETI  6, 1, 1, 8, 2
     CFG_SETI  6, 1, 2, 4, 2
+    # ac3: dtype = f32 (4), 2x2; am3: row_stride = 8, col_stride = 4
+    CFG_SETI  5, 1, 0, 4, 3
+    CFG_SETI  5, 1, 1, 2, 3
+    CFG_SETI  5, 1, 2, 2, 3
+    CFG_SETI  6, 1, 1, 8, 3
+    CFG_SETI  6, 1, 2, 4, 3
     # vc4: dtype = i32 (2), len = 2; vm4: stride = 4
     CFG_SETI  5, 2, 0, 2, 4
     CFG_SETI  5, 2, 1, 2, 4
     CFG_SETI  6, 2, 1, 4, 4
+    # vc5: dtype = f32 (4), len = 2; vm5: stride = 4
+    CFG_SETI  5, 2, 0, 4, 5
+    CFG_SETI  5, 2, 1, 2, 5
+    CFG_SETI  6, 2, 1, 4, 5
     # vc6/vc7: dtype = f32 (4), len = 2
     CFG_SETI  5, 2, 0, 4, 6
     CFG_SETI  5, 2, 1, 2, 6
@@ -125,7 +134,7 @@ _start:
     li        x5, 125
     bne       x4, x5, fail
 
-    # Stage 5 - mma.nt.dequant.zero a2, t0, t2, v6 (vScalePair v6/v7):
+    # Stage 5 - mma.nt.zero a2 then adequant a3, a2, v6, v7:
     # product {{50,68},{42,57}}, vCol {2,3}, vRow {0.5,0.25}
     # -> {{50,102},{21,42.75}}.
     li        x5, 0x40000000     # 2.0
@@ -137,10 +146,11 @@ _start:
     li        x5, 0x3E800000     # 0.25
     VINSERT   7, 1, 5
     li        a0, 5
-    MMA_NT_DEQUANT_ZERO 2, 0, 2, 6
+    MMA_NT_ZERO 2, 0, 2
+    ADEQUANT 3, 2, 6, 7
     lla       x3, dstbuf
-    CFG_REG   1, 1, 0, 0, 3, 2
-    ASTORE    2
+    CFG_REG   1, 1, 0, 0, 3, 3
+    ASTORE    3
     lla       x3, dstbuf
     lla       x4, exp_dequant
     li        x6, 4
@@ -154,7 +164,7 @@ _start:
     addi      x6, x6, -1
     bnez      x6, 5b
 
-    # Stage 6 - vmma.nt.dequant.zero v4, t0[1], t2, v8 (vScalePair v8/v9):
+    # Stage 6 - vmma.nt.zero v4 then vdequant v5, v4, v8, v9:
     # product {42,57}, vCol {2,3}, vRow[0] = 0.5 -> {42.0, 85.5}.
     li        x5, 0x40000000     # 2.0
     VINSERT   8, 0, 5
@@ -163,10 +173,11 @@ _start:
     li        x5, 0x3F000000     # 0.5
     VINSERT   9, 0, 5
     li        a0, 6
-    VMMA_NT_DEQUANT_ZERO 4, 0, 1, 2, 8
+    VMMA_NT_ZERO 4, 0, 1, 2
+    VDEQUANT 5, 4, 8, 9
     lla       x3, dstbuf2
-    CFG_REG   2, 1, 0, 0, 3, 4
-    VSTORE    4
+    CFG_REG   2, 1, 0, 0, 3, 5
+    VSTORE    5
     lla       x3, dstbuf2
     FENCE_MEM
     lwu       x4, 0(x3)
