@@ -17,7 +17,7 @@ constexpr std::uint32_t make_mma(std::uint32_t funct3, std::uint32_t dest, std::
   return (row << 17) | (funct3 << 22) | (src_b << 12) | (src_a << 7) | (dest << 2) | 2u;
 }
 
-// DEQUANT (R4): major4 = 1001, q = 10.
+// QNT_DRAIN (R4): major4 = 1001, q = 10.
 //   [27:25] sel3 = 010 Acc (adequant) / 110 Vec32 (vdequant)
 //   [24:22] funct3 = 000  [21:17] vRow5  [16:12] vCol5
 //   [11:7] S5 (i32 source)  [6:2] D5 (f32 destination)

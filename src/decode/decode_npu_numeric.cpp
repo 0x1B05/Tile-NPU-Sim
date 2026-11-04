@@ -97,7 +97,7 @@ DecodeResult decode_vreduce_argmax(std::uint32_t word) {
   }};
 }
 
-// QNT (R4): major4 = 0100, q = 10.
+// QNT_AT (R4): major4 = 0100, q = 10.
 // 31    28 27     25 24     22 21      17 16      12 11       7 6        2 1   0
 // [major4] [sel3] [funct3] [qf5] [vScale5]   [S5]     [D5]     [ q ]
 // sel3 is reserved; funct3 = {0, 0, QD}: 0 = Acc -> Tile, 1 = Tile -> Acc.
@@ -172,7 +172,7 @@ DecodeResult decode_mma(std::uint32_t word) {
   }
 }
 
-// DEQUANT (R4): major4 = 1001, q = 10.
+// QNT_DRAIN (R4): major4 = 1001, q = 10.
 // [31:28] major4 [27:25] sel3 (010 Acc / 110 Vec32) [24:22] funct3 = 000
 // [21:17] vRow5 [16:12] vCol5 [11:7] S5 [6:2] D5 [1:0] q
 DecodeResult decode_dequant(std::uint32_t word) {

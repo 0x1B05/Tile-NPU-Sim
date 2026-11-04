@@ -17,7 +17,7 @@ using tile_npu::TdequantInstr;
 
 TEST_CASE(qnt_decode) {
   {
-    // Anchor word from the QNT layout: sel3 = 000, funct3 = 000 (QD = 0),
+    // Anchor word from the QNT_AT layout: sel3 = 000, funct3 = 000 (QD = 0),
     // qf5 = 00000, vScale = 1, S5 = 2, D5 = 0.
     const auto word = 0x40001102u;
     const auto result = tile_npu::decode(word);

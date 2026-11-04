@@ -6,8 +6,8 @@
 
 namespace tile_npu::test {
 
-// Shared QNT instruction word builder for the qnt test files; the field
-// layout mirrors the QNT definition:
+// Shared QNT_AT instruction word builder for the qnt test files; the field
+// layout mirrors the QNT_AT definition:
 //   [31:28] major4 = 0100  [27:25] sel3 = 000  [24:22] funct3 = {0, 0, QD}
 //   [21:17] qf5  [16:12] vScale5  [11:7] S5  [6:2] D5  [1:0] q = 10
 // QD 0 = aquant (Acc -> Tile), 1 = tdequant (Tile -> Acc); other funct3 values
