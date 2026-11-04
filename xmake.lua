@@ -51,7 +51,7 @@ target("sim_core", function()
 	end
 	if trace_mode == "mtrace" or trace_mode == "all" then
 		add_defines("CONFIG_MTRACE", { public = true })
-		add_files("src/trace/mtrace/mtrace.cpp")
+		add_files("src/trace/mtrace/mtrace.cpp", "src/trace/mtrace/mtrace_writer.cpp")
 	end
 	add_includedirs("include", { public = true })
 	add_includedirs("src")
@@ -73,9 +73,6 @@ target("sim", function()
 	end
 	if trace_mode == "itrace" or trace_mode == "all" then
 		add_files("src/trace/itrace/disasm.cpp", "src/trace/itrace/itrace_writer.cpp")
-	end
-	if trace_mode == "mtrace" or trace_mode == "all" then
-		add_files("src/trace/mtrace/mtrace_writer.cpp")
 	end
 end)
 

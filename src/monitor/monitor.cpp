@@ -72,7 +72,7 @@ std::string itrace_path(const Options &options) { return trace_path(options, "it
 #endif
 
 #ifdef CONFIG_MTRACE
-std::string mtrace_path(const Options &options) { return trace_path(options, "mtrace.jsonl"); }
+std::string mtrace_path(const Options &options) { return trace_path(options, "mtrace.mtrb"); }
 #endif
 
 #ifdef CONFIG_TRACE
@@ -176,10 +176,10 @@ int run_images(const Options &options) {
 #endif
 #ifdef CONFIG_MTRACE
   std::ofstream mtrace_log;
-  std::optional<tile_npu::trace::MtraceWriter> mtrace_writer;
+  std::optional<tile_npu::trace::BinaryMtraceWriter> mtrace_writer;
   if (options.mtrace) {
     const auto path = mtrace_path(options);
-    mtrace_log.open(path, std::ios::out | std::ios::trunc);
+    mtrace_log.open(path, std::ios::out | std::ios::trunc | std::ios::binary);
     if (!mtrace_log) {
       std::cerr << "cannot open mtrace log: " << path << '\n';
       return 1;
@@ -228,7 +228,10 @@ int run_images(const Options &options) {
   if (itrace_writer) itrace_writer->flush();
 #endif
 #ifdef CONFIG_MTRACE
-  if (mtrace_writer) mtrace_writer->flush();
+  if (mtrace_writer) {
+    mtrace_writer->finish();
+    mtrace_writer->flush();
+  }
 #endif
   if (options.dump_range && !write_dump(ram, *options.dump_range)) {
     std::cerr << "cannot dump memory range to " << options.dump_range->path << '\n';

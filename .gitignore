@@ -21,4 +21,4 @@ __pycache__/
 
 # Generated traces
 itrace.log
-mtrace.jsonl
+mtrace.mtrb
