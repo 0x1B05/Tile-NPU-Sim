@@ -269,12 +269,12 @@
     M_BLK 3, 1, \d5, 0
 .endm
 
-# ROW_MOVE (R4), mirroring NpuR4 in src/decode/encoding.h:
+# ROW_LANE_MOVE (R4), mirroring NpuR4 in src/decode/encoding.h:
 #   [31:28] major4 = 3  [27:26] reserved(0)  [25] IS  [24:22] funct3
 #   [21:17] reserved(0)  [16:12] index5  [11:7] S5  [6:2] D5  [1:0] q = 01
-# funct3: 0 = insert.row (D5 = matrix, S5 = vector),
-#         1 = extract.row (D5 = vector, S5 = matrix).
-# IS = 0: index5 is an immediate row number; IS = 1: index5 names xS.
+# funct3: 000 ainsert.row, 001 aextract.row, 010 vextract,
+#         011 vinsert, 100 vbroadcast.
+# IS = 0: index5 is an immediate index; IS = 1: index5 names xS.
 .macro ROW_MOVE is, funct3, index5, s5, d5
     .word ((3 << 28) | (\is << 25) | (\funct3 << 22) | (\index5 << 12) | (\s5 << 7) | (\d5 << 2) | 1)
 .endm
@@ -287,11 +287,9 @@
     ROW_MOVE 0, 1, \idx, \s5, \d5
 .endm
 
-# LANE_MOVE (R4): major4 = 4, same layout as ROW_MOVE.
-# funct3: 0 = extract (D5 = xD, S5 = vector), 1 = insert (D5 = vector,
-#         S5 = xS), 2 = broadcast (D5/S5 vectors).
+# Lane forms of ROW_LANE_MOVE: local funct3 0/1/2 maps to 010/011/100.
 .macro LANE_MOVE is, funct3, index5, s5, d5
-    .word ((4 << 28) | (\is << 25) | (\funct3 << 22) | (\index5 << 12) | (\s5 << 7) | (\d5 << 2) | 1)
+    .word ((3 << 28) | (\is << 25) | ((\funct3 + 2) << 22) | (\index5 << 12) | (\s5 << 7) | (\d5 << 2) | 1)
 .endm
 
 .macro VEXTRACT xd, s5, idx

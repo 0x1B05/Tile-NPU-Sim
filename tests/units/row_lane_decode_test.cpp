@@ -141,16 +141,16 @@ TEST_CASE(lane_move_decode) {
 TEST_CASE(row_lane_decode_rejects_reserved) {
   constexpr std::array cases{
       // [27:26] are reserved and must be 0; reserved5 must be 0.
-      DecodeCase{"row bit26 reserved", make_row_move(false, 0, 0, 0, 0) | (1u << 26)},
-      DecodeCase{"row bit27 reserved", make_row_move(false, 0, 0, 0, 0) | (1u << 27)},
-      DecodeCase{"lane bit26 reserved", make_lane_move(false, 0, 0, 0, 0) | (1u << 26)},
-      DecodeCase{"lane reserved5", make_lane_move(false, 0, 0, 0, 0) | (1u << 17)},
-      // ROW_MOVE has only funct3 000/001; LANE_MOVE stops at 010.
-      DecodeCase{"row funct3 010", make_row_move(false, 2, 0, 0, 0)},
-      DecodeCase{"lane funct3 011", make_lane_move(false, 3, 0, 0, 0)},
+      DecodeCase{"row bit26 reserved", make_move(false, 0, 0, 0, 0) | (1u << 26)},
+      DecodeCase{"row bit27 reserved", make_move(false, 0, 0, 0, 0) | (1u << 27)},
+      DecodeCase{"reserved5", make_move(false, 0, 0, 0, 0) | (1u << 17)},
+      // ROW_LANE_MOVE defines funct3 000..100.
+      DecodeCase{"funct3 101", make_move(false, 5, 0, 0, 0)},
+      DecodeCase{"funct3 110", make_move(false, 6, 0, 0, 0)},
+      DecodeCase{"funct3 111", make_move(false, 7, 0, 0, 0)},
       // Acc has 16 registers; a16+ is a reserved encoding.
-      DecodeCase{"ainsert.row a16", make_row_move(false, 0, 0, 0, 16)},
-      DecodeCase{"aextract.row a16", make_row_move(false, 1, 0, 16, 0)},
+      DecodeCase{"ainsert.row a16", make_move(false, 0, 0, 0, 16)},
+      DecodeCase{"aextract.row a16", make_move(false, 1, 0, 16, 0)},
   };
   expect_illegal(cases);
 }
