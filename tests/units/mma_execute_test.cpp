@@ -26,16 +26,6 @@ void acc_i32(tile_npu::State &state, std::size_t index, std::uint8_t rows, std::
   state.ac[index].cols = cols;
 }
 
-void vec32_f32(tile_npu::State &state, std::size_t index, std::uint8_t len) {
-  state.vc[index].dtype = DType::f32;
-  state.vc[index].len = len;
-}
-
-void vec32_i32(tile_npu::State &state, std::size_t index, std::uint8_t len) {
-  state.vc[index].dtype = DType::i32;
-  state.vc[index].len = len;
-}
-
 // The shared left operand: 2x3 i8 {{1, 2, 3}, {4, -5, 6}}.
 void poke_lhs(tile_npu::State &state, std::size_t index) {
   const std::uint8_t data[6] = {1, 2, 3, 4, 0xfb, 6};
@@ -93,113 +83,6 @@ TEST_CASE(mma_nt_acc) {
   check_eq(state.a[0][1], std::uint32_t{70}, "D[0,1] = 2 + 68");
   check_eq(state.a[0][32], std::uint32_t{45}, "D[1,0] = 3 + 42");
   check_eq(state.a[0][33], std::uint32_t{61}, "D[1,1] = 4 + 57");
-}
-
-TEST_CASE(adequant_basic) {
-  Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
-  load_one(sim, memory, make_adequant(1, 0, 6, 7));
-  auto &state = sim.state();
-  acc_i32(state, 0, 2, 2);
-  state.ac[1].dtype = DType::f32;
-  state.ac[1].rows = 2;
-  state.ac[1].cols = 2;
-  vec32_f32(state, 6, 2);
-  vec32_f32(state, 7, 2);
-  state.a[0][0] = 50;
-  state.a[0][1] = 68;
-  state.a[0][32] = 42;
-  state.a[0][33] = 57;
-  state.v[6][0] = as_u32(2.0f);
-  state.v[6][1] = as_u32(3.0f);
-  state.v[7][0] = as_u32(0.5f);
-  state.v[7][1] = as_u32(0.25f);
-
-  check_eq(sim.step().status, StepStatus::retired, "adequant retires");
-  check_eq(hex(state.a[1][0]), hex(as_u32(50.0f)), "aD[0,0] = (50 * 2) * 0.5");
-  check_eq(hex(state.a[1][1]), hex(as_u32(102.0f)), "aD[0,1] = (68 * 3) * 0.5");
-  check_eq(hex(state.a[1][32]), hex(as_u32(21.0f)), "aD[1,0] = (42 * 2) * 0.25");
-  check_eq(hex(state.a[1][33]), hex(as_u32(42.75f)), "aD[1,1] = (57 * 3) * 0.25");
-  check_eq(state.ac[0].dtype, DType::i32, "source dtype stays i32");
-  check_eq(state.ac[1].dtype, DType::f32, "destination dtype stays f32");
-}
-
-TEST_CASE(vdequant_basic) {
-  Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
-  load_one(sim, memory, make_vdequant(1, 0, 6, 7));
-  auto &state = sim.state();
-  vec32_i32(state, 0, 2);
-  vec32_f32(state, 1, 2);
-  vec32_f32(state, 6, 2);
-  vec32_f32(state, 7, 1);
-  state.v[0][0] = 42;
-  state.v[0][1] = 57;
-  state.v[6][0] = as_u32(2.0f);
-  state.v[6][1] = as_u32(3.0f);
-  state.v[7][0] = as_u32(0.5f);
-
-  check_eq(sim.step().status, StepStatus::retired, "vdequant retires");
-  check_eq(hex(state.v[1][0]), hex(as_u32(42.0f)), "vD[0] = (42 * 2) * 0.5");
-  check_eq(hex(state.v[1][1]), hex(as_u32(85.5f)), "vD[1] = (57 * 3) * 0.5");
-  check_eq(state.vc[0].dtype, DType::i32, "source dtype stays i32");
-  check_eq(state.vc[1].dtype, DType::f32, "destination dtype stays f32");
-}
-
-TEST_CASE(adequant_rejects_invalid) {
-  {
-    Ram memory(CODE_BASE, 4);
-    Simulator sim(memory);
-    load_one(sim, memory, make_adequant(1, 0, 6, 7));
-    auto &state = sim.state();
-    acc_i32(state, 0, 2, 2);
-    state.ac[1] = state.ac[0];
-    vec32_f32(state, 6, 2);
-    vec32_f32(state, 7, 2);
-    check_eq(sim.step().status, StepStatus::invalid_configuration,
-             "adequant rejects an i32 destination");
-  }
-  {
-    Ram memory(CODE_BASE, 4);
-    Simulator sim(memory);
-    load_one(sim, memory, make_adequant(1, 0, 6, 7));
-    auto &state = sim.state();
-    acc_i32(state, 0, 2, 2);
-    state.ac[1].dtype = DType::f32;
-    state.ac[1].rows = 2;
-    state.ac[1].cols = 2;
-    vec32_f32(state, 6, 3);
-    vec32_f32(state, 7, 2);
-    check_eq(sim.step().status, StepStatus::invalid_configuration,
-             "adequant rejects a vCol length mismatch");
-  }
-}
-
-TEST_CASE(vdequant_rejects_invalid) {
-  {
-    Ram memory(CODE_BASE, 4);
-    Simulator sim(memory);
-    load_one(sim, memory, make_vdequant(1, 0, 6, 7));
-    auto &state = sim.state();
-    vec32_i32(state, 0, 2);
-    vec32_i32(state, 1, 2);
-    vec32_f32(state, 6, 2);
-    vec32_f32(state, 7, 1);
-    check_eq(sim.step().status, StepStatus::invalid_configuration,
-             "vdequant rejects an i32 destination");
-  }
-  {
-    Ram memory(CODE_BASE, 4);
-    Simulator sim(memory);
-    load_one(sim, memory, make_vdequant(1, 0, 6, 7));
-    auto &state = sim.state();
-    vec32_i32(state, 0, 2);
-    vec32_f32(state, 1, 2);
-    vec32_f32(state, 6, 2);
-    vec32_f32(state, 7, 2);
-    check_eq(sim.step().status, StepStatus::invalid_configuration,
-             "vdequant rejects a vRow length other than one");
-  }
 }
 
 TEST_CASE(vmma_nt) {

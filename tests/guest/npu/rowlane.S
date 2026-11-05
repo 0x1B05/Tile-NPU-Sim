@@ -1,6 +1,6 @@
 #include "npu.inc"
 
-# Self-checking ROW_MOVE/LANE_MOVE image: programs configs and descriptors,
+# Self-checking ROW_LANE_MOVE image: programs configs and descriptors,
 # then exercises Acc <-> Vec32 row insert/extract and lane
 # extract/insert/broadcast (immediate and scalar index forms).
 # Every stage stores results back to memory and checks them with scalar

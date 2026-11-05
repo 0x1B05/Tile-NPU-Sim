@@ -1,6 +1,6 @@
 #include "npu.inc"
 
-# Self-checking QNT_AT image: programs configs and descriptors, then runs an
+# Self-checking QNT image: programs configs and descriptors, then runs an
 # aquant, a tdequant that consumes its output, and a second aquant that
 # checks RNE and saturation. Results are stored
 # back and compared word-wise. Ends with ebreak:

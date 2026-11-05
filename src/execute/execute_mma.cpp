@@ -1,11 +1,8 @@
 #include "execute.h"
 
 #include "config_check.h"
-#include "fp_env.h"
 #include "matrix_view.h"
-#include "utils/bits.h"
 
-#include <algorithm>
 #include <bit>
 #include <cstddef>
 #include <cstdint>
@@ -90,39 +87,6 @@ ExecuteResult mma(const MmaInstr &instr, State &state) {
   return {.status = StepStatus::retired};
 }
 
-// adequant: aD(f32) = f32(aS(i32)) * vCol * vRow, with separate source and
-// destination Acc registers.
-ExecuteResult adequant(const AdequantInstr &instr, State &state) {
-  const auto &dst_config = state.ac[instr.dest.index];
-  const auto &src_config = state.ac[instr.src.index];
-  const auto &col_config = state.vc[instr.col_scale];
-  const auto &row_config = state.vc[instr.row_scale];
-  if (!valid_config_of(dst_config, DType::f32) || !valid_config_of(src_config, DType::i32) ||
-      !valid_config_of(col_config, DType::f32) || !valid_config_of(row_config, DType::f32)) {
-    return config_error();
-  }
-  if (dst_config.rows != src_config.rows || dst_config.cols != src_config.cols ||
-      col_config.len != src_config.cols || row_config.len != src_config.rows ||
-      instr.dest.index == instr.src.index) {
-    return config_error();
-  }
-
-  const auto &src = state.a[instr.src.index];
-  auto &dst = state.a[instr.dest.index];
-  const auto &col_scale = state.v[instr.col_scale];
-  const auto &row_scale = state.v[instr.row_scale];
-  const FpEnvGuard fp_env;
-  for (std::size_t i = 0; i < src_config.rows; ++i) {
-    const float row = as_f32(row_scale[i]);
-    for (std::size_t j = 0; j < src_config.cols; ++j) {
-      const auto idx = i * MATRIX_EXTENT + j;
-      const float value = as_f32(i32_to_f32_bits(src[idx]));
-      dst[idx] = as_u32((value * as_f32(col_scale[j])) * row);
-    }
-  }
-  return {.status = StepStatus::retired};
-}
-
 // vmma.nt.zero / vmma.nt.acc: vD[j] = dot(tA[row], tB row j); acc adds
 // the i32 partial into the existing lane.
 ExecuteResult vmma(const VmmaInstr &instr, State &state) {
@@ -153,42 +117,10 @@ ExecuteResult vmma(const VmmaInstr &instr, State &state) {
   return {.status = StepStatus::retired};
 }
 
-// vdequant: vD(f32) = f32(vS(i32)) * vCol * vRow[0], with separate source and
-// destination Vec32 registers.
-ExecuteResult vdequant(const VdequantInstr &instr, State &state) {
-  const auto &dst_config = state.vc[instr.dest.index];
-  const auto &src_config = state.vc[instr.src.index];
-  const auto &col_config = state.vc[instr.col_scale];
-  const auto &row_config = state.vc[instr.row_scale];
-  if (!valid_config_of(dst_config, DType::f32) || !valid_config_of(src_config, DType::i32) ||
-      !valid_config_of(col_config, DType::f32) || !valid_config_of(row_config, DType::f32)) {
-    return config_error();
-  }
-  if (dst_config.len != src_config.len || col_config.len != src_config.len || row_config.len != 1 ||
-      instr.dest.index == instr.src.index) {
-    return config_error();
-  }
-
-  const auto &src = state.v[instr.src.index];
-  auto &dst = state.v[instr.dest.index];
-  const auto &col_scale = state.v[instr.col_scale];
-  const float row = as_f32(state.v[instr.row_scale][0]);
-  const FpEnvGuard fp_env;
-  for (std::size_t j = 0; j < src_config.len; ++j) {
-    const float value = as_f32(i32_to_f32_bits(src[j]));
-    dst[j] = as_u32((value * as_f32(col_scale[j])) * row);
-  }
-  return {.status = StepStatus::retired};
-}
-
 } // namespace
 
 ExecuteResult execute(const MmaInstr &instr, State &state) { return mma(instr, state); }
 
 ExecuteResult execute(const VmmaInstr &instr, State &state) { return vmma(instr, state); }
-
-ExecuteResult execute(const AdequantInstr &instr, State &state) { return adequant(instr, state); }
-
-ExecuteResult execute(const VdequantInstr &instr, State &state) { return vdequant(instr, state); }
 
 } // namespace tile_npu

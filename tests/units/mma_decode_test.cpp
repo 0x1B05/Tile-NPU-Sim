@@ -13,11 +13,9 @@ using namespace tile_npu::test;
 
 namespace {
 
-using tile_npu::AdequantInstr;
 using tile_npu::MmaInstr;
 using tile_npu::MmaOp;
 using tile_npu::NpuDomain;
-using tile_npu::VdequantInstr;
 using tile_npu::VmmaInstr;
 using tile_npu::VmmaOp;
 
@@ -113,30 +111,6 @@ TEST_CASE(vmma_decode) {
   check_vmma_cases(cases);
 }
 
-TEST_CASE(adequant_decode) {
-  const auto result = tile_npu::decode(make_adequant(1, 2, 3, 4));
-  const std::string what = "decode adequant a1, a2, v3, v4";
-  const auto &decoded = expect_npu<AdequantInstr>(result, what);
-  check_eq(decoded.dest.domain, NpuDomain::acc, what + ": dest domain");
-  check_eq(decoded.dest.index, std::uint8_t{1}, what + ": dest");
-  check_eq(decoded.src.domain, NpuDomain::acc, what + ": src domain");
-  check_eq(decoded.src.index, std::uint8_t{2}, what + ": src");
-  check_eq(decoded.col_scale, std::uint8_t{3}, what + ": vCol");
-  check_eq(decoded.row_scale, std::uint8_t{4}, what + ": vRow");
-}
-
-TEST_CASE(vdequant_decode) {
-  const auto result = tile_npu::decode(make_vdequant(5, 6, 7, 8));
-  const std::string what = "decode vdequant v5, v6, v7, v8";
-  const auto &decoded = expect_npu<VdequantInstr>(result, what);
-  check_eq(decoded.dest.domain, NpuDomain::vec32, what + ": dest domain");
-  check_eq(decoded.dest.index, std::uint8_t{5}, what + ": dest");
-  check_eq(decoded.src.domain, NpuDomain::vec32, what + ": src domain");
-  check_eq(decoded.src.index, std::uint8_t{6}, what + ": src");
-  check_eq(decoded.col_scale, std::uint8_t{7}, what + ": vCol");
-  check_eq(decoded.row_scale, std::uint8_t{8}, what + ": vRow");
-}
-
 TEST_CASE(mma_decode_rejects_reserved) {
   constexpr std::array cases{
       // funct3 100..111 are reserved.
@@ -149,9 +123,6 @@ TEST_CASE(mma_decode_rejects_reserved) {
       DecodeCase{"mma row5", make_mma(0, 0, 1, 2, 1)},
       // Acc has 16 registers; a16+ is a reserved encoding.
       DecodeCase{"mma a16 destination", make_mma(0, 16, 1, 2)},
-      DecodeCase{"adequant a16 destination", make_adequant(16, 1, 2, 3)},
-      DecodeCase{"dequant sel3 000", make_dequant(0b000, 1, 2, 3, 4)},
-      DecodeCase{"dequant funct3 001", make_dequant(0b010, 1, 2, 3, 4) | (1u << 22)},
   };
   expect_illegal(cases);
 }

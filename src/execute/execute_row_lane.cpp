@@ -86,8 +86,8 @@ ExecuteResult lane_broadcast(const LaneBroadcastInstr &instr, State &state) {
 
 } // namespace
 
-// ROW_MOVE only pairs Acc with Vec32; the structural validation rejects any
-// other domain combination.
+// Row forms of ROW_LANE_MOVE only pair Acc with Vec32; the structural
+// validation rejects any other domain combination.
 ExecuteResult execute(const RowInstr &instr, State &state) {
   switch (instr.op) {
   case RowOp::insert: return row_copy<RowOp::insert>(instr, state);
