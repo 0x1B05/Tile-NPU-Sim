@@ -41,7 +41,7 @@ struct qwen3_model {
   uint32_t vocab, max_pos, n_prompt, eps_bits;
   uint32_t q_dim, kv_dim;
   uint32_t scale_log2e_bits;
-  uint32_t kv_stride;
+  uint32_t kv_head_stride;
   const int8_t *embed;
   const float *embed_s;
   const float *rope_cos;
@@ -82,9 +82,17 @@ static float pf_scores[4 * (POS_CAP + 32)];
 
 static char *const kv_region = (char *)KV_REGION_BASE;
 
-static char *kv_k_ptr(uint32_t layer) { return kv_region + layer * 2 * model.kv_stride; }
+// K/V are packed by KV head: [layer][k/v][kv_head][pos][head_dim].  The
+// decoder and the batched prefill path both walk one head at a time, so a
+// head-major layout keeps each key's row contiguous and shrinks the row
+// stride from kv_dim*4 to head_dim*4.
+static char *kv_k_ptr(uint32_t layer, uint32_t head) {
+  return kv_region + (layer * 2 * model.n_kv_heads + head) * model.kv_head_stride;
+}
 
-static char *kv_v_ptr(uint32_t layer) { return kv_region + (layer * 2 + 1) * model.kv_stride; }
+static char *kv_v_ptr(uint32_t layer, uint32_t head) {
+  return kv_region + ((layer * 2 + 1) * model.n_kv_heads + head) * model.kv_head_stride;
+}
 
 static uint32_t inv_n_bits(uint32_t n) {
   // n is a power of two: 1/n = 2^-ctz(n) in f32.
@@ -154,8 +162,8 @@ void qwen3_init(uint32_t n_prompt) {
   case 32: model.scale_log2e_bits = 0x3E8293EEu; break;
   default: panic("unsupported head_dim: %u", model.head_dim);
   }
-  model.kv_stride = model.max_pos * model.kv_dim * 4;
-  if ((uint64_t)2 * model.n_layers * model.kv_stride > KV_REGION_SIZE) {
+  model.kv_head_stride = model.max_pos * model.head_dim * 4;
+  if ((uint64_t)2 * model.n_layers * model.n_kv_heads * model.kv_head_stride > KV_REGION_SIZE) {
     panic("kv cache exceeds region");
   }
   model.embed = q3b_find_section("embed\0\0");
@@ -168,11 +176,13 @@ void qwen3_init(uint32_t n_prompt) {
 }
 
 static void cache_append(uint32_t layer, uint32_t pos, const float *k, const float *v) {
-  float *kd = (float *)(kv_k_ptr(layer) + pos * model.kv_dim * 4);
-  float *vd = (float *)(kv_v_ptr(layer) + pos * model.kv_dim * 4);
-  for (uint32_t i = 0; i < model.kv_dim; ++i) {
-    kd[i] = k[i];
-    vd[i] = v[i];
+  for (uint32_t h = 0; h < model.n_kv_heads; ++h) {
+    float *kd = (float *)(kv_k_ptr(layer, h) + pos * model.head_dim * 4);
+    float *vd = (float *)(kv_v_ptr(layer, h) + pos * model.head_dim * 4);
+    for (uint32_t i = 0; i < model.head_dim; ++i) {
+      kd[i] = k[h * model.head_dim + i];
+      vd[i] = v[h * model.head_dim + i];
+    }
   }
 }
 
@@ -182,16 +192,16 @@ static void attention(uint32_t layer, uint32_t pos, const float *q, float *attn)
   const uint32_t n_padded = (n_keys + 31) & ~31u;
   for (uint32_t h = 0; h < model.n_q_heads; ++h) {
     const uint32_t kvh = h / group;
-    const char *kb = kv_k_ptr(layer) + kvh * model.head_dim * 4;
-    const char *vb = kv_v_ptr(layer) + kvh * model.head_dim * 4;
-    qwen3_scores(q + h * model.head_dim, kb, model.kv_dim * 4, scores, n_keys, model.head_dim);
+    const char *kb = kv_k_ptr(layer, kvh);
+    const char *vb = kv_v_ptr(layer, kvh);
+    qwen3_scores(q + h * model.head_dim, kb, model.head_dim * 4, scores, n_keys, model.head_dim);
     // each head's softmax overwrites the whole padded block, so the -inf
     // tail must be re-applied per head
     for (uint32_t i = n_keys; i < n_padded; ++i) {
       ((uint32_t *)scores)[i] = 0xFF800000u;
     }
     qwen3_softmax_exp(scores, n_padded, model.scale_log2e_bits, rcp_word);
-    qwen3_pv(vb, model.kv_dim * 4, scores, attn + h * model.head_dim, n_keys, model.head_dim,
+    qwen3_pv(vb, model.head_dim * 4, scores, attn + h * model.head_dim, n_keys, model.head_dim,
              rcp_word[0]);
   }
 }
@@ -204,14 +214,14 @@ static void attention_rows(uint32_t layer, uint32_t base_pos, const float *q, fl
   const uint32_t group = model.n_q_heads / model.n_kv_heads;
   for (uint32_t h = 0; h < model.n_q_heads; ++h) {
     const uint32_t kvh = h / group;
-    const char *kb = kv_k_ptr(layer) + kvh * model.head_dim * 4;
-    const char *vb = kv_v_ptr(layer) + kvh * model.head_dim * 4;
+    const char *kb = kv_k_ptr(layer, kvh);
+    const char *vb = kv_v_ptr(layer, kvh);
     uint32_t r = 0;
     for (; r + 4 <= rows; r += 4) {
       const uint32_t n_keys_max = base_pos + r + 4;
       const uint32_t n_padded_max = (n_keys_max + 31) & ~31u;
       qwen3_scores4(q + r * model.q_dim + h * model.head_dim, model.q_dim * 4, kb,
-                    model.kv_dim * 4, pf_scores, n_keys_max, model.head_dim);
+                    model.head_dim * 4, pf_scores, n_keys_max, model.head_dim);
       uint32_t rcp4[4];
       for (uint32_t rr = 0; rr < 4; ++rr) {
         const uint32_t n_keys = base_pos + r + rr + 1;
@@ -225,19 +235,20 @@ static void attention_rows(uint32_t layer, uint32_t base_pos, const float *q, fl
         for (uint32_t i = n_keys; i < n_keys_max; ++i)
           row[i] = 0.0f;
       }
-      qwen3_pv4(vb, model.kv_dim * 4, pf_scores, attn + r * model.q_dim + h * model.head_dim,
+      qwen3_pv4(vb, model.head_dim * 4, pf_scores, attn + r * model.q_dim + h * model.head_dim,
                 n_keys_max, model.head_dim, rcp4, model.q_dim * 4);
     }
     for (; r < rows; ++r) {
       const uint32_t n_keys = base_pos + r + 1;
       const uint32_t n_padded = (n_keys + 31) & ~31u;
-      qwen3_scores(q + r * model.q_dim + h * model.head_dim, kb, model.kv_dim * 4, scores, n_keys,
-                   model.head_dim);
+      qwen3_scores(q + r * model.q_dim + h * model.head_dim, kb, model.head_dim * 4, scores,
+                   n_keys, model.head_dim);
       for (uint32_t i = n_keys; i < n_padded; ++i)
         ((uint32_t *)scores)[i] = 0xFF800000u;
       qwen3_softmax_exp(scores, n_padded, model.scale_log2e_bits, rcp_word);
-      qwen3_pv(vb, model.kv_dim * 4, scores, attn + r * model.q_dim + h * model.head_dim, n_keys,
-               model.head_dim, rcp_word[0]);
+      qwen3_pv(vb, model.head_dim * 4, scores,
+               attn + r * model.q_dim + h * model.head_dim, n_keys, model.head_dim,
+               rcp_word[0]);
     }
   }
 }
