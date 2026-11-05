@@ -574,8 +574,7 @@ qwen3_rmsnorm:
     VLOAD   1
     VLOAD   3
     VMUL    3, 3, 2
-    VMUL    1, 1, 3
-    REG_MOVE 3, 2, 4, 1                    # vcopy v4, v1
+    VMUL    4, 1, 3
     VSTORE  4
     addi    t6, t6, -1
     bnez    t6, .Lrn_out
@@ -834,18 +833,14 @@ qwen3_scores4:
 
     mv      t4, zero
 .Lq4_key:
-    VFILL   28, 0
-    VFILL   29, 0
-    VFILL   30, 0
-    VFILL   31, 0
     mul     t0, t4, s2
     add     t0, s1, t0
     SETX    SEL_VM, CF_BASE, 24, X_T0
     VLOAD   24
-    VFMADD  28, 24, 8, 28
-    VFMADD  29, 24, 12, 29
-    VFMADD  30, 24, 16, 30
-    VFMADD  31, 24, 20, 31
+    VMUL    28, 24, 8
+    VMUL    29, 24, 12
+    VMUL    30, 24, 16
+    VMUL    31, 24, 20
     li      t5, 1
     beq     s7, t5, .Lq4_store
     VLOAD   24
@@ -922,11 +917,10 @@ qwen3_softmax_exp:
     srli    t6, a1, 5
 .Lsm_exp:
     VLOAD   1
-    VSUB    1, 1, 0
-    VMULX   1, 1, X_A2
-    VEXP2   1, 1
-    VADD    2, 2, 1
-    REG_MOVE 3, 2, 3, 1                    # vcopy v3, v1
+    VSUB    3, 1, 0
+    VMULX   3, 3, X_A2
+    VEXP2   3, 3
+    VADD    2, 2, 3
     VSTORE  3
     addi    t6, t6, -1
     bnez    t6, .Lsm_exp
@@ -960,8 +954,7 @@ qwen3_pv:
 .Lpv_key:
     lw      t0, 0(t3)
     addi    t3, t3, 4
-    VINSERT 20, 0, X_T0
-    VBROADCAST 20, 20, 0
+    VFILLX  20, X_T0
     mul     t0, t4, a1
     add     t0, a0, t0
     SETX    SEL_VM, CF_BASE, 12, X_T0
@@ -1087,21 +1080,16 @@ qwen3_pv4:
     mv      t4, zero                   # key index
 .Lpv4_key:
     lw      t0, 0(t3)
-    VINSERT 8, 0, X_T0
-    VBROADCAST 8, 8, 0
+    VFILLX  8, X_T0
     add     t1, t3, s8
     lw      t0, 0(t1)
-    VINSERT 9, 0, X_T0
-    VBROADCAST 9, 9, 0
-    add     t1, t3, s8
+    VFILLX  9, X_T0
     add     t1, t1, s8
     lw      t0, 0(t1)
-    VINSERT 10, 0, X_T0
-    VBROADCAST 10, 10, 0
+    VFILLX  10, X_T0
     add     t1, t1, s8
     lw      t0, 0(t1)
-    VINSERT 11, 0, X_T0
-    VBROADCAST 11, 11, 0
+    VFILLX  11, X_T0
 
     mul     t0, t4, s1
     add     t0, s0, t0
@@ -1212,8 +1200,7 @@ qwen3_silu_mul:
     VRCP    1, 1                           # 1 / (1 + exp(-x))
     VMUL    0, 0, 1
     VLOAD   1
-    VMUL    0, 0, 1
-    REG_MOVE 3, 2, 2, 0                    # vcopy v2, v0
+    VMUL    2, 0, 1
     VSTORE  2
     addi    t6, t6, -1
     bnez    t6, .Lsl_loop
@@ -1236,8 +1223,7 @@ qwen3_add:
 .Lad_loop:
     VLOAD   0
     VLOAD   1
-    VADD    0, 0, 1
-    REG_MOVE 3, 2, 2, 0                    # vcopy v2, v0
+    VADD    2, 0, 1
     VSTORE  2
     addi    t6, t6, -1
     bnez    t6, .Lad_loop
