@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "units/er4_helpers.h"
 #include "units/execute_helpers.h"
 #include "units/mblk_helpers.h"
 #include "units/mma_helpers.h"
@@ -104,6 +105,40 @@ TEST_CASE(mtrace_mma_compute) {
   check_eq(event.dst[0].shape[1], std::uint8_t{2}, "D cols");
   check_eq(event.macs, std::uint32_t{12}, "MAC count");
   check_eq(event.mem.kind, TraceMemoryKind::none, "no memory pattern");
+}
+
+TEST_CASE(mtrace_vfmadd_counts_active_lanes) {
+  Ram memory(CODE_BASE, 0x800);
+  Simulator sim(memory);
+  std::vector<tile_npu::TraceEvent> events;
+  sim.set_mtrace_callback([&](const tile_npu::TraceEvent &event) { events.push_back(event); });
+
+  load_one(sim, memory, make_er4(NpuDomain::vec32, 1, 0, 3, 1, 2)); // vfmadd v0, v1, v2, v3
+  auto &state = sim.state();
+  for (auto index : {0, 1, 2, 3})
+    vec_cfg(state, index, DType::f32, 5);
+
+  check_eq(sim.step().status, StepStatus::retired, "vfmadd retires");
+  check_eq(events.size(), std::size_t{1}, "one compute event");
+  check(events[0].op == "vfmadd", "op name");
+  check_eq(events[0].macs, std::uint32_t{5}, "one MAC per active lane");
+}
+
+TEST_CASE(mtrace_afmadd_counts_active_elements) {
+  Ram memory(CODE_BASE, 0x800);
+  Simulator sim(memory);
+  std::vector<tile_npu::TraceEvent> events;
+  sim.set_mtrace_callback([&](const tile_npu::TraceEvent &event) { events.push_back(event); });
+
+  load_one(sim, memory, make_er4(NpuDomain::acc, 1, 0, 3, 1, 2)); // afmadd a0, a1, a2, a3
+  auto &state = sim.state();
+  for (auto index : {0, 1, 2, 3})
+    acc_cfg(state, index, DType::f32, 2, 3);
+
+  check_eq(sim.step().status, StepStatus::retired, "afmadd retires");
+  check_eq(events.size(), std::size_t{1}, "one compute event");
+  check(events[0].op == "afmadd", "op name");
+  check_eq(events[0].macs, std::uint32_t{6}, "one MAC per active element");
 }
 
 TEST_CASE(mtrace_mma_accumulate_reads_destination) {

@@ -51,6 +51,8 @@ with TraceReader("mtrace.mtrb") as trace:
 ```
 
 `Event` fields: `seq`, `instr`, `pc`, `type`, `op`, `src`, `dst`, `mem`, `macs`.
+`macs` counts matrix MACs (`mma`/`vmma`) and one MAC per active element for
+vector/Acc `fmadd` (`vfmadd`/`afmadd`); other vector operations report 0.
 `Endpoint` fields: `kind`, `index`, `bytes`, `elem`, `shape`, `part`.
 `Memory` fields: `pattern`, `region`, `addr`, `elem`, `count`, `stride`,
 `rows`, `cols`, `row_stride`, `col_stride`, `order`, `desc`.

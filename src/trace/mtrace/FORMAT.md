@@ -58,7 +58,7 @@ dst_count      u8
 src[src_count] endpoint
 dst[dst_count] endpoint
 mem            memory   only if has_mem
-macs           varint   only if has_macs
+macs           varint   only if has_macs; matrix MACs and vector FMA elements
 ```
 
 The first event uses `prev_instr = prev_pc = 0`.

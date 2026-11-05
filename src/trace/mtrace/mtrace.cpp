@@ -356,7 +356,19 @@ void trace_npu_dataflow(const DecodedNpuInstr &instr, const State &state, Mtrace
             add_source(event, domain_endpoint(state, i.src1.domain, i.src1.index, "s0"));
             add_source(event, domain_endpoint(state, i.src2.domain, i.src2.index, "s1"));
             add_dest(event, domain_endpoint(state, i.dest.domain, i.dest.index, "d"));
-            emit_compute(trace, trace::er4_mnemonic(i.dest.domain, i.op), event);
+            // fmadd performs one fused multiply-add per active element.  Count
+            // lanes/elements, not instruction issue slots; the latter is
+            // already represented by the event itself.
+            std::uint32_t macs = 0;
+            if (i.op == Er4Op::fmadd) {
+              if (i.dest.domain == NpuDomain::acc) {
+                macs = static_cast<std::uint32_t>(state.ac[i.dest.index].rows) *
+                       state.ac[i.dest.index].cols;
+              } else if (i.dest.domain == NpuDomain::vec32) {
+                macs = state.vc[i.dest.index].len;
+              }
+            }
+            emit_compute(trace, trace::er4_mnemonic(i.dest.domain, i.op), event, macs);
           },
           [&](const MaskInstr &i) {
             TraceEvent event;
