@@ -2,7 +2,7 @@
 # numbers, and instruction encoding macros. Shared by tests/guest and
 # apps/qwen3. Field layouts mirror src/decode/encoding.h; the CF_* numbers
 # follow the manual's field3 table. Correctness is pinned by the known-good
-# words in tests/simulator_test.cpp (0x00002080 = tadd t0, t1, t2), which
+# words in tests/simulator_test.cpp (0x0C002080 = vadd v0, v1, v2), which
 # stay as raw constants on purpose.
 
 # Config field numbers (field3 / field5).
@@ -10,7 +10,6 @@
 .equ CF_ROWS,     1   # TC/AC rows; TM/AM row_stride_bytes
 .equ CF_COLS,     2   # TC/AC cols; TM/AM col_stride_bytes; VM flags
 .equ CF_LAYOUT,   3   # TC/AC layout; TM/AM transform
-.equ CF_ARITH,    4   # TC arith_mode; TM/AM flags
 .equ CF_LEN,      1   # VC len; VM stride_bytes
 .equ CF_BASE,     0
 .equ CF_RSTRIDE,  1
@@ -67,26 +66,6 @@
 #   [16:12] src2    [11:7]  src1  [6:2]   dest    [1:0] q
 .macro E_BIN sel3, funct4, dest, src1, src2
     .word ((\sel3 << 25) | (\funct4 << 21) | (\src2 << 12) | (\src1 << 7) | (\dest << 2))
-.endm
-
-# E_BIN add on the tile domain with BX=0: sel3 = 0b000, funct4 = 0.
-.macro TADD dest, src1, src2
-    E_BIN 0, 0, \dest, \src1, \src2
-.endm
-
-# E_BIN subtract on the tile domain with BX=0: funct4 = 1.
-.macro TSUB dest, src1, src2
-    E_BIN 0, 1, \dest, \src1, \src2
-.endm
-
-# E_BIN max on the tile domain with BX=0: funct4 = 5.
-.macro TMAX dest, src1, src2
-    E_BIN 0, 5, \dest, \src1, \src2
-.endm
-
-# E_BIN add on the tile domain with a scalar source (BX=1): src2 names xS.
-.macro TADDX dest, src1, xs
-    E_BIN 1, 0, \dest, \src1, \xs
 .endm
 
 # Vec32 elementwise forms (E_BIN, dom2 = 3).
@@ -311,10 +290,6 @@
 #         6/7 reserved.
 .macro E_UNARY dom2, funct3, d5, s5
     .word ((1 << 28) | (\dom2 << 26) | (\funct3 << 22) | (\s5 << 7) | (\d5 << 2))
-.endm
-
-.macro TNOT d5, s5
-    E_UNARY 0, 0, \d5, \s5
 .endm
 
 .macro AABS d5, s5

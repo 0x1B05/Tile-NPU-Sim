@@ -17,13 +17,13 @@ namespace {
 template <typename Configs> bool operands_valid(const EbinInstr &instr, const Configs &configs) {
   const auto &dst = configs[instr.dest.index];
   const auto &lhs = configs[instr.src1.index];
-  if (!valid_elementwise_config(dst) || !valid_elementwise_config(lhs) ||
+  if (!valid_domain_config(dst) || !valid_domain_config(lhs) ||
       !configs_match(dst, lhs) || !ebin_op_supports_dtype(instr.op, dst.dtype)) {
     return false;
   }
   return std::visit(Overloaded{[&](NpuRegister rhs) {
                                  const auto &rhs_config = configs[rhs.index];
-                                 return valid_elementwise_config(rhs_config) &&
+                                 return valid_domain_config(rhs_config) &&
                                         configs_match(dst, rhs_config);
                                },
                                [](ScalarRegister) { return true; }},
@@ -34,13 +34,12 @@ template <typename Configs> bool operands_valid(const EbinInstr &instr, const Co
 
 // Runs over the destination's effective region.
 ExecuteResult execute(const EbinInstr &instr, State &state) {
-  return with_domain<NpuDomain::tile, NpuDomain::acc, NpuDomain::vec32>(
+  return with_domain<NpuDomain::acc, NpuDomain::vec32>(
       state, instr.dest.domain, [&](auto &regs, const auto &configs) {
         if (!operands_valid(instr, configs)) {
           return config_error();
         }
         const auto &config = configs[instr.dest.index];
-        const auto arith = arith_mode_of(config);
         std::optional<FpEnvGuard> fp_env;
         if (config.dtype == DType::f32) {
           fp_env.emplace();
@@ -49,7 +48,7 @@ ExecuteResult execute(const EbinInstr &instr, State &state) {
         const auto &lhs = regs[instr.src1.index];
         return with_src2(instr.src2, state, regs, [&](auto rhs) {
           for_each_idx(config, [&](std::size_t n) {
-            dst[n] = apply_ebin_op(instr.op, config.dtype, arith, lhs[n], rhs(n));
+            dst[n] = apply_ebin_op(instr.op, config.dtype, lhs[n], rhs(n));
           });
           return ExecuteResult{.status = StepStatus::retired};
         });

@@ -19,26 +19,6 @@ using tile_npu::StepStatus;
 
 } // namespace
 
-TEST_CASE(eun_tile_not) {
-  Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
-  load_one(sim, memory, make_eun(NpuDomain::tile, 0, 0, 1)); // tnot t0, t1
-  auto &state = sim.state();
-  state.tc[0].dtype = DType::u8;
-  state.tc[0].rows = 1;
-  state.tc[0].cols = 2;
-  state.tc[1].dtype = DType::u8;
-  state.tc[1].rows = 1;
-  state.tc[1].cols = 2;
-  state.t[1][0] = 0x0f;
-  state.t[1][1] = 0xaa;
-  state.t[0][2] = 0x5a; // outside the 1x2 effective region
-  check_eq(sim.step().status, StepStatus::retired, "tnot retires");
-  check_eq(state.t[0][0], std::uint8_t{0xf0}, "tnot lane 0");
-  check_eq(state.t[0][1], std::uint8_t{0x55}, "tnot lane 1");
-  check_eq(state.t[0][2], std::uint8_t{0x5a}, "tnot keeps invalid lanes");
-}
-
 TEST_CASE(eun_acc_abs_neg_i32) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);

@@ -159,13 +159,11 @@ TEST_CASE(cfg_copy_duplicates_whole_register) {
   tc3.dtype = DType::u8;
   tc3.rows = 5;
   tc3.cols = 7;
-  tc3.arith_mode = tile_npu::ArithMode::sat;
   check_eq(sim.step().status, StepStatus::retired, "cfg.copy retires");
   const auto &copied = sim.state().tc[7];
   check_eq(copied.dtype, DType::u8, "tc7.dtype");
   check_eq(copied.rows, std::uint8_t{5}, "tc7.rows");
   check_eq(copied.cols, std::uint8_t{7}, "tc7.cols");
-  check_eq(copied.arith_mode, tile_npu::ArithMode::sat, "tc7.arith_mode");
 }
 
 TEST_CASE(cfg_get_reads_field_back) {
@@ -242,8 +240,8 @@ TEST_CASE(cfg_setw_writes_config_span) {
   write_word(memory, CODE_BASE, cfg_setw(0, 0, 2, 5, 2));      // tc2..tc4 = x5
   write_word(memory, CODE_BASE + 4, cfg_setw(2, 0, 0, 6, 31)); // vc0..vc31 = x6
   sim.reset(CODE_BASE);
-  // TC: rows 8, cols 16, dtype u8, row-major, sat; the high half is ignored.
-  sim.state().scalar.write_x(5, 0xdead'beef'0081'1008ull);
+  // TC: rows 8, cols 16, dtype u8, row-major; the high half is ignored.
+  sim.state().scalar.write_x(5, 0xdead'beef'0001'1008ull);
   sim.state().scalar.write_x(6, 0x0414); // VC: len 20, dtype f32
   check_eq(sim.step().status, StepStatus::retired, "tile cfg.setw retires");
   for (int i = 2; i <= 4; ++i) {
@@ -252,7 +250,6 @@ TEST_CASE(cfg_setw_writes_config_span) {
     check_eq(tc.dtype, DType::u8, what + " dtype");
     check_eq(tc.rows, std::uint8_t{8}, what + " rows");
     check_eq(tc.cols, std::uint8_t{16}, what + " cols");
-    check_eq(tc.arith_mode, tile_npu::ArithMode::sat, what + " arith mode");
   }
   check_eq(sim.state().tc[1].rows, std::uint8_t{0}, "tc1 untouched");
   check_eq(sim.state().tc[5].rows, std::uint8_t{0}, "tc5 untouched");

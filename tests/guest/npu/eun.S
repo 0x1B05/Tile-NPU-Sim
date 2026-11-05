@@ -1,7 +1,7 @@
 #include "npu.inc"
 
 # Self-checking E_UNARY image: programs configs and descriptors, then runs
-# not/abs/neg and the approximate f32 functions in place over vectors loaded
+# abs/neg and the approximate f32 functions in place over vectors loaded
 # from memory. Every stage stores the result back and compares it against an
 # expected array word by word (subw keeps the comparison in the low 32 bits,
 # immune to lw/li extension differences). Ends with ebreak: a0 = 0 pass,
@@ -95,28 +95,6 @@ _start:
     addi      x6, x6, -1
     bnez      x6, 3b
 
-    # tnot: {0x0F, 0xF0, 0x55, 0xAA} -> {0xF0, 0x0F, 0xAA, 0x55}
-    lla       x3, src_b
-    CFG_REG   0, 1, 0, 0, 3, 0
-    TLOAD     0
-    TNOT      0, 0
-    lla       x3, dstbuf32
-    CFG_REG   0, 1, 0, 0, 3, 0
-    TSTORE    0
-    lla       x3, dstbuf32
-    lla       x4, exp_b
-    li        x6, 4
-    li        a0, 5
-    FENCE_MEM
-5:  lbu       x5, 0(x3)
-    lbu       x7, 0(x4)
-    sub       x5, x5, x7
-    bnez      x5, fail
-    addi      x3, x3, 1
-    addi      x4, x4, 1
-    addi      x6, x6, -1
-    bnez      x6, 5b
-
     # aneg: {5, -5} -> {-5, 5}
     lla       x3, src_n
     CFG_REG   1, 1, 0, 0, 3, 0
@@ -174,8 +152,6 @@ src_f2: .word 0x40800000, 0xC0000000, 0x7F800000, 0x80000000
 exp_f2: .word 0x3E800000, 0xBF000000, 0x00000000, 0xFF800000
 src_f3: .word 0x3E800000, 0x40800000, 0x7F800000, 0x00000000
 exp_f3: .word 0x40000000, 0x3F000000, 0x00000000, 0x7F800000
-src_b:  .byte 0x0F, 0xF0, 0x55, 0xAA
-exp_b:  .byte 0xF0, 0x0F, 0xAA, 0x55
     .balign 4
 src_n:  .word 5, 0xFFFFFFFB
 exp_n:  .word 0xFFFFFFFB, 5

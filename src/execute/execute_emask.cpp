@@ -78,7 +78,7 @@ ExecuteResult execute(const MaskInstr &instr, State &state) {
         using Element = typename std::remove_cvref_t<decltype(regs)>::value_type::value_type;
         const auto &dst_config = configs[instr.dest.index];
         const auto &src_config = configs[instr.src.index];
-        if (!valid_elementwise_config(dst_config) || !valid_elementwise_config(src_config) ||
+        if (!valid_domain_config(dst_config) || !valid_domain_config(src_config) ||
             !configs_match(dst_config, src_config)) {
           return config_error();
         }

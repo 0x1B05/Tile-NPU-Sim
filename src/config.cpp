@@ -56,9 +56,6 @@ std::uint64_t read_field(const Config &config, ConfigField field) {
   case ConfigField::rows:   return to_raw(config.rows);
   case ConfigField::cols:   return to_raw(config.cols);
   case ConfigField::layout: return to_raw(config.layout);
-  case ConfigField::arith_mode:
-    if constexpr (requires { config.arith_mode; }) return to_raw(config.arith_mode);
-    break;
   default: break;
   }
   unreachable("invalid field for matrix config");
@@ -71,11 +68,6 @@ ConfigAccessStatus write_field(Config &config, ConfigField field, std::uint64_t 
   case ConfigField::rows:   return store_if(config.rows, raw, extent(MATRIX_EXTENT));
   case ConfigField::cols:   return store_if(config.cols, raw, extent(MATRIX_EXTENT));
   case ConfigField::layout: return store_if(config.layout, raw, below(to_raw(Layout::count)));
-  case ConfigField::arith_mode:
-    if constexpr (requires { config.arith_mode; }) {
-      return store_if(config.arith_mode, raw, below(to_raw(ArithMode::count)));
-    }
-    break;
   default: break;
   }
   return ConfigAccessStatus::unsupported_field;
@@ -171,7 +163,6 @@ constexpr ConfigFieldInfo TC_FIELDS[] = {
     {ConfigField::rows,       BitRange{7,   0}}, // field3 = 1
     {ConfigField::cols,       BitRange{15,  8}}, // field3 = 2
     {ConfigField::layout,     BitRange{22, 20}}, // field3 = 3
-    {ConfigField::arith_mode, BitRange{24, 23}}, // field3 = 4
 };
 
 constexpr ConfigFieldInfo AC_FIELDS[] = {

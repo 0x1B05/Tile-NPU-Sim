@@ -43,13 +43,6 @@ template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
 
 TEST_CASE(eun_decode) {
   constexpr std::array cases{
-      // Anchor word computed by hand from the encoding figure.
-      Case{.name = "tnot t0, t1",
-           .word = 0x10000080u,
-           .op = EunOp::bit_not,
-           .domain = NpuDomain::tile,
-           .dest = 0,
-           .src = 1},
       Case{.name = "anot a11, a0",
            .word = make_eun(NpuDomain::acc, 0, 11, 0),
            .op = EunOp::bit_not,
@@ -92,9 +85,9 @@ TEST_CASE(eun_decode) {
 
 TEST_CASE(eun_decode_rejects_reserved) {
   constexpr std::array cases{
-      // The reserved domain has no E_UNARY; on Tile only `not` exists; funct3 = 110/111 are
-      // reserved.
+      // E_UNARY is Acc/Vec32 only; funct3 = 110/111 are reserved.
       DecodeCase{"reserved not", make_eun(NpuDomain::reserved, 0, 0, 0)},
+      DecodeCase{"tnot", make_eun(NpuDomain::tile, 0, 0, 0)},
       DecodeCase{"tabs", make_eun(NpuDomain::tile, 1, 0, 0)},
       DecodeCase{"texp2", make_eun(NpuDomain::tile, 3, 0, 0)},
       DecodeCase{"funct3 110", make_eun(NpuDomain::acc, 6, 0, 0)},

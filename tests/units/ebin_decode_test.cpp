@@ -58,17 +58,6 @@ template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
 
 TEST_CASE(ebin_decode) {
   constexpr std::array cases{
-      // Anchor words computed by hand from the encoding figure.
-      Case{"tadd t0, t1, t2", 0x00002080u, EbinOp::add, NpuDomain::tile, 0, 1, false, 2},
-      Case{"taddx t0, t1, x2", 0x02002080u, EbinOp::add, NpuDomain::tile, 0, 1, true, 2},
-      Case{"tsub t15, t14, t13", make_ebin(EbinOp::sub, NpuDomain::tile, false, 15, 14, 13),
-           EbinOp::sub, NpuDomain::tile, 15, 14, false, 13},
-      Case{"tadd t31, t30, t29", make_ebin(EbinOp::add, NpuDomain::tile, false, 31, 30, 29),
-           EbinOp::add, NpuDomain::tile, 31, 30, false, 29},
-      Case{"tand t3, t4, t5", make_ebin(EbinOp::bit_and, NpuDomain::tile, false, 3, 4, 5),
-           EbinOp::bit_and, NpuDomain::tile, 3, 4, false, 5},
-      Case{"tshlx t6, t7, x8", make_ebin(EbinOp::shl, NpuDomain::tile, true, 6, 7, 8), EbinOp::shl,
-           NpuDomain::tile, 6, 7, true, 8},
       Case{"amul a0, a1, a2", make_ebin(EbinOp::mul, NpuDomain::acc, false, 0, 1, 2), EbinOp::mul,
            NpuDomain::acc, 0, 1, false, 2},
       Case{"aadd a15, a14, a13", make_ebin(EbinOp::add, NpuDomain::acc, false, 15, 14, 13),
@@ -91,18 +80,16 @@ TEST_CASE(ebin_decode) {
 
 TEST_CASE(ebin_decode_rejects_reserved) {
   const std::array cases{
-      DecodeCase{"tile mul has no 8-bit form",
-                 make_ebin(EbinOp::mul, NpuDomain::tile, false, 0, 1, 2)},
+      DecodeCase{"tile domain has no E_BIN encoding",
+                 make_ebin(EbinOp::add, NpuDomain::tile, false, 0, 1, 2)},
       DecodeCase{"funct4 0011 is reserved",
                  make_ebin(static_cast<EbinOp>(3), NpuDomain::acc, false, 0, 1, 2)},
-      DecodeCase{"tile mulx is reserved as well",
-                 make_ebin(EbinOp::mul, NpuDomain::tile, true, 0, 1, 2)},
       // funct4 values 6/7/14/15 are unassigned; the enum has no name for
       // them, so the raw code is cast in explicitly.
       DecodeCase{"funct4 = 0110 unassigned",
-                 make_ebin(static_cast<EbinOp>(6), NpuDomain::tile, false, 0, 1, 2)},
+                 make_ebin(static_cast<EbinOp>(6), NpuDomain::acc, false, 0, 1, 2)},
       DecodeCase{"funct4 = 0111 unassigned",
-                 make_ebin(static_cast<EbinOp>(7), NpuDomain::tile, false, 0, 1, 2)},
+                 make_ebin(static_cast<EbinOp>(7), NpuDomain::acc, false, 0, 1, 2)},
       DecodeCase{"funct4 = 1110 unassigned",
                  make_ebin(static_cast<EbinOp>(14), NpuDomain::vec32, false, 0, 1, 2)},
       DecodeCase{"funct4 = 1111 unassigned",
@@ -110,7 +97,7 @@ TEST_CASE(ebin_decode_rejects_reserved) {
       DecodeCase{"reserved domain has no E_BIN encoding",
                  make_ebin(EbinOp::add, NpuDomain::reserved, false, 0, 1, 2)},
       DecodeCase{"nonzero E_BIN reserved4",
-                 make_ebin(EbinOp::add, NpuDomain::tile, false, 0, 1, 2) | (1u << 17)},
+                 make_ebin(EbinOp::add, NpuDomain::acc, false, 0, 1, 2) | (1u << 17)},
       // Acc has 16 registers; a16+ is a reserved encoding.
       DecodeCase{"acc dest 16 out of range",
                  make_ebin(EbinOp::add, NpuDomain::acc, false, 16, 1, 2)},

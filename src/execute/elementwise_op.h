@@ -13,14 +13,6 @@
 
 namespace tile_npu {
 
-// The overflow mode only exists on the tile domain (8-bit add/sub); the
-// 32-bit domains always wrap.
-inline ArithMode arith_mode_of(const TileConfig &config) { return config.arith_mode; }
-
-inline ArithMode arith_mode_of(const AccConfig &) { return ArithMode::wrap; }
-
-inline ArithMode arith_mode_of(const Vec32Config &) { return ArithMode::wrap; }
-
 // Bitwise and shift operations are integer-only. Legality comes from the
 // shared EBIN_BY_FUNCT4 table; the op is structurally valid.
 inline bool ebin_op_supports_dtype(EbinOp op, DType dtype) {
@@ -40,18 +32,7 @@ inline float apply_ebin_f32(EbinOp op, float lhs, float rhs) {
   }
 }
 
-template <typename E> E ebin_add_sub(EbinOp op, DType dtype, ArithMode arith, E lhs, E rhs) {
-  if constexpr (sizeof(E) == 1) {
-    using S = std::make_signed_t<E>;
-    const bool is_signed = dtype == DType::i8 || dtype == DType::i32;
-    const int left = is_signed ? static_cast<int>(static_cast<S>(lhs)) : int{lhs};
-    const int right = is_signed ? static_cast<int>(static_cast<S>(rhs)) : int{rhs};
-    int result = op == EbinOp::add ? left + right : left - right;
-    if (arith == ArithMode::sat) {
-      result = is_signed ? std::clamp(result, -128, 127) : std::clamp(result, 0, 255);
-    }
-    return static_cast<E>(result);
-  }
+template <typename E> E ebin_add_sub(EbinOp op, E lhs, E rhs) {
   return static_cast<E>(op == EbinOp::add ? lhs + rhs : lhs - rhs);
 }
 
@@ -66,7 +47,7 @@ template <typename E> E ebin_min_max(EbinOp op, DType dtype, E lhs, E rhs) {
   return op == EbinOp::min ? std::min(lhs, rhs) : std::max(lhs, rhs);
 }
 
-template <typename E> E apply_ebin_int(EbinOp op, DType dtype, ArithMode arith, E lhs, E rhs) {
+template <typename E> E apply_ebin_int(EbinOp op, DType dtype, E lhs, E rhs) {
   using S = std::make_signed_t<E>;
   constexpr E shamt_mask = static_cast<E>(std::numeric_limits<E>::digits - 1);
 
@@ -74,7 +55,7 @@ template <typename E> E apply_ebin_int(EbinOp op, DType dtype, ArithMode arith, 
   case EbinOp::mul: return static_cast<E>(lhs * rhs);
 
   case EbinOp::add:
-  case EbinOp::sub: return ebin_add_sub(op, dtype, arith, lhs, rhs);
+  case EbinOp::sub: return ebin_add_sub(op, lhs, rhs);
 
   case EbinOp::min:
   case EbinOp::max: return ebin_min_max(op, dtype, lhs, rhs);
@@ -89,13 +70,13 @@ template <typename E> E apply_ebin_int(EbinOp op, DType dtype, ArithMode arith, 
   }
 }
 
-template <typename E> E apply_ebin_op(EbinOp op, DType dtype, ArithMode arith, E lhs, E rhs) {
+template <typename E> E apply_ebin_op(EbinOp op, DType dtype, E lhs, E rhs) {
   if constexpr (sizeof(E) == sizeof(float)) {
     if (dtype == DType::f32) {
       return static_cast<E>(as_u32(apply_ebin_f32(op, as_f32(lhs), as_f32(rhs))));
     }
   }
-  return apply_ebin_int(op, dtype, arith, lhs, rhs);
+  return apply_ebin_int(op, dtype, lhs, rhs);
 }
 
 } // namespace tile_npu

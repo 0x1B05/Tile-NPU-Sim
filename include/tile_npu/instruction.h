@@ -304,7 +304,7 @@ enum class ConfigRegType : std::uint8_t { tc, ac, vc, tm, am, vm, count };
 
 // clang-format off
 enum class ConfigField : std::uint8_t {
-  dtype, rows, cols, layout, arith_mode, // matrix configs
+  dtype, rows, cols, layout, // matrix configs
   len,                                   // vector configs
   base_addr, row_stride_bytes, col_stride_bytes, transform, flags,   // matrix descriptors
   stride_bytes,                                                     // vector descriptors

@@ -66,7 +66,6 @@ std::string_view field_name(ConfigField field) {
   case ConfigField::rows: return "rows";
   case ConfigField::cols: return "cols";
   case ConfigField::layout: return "layout";
-  case ConfigField::arith_mode: return "arith_mode";
   case ConfigField::len: return "len";
   case ConfigField::base_addr: return "base_addr";
   case ConfigField::row_stride_bytes: return "row_stride_bytes";

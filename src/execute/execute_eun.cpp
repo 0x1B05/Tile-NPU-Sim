@@ -62,11 +62,11 @@ template <typename E> E apply_unary(EunOp op, DType dtype, E value) {
 
 // Runs over the destination's effective region.
 ExecuteResult execute(const EunInstr &instr, State &state) {
-  return with_domain<NpuDomain::tile, NpuDomain::acc, NpuDomain::vec32>(
+  return with_domain<NpuDomain::acc, NpuDomain::vec32>(
       state, instr.dest.domain, [&](auto &regs, const auto &configs) {
         const auto &dst_config = configs[instr.dest.index];
         const auto &src_config = configs[instr.src.index];
-        if (!valid_elementwise_config(dst_config) || !valid_elementwise_config(src_config) ||
+        if (!valid_domain_config(dst_config) || !valid_domain_config(src_config) ||
             !configs_match(dst_config, src_config) ||
             !op_supports_dtype(instr.op, dst_config.dtype)) {
           return config_error();

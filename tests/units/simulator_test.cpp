@@ -61,36 +61,36 @@ TEST_CASE(memory_and_step) {
   check_eq(hex(sim.state().scalar.read_x(1)), hex(0), "reset clears simulator state");
 }
 
-TEST_CASE(empty_tadd) {
+TEST_CASE(empty_vadd) {
   tile_npu::Ram memory(0x3800, 4);
-  write_word(memory, 0x3800, 0); // tadd t0, t0, t0; zero default shape
+  write_word(memory, 0x3800, 0x0C000000u); // vadd v0, v0, v0; zero default len
   tile_npu::Simulator sim(memory);
   sim.reset(0x3800);
-  sim.state().t[0][0] = 42;
+  sim.state().v[0][0] = 42;
   check_eq(sim.step().status, tile_npu::StepStatus::invalid_configuration,
-           "all-zero NPU word decodes as tadd, but the zero shape is illegal");
-  check_eq(sim.state().t[0][0], std::uint8_t{42}, "rejected tadd leaves data untouched");
-  check_eq(hex(sim.state().scalar.pc), hex(0x3800), "rejected tadd keeps pc");
+           "vadd with the default zero length is illegal");
+  check_eq(sim.state().v[0][0], std::uint32_t{42}, "rejected vadd leaves data untouched");
+  check_eq(hex(sim.state().scalar.pc), hex(0x3800), "rejected vadd keeps pc");
 }
 
 TEST_CASE(failed_execution_is_non_mutating) {
   tile_npu::Ram memory(0x4000, 8);
-  write_word(memory, 0x4000, 0x00002080u); // tadd t0, t1, t2
-  write_word(memory, 0x4004, 0x00022080u); // reserved4 is nonzero
+  write_word(memory, 0x4000, 0x0C002080u); // vadd v0, v1, v2
+  write_word(memory, 0x4004, 0x0C022080u); // reserved4 is nonzero
 
   tile_npu::Simulator sim(memory);
   sim.reset(0x4000);
   auto &state = sim.state();
-  state.tc[0].rows = state.tc[1].rows = state.tc[2].rows = 1;
-  state.tc[0].cols = state.tc[1].cols = 1;
-  state.tc[2].cols = 2;
-  state.t[0][0] = 99;
+  state.vc[0].dtype = state.vc[1].dtype = state.vc[2].dtype = tile_npu::DType::i32;
+  state.vc[0].len = state.vc[1].len = 1;
+  state.vc[2].len = 2;
+  state.v[0][0] = 99;
   check_eq(sim.step().status, tile_npu::StepStatus::invalid_configuration, "shape mismatch status");
-  check_eq(state.t[0][0], std::uint8_t{99}, "shape mismatch does not partially execute tadd");
+  check_eq(state.v[0][0], std::uint32_t{99}, "shape mismatch does not partially execute vadd");
   check_eq(hex(state.scalar.pc), hex(0x4000), "shape mismatch preserves pc");
 
   state.scalar.pc = 0x4004;
   check_eq(sim.step().status, tile_npu::StepStatus::illegal_instruction, "illegal encoding status");
-  check_eq(state.t[0][0], std::uint8_t{99}, "illegal encoding leaves state unchanged");
+  check_eq(state.v[0][0], std::uint32_t{99}, "illegal encoding leaves state unchanged");
   check_eq(hex(sim.state().scalar.pc), hex(0x4004), "illegal encoding preserves pc");
 }

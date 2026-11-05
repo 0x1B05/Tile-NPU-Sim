@@ -25,10 +25,9 @@ std::optional<NpuOperand> decode_bx_src2(std::uint8_t sel3, std::uint8_t src2,
 // E_BIN (R3): major4 = 0000, q = 00.
 // 31    28 27  26  25  24    21 20       17 16      12 11       7 6        2 1   0
 // [major4] [dom2] [BX] [funct4] [reserved4] [   B5   ] [   A5   ] [   D5   ] [ q ]
-// dom2: 00 Tile, 01 Acc, 11 Vec32; 10 reserved.
+// dom2: 01 Acc, 11 Vec32; 00/10 reserved.
 // BX: 0 = same-domain B5, 1 = Scalar xS in B5.
-// funct4 = {G, op3}, checked by EBIN_BY_FUNCT4; Tile mul and op3 = 011 are
-// reserved.
+// funct4 = {G, op3}, checked by EBIN_BY_FUNCT4; op3 = 011 is reserved.
 DecodeResult decode_ebin(std::uint32_t word) {
   const auto f = encoding::NpuR3::from(word);
   const auto domain = sel3_domain(f.sel3);
@@ -50,7 +49,7 @@ DecodeResult decode_ebin(std::uint32_t word) {
 // E_UNARY (R2): major4 = 0001, q = 00.
 // 31    28 27  26 25  24    22 21                12 11       7 6        2 1   0
 // [major4] [dom2] [0] [funct3] [    reserved10    ] [   S5   ] [   D5   ] [ q ]
-// dom2: 00 Tile (only the not operation), 01 Acc, 11 Vec32; 10 reserved.
+// dom2: 01 Acc, 11 Vec32; 00/10 reserved.
 // funct3: 000 not, 001 abs, 010 neg, 011 exp2.approx, 100 rcp.approx,
 //         101 rsqrt.approx; 110/111 reserved.
 DecodeResult decode_eun(std::uint32_t word) {

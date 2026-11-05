@@ -13,7 +13,6 @@
 namespace tile_npu {
 
 struct EbinInfo {
-  bool tile_allowed;
   bool integer_allowed;
   bool f32_allowed;
 };
@@ -21,41 +20,43 @@ struct EbinInfo {
 inline constexpr std::array<std::optional<EbinInfo>, 16> EBIN_BY_FUNCT4 = [] {
   std::array<std::optional<EbinInfo>, 16> table{};
   // clang-format off
-  //                       tile   int    f32
-  table[0b0000] = EbinInfo{true , true , true }; // add
-  table[0b0001] = EbinInfo{true , true , true }; // sub
-  table[0b0010] = EbinInfo{false, true , true }; // mul
-  table[0b0100] = EbinInfo{true , true , true }; // min
-  table[0b0101] = EbinInfo{true , true , true }; // max
-  table[0b1000] = EbinInfo{true , true , false}; // bit_and
-  table[0b1001] = EbinInfo{true , true , false}; // bit_or
-  table[0b1010] = EbinInfo{true , true , false}; // bit_xor
-  table[0b1011] = EbinInfo{true , true , false}; // shl
-  table[0b1100] = EbinInfo{true , true , false}; // shr
-  table[0b1101] = EbinInfo{true , true , false}; // sra
+  //                       int    f32
+  table[0b0000] = EbinInfo{true , true }; // add
+  table[0b0001] = EbinInfo{true , true }; // sub
+  table[0b0010] = EbinInfo{true , true }; // mul
+  table[0b0100] = EbinInfo{true , true }; // min
+  table[0b0101] = EbinInfo{true , true }; // max
+  table[0b1000] = EbinInfo{true , false}; // bit_and
+  table[0b1001] = EbinInfo{true , false}; // bit_or
+  table[0b1010] = EbinInfo{true , false}; // bit_xor
+  table[0b1011] = EbinInfo{true , false}; // shl
+  table[0b1100] = EbinInfo{true , false}; // shr
+  table[0b1101] = EbinInfo{true , false}; // sra
   // clang-format on
   return table;
 }();
 
-// E_BIN/E_BCAST op legality on a destination domain: an assigned funct4 code,
-// a defined domain, and no Tile mul.
+inline constexpr bool is_acc_or_vec32(NpuDomain domain) {
+  return domain == NpuDomain::acc || domain == NpuDomain::vec32;
+}
+
+// E_BIN/E_BCAST op legality on a destination domain: an assigned funct4 code
+// and an Acc/Vec32 destination. Tile has no elementwise instructions.
 inline constexpr bool is_ebin_op(EbinOp op, NpuDomain domain) {
   const auto code = static_cast<std::uint8_t>(op);
   if (code >= EBIN_BY_FUNCT4.size() || !EBIN_BY_FUNCT4[code]) return false;
-  return domain != NpuDomain::reserved &&
-         (domain != NpuDomain::tile || EBIN_BY_FUNCT4[code]->tile_allowed);
+  return is_acc_or_vec32(domain);
 }
 
-// Tile only has `not`.
+// E_UNARY is Acc/Vec32 only; Tile has no elementwise instructions.
 inline constexpr bool is_eun_op(EunOp op, NpuDomain domain) {
-  if (domain == NpuDomain::reserved) return false;
   switch (op) {
-  case EunOp::bit_not: return true;
+  case EunOp::bit_not:
   case EunOp::abs:
   case EunOp::neg:
   case EunOp::exp2:
   case EunOp::rcp:
-  case EunOp::rsqrt: return domain == NpuDomain::acc || domain == NpuDomain::vec32;
+  case EunOp::rsqrt: return is_acc_or_vec32(domain);
   default: return false;
   }
 }
@@ -82,10 +83,9 @@ inline constexpr std::array<std::optional<CmpInfo>, 8> CMP_BY_FUNCT3 = [] {
 
 // select and fmadd are Acc/Vec32 only; Tile is reserved.
 inline constexpr bool is_er4_op(Er4Op op, NpuDomain domain) {
-  if (domain == NpuDomain::reserved) return false;
   switch (op) {
   case Er4Op::select:
-  case Er4Op::fmadd: return domain == NpuDomain::acc || domain == NpuDomain::vec32;
+  case Er4Op::fmadd: return is_acc_or_vec32(domain);
   default: return false;
   }
 }

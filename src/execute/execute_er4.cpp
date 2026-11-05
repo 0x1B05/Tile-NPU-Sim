@@ -23,8 +23,8 @@ template <typename Configs> bool valid_operands(const Er4Instr &instr, const Con
   const auto &arg = configs[instr.arg.index];
   const auto &lhs = configs[instr.src1.index];
   const auto &rhs = configs[instr.src2.index];
-  if (!valid_elementwise_config(dst) || !valid_domain_config(arg) ||
-      !valid_elementwise_config(lhs) || !valid_elementwise_config(rhs) ||
+  if (!valid_domain_config(dst) || !valid_domain_config(arg) ||
+      !valid_domain_config(lhs) || !valid_domain_config(rhs) ||
       !configs_match(dst, lhs) || !configs_match(dst, rhs)) {
     return false;
   }

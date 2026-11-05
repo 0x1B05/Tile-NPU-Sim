@@ -34,12 +34,10 @@ inline void load_one(tile_npu::Simulator &sim, tile_npu::Ram &memory, std::uint3
 }
 
 inline void tile_cfg(tile_npu::State &state, std::size_t index, tile_npu::DType dtype,
-                     std::uint8_t rows, std::uint8_t cols,
-                     tile_npu::ArithMode arith_mode = tile_npu::ArithMode::wrap) {
+                     std::uint8_t rows, std::uint8_t cols) {
   state.tc[index].dtype = dtype;
   state.tc[index].rows = rows;
   state.tc[index].cols = cols;
-  state.tc[index].arith_mode = arith_mode;
 }
 
 inline void acc_cfg(tile_npu::State &state, std::size_t index, tile_npu::DType dtype,

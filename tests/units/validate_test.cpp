@@ -111,19 +111,19 @@ constexpr NpuRegister V(std::uint8_t i) { return {NpuDomain::vec32, i}; }
 } // namespace
 
 TEST_CASE(validate_rejects_bad_ebin) {
-  check_illegal(EbinInstr{static_cast<EbinOp>(14), T(0), T(1), T(2)}, "unassigned funct4 code");
+  check_illegal(EbinInstr{static_cast<EbinOp>(14), A(0), A(1), A(2)}, "unassigned funct4 code");
   check_illegal(EbinInstr{static_cast<EbinOp>(3), A(0), A(1), A(2)}, "reserved funct4 code");
   check_illegal(EbinInstr{EbinOp::add, R(0), R(1), R(2)}, "reserved domain");
-  check_illegal(EbinInstr{EbinOp::mul, T(0), T(1), T(2)}, "tile mul");
-  check_illegal(EbinInstr{EbinOp::add, T(0), A(1), T(2)}, "cross-domain src1");
-  check_illegal(EbinInstr{EbinOp::add, T(32), T(1), T(2)}, "dest index 32");
-  check_illegal(EbinInstr{EbinOp::add, T(0), T(1), ScalarRegister{32}}, "scalar src2 index 32");
+  check_illegal(EbinInstr{EbinOp::add, T(0), T(1), T(2)}, "tile domain");
+  check_illegal(EbinInstr{EbinOp::add, A(0), V(1), A(2)}, "cross-domain src1");
+  check_illegal(EbinInstr{EbinOp::add, A(16), A(1), A(2)}, "dest index 16");
+  check_illegal(EbinInstr{EbinOp::add, V(0), V(1), ScalarRegister{32}}, "scalar src2 index 32");
 }
 
 TEST_CASE(validate_rejects_bad_eun) {
   check_illegal(EunInstr{static_cast<EunOp>(7), A(0), A(1)}, "reserved op");
   check_illegal(EunInstr{EunOp::bit_not, R(0), R(1)}, "reserved domain");
-  check_illegal(EunInstr{EunOp::abs, T(0), T(1)}, "tile only has bit_not");
+  check_illegal(EunInstr{EunOp::bit_not, T(0), T(1)}, "tile has no E_UNARY");
   check_illegal(EunInstr{EunOp::neg, A(0), V(1)}, "cross-domain src");
 }
 
@@ -355,16 +355,16 @@ TEST_CASE(validate_rejects_acc_index_16) {
 TEST_CASE(validate_accepts_legal_hand_built_ebin) {
   Env env;
   for (auto index : {0, 1, 2})
-    tile_cfg(env.state, index, DType::i8, 1, 2);
-  env.state.t[1][0] = i8_bits(3);
-  env.state.t[1][1] = i8_bits(-4);
-  env.state.t[2][0] = i8_bits(5);
-  env.state.t[2][1] = i8_bits(10);
-  const EbinInstr instr{EbinOp::add, T(0), T(1), T(2)}; // tadd t0, t1, t2
+    acc_cfg(env.state, index, DType::i32, 1, 2);
+  env.state.a[1][0] = 3;
+  env.state.a[1][1] = static_cast<std::uint32_t>(-4);
+  env.state.a[2][0] = 5;
+  env.state.a[2][1] = 10;
+  const EbinInstr instr{EbinOp::add, A(0), A(1), A(2)}; // aadd a0, a1, a2
   const auto result = exec_npu_instr(DecodedNpuInstr{instr}, env.ctx);
-  check_eq(result.status, StepStatus::retired, "hand-built tadd retires");
-  check_eq(env.state.t[0][0], i8_bits(8), "lane 0");
-  check_eq(env.state.t[0][1], i8_bits(6), "lane 1");
+  check_eq(result.status, StepStatus::retired, "hand-built aadd retires");
+  check_eq(env.state.a[0][0], 8u, "lane 0");
+  check_eq(env.state.a[0][1], 6u, "lane 1");
 }
 
 TEST_CASE(validate_accepts_legal_hand_built_cfg) {
@@ -403,18 +403,6 @@ TEST_CASE(validate_accepts_high_index_cfg) {
 
 TEST_CASE(validate_accepts_high_index_data_registers) {
   Env env;
-  for (auto index : {29, 30, 31})
-    tile_cfg(env.state, index, DType::i8, 1, 2);
-  env.state.t[30][0] = i8_bits(3);
-  env.state.t[30][1] = i8_bits(-4);
-  env.state.t[29][0] = i8_bits(5);
-  env.state.t[29][1] = i8_bits(10);
-  const EbinInstr tile_add{EbinOp::add, T(31), T(30), T(29)}; // tadd t31, t30, t29
-  const auto tile_result = exec_npu_instr(DecodedNpuInstr{tile_add}, env.ctx);
-  check_eq(tile_result.status, StepStatus::retired, "hand-built tadd t31 retires");
-  check_eq(env.state.t[31][0], i8_bits(8), "tile lane 0");
-  check_eq(env.state.t[31][1], i8_bits(6), "tile lane 1");
-
   for (auto index : {13, 14, 15})
     acc_cfg(env.state, index, DType::i32, 1, 2);
   env.state.a[14][0] = static_cast<std::uint32_t>(-7);

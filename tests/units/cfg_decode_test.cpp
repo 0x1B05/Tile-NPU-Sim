@@ -173,7 +173,7 @@ TEST_CASE(cfg_decode_field_codes_by_register_type) {
   };
 
   constexpr std::array tc_fields{ConfigField::dtype, ConfigField::rows, ConfigField::cols,
-                                 ConfigField::layout, ConfigField::arith_mode};
+                                 ConfigField::layout};
   constexpr std::array ac_fields{ConfigField::dtype, ConfigField::rows, ConfigField::cols,
                                  ConfigField::layout};
   constexpr std::array vc_fields{ConfigField::dtype, ConfigField::len};
