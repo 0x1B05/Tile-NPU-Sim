@@ -98,19 +98,19 @@ DecodeResult decode_vreduce_argmax(std::uint32_t word) {
 }
 
 // QNT (R4): major4 = 0100, q = 10.
-// [31:28] major4 [27:25] qf3 [24:22] funct3 (DQ/FORM)
+// [31:28] major4 [27:25] qf3 [24:22] funct3 (FORM/QD)
 // [21:17] vCol5 [16:12] vRow5 [11:7] S5 [6:2] D5 [1:0] q
 DecodeResult decode_qnt(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   if (f.sel3 != 0) {
     return DecodeError::illegal;
   }
-  const auto dq = static_cast<std::uint8_t>(f.funct3 & 0b100);
-  const auto form = static_cast<std::uint8_t>(f.funct3 & 0b011);
+  const auto form = static_cast<std::uint8_t>((f.funct3 >> 1) & 0b011);
+  const auto qd = static_cast<std::uint8_t>(f.funct3 & 0b001);
   const auto col = f.arg;
   const auto row = f.src2;
 
-  if (dq == 0) {
+  if (qd == 0) {
     if (form != 0 || col != 0 || !domain_register_valid(NpuDomain::tile, f.dest) ||
         !domain_register_valid(NpuDomain::acc, f.src1) ||
         !domain_register_valid(NpuDomain::vec32, row)) {

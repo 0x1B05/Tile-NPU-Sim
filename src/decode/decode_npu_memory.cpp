@@ -12,7 +12,7 @@ namespace tile_npu {
 // 31    28 27  26 25  24    22 21                12 11       7 6        2 1   0
 // [major4] [dom2] [0] [funct3] [    reserved10    ] [   S5   ] [   D5   ] [ q ]
 // dom2: 00 Tile, 01 Acc, 11 Vec32; 10 reserved. Acc gather is reserved.
-// funct3 = {form2, LS}: 000 block load, 001 block store, 010 gather load.
+// funct3 = {FORM, LS}: 000 block load, 001 block store, 010 gather load.
 template <MblkOp Op> DecodeResult decode_mblk(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = sel3_domain(f.sel3);

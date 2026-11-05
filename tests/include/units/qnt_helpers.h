@@ -5,7 +5,7 @@
 namespace tile_npu::test {
 
 // QNT (R4): major4 = 0100, q = 10.
-//   [27:25] qf3  [24:22] funct3 (DQ/FORM)  [21:17] vCol5  [16:12] vRow5
+//   [27:25] qf3  [24:22] funct3 (FORM/QD)  [21:17] vCol5  [16:12] vRow5
 //   [11:7] S5  [6:2] D5
 // qf3 = 000 selects q8s32.
 constexpr std::uint32_t make_qnt(std::uint32_t qf3, std::uint32_t funct3, std::uint32_t dest,
@@ -20,17 +20,17 @@ constexpr std::uint32_t make_aquant(std::uint32_t dest, std::uint32_t src, std::
 }
 
 constexpr std::uint32_t make_tdequant(std::uint32_t dest, std::uint32_t src, std::uint32_t scale) {
-  return make_qnt(0, 0b100, dest, src, 0, scale);
+  return make_qnt(0, 0b001, dest, src, 0, scale);
 }
 
 constexpr std::uint32_t make_adequant(std::uint32_t dest, std::uint32_t src, std::uint32_t col,
                                       std::uint32_t row) {
-  return make_qnt(0, 0b101, dest, src, col, row);
+  return make_qnt(0, 0b011, dest, src, col, row);
 }
 
 constexpr std::uint32_t make_vdequant(std::uint32_t dest, std::uint32_t src, std::uint32_t col,
                                       std::uint32_t row) {
-  return make_qnt(0, 0b110, dest, src, col, row);
+  return make_qnt(0, 0b101, dest, src, col, row);
 }
 
 } // namespace tile_npu::test

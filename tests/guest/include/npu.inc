@@ -125,7 +125,7 @@
 # src/decode/encoding.h:
 #   [31:28] major4 = 0000  [27:26] dom2  [25] 0  [24:22] funct3
 #   [21:12] reserved(0)    [11:7] S5 (u32 gather index vS)  [6:2] D5  [1:0] q = 01
-# funct3 = {form2, LS}: 000/001 = block load/store, 010 = gather load.
+# funct3 = {FORM, LS}: 000/001 = block load/store, 010 = gather load.
 # dom2: 0 = tile, 1 = acc, 3 = v (vec32); 2 is reserved.
 .macro M_BLK dom2, funct3, d5, s5
     .word ((\dom2 << 26) | (\funct3 << 22) | (\s5 << 7) | (\d5 << 2) | 1)
@@ -478,10 +478,10 @@
 .endm
 
 # QNT (R4), major4 = 0100, q = 10:
-#   [27:25] qf3  [24:22] DQ/FORM  [21:17] vCol5  [16:12] vRow5
+#   [27:25] qf3  [24:22] FORM/QD  [21:17] vCol5  [16:12] vRow5
 #   [11:7] S5  [6:2] D5
 # qf3 = 000: q8s32.
-# funct3: 000 aquant, 100 tdequant, 101 adequant, 110 vdequant.
+# funct3: 000 aquant, 001 tdequant, 011 adequant, 101 vdequant.
 .macro QNT qf3, funct3, d5, s5, vcol, vrow
     .word ((4 << 28) | ((\qf3 & 7) << 25) | ((\funct3 & 7) << 22) | ((\vcol & 31) << 17) | ((\vrow & 31) << 12) | (\s5 << 7) | (\d5 << 2) | 2)
 .endm
@@ -493,17 +493,17 @@
 
 # tdequant.rows.f32: asm operand order aD, tS, vScale.
 .macro TDEQUANT d5, s5, vscale
-    QNT 0, 4, \d5, \s5, 0, \vscale
+    QNT 0, 1, \d5, \s5, 0, \vscale
 .endm
 
 # adequant: asm operand order aD, aS, vCol, vRow.
 .macro ADEQUANT d5, s5, vcol, vrow
-    QNT 0, 5, \d5, \s5, \vcol, \vrow
+    QNT 0, 3, \d5, \s5, \vcol, \vrow
 .endm
 
 # vdequant: asm operand order vD, vS, vCol, vRow.
 .macro VDEQUANT d5, s5, vcol, vrow
-    QNT 0, 6, \d5, \s5, \vcol, \vrow
+    QNT 0, 5, \d5, \s5, \vcol, \vrow
 .endm
 
 # MMA (R4), mirroring NpuR4 in src/decode/encoding.h:

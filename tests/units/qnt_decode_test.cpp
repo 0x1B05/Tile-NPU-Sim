@@ -66,17 +66,17 @@ TEST_CASE(qnt_decode_rejects_reserved) {
       // qf3 = 000 is the only defined quantization format.
       DecodeCase{"aquant qf3 001", make_qnt(1, 0b000, 0, 0, 0, 0)},
       // Quantization only defines FORM = 00.
-      DecodeCase{"aquant form 01", make_qnt(0, 0b001, 0, 0, 0, 0)},
-      DecodeCase{"aquant form 10", make_qnt(0, 0b010, 0, 0, 0, 0)},
-      DecodeCase{"aquant form 11", make_qnt(0, 0b011, 0, 0, 0, 0)},
+      DecodeCase{"aquant form 01", make_qnt(0, 0b010, 0, 0, 0, 0)},
+      DecodeCase{"aquant form 10", make_qnt(0, 0b100, 0, 0, 0, 0)},
+      DecodeCase{"aquant form 11", make_qnt(0, 0b110, 0, 0, 0, 0)},
       // Dequantization FORM = 11 is reserved.
       DecodeCase{"dequant form 11", make_qnt(0, 0b111, 0, 0, 0, 0)},
       // The Tile storage path has no column scale.
       DecodeCase{"aquant vCol nonzero", make_qnt(0, 0b000, 0, 0, 1, 0)},
-      DecodeCase{"tdequant vCol nonzero", make_qnt(0, 0b100, 0, 0, 1, 0)},
+      DecodeCase{"tdequant vCol nonzero", make_qnt(0, 0b001, 0, 0, 1, 0)},
       // Acc has 16 registers; a16+ is a reserved encoding.
       DecodeCase{"aquant a16 source", make_qnt(0, 0b000, 0, 16, 0, 0)},
-      DecodeCase{"tdequant a16 destination", make_qnt(0, 0b100, 16, 0, 0, 0)},
+      DecodeCase{"tdequant a16 destination", make_qnt(0, 0b001, 16, 0, 0, 0)},
   };
   expect_illegal(cases);
 }
