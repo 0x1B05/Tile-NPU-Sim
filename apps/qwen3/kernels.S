@@ -581,6 +581,120 @@ qwen3_rmsnorm:
     ret
 
 # ---------------------------------------------------------------------------
+# void qwen3_rmsnorm_rope(float *x, const float *gamma, const float *cos_h,
+#                         const float *sin_h, uint32_t hd, uint32_t eps_bits,
+#                         uint32_t inv_n_bits)
+#
+# Fused per-head RMSNorm and rotate-half RoPE.  Keeping the head in v0..v3
+# removes the intermediate store/load that separate rmsnorm and rope calls
+# would perform.  Arithmetic order matches qwen3_rmsnorm followed by
+# qwen3_rope, so the result is bit-identical.  hd is 64 or 128.
+# ---------------------------------------------------------------------------
+    .globl qwen3_rmsnorm_rope
+qwen3_rmsnorm_rope:
+    LI_CWV  t6, DT_F32, 32
+    SETW    SEL_VC, 0, X_T6, 21
+    srli    t6, a4, 6                   # chunks per half: 1 (hd=64) or 2 (hd=128)
+
+    # x chunks: vm0..vm3; gamma: vm4..vm7; cos/sin: vm8..vm11
+    mv      t0, a0
+    .irp R,0,1,2,3
+      SETX    SEL_VM, CF_BASE, \R, X_T0
+      SETIV   SEL_VM, CF_STRIDE, 4, \R
+      SETIV   SEL_VM, CF_VFLAGS, 1, \R
+      addi    t0, t0, 128
+    .endr
+    mv      t0, a1
+    .irp R,4,5,6,7
+      SETX    SEL_VM, CF_BASE, \R, X_T0
+      SETIV   SEL_VM, CF_STRIDE, 4, \R
+      SETIV   SEL_VM, CF_VFLAGS, 1, \R
+      addi    t0, t0, 128
+    .endr
+    SETX    SEL_VM, CF_BASE, 8, X_A2
+    addi    t0, a2, 128
+    SETX    SEL_VM, CF_BASE, 9, X_T0
+    SETX    SEL_VM, CF_BASE, 10, X_A3
+    addi    t0, a3, 128
+    SETX    SEL_VM, CF_BASE, 11, X_T0
+    .irp R,8,9,10,11
+      SETIV   SEL_VM, CF_STRIDE, 4, \R
+      SETIV   SEL_VM, CF_VFLAGS, 1, \R
+    .endr
+
+    # store descriptors: vm12..vm15 = x, x+32, x+64, x+96 elements
+    mv      t0, a0
+    .irp R,12,13,14,15
+      SETX    SEL_VM, CF_BASE, \R, X_T0
+      SETIV   SEL_VM, CF_STRIDE, 4, \R
+      SETIV   SEL_VM, CF_VFLAGS, 0, \R
+      addi    t0, t0, 128
+    .endr
+
+    # sumsq with the same per-lane chunk order as qwen3_rmsnorm
+    VFILL   16, 0
+    VLOAD   0
+    VFMADD  16, 0, 0, 16
+    VLOAD   1
+    VFMADD  16, 1, 1, 16
+    li      t5, 1
+    beq     t6, t5, .Lrr_sum_done
+    VLOAD   2
+    VFMADD  16, 2, 2, 16
+    VLOAD   3
+    VFMADD  16, 3, 3, 16
+.Lrr_sum_done:
+    VREDUCE 0, 17, 16
+    VMULX   17, 17, X_A6
+    VADDX   17, 17, X_A5
+    VRSQRT  17, 17
+
+    # x = x * (gamma * inv_rms), same operand order as qwen3_rmsnorm
+    VLOAD   4
+    VMUL    4, 4, 17
+    VMUL    4, 0, 4
+    VLOAD   5
+    VMUL    5, 5, 17
+    VMUL    5, 1, 5
+    li      t5, 1
+    beq     t6, t5, .Lrr_norm_done
+    VLOAD   6
+    VMUL    6, 6, 17
+    VMUL    6, 2, 6
+    VLOAD   7
+    VMUL    7, 7, 17
+    VMUL    7, 3, 7
+.Lrr_norm_done:
+    # rotate-half RoPE on the normalized chunks (v4..v7)
+    VLOAD   8
+    VLOAD   10
+    VMUL    18, 4, 8
+    VMUL    19, 6, 10
+    VSUB    12, 18, 19
+    VMUL    18, 6, 8
+    VMUL    19, 4, 10
+    VADD    14, 18, 19
+    li      t5, 1
+    beq     t6, t5, .Lrr_rope_done
+    VLOAD   9
+    VLOAD   11
+    VMUL    18, 5, 9
+    VMUL    19, 7, 11
+    VSUB    13, 18, 19
+    VMUL    18, 7, 9
+    VMUL    19, 5, 11
+    VADD    15, 18, 19
+.Lrr_rope_done:
+    VSTORE  12
+    VSTORE  13
+    li      t5, 1
+    beq     t6, t5, .Lrr_done
+    VSTORE  14
+    VSTORE  15
+.Lrr_done:
+    ret
+
+# ---------------------------------------------------------------------------
 # void qwen3_rope(float *x, const float *cos_h, const float *sin_h, uint32_t hd)
 # In-place rotate-half RoPE on one head. cos_h/sin_h point at the position's
 # row (hd/2 f32 each). Requires hd/2 <= 64; the half is processed in 32-lane

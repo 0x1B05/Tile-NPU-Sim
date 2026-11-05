@@ -13,6 +13,8 @@ void qwen3_matmul_q(const int8_t *w, const float *w_scales, const int8_t *xq, co
 void qwen3_rmsnorm(float *x, const float *gamma, float *out, uint32_t n, uint32_t eps_bits,
                    uint32_t inv_n_bits);
 void qwen3_rope(float *x, const float *cos_h, const float *sin_h, uint32_t hd);
+void qwen3_rmsnorm_rope(float *x, const float *gamma, const float *cos_h, const float *sin_h,
+                        uint32_t hd, uint32_t eps_bits, uint32_t inv_n_bits);
 void qwen3_scores(const float *q, const char *k_base, uint32_t row_stride, float *scores,
                   uint32_t n_keys, uint32_t hd);
 void qwen3_scores4(const float *q, uint32_t q_stride, const char *k_base, uint32_t k_stride,
