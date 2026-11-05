@@ -1008,6 +1008,186 @@ qwen3_pv:
     ret
 
 # ---------------------------------------------------------------------------
+# void qwen3_pv4(const char *v_base, uint32_t row_stride, const float *probs,
+#                float *out, uint32_t n_keys, uint32_t hd,
+#                const uint32_t *rcp4, uint32_t out_stride)
+#
+# Four consecutive query rows.  Rows use the same max n_keys; the caller
+# zeroes the softmax tail so the extra terms contribute exactly zero.  The
+# per-row arithmetic order is the same as qwen3_pv.
+# ---------------------------------------------------------------------------
+    .globl qwen3_pv4
+qwen3_pv4:
+    addi    sp, sp, -80
+    sd      s0, 0(sp)
+    sd      s1, 8(sp)
+    sd      s2, 16(sp)
+    sd      s3, 24(sp)
+    sd      s4, 32(sp)
+    sd      s5, 40(sp)
+    sd      s6, 48(sp)
+    sd      s7, 56(sp)
+    sd      s8, 64(sp)
+    sd      s9, 72(sp)
+    mv      s0, a0                     # V base
+    mv      s1, a1                     # V row stride
+    mv      s2, a2                     # probs base
+    mv      s3, a3                     # out base
+    mv      s4, a4                     # max n_keys
+    mv      s5, a5                     # head_dim
+    mv      s6, a6                     # rcp4
+    mv      s7, a7                     # out row stride
+    srli    s9, s5, 5                  # chunks
+    addi    t0, s4, 31
+    srli    t0, t0, 5
+    slli    s8, t0, 7                  # probs row stride (bytes)
+
+    LI_CWV  t6, DT_F32, 32
+    SETW    SEL_VC, 8, X_T6, 23        # v8..v31: f32 len 32
+    SETIV   SEL_VM, CF_STRIDE, 4, 12
+    SETIV   SEL_VM, CF_VFLAGS, 1, 12   # V chunks auto-increment
+
+.macro PV4_OUT_ROW base, vmbase
+    mv      t0, \base
+    .irp C,0,1,2,3
+      SETX    SEL_VM, CF_BASE, (\vmbase + \C), X_T0
+      SETIV   SEL_VM, CF_STRIDE, 4, (\vmbase + \C)
+      SETIV   SEL_VM, CF_VFLAGS, 0, (\vmbase + \C)
+      addi    t0, t0, 128
+    .endr
+.endm
+
+    PV4_OUT_ROW s3, 16                 # out row 0: vm16..19
+    add     t1, s3, s7
+    PV4_OUT_ROW t1, 20                 # out row 1: vm20..23
+    slli    t1, s7, 1
+    add     t1, s3, t1
+    PV4_OUT_ROW t1, 24                 # out row 2: vm24..27
+    add     t1, t1, s7
+    PV4_OUT_ROW t1, 28                 # out row 3: vm28..31
+
+    VFILL   16, 0
+    VFILL   17, 0
+    VFILL   18, 0
+    VFILL   19, 0
+    VFILL   20, 0
+    VFILL   21, 0
+    VFILL   22, 0
+    VFILL   23, 0
+    VFILL   24, 0
+    VFILL   25, 0
+    VFILL   26, 0
+    VFILL   27, 0
+    VFILL   28, 0
+    VFILL   29, 0
+    VFILL   30, 0
+    VFILL   31, 0
+
+    mv      t3, s2                     # row 0 probs cursor
+    mv      t4, zero                   # key index
+.Lpv4_key:
+    lw      t0, 0(t3)
+    VINSERT 8, 0, X_T0
+    VBROADCAST 8, 8, 0
+    add     t1, t3, s8
+    lw      t0, 0(t1)
+    VINSERT 9, 0, X_T0
+    VBROADCAST 9, 9, 0
+    add     t1, t3, s8
+    add     t1, t1, s8
+    lw      t0, 0(t1)
+    VINSERT 10, 0, X_T0
+    VBROADCAST 10, 10, 0
+    add     t1, t1, s8
+    lw      t0, 0(t1)
+    VINSERT 11, 0, X_T0
+    VBROADCAST 11, 11, 0
+
+    mul     t0, t4, s1
+    add     t0, s0, t0
+    SETX    SEL_VM, CF_BASE, 12, X_T0
+    VLOAD   12
+    VFMADD  16, 12, 8, 16
+    VFMADD  20, 12, 9, 20
+    VFMADD  24, 12, 10, 24
+    VFMADD  28, 12, 11, 28
+    li      t5, 1
+    beq     s9, t5, .Lpv4_next
+    VLOAD   12
+    VFMADD  17, 12, 8, 17
+    VFMADD  21, 12, 9, 21
+    VFMADD  25, 12, 10, 25
+    VFMADD  29, 12, 11, 29
+    li      t5, 2
+    beq     s9, t5, .Lpv4_next
+    VLOAD   12
+    VFMADD  18, 12, 8, 18
+    VFMADD  22, 12, 9, 22
+    VFMADD  26, 12, 10, 26
+    VFMADD  30, 12, 11, 30
+    li      t5, 3
+    beq     s9, t5, .Lpv4_next
+    VLOAD   12
+    VFMADD  19, 12, 8, 19
+    VFMADD  23, 12, 9, 23
+    VFMADD  27, 12, 10, 27
+    VFMADD  31, 12, 11, 31
+.Lpv4_next:
+    addi    t3, t3, 4
+    addi    t4, t4, 1
+    bltu    t4, s4, .Lpv4_key
+
+    lw      t0, 0(s6)
+    VMULX   16, 16, X_T0
+    VMULX   17, 17, X_T0
+    VMULX   18, 18, X_T0
+    VMULX   19, 19, X_T0
+    lw      t0, 4(s6)
+    VMULX   20, 20, X_T0
+    VMULX   21, 21, X_T0
+    VMULX   22, 22, X_T0
+    VMULX   23, 23, X_T0
+    lw      t0, 8(s6)
+    VMULX   24, 24, X_T0
+    VMULX   25, 25, X_T0
+    VMULX   26, 26, X_T0
+    VMULX   27, 27, X_T0
+    lw      t0, 12(s6)
+    VMULX   28, 28, X_T0
+    VMULX   29, 29, X_T0
+    VMULX   30, 30, X_T0
+    VMULX   31, 31, X_T0
+    VSTORE  16
+    VSTORE  17
+    VSTORE  18
+    VSTORE  19
+    VSTORE  20
+    VSTORE  21
+    VSTORE  22
+    VSTORE  23
+    VSTORE  24
+    VSTORE  25
+    VSTORE  26
+    VSTORE  27
+    VSTORE  28
+    VSTORE  29
+    VSTORE  30
+    VSTORE  31
+
+    ld      s0, 0(sp)
+    ld      s1, 8(sp)
+    ld      s2, 16(sp)
+    ld      s3, 24(sp)
+    ld      s4, 32(sp)
+    ld      s5, 40(sp)
+    ld      s6, 48(sp)
+    ld      s7, 56(sp)
+    ld      s8, 64(sp)
+    ld      s9, 72(sp)
+    addi    sp, sp, 80
+    ret
+
+# ---------------------------------------------------------------------------
 # void qwen3_silu_mul(float *gate, const float *up, float *out, uint32_t n)
 # out = silu(gate) * up, n % 32 == 0.
 # ---------------------------------------------------------------------------

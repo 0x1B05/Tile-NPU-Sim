@@ -212,17 +212,21 @@ static void attention_rows(uint32_t layer, uint32_t base_pos, const float *q, fl
       const uint32_t n_padded_max = (n_keys_max + 31) & ~31u;
       qwen3_scores4(q + r * model.q_dim + h * model.head_dim, model.q_dim * 4, kb,
                     model.kv_dim * 4, pf_scores, n_keys_max, model.head_dim);
+      uint32_t rcp4[4];
       for (uint32_t rr = 0; rr < 4; ++rr) {
         const uint32_t n_keys = base_pos + r + rr + 1;
         const uint32_t n_padded = (n_keys + 31) & ~31u;
         float *row = pf_scores + rr * n_padded_max;
         for (uint32_t i = n_keys; i < n_padded; ++i)
           ((uint32_t *)row)[i] = 0xFF800000u;
-        uint32_t rcp = 0;
-        qwen3_softmax_exp(row, n_padded, model.scale_log2e_bits, &rcp);
-        qwen3_pv(vb, model.kv_dim * 4, row, attn + (r + rr) * model.q_dim + h * model.head_dim,
-                 n_keys, model.head_dim, rcp);
+        qwen3_softmax_exp(row, n_padded, model.scale_log2e_bits, &rcp4[rr]);
+        // qwen3_pv4 uses the group's max key count; the softmax tail beyond
+        // this row's causal prefix must contribute exactly zero.
+        for (uint32_t i = n_keys; i < n_keys_max; ++i)
+          row[i] = 0.0f;
       }
+      qwen3_pv4(vb, model.kv_dim * 4, pf_scores, attn + r * model.q_dim + h * model.head_dim,
+                n_keys_max, model.head_dim, rcp4, model.q_dim * 4);
     }
     for (; r < rows; ++r) {
       const uint32_t n_keys = base_pos + r + 1;
