@@ -5,7 +5,11 @@
 #include "q3p.h"
 #include "snapshot.h"
 
-#define MAX_NEW_TOKENS 32
+#ifndef QWEN3_MAX_NEW_TOKENS
+#define QWEN3_MAX_NEW_TOKENS 32
+#endif
+
+#define MAX_NEW_TOKENS QWEN3_MAX_NEW_TOKENS
 #define EOS_IM_END 151645u
 #define EOS_ENDOFTEXT 151643u
 

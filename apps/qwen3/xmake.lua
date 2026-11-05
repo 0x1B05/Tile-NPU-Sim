@@ -19,6 +19,7 @@ local function define_qwen3_app(name, base_name, snapshot)
 			local gcc, objcopy = guestimg.toolchain()
 			os.mkdir(app_bindir)
 			local linkscript = path.join(app_srcdir, "link.ld")
+			local max_new_tokens = get_config("qwen3_max_new_tokens") or "32"
 			local sources = os.files(path.join(app_srcdir, "*.c"))
 			table.join2(sources, os.files(path.join(app_srcdir, "*.S")))
 			local elf = path.join(app_bindir, base_name .. ".elf")
@@ -56,6 +57,7 @@ local function define_qwen3_app(name, base_name, snapshot)
 				if snapshot then
 					table.insert(args, "-DQWEN3_SNAPSHOT=1")
 				end
+				table.insert(args, "-DQWEN3_MAX_NEW_TOKENS=" .. max_new_tokens)
 				table.join2(args, sources)
 				os.vrunv(gcc, args)
 				os.vrunv(objcopy, { "-O", "binary", elf, bin })
@@ -64,7 +66,7 @@ local function define_qwen3_app(name, base_name, snapshot)
 				files = deps,
 				changed = target:is_rebuilt(),
 				lastmtime = math.min(os.mtime(elf), os.mtime(bin)),
-				values = { gcc, "-march=rv64im -mabi=lp64 -O2", snapshot },
+				values = { gcc, "-march=rv64im -mabi=lp64 -O2", snapshot, max_new_tokens },
 			})
 		end)
 	end)
