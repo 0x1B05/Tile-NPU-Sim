@@ -742,6 +742,155 @@ qwen3_scores:
     ret
 
 # ---------------------------------------------------------------------------
+# void qwen3_scores4(const float *q, uint32_t q_stride, const char *k_base,
+#                    uint32_t k_stride, float *scores, uint32_t n_keys,
+#                    uint32_t hd)
+#
+# Four consecutive query rows against the same K rows.  The score rows are
+# laid out with stride ((n_keys + 31) & ~31) * sizeof(float).  Each query row
+# uses the same K chunk order as qwen3_scores, so its score is bit-identical.
+# ---------------------------------------------------------------------------
+    .globl qwen3_scores4
+qwen3_scores4:
+    addi    sp, sp, -64
+    sd      s0, 0(sp)
+    sd      s1, 8(sp)
+    sd      s2, 16(sp)
+    sd      s3, 24(sp)
+    sd      s4, 32(sp)
+    sd      s5, 40(sp)
+    sd      s6, 48(sp)
+    sd      s7, 56(sp)
+    mv      s0, a1                     # q row stride (bytes)
+    mv      s1, a2                     # K base
+    mv      s2, a3                     # K row stride (bytes)
+    mv      s3, a4                     # score base
+    mv      s4, a5                     # n_keys
+    mv      s5, a6                     # head_dim
+    srli    s7, s5, 5                  # chunks
+    addi    t0, s4, 31
+    srli    t0, t0, 5
+    slli    s6, t0, 7                  # padded score row stride (bytes)
+
+    LI_CWV  t6, DT_F32, 32
+    SETW    SEL_VC, 0, X_T6, 23        # v0..v23: f32 len 32
+    SETW    SEL_VC, 24, X_T6, 7        # v24..v31: f32 len 32
+    LI_CWV  t5, DT_F32, 1
+    SETW    SEL_VC, 4, X_T5, 3         # v4..v7: one-lane score results
+
+.macro Q4_ROW base, vmbase
+    mv      t0, \base
+    .irp C,0,1,2,3
+      SETX    SEL_VM, CF_BASE, (\vmbase + \C), X_T0
+      SETIV   SEL_VM, CF_STRIDE, 4, (\vmbase + \C)
+      SETIV   SEL_VM, CF_VFLAGS, 0, (\vmbase + \C)
+      addi    t0, t0, 128
+    .endr
+.endm
+
+    Q4_ROW  a0, 8                      # q0 chunks: v8..v11
+    add     t1, a0, s0
+    Q4_ROW  t1, 12                     # q1 chunks: v12..v15
+    slli    t1, s0, 1
+    add     t1, a0, t1
+    Q4_ROW  t1, 16                     # q2 chunks: v16..v19
+    add     t1, t1, s0
+    Q4_ROW  t1, 20                     # q3 chunks: v20..v23
+
+    VLOAD   8                          # q row 0, chunk 0
+    VLOAD   12                         # q row 1, chunk 0
+    VLOAD   16                         # q row 2, chunk 0
+    VLOAD   20                         # q row 3, chunk 0
+    li      t5, 1
+    beq     s7, t5, .Lq4_qdone
+    VLOAD   9
+    VLOAD   13
+    VLOAD   17
+    VLOAD   21
+    li      t5, 2
+    beq     s7, t5, .Lq4_qdone
+    VLOAD   10
+    VLOAD   14
+    VLOAD   18
+    VLOAD   22
+    li      t5, 3
+    beq     s7, t5, .Lq4_qdone
+    VLOAD   11
+    VLOAD   15
+    VLOAD   19
+    VLOAD   23
+.Lq4_qdone:
+
+    SETIV   SEL_VM, CF_STRIDE, 4, 24
+    SETIV   SEL_VM, CF_VFLAGS, 1, 24   # K chunks auto-increment
+
+    mv      t0, s3
+    .irp R,4,5,6,7
+      SETX    SEL_VM, CF_BASE, \R, X_T0
+      SETIV   SEL_VM, CF_STRIDE, 4, \R
+      SETIV   SEL_VM, CF_VFLAGS, 1, \R # one score per key, auto-increment
+      add     t0, t0, s6
+    .endr
+
+    mv      t4, zero
+.Lq4_key:
+    VFILL   28, 0
+    VFILL   29, 0
+    VFILL   30, 0
+    VFILL   31, 0
+    mul     t0, t4, s2
+    add     t0, s1, t0
+    SETX    SEL_VM, CF_BASE, 24, X_T0
+    VLOAD   24
+    VFMADD  28, 24, 8, 28
+    VFMADD  29, 24, 12, 29
+    VFMADD  30, 24, 16, 30
+    VFMADD  31, 24, 20, 31
+    li      t5, 1
+    beq     s7, t5, .Lq4_store
+    VLOAD   24
+    VFMADD  28, 24, 9, 28
+    VFMADD  29, 24, 13, 29
+    VFMADD  30, 24, 17, 30
+    VFMADD  31, 24, 21, 31
+    li      t5, 2
+    beq     s7, t5, .Lq4_store
+    VLOAD   24
+    VFMADD  28, 24, 10, 28
+    VFMADD  29, 24, 14, 29
+    VFMADD  30, 24, 18, 30
+    VFMADD  31, 24, 22, 31
+    li      t5, 3
+    beq     s7, t5, .Lq4_store
+    VLOAD   24
+    VFMADD  28, 24, 11, 28
+    VFMADD  29, 24, 15, 29
+    VFMADD  30, 24, 19, 30
+    VFMADD  31, 24, 23, 31
+.Lq4_store:
+    VREDUCE 0, 4, 28
+    VREDUCE 0, 5, 29
+    VREDUCE 0, 6, 30
+    VREDUCE 0, 7, 31
+    VSTORE  4
+    VSTORE  5
+    VSTORE  6
+    VSTORE  7
+    addi    t4, t4, 1
+    bltu    t4, s4, .Lq4_key
+
+    ld      s0, 0(sp)
+    ld      s1, 8(sp)
+    ld      s2, 16(sp)
+    ld      s3, 24(sp)
+    ld      s4, 32(sp)
+    ld      s5, 40(sp)
+    ld      s6, 48(sp)
+    ld      s7, 56(sp)
+    addi    sp, sp, 64
+    ret
+
+# ---------------------------------------------------------------------------
 # void qwen3_softmax_exp(float *scores, uint32_t n, uint32_t scale_log2e_bits,
 #                     uint32_t *rcp_out)
 # In place: s[i] = exp2((s[i] - max) * scale_log2e); *rcp_out = rcp(sum).

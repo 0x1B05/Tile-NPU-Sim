@@ -6,6 +6,7 @@
 #include "q3b.h"
 #include "snapshot.h"
 
+
 // Qwen3 forward pass orchestration. Architecture dims come from the blob
 // header at runtime; weight pointers are cached per layer at init.
 // qwen3_ = Qwen3 NPU kernel, implemented in kernels.S.
@@ -77,6 +78,7 @@ static float pf_k[PREFILL_CHUNK_ROWS * KV_DIM_CAP];
 static float pf_v[PREFILL_CHUNK_ROWS * KV_DIM_CAP];
 static int8_t pf_xq[PREFILL_CHUNK_ROWS * HIDDEN_CAP];
 static float pf_xs[PREFILL_CHUNK_ROWS];
+static float pf_scores[4 * (POS_CAP + 32)];
 
 static char *const kv_region = (char *)KV_REGION_BASE;
 
@@ -191,6 +193,48 @@ static void attention(uint32_t layer, uint32_t pos, const float *q, float *attn)
     qwen3_softmax_exp(scores, n_padded, model.scale_log2e_bits, rcp_word);
     qwen3_pv(vb, model.kv_dim * 4, scores, attn + h * model.head_dim, n_keys, model.head_dim,
              rcp_word[0]);
+  }
+}
+
+// Prefill attention groups four consecutive query rows per head.  K is loaded
+// once per key for the group; rows with a shorter causal prefix mask the extra
+// scores with -inf before softmax.  The per-row score order is unchanged.
+static void attention_rows(uint32_t layer, uint32_t base_pos, const float *q, float *attn,
+                           uint32_t rows) {
+  const uint32_t group = model.n_q_heads / model.n_kv_heads;
+  for (uint32_t h = 0; h < model.n_q_heads; ++h) {
+    const uint32_t kvh = h / group;
+    const char *kb = kv_k_ptr(layer) + kvh * model.head_dim * 4;
+    const char *vb = kv_v_ptr(layer) + kvh * model.head_dim * 4;
+    uint32_t r = 0;
+    for (; r + 4 <= rows; r += 4) {
+      const uint32_t n_keys_max = base_pos + r + 4;
+      const uint32_t n_padded_max = (n_keys_max + 31) & ~31u;
+      qwen3_scores4(q + r * model.q_dim + h * model.head_dim, model.q_dim * 4, kb,
+                    model.kv_dim * 4, pf_scores, n_keys_max, model.head_dim);
+      for (uint32_t rr = 0; rr < 4; ++rr) {
+        const uint32_t n_keys = base_pos + r + rr + 1;
+        const uint32_t n_padded = (n_keys + 31) & ~31u;
+        float *row = pf_scores + rr * n_padded_max;
+        for (uint32_t i = n_keys; i < n_padded; ++i)
+          ((uint32_t *)row)[i] = 0xFF800000u;
+        uint32_t rcp = 0;
+        qwen3_softmax_exp(row, n_padded, model.scale_log2e_bits, &rcp);
+        qwen3_pv(vb, model.kv_dim * 4, row, attn + (r + rr) * model.q_dim + h * model.head_dim,
+                 n_keys, model.head_dim, rcp);
+      }
+    }
+    for (; r < rows; ++r) {
+      const uint32_t n_keys = base_pos + r + 1;
+      const uint32_t n_padded = (n_keys + 31) & ~31u;
+      qwen3_scores(q + r * model.q_dim + h * model.head_dim, kb, model.kv_dim * 4, scores, n_keys,
+                   model.head_dim);
+      for (uint32_t i = n_keys; i < n_padded; ++i)
+        ((uint32_t *)scores)[i] = 0xFF800000u;
+      qwen3_softmax_exp(scores, n_padded, model.scale_log2e_bits, rcp_word);
+      qwen3_pv(vb, model.kv_dim * 4, scores, attn + r * model.q_dim + h * model.head_dim, n_keys,
+               model.head_dim, rcp_word[0]);
+    }
   }
 }
 
@@ -322,8 +366,8 @@ uint32_t qwen3_prefill(const uint32_t *tokens, uint32_t n) {
         for (uint32_t h = 0; h < model.n_kv_heads; ++h)
           qwen3_rope(pf_k + t * model.kv_dim + h * model.head_dim, cos_p, sin_p, model.head_dim);
         cache_append(L, base + t, pf_k + t * model.kv_dim, pf_v + t * model.kv_dim);
-        attention(L, base + t, pf_q + t * model.q_dim, pf_attn + t * model.q_dim);
       }
+      attention_rows(L, base, pf_q, pf_attn, chunk_rows);
       qwen3_quant_rows(pf_attn, model.q_dim, pf_xq, pf_xs, chunk_rows);
       qwen3_matmul_q(sec[SEC_OW], sec[SEC_OWS], pf_xq, pf_xs, pf_h2, model.hidden, model.q_dim,
                      chunk_rows);
