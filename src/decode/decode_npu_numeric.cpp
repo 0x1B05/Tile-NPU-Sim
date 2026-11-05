@@ -98,7 +98,7 @@ DecodeResult decode_vreduce_argmax(std::uint32_t word) {
 }
 
 // QNT (R4): major4 = 0100, q = 10.
-// [31:28] major4 [27:25] qf3 [24:22] DQ/FORM
+// [31:28] major4 [27:25] qf3 [24:22] funct3 (DQ/FORM)
 // [21:17] vCol5 [16:12] vRow5 [11:7] S5 [6:2] D5 [1:0] q
 DecodeResult decode_qnt(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);

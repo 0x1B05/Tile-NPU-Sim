@@ -481,9 +481,9 @@
 #   [27:25] qf3  [24:22] DQ/FORM  [21:17] vCol5  [16:12] vRow5
 #   [11:7] S5  [6:2] D5
 # qf3 = 000: q8s32.
-# mode: 000 aquant, 100 tdequant, 101 adequant, 110 vdequant.
-.macro QNT qf3, mode, d5, s5, vcol, vrow
-    .word ((4 << 28) | ((\qf3 & 7) << 25) | ((\mode & 7) << 22) | ((\vcol & 31) << 17) | ((\vrow & 31) << 12) | (\s5 << 7) | (\d5 << 2) | 2)
+# funct3: 000 aquant, 100 tdequant, 101 adequant, 110 vdequant.
+.macro QNT qf3, funct3, d5, s5, vcol, vrow
+    .word ((4 << 28) | ((\qf3 & 7) << 25) | ((\funct3 & 7) << 22) | ((\vcol & 31) << 17) | ((\vrow & 31) << 12) | (\s5 << 7) | (\d5 << 2) | 2)
 .endm
 
 # aquant.rows.q8s32: asm operand order tD, aS, vScale.

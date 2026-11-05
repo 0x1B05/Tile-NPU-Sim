@@ -5,13 +5,13 @@
 namespace tile_npu::test {
 
 // QNT (R4): major4 = 0100, q = 10.
-//   [27:25] qf3  [24:22] DQ/FORM  [21:17] vCol5  [16:12] vRow5
+//   [27:25] qf3  [24:22] funct3 (DQ/FORM)  [21:17] vCol5  [16:12] vRow5
 //   [11:7] S5  [6:2] D5
 // qf3 = 000 selects q8s32.
-constexpr std::uint32_t make_qnt(std::uint32_t qf3, std::uint32_t mode, std::uint32_t dest,
+constexpr std::uint32_t make_qnt(std::uint32_t qf3, std::uint32_t funct3, std::uint32_t dest,
                                  std::uint32_t src, std::uint32_t col_scale,
                                  std::uint32_t row_scale) {
-  return (4u << 28) | ((qf3 & 0x7u) << 25) | ((mode & 0x7u) << 22) | ((col_scale & 0x1fu) << 17) |
+  return (4u << 28) | ((qf3 & 0x7u) << 25) | ((funct3 & 0x7u) << 22) | ((col_scale & 0x1fu) << 17) |
          ((row_scale & 0x1fu) << 12) | (src << 7) | (dest << 2) | 2u;
 }
 

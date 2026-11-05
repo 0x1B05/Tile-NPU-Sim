@@ -96,9 +96,9 @@ constexpr DecodeEntry NPU_TABLE[] = {
     {"0010 000 0?? 0000000000 ????? ????? 10", decode_vreduce},
     {"0010 000 100 00000 ????? ????? ????? 10", decode_vreduce_argmax},
     {"0010 ??? ??? ????? ????? ????? ????? 10", illegal},                             // reserved VREDUCE encodings
-    // QNT (R4): major4 = 0100; [27:25] qf3, [24:22] DQ/FORM,
-    // [21:17] vCol5, [16:12] vRow5, S5, D5. The handler checks the mode,
-    // format, and register ranges.
+    // QNT (R4): major4 = 0100; [27:25] qf3, [24:22] funct3 (DQ/FORM),
+    // [21:17] vCol5, [16:12] vRow5, S5, D5. The handler checks the
+    // format, operation, and register ranges.
     {"0100 ??? ??? ????? ????? ????? ????? 10", decode_qnt},
     // CFG_COMPUTE_SETI / CFG_MEM_SETI (I format): the handler checks the
     // field code against the selected config register type.
