@@ -665,17 +665,18 @@ qwen3_rmsnorm_rope:
     VMUL    7, 7, 17
     VMUL    7, 3, 7
 .Lrr_norm_done:
-    # rotate-half RoPE on the normalized chunks (v4..v7)
+    # rotate-half RoPE on the normalized chunks.  hd=64 has one chunk per
+    # half (v4 first, v5 second); hd=128 has two (v4/v5 first, v6/v7 second).
     VLOAD   8
     VLOAD   10
+    li      t5, 1
+    beq     t6, t5, .Lrr_rope_small
     VMUL    18, 4, 8
     VMUL    19, 6, 10
     VSUB    12, 18, 19
     VMUL    18, 6, 8
     VMUL    19, 4, 10
     VADD    14, 18, 19
-    li      t5, 1
-    beq     t6, t5, .Lrr_rope_done
     VLOAD   9
     VLOAD   11
     VMUL    18, 5, 9
@@ -684,14 +685,20 @@ qwen3_rmsnorm_rope:
     VMUL    18, 7, 9
     VMUL    19, 5, 11
     VADD    15, 18, 19
-.Lrr_rope_done:
     VSTORE  12
     VSTORE  13
-    li      t5, 1
-    beq     t6, t5, .Lrr_done
     VSTORE  14
     VSTORE  15
-.Lrr_done:
+    ret
+.Lrr_rope_small:
+    VMUL    18, 4, 8
+    VMUL    19, 5, 10
+    VSUB    12, 18, 19
+    VMUL    18, 5, 8
+    VMUL    19, 4, 10
+    VADD    13, 18, 19
+    VSTORE  12
+    VSTORE  13
     ret
 
 # ---------------------------------------------------------------------------
@@ -1260,21 +1267,49 @@ qwen3_pv4:
     VMULX   30, 30, X_T0
     VMULX   31, 31, X_T0
     VSTORE  16
+    li      t5, 1
+    beq     s9, t5, .Lpv4_r0_done
     VSTORE  17
+    li      t5, 2
+    beq     s9, t5, .Lpv4_r0_done
     VSTORE  18
+    li      t5, 3
+    beq     s9, t5, .Lpv4_r0_done
     VSTORE  19
+.Lpv4_r0_done:
     VSTORE  20
+    li      t5, 1
+    beq     s9, t5, .Lpv4_r1_done
     VSTORE  21
+    li      t5, 2
+    beq     s9, t5, .Lpv4_r1_done
     VSTORE  22
+    li      t5, 3
+    beq     s9, t5, .Lpv4_r1_done
     VSTORE  23
+.Lpv4_r1_done:
     VSTORE  24
+    li      t5, 1
+    beq     s9, t5, .Lpv4_r2_done
     VSTORE  25
+    li      t5, 2
+    beq     s9, t5, .Lpv4_r2_done
     VSTORE  26
+    li      t5, 3
+    beq     s9, t5, .Lpv4_r2_done
     VSTORE  27
+.Lpv4_r2_done:
     VSTORE  28
+    li      t5, 1
+    beq     s9, t5, .Lpv4_r3_done
     VSTORE  29
+    li      t5, 2
+    beq     s9, t5, .Lpv4_r3_done
     VSTORE  30
+    li      t5, 3
+    beq     s9, t5, .Lpv4_r3_done
     VSTORE  31
+.Lpv4_r3_done:
 
     ld      s0, 0(sp)
     ld      s1, 8(sp)

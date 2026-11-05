@@ -6,8 +6,6 @@
 #include "q3b.h"
 #include "snapshot.h"
 
-
-
 // Qwen3 forward pass orchestration. Architecture dims come from the blob
 // header at runtime; weight pointers are cached per layer at init.
 // qwen3_ = Qwen3 NPU kernel, implemented in kernels.S.
@@ -289,12 +287,24 @@ static uint32_t qwen3_forward_impl(uint32_t token, uint32_t pos, int want_logits
     const float *cos_p = model.rope_cos + pos * (model.head_dim / 2);
     const float *sin_p = model.rope_sin + pos * (model.head_dim / 2);
     for (uint32_t h = 0; h < model.n_q_heads; ++h) {
-      qwen3_rmsnorm_rope(q_buf + h * model.head_dim, sec[SEC_QN], cos_p, sin_p,
-                         model.head_dim, model.eps_bits, inv_n_bits(model.head_dim));
+      if (model.head_dim >= 64) {
+        qwen3_rmsnorm_rope(q_buf + h * model.head_dim, sec[SEC_QN], cos_p, sin_p,
+                           model.head_dim, model.eps_bits, inv_n_bits(model.head_dim));
+      } else {
+        qwen3_rmsnorm(q_buf + h * model.head_dim, sec[SEC_QN], q_buf + h * model.head_dim,
+                      model.head_dim, model.eps_bits, inv_n_bits(model.head_dim));
+        qwen3_rope(q_buf + h * model.head_dim, cos_p, sin_p, model.head_dim);
+      }
     }
     for (uint32_t h = 0; h < model.n_kv_heads; ++h) {
-      qwen3_rmsnorm_rope(k_buf + h * model.head_dim, sec[SEC_KN], cos_p, sin_p,
-                         model.head_dim, model.eps_bits, inv_n_bits(model.head_dim));
+      if (model.head_dim >= 64) {
+        qwen3_rmsnorm_rope(k_buf + h * model.head_dim, sec[SEC_KN], cos_p, sin_p,
+                           model.head_dim, model.eps_bits, inv_n_bits(model.head_dim));
+      } else {
+        qwen3_rmsnorm(k_buf + h * model.head_dim, sec[SEC_KN], k_buf + h * model.head_dim,
+                      model.head_dim, model.eps_bits, inv_n_bits(model.head_dim));
+        qwen3_rope(k_buf + h * model.head_dim, cos_p, sin_p, model.head_dim);
+      }
     }
     if (update_cache) cache_append(L, pos, k_buf, v_buf);
     attention(L, pos, q_buf, attn_buf);
@@ -364,14 +374,27 @@ uint32_t qwen3_prefill(const uint32_t *tokens, uint32_t n) {
         const float *cos_p = model.rope_cos + (base + t) * (model.head_dim / 2);
         const float *sin_p = model.rope_sin + (base + t) * (model.head_dim / 2);
         for (uint32_t h = 0; h < model.n_q_heads; ++h) {
-          qwen3_rmsnorm_rope(pf_q + t * model.q_dim + h * model.head_dim, sec[SEC_QN], cos_p,
-                             sin_p, model.head_dim, model.eps_bits,
-                             inv_n_bits(model.head_dim));
+          float *qh = pf_q + t * model.q_dim + h * model.head_dim;
+          if (model.head_dim >= 64) {
+            qwen3_rmsnorm_rope(qh, sec[SEC_QN], cos_p, sin_p, model.head_dim, model.eps_bits,
+                               inv_n_bits(model.head_dim));
+          } else {
+            qwen3_rmsnorm(qh, sec[SEC_QN], qh, model.head_dim, model.eps_bits,
+                          inv_n_bits(model.head_dim));
+            qwen3_rope(qh, cos_p, sin_p, model.head_dim);
+          }
         }
-        for (uint32_t h = 0; h < model.n_kv_heads; ++h)
-          qwen3_rmsnorm_rope(pf_k + t * model.kv_dim + h * model.head_dim, sec[SEC_KN], cos_p,
-                             sin_p, model.head_dim, model.eps_bits,
-                             inv_n_bits(model.head_dim));
+        for (uint32_t h = 0; h < model.n_kv_heads; ++h) {
+          float *kh = pf_k + t * model.kv_dim + h * model.head_dim;
+          if (model.head_dim >= 64) {
+            qwen3_rmsnorm_rope(kh, sec[SEC_KN], cos_p, sin_p, model.head_dim, model.eps_bits,
+                               inv_n_bits(model.head_dim));
+          } else {
+            qwen3_rmsnorm(kh, sec[SEC_KN], kh, model.head_dim, model.eps_bits,
+                          inv_n_bits(model.head_dim));
+            qwen3_rope(kh, cos_p, sin_p, model.head_dim);
+          }
+        }
         cache_append(L, base + t, pf_k + t * model.kv_dim, pf_v + t * model.kv_dim);
       }
       attention_rows(L, base, pf_q, pf_attn, chunk_rows);
