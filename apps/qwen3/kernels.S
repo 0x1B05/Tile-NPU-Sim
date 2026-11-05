@@ -574,11 +574,131 @@ qwen3_rmsnorm:
     VLOAD   1
     VLOAD   3
     VMUL    3, 3, 2
-    VMUL    1, 1, 3
-    REG_MOVE 3, 2, 4, 1                    # vcopy v4, v1
+    VMUL    4, 1, 3
     VSTORE  4
     addi    t6, t6, -1
     bnez    t6, .Lrn_out
+    ret
+
+# ---------------------------------------------------------------------------
+# void qwen3_rmsnorm_rope(float *x, const float *gamma, const float *cos_h,
+#                         const float *sin_h, uint32_t hd, uint32_t eps_bits,
+#                         uint32_t inv_n_bits)
+#
+# Fused per-head RMSNorm and rotate-half RoPE.  Keeping the head in v0..v3
+# removes the intermediate store/load that separate rmsnorm and rope calls
+# would perform.  Arithmetic order matches qwen3_rmsnorm followed by
+# qwen3_rope, so the result is bit-identical.  hd is 64 or 128.
+# ---------------------------------------------------------------------------
+    .globl qwen3_rmsnorm_rope
+qwen3_rmsnorm_rope:
+    LI_CWV  t6, DT_F32, 32
+    SETW    SEL_VC, 0, X_T6, 21
+    srli    t6, a4, 6                   # chunks per half: 1 (hd=64) or 2 (hd=128)
+
+    # x chunks: vm0..vm3; gamma: vm4..vm7; cos/sin: vm8..vm11
+    mv      t0, a0
+    .irp R,0,1,2,3
+      SETX    SEL_VM, CF_BASE, \R, X_T0
+      SETIV   SEL_VM, CF_STRIDE, 4, \R
+      SETIV   SEL_VM, CF_VFLAGS, 1, \R
+      addi    t0, t0, 128
+    .endr
+    mv      t0, a1
+    .irp R,4,5,6,7
+      SETX    SEL_VM, CF_BASE, \R, X_T0
+      SETIV   SEL_VM, CF_STRIDE, 4, \R
+      SETIV   SEL_VM, CF_VFLAGS, 1, \R
+      addi    t0, t0, 128
+    .endr
+    SETX    SEL_VM, CF_BASE, 8, X_A2
+    addi    t0, a2, 128
+    SETX    SEL_VM, CF_BASE, 9, X_T0
+    SETX    SEL_VM, CF_BASE, 10, X_A3
+    addi    t0, a3, 128
+    SETX    SEL_VM, CF_BASE, 11, X_T0
+    .irp R,8,9,10,11
+      SETIV   SEL_VM, CF_STRIDE, 4, \R
+      SETIV   SEL_VM, CF_VFLAGS, 1, \R
+    .endr
+
+    # store descriptors: vm12..vm15 = x, x+32, x+64, x+96 elements
+    mv      t0, a0
+    .irp R,12,13,14,15
+      SETX    SEL_VM, CF_BASE, \R, X_T0
+      SETIV   SEL_VM, CF_STRIDE, 4, \R
+      SETIV   SEL_VM, CF_VFLAGS, 0, \R
+      addi    t0, t0, 128
+    .endr
+
+    # sumsq with the same per-lane chunk order as qwen3_rmsnorm
+    VFILL   16, 0
+    VLOAD   0
+    VFMADD  16, 0, 0, 16
+    VLOAD   1
+    VFMADD  16, 1, 1, 16
+    li      t5, 1
+    beq     t6, t5, .Lrr_sum_done
+    VLOAD   2
+    VFMADD  16, 2, 2, 16
+    VLOAD   3
+    VFMADD  16, 3, 3, 16
+.Lrr_sum_done:
+    VREDUCE 0, 17, 16
+    VMULX   17, 17, X_A6
+    VADDX   17, 17, X_A5
+    VRSQRT  17, 17
+
+    # x = x * (gamma * inv_rms), same operand order as qwen3_rmsnorm
+    VLOAD   4
+    VMUL    4, 4, 17
+    VMUL    4, 0, 4
+    VLOAD   5
+    VMUL    5, 5, 17
+    VMUL    5, 1, 5
+    li      t5, 1
+    beq     t6, t5, .Lrr_norm_done
+    VLOAD   6
+    VMUL    6, 6, 17
+    VMUL    6, 2, 6
+    VLOAD   7
+    VMUL    7, 7, 17
+    VMUL    7, 3, 7
+.Lrr_norm_done:
+    # rotate-half RoPE on the normalized chunks.  hd=64 has one chunk per
+    # half (v4 first, v5 second); hd=128 has two (v4/v5 first, v6/v7 second).
+    VLOAD   8
+    VLOAD   10
+    li      t5, 1
+    beq     t6, t5, .Lrr_rope_small
+    VMUL    18, 4, 8
+    VMUL    19, 6, 10
+    VSUB    12, 18, 19
+    VMUL    18, 6, 8
+    VMUL    19, 4, 10
+    VADD    14, 18, 19
+    VLOAD   9
+    VLOAD   11
+    VMUL    18, 5, 9
+    VMUL    19, 7, 11
+    VSUB    13, 18, 19
+    VMUL    18, 7, 9
+    VMUL    19, 5, 11
+    VADD    15, 18, 19
+    VSTORE  12
+    VSTORE  13
+    VSTORE  14
+    VSTORE  15
+    ret
+.Lrr_rope_small:
+    VMUL    18, 4, 8
+    VMUL    19, 5, 10
+    VSUB    12, 18, 19
+    VMUL    18, 5, 8
+    VMUL    19, 4, 10
+    VADD    13, 18, 19
+    VSTORE  12
+    VSTORE  13
     ret
 
 # ---------------------------------------------------------------------------
@@ -742,6 +862,151 @@ qwen3_scores:
     ret
 
 # ---------------------------------------------------------------------------
+# void qwen3_scores4(const float *q, uint32_t q_stride, const char *k_base,
+#                    uint32_t k_stride, float *scores, uint32_t n_keys,
+#                    uint32_t hd)
+#
+# Four consecutive query rows against the same K rows.  The score rows are
+# laid out with stride ((n_keys + 31) & ~31) * sizeof(float).  Each query row
+# uses the same K chunk order as qwen3_scores, so its score is bit-identical.
+# ---------------------------------------------------------------------------
+    .globl qwen3_scores4
+qwen3_scores4:
+    addi    sp, sp, -64
+    sd      s0, 0(sp)
+    sd      s1, 8(sp)
+    sd      s2, 16(sp)
+    sd      s3, 24(sp)
+    sd      s4, 32(sp)
+    sd      s5, 40(sp)
+    sd      s6, 48(sp)
+    sd      s7, 56(sp)
+    mv      s0, a1                     # q row stride (bytes)
+    mv      s1, a2                     # K base
+    mv      s2, a3                     # K row stride (bytes)
+    mv      s3, a4                     # score base
+    mv      s4, a5                     # n_keys
+    mv      s5, a6                     # head_dim
+    srli    s7, s5, 5                  # chunks
+    addi    t0, s4, 31
+    srli    t0, t0, 5
+    slli    s6, t0, 7                  # padded score row stride (bytes)
+
+    LI_CWV  t6, DT_F32, 32
+    SETW    SEL_VC, 0, X_T6, 23        # v0..v23: f32 len 32
+    SETW    SEL_VC, 24, X_T6, 7        # v24..v31: f32 len 32
+    LI_CWV  t5, DT_F32, 1
+    SETW    SEL_VC, 4, X_T5, 3         # v4..v7: one-lane score results
+
+.macro Q4_ROW base, vmbase
+    mv      t0, \base
+    .irp C,0,1,2,3
+      SETX    SEL_VM, CF_BASE, (\vmbase + \C), X_T0
+      SETIV   SEL_VM, CF_STRIDE, 4, (\vmbase + \C)
+      SETIV   SEL_VM, CF_VFLAGS, 0, (\vmbase + \C)
+      addi    t0, t0, 128
+    .endr
+.endm
+
+    Q4_ROW  a0, 8                      # q0 chunks: v8..v11
+    add     t1, a0, s0
+    Q4_ROW  t1, 12                     # q1 chunks: v12..v15
+    slli    t1, s0, 1
+    add     t1, a0, t1
+    Q4_ROW  t1, 16                     # q2 chunks: v16..v19
+    add     t1, t1, s0
+    Q4_ROW  t1, 20                     # q3 chunks: v20..v23
+
+    VLOAD   8                          # q row 0, chunk 0
+    VLOAD   12                         # q row 1, chunk 0
+    VLOAD   16                         # q row 2, chunk 0
+    VLOAD   20                         # q row 3, chunk 0
+    li      t5, 1
+    beq     s7, t5, .Lq4_qdone
+    VLOAD   9
+    VLOAD   13
+    VLOAD   17
+    VLOAD   21
+    li      t5, 2
+    beq     s7, t5, .Lq4_qdone
+    VLOAD   10
+    VLOAD   14
+    VLOAD   18
+    VLOAD   22
+    li      t5, 3
+    beq     s7, t5, .Lq4_qdone
+    VLOAD   11
+    VLOAD   15
+    VLOAD   19
+    VLOAD   23
+.Lq4_qdone:
+
+    SETIV   SEL_VM, CF_STRIDE, 4, 24
+    SETIV   SEL_VM, CF_VFLAGS, 1, 24   # K chunks auto-increment
+
+    mv      t0, s3
+    .irp R,4,5,6,7
+      SETX    SEL_VM, CF_BASE, \R, X_T0
+      SETIV   SEL_VM, CF_STRIDE, 4, \R
+      SETIV   SEL_VM, CF_VFLAGS, 1, \R # one score per key, auto-increment
+      add     t0, t0, s6
+    .endr
+
+    mv      t4, zero
+.Lq4_key:
+    mul     t0, t4, s2
+    add     t0, s1, t0
+    SETX    SEL_VM, CF_BASE, 24, X_T0
+    VLOAD   24
+    VMUL    28, 24, 8
+    VMUL    29, 24, 12
+    VMUL    30, 24, 16
+    VMUL    31, 24, 20
+    li      t5, 1
+    beq     s7, t5, .Lq4_store
+    VLOAD   24
+    VFMADD  28, 24, 9, 28
+    VFMADD  29, 24, 13, 29
+    VFMADD  30, 24, 17, 30
+    VFMADD  31, 24, 21, 31
+    li      t5, 2
+    beq     s7, t5, .Lq4_store
+    VLOAD   24
+    VFMADD  28, 24, 10, 28
+    VFMADD  29, 24, 14, 29
+    VFMADD  30, 24, 18, 30
+    VFMADD  31, 24, 22, 31
+    li      t5, 3
+    beq     s7, t5, .Lq4_store
+    VLOAD   24
+    VFMADD  28, 24, 11, 28
+    VFMADD  29, 24, 15, 29
+    VFMADD  30, 24, 19, 30
+    VFMADD  31, 24, 23, 31
+.Lq4_store:
+    VREDUCE 0, 4, 28
+    VREDUCE 0, 5, 29
+    VREDUCE 0, 6, 30
+    VREDUCE 0, 7, 31
+    VSTORE  4
+    VSTORE  5
+    VSTORE  6
+    VSTORE  7
+    addi    t4, t4, 1
+    bltu    t4, s4, .Lq4_key
+
+    ld      s0, 0(sp)
+    ld      s1, 8(sp)
+    ld      s2, 16(sp)
+    ld      s3, 24(sp)
+    ld      s4, 32(sp)
+    ld      s5, 40(sp)
+    ld      s6, 48(sp)
+    ld      s7, 56(sp)
+    addi    sp, sp, 64
+    ret
+
+# ---------------------------------------------------------------------------
 # void qwen3_softmax_exp(float *scores, uint32_t n, uint32_t scale_log2e_bits,
 #                     uint32_t *rcp_out)
 # In place: s[i] = exp2((s[i] - max) * scale_log2e); *rcp_out = rcp(sum).
@@ -773,11 +1038,10 @@ qwen3_softmax_exp:
     srli    t6, a1, 5
 .Lsm_exp:
     VLOAD   1
-    VSUB    1, 1, 0
-    VMULX   1, 1, X_A2
-    VEXP2   1, 1
-    VADD    2, 2, 1
-    REG_MOVE 3, 2, 3, 1                    # vcopy v3, v1
+    VSUB    3, 1, 0
+    VMULX   3, 3, X_A2
+    VEXP2   3, 3
+    VADD    2, 2, 3
     VSTORE  3
     addi    t6, t6, -1
     bnez    t6, .Lsm_exp
@@ -811,8 +1075,7 @@ qwen3_pv:
 .Lpv_key:
     lw      t0, 0(t3)
     addi    t3, t3, 4
-    VINSERT 20, 0, X_T0
-    VBROADCAST 20, 20, 0
+    VFILLX  20, X_T0
     mul     t0, t4, a1
     add     t0, a0, t0
     SETX    SEL_VM, CF_BASE, 12, X_T0
@@ -859,6 +1122,209 @@ qwen3_pv:
     ret
 
 # ---------------------------------------------------------------------------
+# void qwen3_pv4(const char *v_base, uint32_t row_stride, const float *probs,
+#                float *out, uint32_t n_keys, uint32_t hd,
+#                const uint32_t *rcp4, uint32_t out_stride)
+#
+# Four consecutive query rows.  Rows use the same max n_keys; the caller
+# zeroes the softmax tail so the extra terms contribute exactly zero.  The
+# per-row arithmetic order is the same as qwen3_pv.
+# ---------------------------------------------------------------------------
+    .globl qwen3_pv4
+qwen3_pv4:
+    addi    sp, sp, -80
+    sd      s0, 0(sp)
+    sd      s1, 8(sp)
+    sd      s2, 16(sp)
+    sd      s3, 24(sp)
+    sd      s4, 32(sp)
+    sd      s5, 40(sp)
+    sd      s6, 48(sp)
+    sd      s7, 56(sp)
+    sd      s8, 64(sp)
+    sd      s9, 72(sp)
+    mv      s0, a0                     # V base
+    mv      s1, a1                     # V row stride
+    mv      s2, a2                     # probs base
+    mv      s3, a3                     # out base
+    mv      s4, a4                     # max n_keys
+    mv      s5, a5                     # head_dim
+    mv      s6, a6                     # rcp4
+    mv      s7, a7                     # out row stride
+    srli    s9, s5, 5                  # chunks
+    addi    t0, s4, 31
+    srli    t0, t0, 5
+    slli    s8, t0, 7                  # probs row stride (bytes)
+
+    LI_CWV  t6, DT_F32, 32
+    SETW    SEL_VC, 8, X_T6, 23        # v8..v31: f32 len 32
+    SETIV   SEL_VM, CF_STRIDE, 4, 12
+    SETIV   SEL_VM, CF_VFLAGS, 1, 12   # V chunks auto-increment
+
+.macro PV4_OUT_ROW base, vmbase
+    mv      t0, \base
+    .irp C,0,1,2,3
+      SETX    SEL_VM, CF_BASE, (\vmbase + \C), X_T0
+      SETIV   SEL_VM, CF_STRIDE, 4, (\vmbase + \C)
+      SETIV   SEL_VM, CF_VFLAGS, 0, (\vmbase + \C)
+      addi    t0, t0, 128
+    .endr
+.endm
+
+    PV4_OUT_ROW s3, 16                 # out row 0: vm16..19
+    add     t1, s3, s7
+    PV4_OUT_ROW t1, 20                 # out row 1: vm20..23
+    slli    t1, s7, 1
+    add     t1, s3, t1
+    PV4_OUT_ROW t1, 24                 # out row 2: vm24..27
+    add     t1, t1, s7
+    PV4_OUT_ROW t1, 28                 # out row 3: vm28..31
+
+    VFILL   16, 0
+    VFILL   17, 0
+    VFILL   18, 0
+    VFILL   19, 0
+    VFILL   20, 0
+    VFILL   21, 0
+    VFILL   22, 0
+    VFILL   23, 0
+    VFILL   24, 0
+    VFILL   25, 0
+    VFILL   26, 0
+    VFILL   27, 0
+    VFILL   28, 0
+    VFILL   29, 0
+    VFILL   30, 0
+    VFILL   31, 0
+
+    mv      t3, s2                     # row 0 probs cursor
+    mv      t4, zero                   # key index
+.Lpv4_key:
+    lw      t0, 0(t3)
+    VFILLX  8, X_T0
+    add     t1, t3, s8
+    lw      t0, 0(t1)
+    VFILLX  9, X_T0
+    add     t1, t1, s8
+    lw      t0, 0(t1)
+    VFILLX  10, X_T0
+    add     t1, t1, s8
+    lw      t0, 0(t1)
+    VFILLX  11, X_T0
+
+    mul     t0, t4, s1
+    add     t0, s0, t0
+    SETX    SEL_VM, CF_BASE, 12, X_T0
+    VLOAD   12
+    VFMADD  16, 12, 8, 16
+    VFMADD  20, 12, 9, 20
+    VFMADD  24, 12, 10, 24
+    VFMADD  28, 12, 11, 28
+    li      t5, 1
+    beq     s9, t5, .Lpv4_next
+    VLOAD   12
+    VFMADD  17, 12, 8, 17
+    VFMADD  21, 12, 9, 21
+    VFMADD  25, 12, 10, 25
+    VFMADD  29, 12, 11, 29
+    li      t5, 2
+    beq     s9, t5, .Lpv4_next
+    VLOAD   12
+    VFMADD  18, 12, 8, 18
+    VFMADD  22, 12, 9, 22
+    VFMADD  26, 12, 10, 26
+    VFMADD  30, 12, 11, 30
+    li      t5, 3
+    beq     s9, t5, .Lpv4_next
+    VLOAD   12
+    VFMADD  19, 12, 8, 19
+    VFMADD  23, 12, 9, 23
+    VFMADD  27, 12, 10, 27
+    VFMADD  31, 12, 11, 31
+.Lpv4_next:
+    addi    t3, t3, 4
+    addi    t4, t4, 1
+    bltu    t4, s4, .Lpv4_key
+
+    lw      t0, 0(s6)
+    VMULX   16, 16, X_T0
+    VMULX   17, 17, X_T0
+    VMULX   18, 18, X_T0
+    VMULX   19, 19, X_T0
+    lw      t0, 4(s6)
+    VMULX   20, 20, X_T0
+    VMULX   21, 21, X_T0
+    VMULX   22, 22, X_T0
+    VMULX   23, 23, X_T0
+    lw      t0, 8(s6)
+    VMULX   24, 24, X_T0
+    VMULX   25, 25, X_T0
+    VMULX   26, 26, X_T0
+    VMULX   27, 27, X_T0
+    lw      t0, 12(s6)
+    VMULX   28, 28, X_T0
+    VMULX   29, 29, X_T0
+    VMULX   30, 30, X_T0
+    VMULX   31, 31, X_T0
+    VSTORE  16
+    li      t5, 1
+    beq     s9, t5, .Lpv4_r0_done
+    VSTORE  17
+    li      t5, 2
+    beq     s9, t5, .Lpv4_r0_done
+    VSTORE  18
+    li      t5, 3
+    beq     s9, t5, .Lpv4_r0_done
+    VSTORE  19
+.Lpv4_r0_done:
+    VSTORE  20
+    li      t5, 1
+    beq     s9, t5, .Lpv4_r1_done
+    VSTORE  21
+    li      t5, 2
+    beq     s9, t5, .Lpv4_r1_done
+    VSTORE  22
+    li      t5, 3
+    beq     s9, t5, .Lpv4_r1_done
+    VSTORE  23
+.Lpv4_r1_done:
+    VSTORE  24
+    li      t5, 1
+    beq     s9, t5, .Lpv4_r2_done
+    VSTORE  25
+    li      t5, 2
+    beq     s9, t5, .Lpv4_r2_done
+    VSTORE  26
+    li      t5, 3
+    beq     s9, t5, .Lpv4_r2_done
+    VSTORE  27
+.Lpv4_r2_done:
+    VSTORE  28
+    li      t5, 1
+    beq     s9, t5, .Lpv4_r3_done
+    VSTORE  29
+    li      t5, 2
+    beq     s9, t5, .Lpv4_r3_done
+    VSTORE  30
+    li      t5, 3
+    beq     s9, t5, .Lpv4_r3_done
+    VSTORE  31
+.Lpv4_r3_done:
+
+    ld      s0, 0(sp)
+    ld      s1, 8(sp)
+    ld      s2, 16(sp)
+    ld      s3, 24(sp)
+    ld      s4, 32(sp)
+    ld      s5, 40(sp)
+    ld      s6, 48(sp)
+    ld      s7, 56(sp)
+    ld      s8, 64(sp)
+    ld      s9, 72(sp)
+    addi    sp, sp, 80
+    ret
+
+# ---------------------------------------------------------------------------
 # void qwen3_silu_mul(float *gate, const float *up, float *out, uint32_t n)
 # out = silu(gate) * up, n % 32 == 0.
 # ---------------------------------------------------------------------------
@@ -883,8 +1349,7 @@ qwen3_silu_mul:
     VRCP    1, 1                           # 1 / (1 + exp(-x))
     VMUL    0, 0, 1
     VLOAD   1
-    VMUL    0, 0, 1
-    REG_MOVE 3, 2, 2, 0                    # vcopy v2, v0
+    VMUL    2, 0, 1
     VSTORE  2
     addi    t6, t6, -1
     bnez    t6, .Lsl_loop
@@ -907,8 +1372,7 @@ qwen3_add:
 .Lad_loop:
     VLOAD   0
     VLOAD   1
-    VADD    0, 0, 1
-    REG_MOVE 3, 2, 2, 0                    # vcopy v2, v0
+    VADD    2, 0, 1
     VSTORE  2
     addi    t6, t6, -1
     bnez    t6, .Lad_loop
