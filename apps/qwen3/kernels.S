@@ -1007,6 +1007,24 @@ qwen3_scores4:
     ret
 
 # ---------------------------------------------------------------------------
+# void qwen3_mask_tail_zero(float *block, uint32_t keep)
+#
+# Mask one 32-lane f32 block in place: lanes [0, keep) keep the source, the
+# rest become +0.  Used for the probability tail consumed by qwen3_pv4.
+# ---------------------------------------------------------------------------
+    .globl qwen3_mask_tail_zero
+qwen3_mask_tail_zero:
+    LI_CWV  t6, DT_F32, 32
+    SETW    SEL_VC, 0, X_T6
+    SETX    SEL_VM, CF_BASE, 0, X_A0
+    SETIV   SEL_VM, CF_STRIDE, 4, 0
+    SETIV   SEL_VM, CF_VFLAGS, 0, 0
+    VLOAD   0
+    VMASK_TAIL 0, 0, X_A1, 0
+    VSTORE  0
+    ret
+
+# ---------------------------------------------------------------------------
 # void qwen3_softmax_exp(float *scores, uint32_t n, uint32_t scale_log2e_bits,
 #                     uint32_t *rcp_out)
 # In place: s[i] = exp2((s[i] - max) * scale_log2e); *rcp_out = rcp(sum).
@@ -1048,6 +1066,76 @@ qwen3_softmax_exp:
     VREDUCE 0, 4, 2                       # v4 = sum in every lane
     VRCP    4, 4
     SETX    SEL_VM, CF_BASE, 4, X_A3
+    SETIV   SEL_VM, CF_STRIDE, 4, 4
+    SETIV   SEL_VM, CF_VFLAGS, 0, 4
+    VSTORE  4                             # *rcp_out = rcp(sum)
+    FENCE_MEM                   # scores and rcp are read by scalar code
+    ret
+
+
+# ---------------------------------------------------------------------------
+# void qwen3_softmax_exp_masked(float *scores, uint32_t n, uint32_t n_valid,
+#                     uint32_t scale_log2e_bits, uint32_t *rcp_out)
+# In place: s[i] = exp2((s[i] - max) * scale_log2e); *rcp_out = rcp(sum).
+# n % 32 == 0; lanes [n_valid, n) are masked to -inf in registers.
+# ---------------------------------------------------------------------------
+    .globl qwen3_softmax_exp_masked
+qwen3_softmax_exp_masked:
+    LI_CWV  t6, DT_F32, 32
+    SETW    SEL_VC, 0, X_T6, 4
+    LI_CWV  t6, DT_F32, 1
+    SETW    SEL_VC, 4, X_T6     # vc4: len-1 store of the rcp result
+    SETIV   SEL_VM, CF_STRIDE, 4, 1
+    SETIV   SEL_VM, CF_VFLAGS, 1, 1
+    SETIV   SEL_VM, CF_STRIDE, 4, 3
+    SETIV   SEL_VM, CF_VFLAGS, 1, 3
+    li      t0, 0xFF800000                # -inf
+    VFILLX  0, X_T0
+    SETX    SEL_VM, CF_BASE, 1, X_A0
+    andi    t4, a2, 31                    # valid lanes in the last block
+    srli    t6, a1, 5
+    addi    t5, t6, -1
+    beqz    t5, .Lsm_max_last
+.Lsm_max_full:
+    VLOAD   1
+    VMAX    0, 0, 1
+    addi    t5, t5, -1
+    bnez    t5, .Lsm_max_full
+.Lsm_max_last:
+    VLOAD   1
+    beqz    t4, .Lsm_max_tail_done
+    VMASK_TAIL 1, 1, X_T4, 8
+.Lsm_max_tail_done:
+    VMAX    0, 0, 1
+    VREDUCE 1, 0, 0                       # v0 = max f32 bits in every lane
+    VFILL   2, 0
+    SETX    SEL_VM, CF_BASE, 1, X_A0   # rewind load
+    SETX    SEL_VM, CF_BASE, 3, X_A0   # store stream
+    srli    t6, a1, 5
+    addi    t5, t6, -1
+    beqz    t5, .Lsm_exp_last
+.Lsm_exp_full:
+    VLOAD   1
+    VSUB    3, 1, 0
+    VMULX   3, 3, X_A3
+    VEXP2   3, 3
+    VADD    2, 2, 3
+    VSTORE  3
+    addi    t5, t5, -1
+    bnez    t5, .Lsm_exp_full
+.Lsm_exp_last:
+    VLOAD   1
+    beqz    t4, .Lsm_exp_tail_done
+    VMASK_TAIL 1, 1, X_T4, 8
+.Lsm_exp_tail_done:
+    VSUB    3, 1, 0
+    VMULX   3, 3, X_A3
+    VEXP2   3, 3
+    VADD    2, 2, 3
+    VSTORE  3
+    VREDUCE 0, 4, 2                       # v4 = sum in every lane
+    VRCP    4, 4
+    SETX    SEL_VM, CF_BASE, 4, X_A4
     SETIV   SEL_VM, CF_STRIDE, 4, 4
     SETIV   SEL_VM, CF_VFLAGS, 0, 4
     VSTORE  4                             # *rcp_out = rcp(sum)

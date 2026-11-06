@@ -19,7 +19,10 @@ void qwen3_scores(const float *q, const char *k_base, uint32_t row_stride, float
                   uint32_t n_keys, uint32_t hd);
 void qwen3_scores4(const float *q, uint32_t q_stride, const char *k_base, uint32_t k_stride,
                    float *scores, uint32_t n_keys, uint32_t hd);
+void qwen3_mask_tail_zero(float *block, uint32_t keep);
 void qwen3_softmax_exp(float *scores, uint32_t n, uint32_t scale_log2e_bits, uint32_t *rcp_out);
+void qwen3_softmax_exp_masked(float *scores, uint32_t n, uint32_t n_valid,
+                              uint32_t scale_log2e_bits, uint32_t *rcp_out);
 void qwen3_pv(const char *v_base, uint32_t row_stride, const float *probs, float *out,
               uint32_t n_keys, uint32_t hd, uint32_t rcp_bits);
 void qwen3_pv4(const char *v_base, uint32_t row_stride, const float *probs, float *out,

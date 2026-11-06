@@ -185,6 +185,18 @@ static void cache_append(uint32_t layer, uint32_t pos, const float *k, const flo
   }
 }
 
+// Rows with a short tail use the scalar fill; rows with a longer, non-empty
+// tail use vmask.tail inside the softmax kernel.
+static void softmax_row(float *row, uint32_t n_padded, uint32_t n_keys, uint32_t *rcp) {
+  if (n_keys >= 32 && (n_keys & 31u)) {
+    qwen3_softmax_exp_masked(row, n_padded, n_keys, model.scale_log2e_bits, rcp);
+  } else {
+    for (uint32_t i = n_keys; i < n_padded; ++i)
+      ((uint32_t *)row)[i] = 0xFF800000u;
+    qwen3_softmax_exp(row, n_padded, model.scale_log2e_bits, rcp);
+  }
+}
+
 static void attention(uint32_t layer, uint32_t pos, const float *q, float *attn) {
   const uint32_t group = model.n_q_heads / model.n_kv_heads;
   const uint32_t n_keys = pos + 1;
@@ -194,12 +206,7 @@ static void attention(uint32_t layer, uint32_t pos, const float *q, float *attn)
     const char *kb = kv_k_ptr(layer, kvh);
     const char *vb = kv_v_ptr(layer, kvh);
     qwen3_scores(q + h * model.head_dim, kb, model.head_dim * 4, scores, n_keys, model.head_dim);
-    // each head's softmax overwrites the whole padded block, so the -inf
-    // tail must be re-applied per head
-    for (uint32_t i = n_keys; i < n_padded; ++i) {
-      ((uint32_t *)scores)[i] = 0xFF800000u;
-    }
-    qwen3_softmax_exp(scores, n_padded, model.scale_log2e_bits, rcp_word);
+    softmax_row(scores, n_padded, n_keys, rcp_word);
     qwen3_pv(vb, model.head_dim * 4, scores, attn + h * model.head_dim, n_keys, model.head_dim,
              rcp_word[0]);
   }
@@ -226,13 +233,10 @@ static void attention_rows(uint32_t layer, uint32_t base_pos, const float *q, fl
         const uint32_t n_keys = base_pos + r + rr + 1;
         const uint32_t n_padded = (n_keys + 31) & ~31u;
         float *row = pf_scores + rr * n_padded_max;
-        for (uint32_t i = n_keys; i < n_padded; ++i)
-          ((uint32_t *)row)[i] = 0xFF800000u;
-        qwen3_softmax_exp(row, n_padded, model.scale_log2e_bits, &rcp4[rr]);
-        // qwen3_pv4 uses the group's max key count; the softmax tail beyond
-        // this row's causal prefix must contribute exactly zero.
-        for (uint32_t i = n_keys; i < n_keys_max; ++i)
-          row[i] = 0.0f;
+        softmax_row(row, n_padded, n_keys, &rcp4[rr]);
+        // qwen3_pv4 uses the group's max key count; keys beyond this row's
+        // padded softmax block were not exponentiated and must be zero.
+        if (n_keys_max > n_padded) qwen3_mask_tail_zero(row + n_padded, 0);
       }
       qwen3_pv4(vb, model.head_dim * 4, pf_scores, attn + r * model.q_dim + h * model.head_dim,
                 n_keys_max, model.head_dim, rcp4, model.q_dim * 4);
@@ -242,9 +246,7 @@ static void attention_rows(uint32_t layer, uint32_t base_pos, const float *q, fl
       const uint32_t n_padded = (n_keys + 31) & ~31u;
       qwen3_scores(q + r * model.q_dim + h * model.head_dim, kb, model.head_dim * 4, scores,
                    n_keys, model.head_dim);
-      for (uint32_t i = n_keys; i < n_padded; ++i)
-        ((uint32_t *)scores)[i] = 0xFF800000u;
-      qwen3_softmax_exp(scores, n_padded, model.scale_log2e_bits, rcp_word);
+      softmax_row(scores, n_padded, n_keys, rcp_word);
       qwen3_pv(vb, model.head_dim * 4, scores,
                attn + r * model.q_dim + h * model.head_dim, n_keys, model.head_dim,
                rcp_word[0]);
