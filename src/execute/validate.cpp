@@ -182,18 +182,6 @@ bool valid_structure(const CfgGetwInstr &instr) {
          valid_config_index(instr.reg_type, instr.src);
 }
 
-bool valid_structure(const CvtInstr &instr) {
-  if (!in_range(instr.dest) || !in_range(instr.src)) return false;
-  switch (instr.op) {
-  case CvtOp::cvt:
-    return (instr.dest.domain == NpuDomain::acc || instr.dest.domain == NpuDomain::vec32) &&
-           instr.src.domain == instr.dest.domain;
-  case CvtOp::widen:
-    return instr.dest.domain == NpuDomain::acc && instr.src.domain == NpuDomain::tile;
-  default: return false;
-  }
-}
-
 bool valid_structure(const AreduceInstr &instr) {
   return is_areduce_op(instr.op) && instr.dest.domain == NpuDomain::vec32 && in_range(instr.dest) &&
          instr.src.domain == NpuDomain::acc && in_range(instr.src);

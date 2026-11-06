@@ -168,13 +168,6 @@ inline std::string vreduce_mnemonic(ReduceOp op) {
 
 inline std::string vreduce_argmax_mnemonic() { return "vreduce.argmax"; }
 
-inline std::string cvt_mnemonic(NpuDomain domain, CvtOp op) {
-  if (op == CvtOp::widen) return "twiden.i8.i32";
-  std::string name(1, domain_char(domain));
-  name += "cvt.i32.f32";
-  return name;
-}
-
 inline std::string aquant_mnemonic() { return "aquant.rows.q8s32"; }
 
 inline std::string tdequant_mnemonic() { return "tdequant.rows.f32"; }

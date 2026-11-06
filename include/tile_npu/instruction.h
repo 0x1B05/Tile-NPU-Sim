@@ -278,14 +278,6 @@ struct VreduceArgmaxInstr {
   NpuRegister src{};        // Vec32
 };
 
-enum class CvtOp : std::uint8_t { cvt = 0b000, widen = 0b001 };
-
-struct CvtInstr {
-  CvtOp op = CvtOp::cvt;
-  NpuRegister dest{};
-  NpuRegister src{};
-};
-
 // aquant.rows.q8s32: per-row quantization with a Vec32 scale.
 struct AquantInstr {
   NpuRegister dest{};      // Tile

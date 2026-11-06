@@ -337,10 +337,6 @@ std::string npu_instr(const DecodedNpuInstr &instr) {
             return vreduce_argmax_mnemonic() + " " + npu_reg(i.index_dest) + ", " +
                    npu_reg(i.value_dest) + ", " + npu_reg(i.src);
           },
-          [](const CvtInstr &i) {
-            return cvt_mnemonic(i.dest.domain, i.op) + " " + npu_reg(i.dest) + ", " +
-                   npu_reg(i.src);
-          },
           [](const AquantInstr &i) {
             std::ostringstream out;
             out << aquant_mnemonic() << ' ' << npu_reg(i.dest) << ", " << npu_reg(i.src) << ", v"

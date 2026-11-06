@@ -8,26 +8,6 @@
 
 namespace tile_npu {
 
-// CVT (R2): major4 = 0011, q = 10.
-// 31    28 27  26 25  24    22 21                12 11       7 6        2 1   0
-// [major4] [dom2] [0] [funct3] [    reserved10    ] [   S5   ] [   D5   ] [ q ]
-// dom2: destination 01 Acc, 11 Vec32; 00/10 reserved.
-// funct3: 000 i32 -> f32 (same-domain S5/D5), 001 Tile i8 -> Acc i32.
-DecodeResult decode_cvt(std::uint32_t word) {
-  const auto f = encoding::NpuR2::from(word);
-  const auto op = static_cast<CvtOp>(f.funct3);
-  const auto domain = sel3_domain(f.sel3);
-  const auto src_domain = op == CvtOp::widen ? NpuDomain::tile : domain;
-  if (!domain_register_valid(domain, f.dest) || !domain_register_valid(src_domain, f.src2)) {
-    return DecodeError::illegal;
-  }
-  return DecodedNpuInstr{CvtInstr{
-      .op = op,
-      .dest = {.domain = domain, .index = f.dest},
-      .src = {.domain = src_domain, .index = f.src2},
-  }};
-}
-
 // AREDUCE (R2): major4 = 0001, q = 10.
 // 31    28 27       25 24    22 21                12 11       7 6        2 1   0
 // [major4] [reserved3] [funct3] [    reserved10    ] [   S5   ] [   D5   ] [ q ]

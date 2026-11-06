@@ -37,8 +37,6 @@ using tile_npu::CmpInstr;
 using tile_npu::CmpOp;
 using tile_npu::ConfigField;
 using tile_npu::ConfigRegType;
-using tile_npu::CvtInstr;
-using tile_npu::CvtOp;
 using tile_npu::DecodedNpuInstr;
 using tile_npu::DType;
 using tile_npu::EbinInstr;
@@ -251,13 +249,6 @@ TEST_CASE(validate_rejects_bad_cfg_word) {
                 "setw span past ac15");
 }
 
-TEST_CASE(validate_rejects_bad_cvt) {
-  check_illegal(CvtInstr{CvtOp::widen, A(0), R(0)}, "widen from reserved");
-  check_illegal(CvtInstr{CvtOp::cvt, A(0), V(0)}, "cross-domain cvt");
-  check_illegal(CvtInstr{CvtOp::cvt, T(0), T(1)}, "cvt on tile");
-  check_illegal(CvtInstr{static_cast<CvtOp>(2), A(0), A(1)}, "reserved op");
-}
-
 TEST_CASE(validate_rejects_bad_reduce) {
   check_illegal(AreduceInstr{static_cast<ReduceOp>(6), V(0), A(0)}, "reserved areduce op");
   check_illegal(AreduceInstr{static_cast<ReduceOp>(4), V(0), A(0)}, "areduce argmax uses R4");
@@ -347,7 +338,6 @@ TEST_CASE(validate_rejects_acc_index_16) {
   check_illegal(MblkInstr{.op = MblkOp::load, .reg = A(16)}, "mblk destination a16");
   check_illegal(FillInstr{A(16), FillImm16{1}}, "fill destination a16");
   check_illegal(MoveInstr{A(16), A(0)}, "move destination a16");
-  check_illegal(CvtInstr{CvtOp::cvt, A(16), A(0)}, "cvt destination a16");
   check_illegal(AreduceInstr{ReduceOp::sum, V(0), A(16)}, "areduce source a16");
   check_illegal(AquantInstr{.dest = T(0), .src = A(16), .scale = 0}, "aquant source a16");
   check_illegal(TdequantInstr{.dest = A(16), .src = T(0), .scale = 0}, "tdequant destination a16");

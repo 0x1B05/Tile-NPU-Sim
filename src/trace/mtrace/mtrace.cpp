@@ -403,12 +403,6 @@ void trace_npu_dataflow(const DecodedNpuInstr &instr, const State &state, Mtrace
             add_dest(event, domain_endpoint(state, i.value_dest.domain, i.value_dest.index, "val"));
             emit_compute(trace, trace::vreduce_argmax_mnemonic(), event);
           },
-          [&](const CvtInstr &i) {
-            TraceEvent event;
-            add_source(event, domain_endpoint(state, i.src.domain, i.src.index, "s0"));
-            add_dest(event, domain_endpoint(state, i.dest.domain, i.dest.index, "d"));
-            emit_compute(trace, trace::cvt_mnemonic(i.dest.domain, i.op), event);
-          },
           [&](const AquantInstr &i) {
             TraceEvent event;
             add_source(event, domain_endpoint(state, i.src.domain, i.src.index, "s0"));

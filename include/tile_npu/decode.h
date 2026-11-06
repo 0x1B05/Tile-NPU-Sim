@@ -21,9 +21,8 @@ using DecodedNpuInstr = std::variant<
     // Matrix and elementwise arithmetic.
     MmaInstr, VmmaInstr, AdequantInstr, VdequantInstr,
     EbinInstr, EunInstr, CmpInstr, BcastInstr, Er4Instr, MaskInstr,
-    // Reductions, conversions, and quantization.
+    // Reductions and quantization.
     AreduceInstr, AreduceArgmaxInstr, VreduceInstr, VreduceArgmaxInstr,
-    CvtInstr,
     AquantInstr, TdequantInstr,
     // Configuration and system control.
     CfgSetiInstr, CfgSetxInstr, CfgCopyInstr, CfgGetInstr, CfgSetwInstr, CfgGetwInstr, SysInstr>;

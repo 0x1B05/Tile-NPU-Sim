@@ -141,15 +141,6 @@ TEST_CASE(npu_guest_emask) {
   check_guest_image("emask", 1024);
 }
 
-TEST_CASE(npu_guest_cvt) {
-  // tests/guest/npu/cvt.S self-configures configs and descriptors, then
-  // exercises twiden (i8 Tile -> i32 Acc), an in-place acvt (i32 -> f32,
-  // checking the destination dtype update) and a vcvt, with store-back
-  // checks. It reaches ebreak with a0 = 0 on success; a failing check
-  // reports its stage in a0.
-  check_guest_image("cvt", 1024);
-}
-
 TEST_CASE(npu_guest_reduce) {
   // tests/guest/npu/reduce.S self-configures configs and descriptors, then
   // exercises areduce.rows.sum/argmax and vreduce.argmax cases (NaN candidates
