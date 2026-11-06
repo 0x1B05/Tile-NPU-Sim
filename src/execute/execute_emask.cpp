@@ -70,10 +70,10 @@ bool keeps(MaskOp op, std::uint64_t bound, std::size_t row, std::size_t col) {
 } // namespace
 
 // Runs over the destination's effective region; positions failing the
-// condition take the fill value. Only tail exists on vectors, bounded by the
-// full 64-bit xLen.
+// condition take the fill value. Tail exists on Acc and Vec32; tril/triu are
+// Acc-only, so Tile never reaches this executor.
 ExecuteResult execute(const MaskInstr &instr, State &state) {
-  return with_domain<NpuDomain::tile, NpuDomain::acc, NpuDomain::vec32>(
+  return with_domain<NpuDomain::acc, NpuDomain::vec32>(
       state, instr.dest.domain, [&](auto &regs, const auto &configs) {
         using Element = typename std::remove_cvref_t<decltype(regs)>::value_type::value_type;
         const auto &dst_config = configs[instr.dest.index];

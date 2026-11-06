@@ -18,30 +18,6 @@ using tile_npu::StepStatus;
 
 } // namespace
 
-TEST_CASE(emask_tile_tail) {
-  Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
-  // tmask.tail t0, t1, x2, -1 on a 3x3 i8 tile with xBounds = (nRows 2,
-  // nCols 1): only the first column of the first two rows keeps the source.
-  load_one(sim, memory, make_emask(NpuDomain::tile, 0, 0, 1, 2, 2));
-  auto &state = sim.state();
-  for (auto index : {0, 1})
-    tile_cfg(state, index, DType::i8, 3, 3);
-  state.scalar.write_x(2, (std::uint64_t{1} << 32) | 2);
-  for (std::uint8_t k = 0; k < 9; ++k)
-    state.t[1][(k / 3) * 32 + (k % 3)] = static_cast<std::uint8_t>(k + 1);
-  state.t[0][3] = 0x5a; // sentinel outside the 3x3 effective region
-
-  check_eq(sim.step().status, StepStatus::retired, "tmask.tail retires");
-  check_eq(state.t[0][0], std::uint8_t{1}, "inside the bound keeps source");
-  check_eq(state.t[0][32], std::uint8_t{4}, "second row inside the bound");
-  check_eq(state.t[0][1], std::uint8_t{0xff}, "col >= nCols fills -1");
-  check_eq(state.t[0][2], std::uint8_t{0xff}, "col >= nCols fills -1");
-  check_eq(state.t[0][33], std::uint8_t{0xff}, "col >= nCols fills -1");
-  check_eq(state.t[0][64], std::uint8_t{0xff}, "row >= nRows fills -1");
-  check_eq(state.t[0][3], std::uint8_t{0x5a}, "mask keeps invalid lanes");
-}
-
 TEST_CASE(emask_acc_tril) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
@@ -127,11 +103,11 @@ TEST_CASE(emask_rejects_invalid) {
   check_eq(state.a[0][0], std::uint32_t{0xeeeeeeeeu}, "non-mutating");
 
   // Source and destination shapes must match.
-  load_one(sim, memory, make_emask(NpuDomain::tile, 0, 0, 1, 2, 0));
-  tile_cfg(state, 0, DType::i8, 2, 2);
-  tile_cfg(state, 1, DType::i8, 2, 3);
+  load_one(sim, memory, make_emask(NpuDomain::acc, 0, 0, 1, 2, 0));
+  acc_cfg(state, 0, DType::i32, 2, 2);
+  acc_cfg(state, 1, DType::i32, 2, 3);
   check_eq(sim.step().status, StepStatus::invalid_configuration,
-           "tmask.tail rejects a shape mismatch");
+           "amask.tail rejects a shape mismatch");
 
   // Source and destination dtypes must match.
   load_one(sim, memory, make_emask(NpuDomain::vec32, 0, 0, 1, 2, 0));

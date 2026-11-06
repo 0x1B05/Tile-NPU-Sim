@@ -156,6 +156,7 @@ TEST_CASE(validate_rejects_bad_er4) {
 
 TEST_CASE(validate_rejects_bad_emask) {
   check_illegal(MaskInstr{static_cast<MaskOp>(3), A(0), A(1), 0, Fill5Code{0}}, "reserved op");
+  check_illegal(MaskInstr{MaskOp::tail, T(0), T(1), 0, Fill5Code{0}}, "tail on a tile domain");
   check_illegal(MaskInstr{MaskOp::tril, T(0), T(1), 0, Fill5Code{0}}, "tril on a tile domain");
   check_illegal(MaskInstr{MaskOp::tril, V(0), V(1), 0, Fill5Code{0}}, "tril on a vector domain");
   check_illegal(MaskInstr{MaskOp::tail, R(0), R(1), 0, Fill5Code{0}}, "reserved domain");

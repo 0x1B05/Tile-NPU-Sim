@@ -142,9 +142,10 @@ DecodeResult decode_er4(std::uint32_t word) {
 // E_MASK (R4): major4 = 0100, q = 00.
 // 31    28 27  26  25  24    22 21      17 16      12 11       7 6        2 1   0
 // [major4] [dom2] [FS] [funct3] [xBound5 ] [ fill5  ] [   S5   ] [   D5   ] [ q ]
-// dom2: 00 Tile, 01 Acc, 11 Vec32; 10 reserved.
-// FS: 0 = fill5 code in [16:12], 1 = Scalar xFill in [16:12].
-// funct3: 000 tail, 001 tril, 010 triu; 011..111 reserved. tril/triu are Acc-only.
+// dom2: 01 Acc, 11 Vec32; 00/10 reserved. FS: 0 = fill5 code in [16:12],
+// 1 = Scalar xFill in [16:12].
+// funct3: 000 tail, 001 tril, 010 triu; 011..111 reserved. tail is Acc/Vec32,
+// tril/triu are Acc-only.
 // xBound5 names Scalar xBounds/xLen for tail, or xDelta for Acc tril/triu.
 DecodeResult decode_emask(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);

@@ -73,10 +73,10 @@ TEST_CASE(emask_decode) {
       // Anchor word computed by hand from the encoding figure: the asm
       // operand order is D, S, xBound, fill; xBound sits in [21:17] and the
       // fill in [16:12].
-      Case{.name = "tmask.tail t0, t1, x2, +1",
-           .word = 0x40041080u,
+      Case{.name = "amask.tail a0, a1, x2, +1",
+           .word = make_emask(NpuDomain::acc, 0, 0, 1, 2, 1),
            .op = MaskOp::tail,
-           .domain = NpuDomain::tile,
+           .domain = NpuDomain::acc,
            .dest = 0,
            .src = 1,
            .bound = 2,
@@ -117,8 +117,9 @@ TEST_CASE(emask_decode_rejects_reserved) {
   constexpr std::array cases{
       // funct3 >= 011 is reserved.
       DecodeCase{"funct3 011", make_emask(NpuDomain::acc, 3, 0, 0, 0, 0)},
-      DecodeCase{"funct3 111", make_emask(NpuDomain::tile, 7, 0, 0, 0, 0)},
-      // tril/triu are Acc-only.
+      DecodeCase{"funct3 111", make_emask(NpuDomain::acc, 7, 0, 0, 0, 0)},
+      // tail is Acc/Vec32 only; tril/triu are Acc-only.
+      DecodeCase{"tmask.tail", make_emask(NpuDomain::tile, 0, 0, 0, 0, 0)},
       DecodeCase{"tmask.tril", make_emask(NpuDomain::tile, 1, 0, 0, 0, 0)},
       DecodeCase{"tmask.triu", make_emask(NpuDomain::tile, 2, 0, 0, 0, 0)},
       DecodeCase{"vmask.tril", make_emask(NpuDomain::vec32, 1, 0, 0, 0, 0)},
@@ -126,7 +127,7 @@ TEST_CASE(emask_decode_rejects_reserved) {
       DecodeCase{"reserved triu", make_emask(NpuDomain::reserved, 2, 0, 0, 0, 0)},
       // fill5 codes 9-31 are reserved (FS = 0 only; with FS = 1 [16:12] names
       // xFill and any 5-bit number is a valid Scalar register).
-      DecodeCase{"fill5 9", make_emask(NpuDomain::tile, 0, 0, 0, 0, 9)},
+      DecodeCase{"fill5 9", make_emask(NpuDomain::acc, 0, 0, 0, 0, 9)},
       DecodeCase{"fill5 31", make_emask(NpuDomain::acc, 0, 0, 0, 0, 31)},
       // Acc has 16 registers; a16+ is a reserved encoding.
       DecodeCase{"amask a16 destination", make_emask(NpuDomain::acc, 0, 16, 0, 0, 0)},

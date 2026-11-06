@@ -90,11 +90,10 @@ inline constexpr bool is_er4_op(Er4Op op, NpuDomain domain) {
   }
 }
 
-// tril/triu are Acc-only; tail exists on all data domains.
+// Tail masks are Acc/Vec32 only; tril/triu are Acc-only.
 inline constexpr bool is_mask_op(MaskOp op, NpuDomain domain) {
-  if (domain == NpuDomain::reserved) return false;
   switch (op) {
-  case MaskOp::tail: return true;
+  case MaskOp::tail: return is_acc_or_vec32(domain);
   case MaskOp::tril:
   case MaskOp::triu: return domain == NpuDomain::acc;
   default: return false;
