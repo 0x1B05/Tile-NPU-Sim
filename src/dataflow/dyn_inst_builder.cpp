@@ -246,8 +246,14 @@ void fill_sys(DynInst &inst, const SysInstr &instr) {
 
 } // namespace
 
-DynInst make_scalar_dyn_inst(std::uint64_t id, std::uint64_t pc, const DecodedScalarInstr &) {
-  return DynInst{.id = id, .pc = pc, .op = DynOp::scalar, .unit = Unit::scalar};
+DynInst make_scalar_dyn_inst(std::uint64_t id, std::uint64_t pc, const DecodedScalarInstr &instr) {
+  DynInst out{.id = id, .pc = pc, .op = DynOp::scalar, .unit = Unit::scalar};
+  // x0 is hard-wired; leaving it out keeps the record free of hazards that
+  // the scoreboard would discard anyway.
+  if (instr.regs.src1 != 0) add_src(out, Domain::scalar, instr.regs.src1);
+  if (instr.regs.src2 != 0) add_src(out, Domain::scalar, instr.regs.src2);
+  if (instr.regs.dest != 0) set_dst(out, Domain::scalar, instr.regs.dest);
+  return out;
 }
 
 DynInst make_dyn_inst(std::uint64_t id, std::uint64_t pc, const DecodedNpuInstr &instr,

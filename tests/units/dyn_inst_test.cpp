@@ -95,4 +95,16 @@ TEST_CASE(dyn_inst_sync_and_scalar) {
   const auto scalar = make_scalar_dyn_inst(12, 0x80000014, addi);
   check_eq(scalar.op, DynOp::scalar, "scalar op");
   check_eq(scalar.unit, Unit::scalar, "scalar unit");
+  check_eq(scalar.src_count, std::uint8_t{0}, "x0 operands are not recorded");
+  check(scalar.dst.has_value(), "scalar destination is recorded");
+  check_eq(scalar.dst->domain, Domain::scalar, "scalar destination domain");
+  check_eq(scalar.dst->index, std::uint8_t{1}, "scalar destination index");
+
+  const DecodedScalarInstr add{.op = ScalarOp::add,
+                               .regs = ScalarRegs{.dest = 3, .src1 = 1, .src2 = 2}};
+  const auto add_inst = make_scalar_dyn_inst(13, 0x80000018, add);
+  check_eq(add_inst.src_count, std::uint8_t{2}, "scalar sources are recorded");
+  check_eq(add_inst.src[0].index, std::uint8_t{1}, "first scalar source");
+  check_eq(add_inst.src[1].index, std::uint8_t{2}, "second scalar source");
+  check_eq(add_inst.dst->index, std::uint8_t{3}, "scalar add destination");
 }
