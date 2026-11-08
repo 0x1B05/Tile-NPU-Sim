@@ -714,3 +714,42 @@ TEST_CASE(uarch_sram_and_memory_parameters_change_timing) {
   check(slow_engine.stats().cycles > fast_engine.stats().cycles,
         "memory latency parameter reaches the DMA path");
 }
+
+TEST_CASE(event_engine_reports_unit_busy_cycles) {
+  tile_npu::EventUarchEngine engine;
+  engine.reset();
+
+  engine.dispatch(mma_inst(1, 8, 4, 0, 16, 0));
+  engine.dispatch(scalar_inst(2, 1));
+  engine.finish();
+
+  const auto mma = tile_npu::unit_index(tile_npu::Unit::mma);
+  const auto scalar = tile_npu::unit_index(tile_npu::Unit::scalar);
+  check_eq(engine.stats().unit_busy_cycles[mma], std::uint64_t{75},
+           "MMA occupies its unit for the whole latency");
+  check_eq(engine.stats().unit_busy_cycles[scalar], std::uint64_t{1},
+           "scalar occupies its unit for one cycle");
+  check_eq(engine.stats().unit_in_flight_peak[mma], std::uint64_t{1},
+           "MMA in-flight high-water mark");
+  check_eq(engine.stats().unit_in_flight_peak[scalar], std::uint64_t{1},
+           "scalar in-flight high-water mark");
+}
+
+TEST_CASE(sram_model_reports_per_domain_stats) {
+  tile_npu::SramModel sram;
+
+  sram.reserve_stream(tile_npu::Domain::tile, 0, 0, 0, 8, false);
+  sram.access(tile_npu::Domain::acc, 0, 0, 64, 0, 0, true);
+
+  const auto &stats = sram.stats();
+  const auto tile = static_cast<std::size_t>(tile_npu::Domain::tile);
+  const auto acc = static_cast<std::size_t>(tile_npu::Domain::acc);
+  const auto vec = static_cast<std::size_t>(tile_npu::Domain::vec32);
+  check_eq(stats.domains[tile].reads, std::uint64_t{1}, "tile read count");
+  check_eq(stats.domains[tile].busy_cycles, std::uint64_t{8}, "tile busy cycles");
+  check_eq(stats.domains[acc].writes, std::uint64_t{1}, "acc write count");
+  check_eq(stats.domains[acc].write_bytes, std::uint64_t{64}, "acc write bytes");
+  check_eq(stats.domains[vec].accesses, std::uint64_t{0}, "unused domain stays zero");
+  check_eq(stats.reads, std::uint64_t{1}, "aggregate reads");
+  check_eq(stats.writes, std::uint64_t{1}, "aggregate writes");
+}

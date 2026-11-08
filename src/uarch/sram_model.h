@@ -11,8 +11,6 @@
 
 namespace tile_npu {
 
-inline constexpr std::size_t SRAM_DOMAIN_COUNT = static_cast<std::size_t>(Domain::vec32) + 1;
-
 struct SramDomainConfig {
   std::size_t banks = 2;
   std::size_t ports_per_bank = 1;
@@ -78,7 +76,8 @@ public:
 
 private:
   const SramDomainConfig &domain_config(Domain domain) const;
-  void touch_stats(bool write, std::uint32_t bytes, std::uint64_t busy_cycles, bool conflict);
+  void touch_stats(Domain domain, bool write, std::uint32_t bytes, std::uint64_t busy_cycles,
+                   bool conflict);
 
   SramConfig config_{};
   std::array<std::vector<SramBank>, SRAM_DOMAIN_COUNT> banks_{};

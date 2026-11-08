@@ -3,12 +3,30 @@
 #include "tile_npu/dyn_inst.h"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 
 namespace tile_npu {
 
+// Domain order matches enum Domain: scalar, tile, acc, vec32. The scalar
+// domain does not have a register-file SRAM model, but keeping the slot makes
+// the array index equal to the Domain value.
+inline constexpr std::size_t SRAM_DOMAIN_COUNT = static_cast<std::size_t>(Domain::vec32) + 1;
+
+// On-chip SRAM activity for one register-file domain.
+struct SramDomainStats {
+  std::uint64_t accesses = 0;
+  std::uint64_t reads = 0;
+  std::uint64_t writes = 0;
+  std::uint64_t read_bytes = 0;
+  std::uint64_t write_bytes = 0;
+  std::uint64_t conflicts = 0;
+  std::uint64_t busy_cycles = 0;
+};
+
 // On-chip SRAM activity shared by the Tile/Acc/Vec register files. `conflicts`
-// counts accesses whose earliest bank/port was later than requested.
+// counts accesses whose earliest bank/port was later than requested. The
+// aggregate fields duplicate the sum of `domains` for convenient export.
 struct SramStats {
   std::uint64_t accesses = 0;
   std::uint64_t reads = 0;
@@ -17,6 +35,7 @@ struct SramStats {
   std::uint64_t write_bytes = 0;
   std::uint64_t conflicts = 0;
   std::uint64_t busy_cycles = 0;
+  std::array<SramDomainStats, SRAM_DOMAIN_COUNT> domains{};
 };
 
 // Off-chip memory requests issued through MemoryService.
@@ -47,6 +66,10 @@ struct UarchStats {
   // Sum of per-cycle queue occupancy and the observed high-water mark.
   std::array<std::uint64_t, UNIT_COUNT> queue_occupancy_cycles{};
   std::array<std::uint64_t, UNIT_COUNT> queue_peak{};
+  // Cycles with at least one issued-but-not-complete instruction in the unit,
+  // and the peak number of concurrently in-flight instructions.
+  std::array<std::uint64_t, UNIT_COUNT> unit_busy_cycles{};
+  std::array<std::uint64_t, UNIT_COUNT> unit_in_flight_peak{};
 
   SramStats sram{};
   MemoryStats memory{};

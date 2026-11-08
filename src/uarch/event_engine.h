@@ -51,6 +51,7 @@ public:
 private:
   struct QueueSample {
     std::array<std::size_t, UNIT_COUNT> occupancy{};
+    std::array<std::size_t, UNIT_COUNT> active{};
     std::array<std::uint64_t, UNIT_COUNT> dependency_waits{};
     std::uint64_t memory_waits = 0;
   };

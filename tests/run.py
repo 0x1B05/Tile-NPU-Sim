@@ -148,6 +148,77 @@ def suite_guest(args: argparse.Namespace) -> int:
     return 1 if failures else 0
 
 
+def uarch_stats_errors(stats: dict) -> list[str]:
+    """Check that the P4 counter schema is present and internally consistent."""
+    errors: list[str] = []
+    required = (
+        "cycles",
+        "retired",
+        "unit_count",
+        "unit_busy_cycles",
+        "unit_utilization",
+        "unit_in_flight_peak",
+        "dispatch_stall_cycles",
+        "dependency_stall_cycles",
+        "queue_occupancy_cycles",
+        "queue_peak",
+        "sram",
+        "memory",
+    )
+    missing = [key for key in required if key not in stats]
+    if missing:
+        return ["stats JSON missing " + ", ".join(missing)]
+
+    sram = stats["sram"]
+    missing = [
+        key
+        for key in ("tile", "acc", "vec32", "bandwidth_bytes_per_cycle")
+        if key not in sram
+    ]
+    if missing:
+        return ["sram stats missing " + ", ".join(missing)]
+    if "bandwidth_bytes_per_cycle" not in stats["memory"]:
+        return ["memory stats missing bandwidth_bytes_per_cycle"]
+
+    units = set(stats["unit_count"])
+    for key in (
+        "unit_busy_cycles",
+        "unit_utilization",
+        "unit_in_flight_peak",
+        "dispatch_stall_cycles",
+        "dependency_stall_cycles",
+        "queue_occupancy_cycles",
+        "queue_peak",
+    ):
+        if set(stats[key]) != units:
+            errors.append(f"{key} does not cover the same units as unit_count")
+
+    if sum(stats["unit_count"].values()) != stats["retired"]:
+        errors.append("unit_count sum does not match retired")
+    cycles = stats["cycles"]
+    for unit, busy in stats["unit_busy_cycles"].items():
+        if busy > cycles:
+            errors.append(f"unit_busy_cycles[{unit}] exceeds cycles")
+        utilization = stats["unit_utilization"].get(unit)
+        if utilization is None or utilization < 0 or utilization > 1:
+            errors.append(f"unit_utilization[{unit}] is outside [0, 1]")
+
+    domains = [sram["tile"], sram["acc"], sram["vec32"]]
+    if sram["accesses"] != sum(domain["accesses"] for domain in domains):
+        errors.append("sram accesses do not match the domain sum")
+    if sram["conflicts"] != sum(domain["conflicts"] for domain in domains):
+        errors.append("sram conflicts do not match the domain sum")
+    sram_bytes = sram["read_bytes"] + sram["write_bytes"]
+    if sram_bytes != sum(domain["read_bytes"] + domain["write_bytes"] for domain in domains):
+        errors.append("sram bytes do not match the domain sum")
+    if sram_bytes > 0 and cycles > 0 and sram["bandwidth_bytes_per_cycle"] <= 0:
+        errors.append("SRAM traffic has no reported bandwidth")
+    memory_bytes = stats["memory"]["read_bytes"] + stats["memory"]["write_bytes"]
+    if memory_bytes > 0 and stats["memory"]["bandwidth_bytes_per_cycle"] <= 0:
+        errors.append("memory traffic has no reported bandwidth")
+    return errors
+
+
 def suite_uarch(args: argparse.Namespace) -> int:
     build_dir, guest_dir, _ = build_dirs(args)
     if args.build:
@@ -236,6 +307,7 @@ def suite_uarch(args: argparse.Namespace) -> int:
                     f"architectural state differs: functional={functional['arch_digest']} "
                     f"uarch={uarch['arch_digest']}"
                 )
+            errors.extend(uarch_stats_errors(uarch))
 
             expected = baseline.get("images", {}).get(name)
             if expected is not None and not args.update_uarch_baseline:

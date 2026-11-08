@@ -17,8 +17,10 @@
 #include <iostream>
 #include <limits>
 #include <span>
+#include <sstream>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -38,6 +40,61 @@ bool parse_image_arg(std::string_view arg, Image &image) {
 
 constexpr std::array<const char *, tile_npu::UNIT_COUNT> UNIT_NAMES{"scalar", "mma",    "vector",
                                                                     "dma",    "config", "sync"};
+constexpr std::array<const char *, tile_npu::SRAM_DOMAIN_COUNT> DOMAIN_NAMES{"scalar", "tile",
+                                                                             "acc", "vec32"};
+
+double per_cycle(std::uint64_t value, std::uint64_t cycles) {
+  return cycles == 0 ? 0.0 : static_cast<double>(value) / static_cast<double>(cycles);
+}
+
+template <std::size_t N>
+void write_u64_object(std::ostream &out, const std::array<std::uint64_t, N> &values) {
+  out << '{';
+  for (std::size_t i = 0; i < N; ++i) {
+    if (i != 0) out << ", ";
+    out << '"' << UNIT_NAMES[i] << "\": " << values[i];
+  }
+  out << '}';
+}
+
+template <std::size_t N>
+void write_ratio_object(std::ostream &out, const std::array<std::uint64_t, N> &values,
+                        std::uint64_t cycles) {
+  out << '{';
+  for (std::size_t i = 0; i < N; ++i) {
+    if (i != 0) out << ", ";
+    out << '"' << UNIT_NAMES[i] << "\": " << per_cycle(values[i], cycles);
+  }
+  out << '}';
+}
+
+void write_sram_domain(std::ostream &out, const tile_npu::SramDomainStats &stats) {
+  out << "{\"accesses\": " << stats.accesses << ", \"reads\": " << stats.reads
+      << ", \"writes\": " << stats.writes << ", \"read_bytes\": " << stats.read_bytes
+      << ", \"write_bytes\": " << stats.write_bytes << ", \"conflicts\": " << stats.conflicts
+      << ", \"busy_cycles\": " << stats.busy_cycles << '}';
+}
+
+void write_sram(std::ostream &out, const tile_npu::SramStats &stats, std::uint64_t cycles) {
+  out << "{\"accesses\": " << stats.accesses << ", \"reads\": " << stats.reads
+      << ", \"writes\": " << stats.writes << ", \"read_bytes\": " << stats.read_bytes
+      << ", \"write_bytes\": " << stats.write_bytes << ", \"conflicts\": " << stats.conflicts
+      << ", \"busy_cycles\": " << stats.busy_cycles;
+  for (std::size_t domain = 1; domain < tile_npu::SRAM_DOMAIN_COUNT; ++domain) {
+    out << ", \"" << DOMAIN_NAMES[domain] << "\": ";
+    write_sram_domain(out, stats.domains[domain]);
+  }
+  out << ", \"bandwidth_bytes_per_cycle\": "
+      << per_cycle(stats.read_bytes + stats.write_bytes, cycles) << '}';
+}
+
+void write_memory(std::ostream &out, const tile_npu::MemoryStats &stats, std::uint64_t cycles) {
+  out << "{\"transfers\": " << stats.transfers << ", \"reads\": " << stats.reads
+      << ", \"writes\": " << stats.writes << ", \"read_bytes\": " << stats.read_bytes
+      << ", \"write_bytes\": " << stats.write_bytes << ", \"busy_cycles\": " << stats.busy_cycles
+      << ", \"bandwidth_bytes_per_cycle\": "
+      << per_cycle(stats.read_bytes + stats.write_bytes, cycles) << '}';
+}
 
 bool write_run_json(const std::string &path, tile_npu::ExecutionMode mode,
                     const tile_npu::UarchConfig &config, const tile_npu::Machine &machine,
@@ -62,14 +119,140 @@ bool write_run_json(const std::string &path, tile_npu::ExecutionMode mode,
     out << ",\n  \"uarch_config\": " << tile_npu::uarch_config_json(config);
     out << ",\n  \"cycles\": " << stats.cycles;
     out << ",\n  \"retired\": " << stats.retired;
-    out << ",\n  \"unit_count\": {";
-    for (std::size_t i = 0; i < tile_npu::UNIT_COUNT; ++i) {
-      if (i != 0) out << ", ";
-      out << '"' << UNIT_NAMES[i] << "\": " << stats.unit_count[i];
-    }
-    out << "}";
+    out << ",\n  \"ipc\": " << per_cycle(stats.retired, stats.cycles);
+    out << ",\n  \"window_stall_cycles\": " << stats.window_stall_cycles;
+    out << ",\n  \"memory_order_stall_cycles\": " << stats.memory_order_stall_cycles;
+    out << ",\n  \"unit_count\": ";
+    write_u64_object(out, stats.unit_count);
+    out << ",\n  \"unit_busy_cycles\": ";
+    write_u64_object(out, stats.unit_busy_cycles);
+    out << ",\n  \"unit_utilization\": ";
+    write_ratio_object(out, stats.unit_busy_cycles, stats.cycles);
+    out << ",\n  \"unit_in_flight_peak\": ";
+    write_u64_object(out, stats.unit_in_flight_peak);
+    out << ",\n  \"dispatch_stall_cycles\": ";
+    write_u64_object(out, stats.dispatch_stall_cycles);
+    out << ",\n  \"dependency_stall_cycles\": ";
+    write_u64_object(out, stats.dependency_stall_cycles);
+    out << ",\n  \"queue_occupancy_cycles\": ";
+    write_u64_object(out, stats.queue_occupancy_cycles);
+    out << ",\n  \"queue_peak\": ";
+    write_u64_object(out, stats.queue_peak);
+    out << ",\n  \"sram\": ";
+    write_sram(out, stats.sram, stats.cycles);
+    out << ",\n  \"memory\": ";
+    write_memory(out, stats.memory, stats.cycles);
   }
   out << "\n}\n";
+  return out.good();
+}
+
+std::string csv_escape(std::string_view value) {
+  if (value.find_first_of(",\"\n\r") == std::string_view::npos) return std::string(value);
+  std::string escaped = "\"";
+  for (const char ch : value) {
+    if (ch == '"') escaped += '"';
+    escaped += ch;
+  }
+  escaped += '"';
+  return escaped;
+}
+
+std::string number(double value) {
+  std::ostringstream text;
+  text << value;
+  return text.str();
+}
+
+bool write_run_csv(const std::string &path, tile_npu::ExecutionMode mode,
+                   const tile_npu::UarchConfig &config, const tile_npu::Machine &machine,
+                   const tile_npu::StepResult &result, int exit_code) {
+  std::vector<std::string> keys;
+  std::vector<std::string> values;
+  const auto add = [&](std::string key, std::string value) {
+    keys.push_back(std::move(key));
+    values.push_back(std::move(value));
+  };
+
+  const auto &state = machine.state();
+  add("mode", mode == tile_npu::ExecutionMode::uarch ? "uarch" : "functional");
+  add("status", std::string(tile_npu::monitor::status_name(result.status)));
+  add("pc", tile_npu::hex64(result.pc));
+  add("a0", std::to_string(state.scalar.read_x(tile_npu::monitor::EXIT_CODE_REG)));
+  add("exit_code", std::to_string(exit_code));
+  add("arch_digest", tile_npu::hex64(tile_npu::architectural_digest(state)));
+
+  if (mode == tile_npu::ExecutionMode::uarch) {
+    const auto &stats = machine.stats();
+    add("cycles", std::to_string(stats.cycles));
+    add("retired", std::to_string(stats.retired));
+    add("ipc", number(per_cycle(stats.retired, stats.cycles)));
+    add("window_stall_cycles", std::to_string(stats.window_stall_cycles));
+    add("memory_order_stall_cycles", std::to_string(stats.memory_order_stall_cycles));
+    add("window_depth", std::to_string(config.window_depth));
+    add("mma_read_latency", std::to_string(config.mma.read_latency));
+    add("mma_input_skew", std::to_string(config.mma.input_skew));
+    add("mma_output_skew", std::to_string(config.mma.output_skew));
+    add("vector_lanes", std::to_string(config.vector.lanes));
+    add("memory_bytes_per_cycle", std::to_string(config.memory.bytes_per_cycle));
+    add("memory_latency", std::to_string(config.memory.latency));
+
+    for (std::size_t unit = 0; unit < tile_npu::UNIT_COUNT; ++unit) {
+      const auto prefix = std::string(UNIT_NAMES[unit]);
+      add("unit_count_" + prefix, std::to_string(stats.unit_count[unit]));
+      add("unit_busy_cycles_" + prefix, std::to_string(stats.unit_busy_cycles[unit]));
+      add("unit_utilization_" + prefix,
+          number(per_cycle(stats.unit_busy_cycles[unit], stats.cycles)));
+      add("unit_in_flight_peak_" + prefix, std::to_string(stats.unit_in_flight_peak[unit]));
+      add("queue_depth_" + prefix, std::to_string(config.queue_depth[unit]));
+      add("dispatch_stall_cycles_" + prefix, std::to_string(stats.dispatch_stall_cycles[unit]));
+      add("dependency_stall_cycles_" + prefix, std::to_string(stats.dependency_stall_cycles[unit]));
+      add("queue_occupancy_cycles_" + prefix, std::to_string(stats.queue_occupancy_cycles[unit]));
+      add("queue_peak_" + prefix, std::to_string(stats.queue_peak[unit]));
+    }
+
+    for (std::size_t domain = 1; domain < tile_npu::SRAM_DOMAIN_COUNT; ++domain) {
+      const auto prefix = "sram_" + std::string(DOMAIN_NAMES[domain]) + "_";
+      const auto &domain_stats = stats.sram.domains[domain];
+      add(prefix + "accesses", std::to_string(domain_stats.accesses));
+      add(prefix + "reads", std::to_string(domain_stats.reads));
+      add(prefix + "writes", std::to_string(domain_stats.writes));
+      add(prefix + "read_bytes", std::to_string(domain_stats.read_bytes));
+      add(prefix + "write_bytes", std::to_string(domain_stats.write_bytes));
+      add(prefix + "conflicts", std::to_string(domain_stats.conflicts));
+      add(prefix + "busy_cycles", std::to_string(domain_stats.busy_cycles));
+      add(prefix + "banks", std::to_string(config.sram.domains[domain].banks));
+      add(prefix + "ports", std::to_string(config.sram.domains[domain].ports_per_bank));
+      add(prefix + "width", std::to_string(config.sram.domains[domain].bank_width_bytes));
+    }
+    add("sram_bandwidth_bytes_per_cycle",
+        number(per_cycle(stats.sram.read_bytes + stats.sram.write_bytes, stats.cycles)));
+
+    add("memory_transfers", std::to_string(stats.memory.transfers));
+    add("memory_reads", std::to_string(stats.memory.reads));
+    add("memory_writes", std::to_string(stats.memory.writes));
+    add("memory_read_bytes", std::to_string(stats.memory.read_bytes));
+    add("memory_write_bytes", std::to_string(stats.memory.write_bytes));
+    add("memory_busy_cycles", std::to_string(stats.memory.busy_cycles));
+    add("memory_bandwidth_bytes_per_cycle",
+        number(per_cycle(stats.memory.read_bytes + stats.memory.write_bytes, stats.cycles)));
+  }
+
+  std::ofstream out(path, std::ios::out | std::ios::trunc);
+  if (!out) {
+    std::cerr << "cannot open stats file: " << path << '\n';
+    return false;
+  }
+  for (std::size_t i = 0; i < keys.size(); ++i) {
+    if (i != 0) out << ',';
+    out << csv_escape(keys[i]);
+  }
+  out << '\n';
+  for (std::size_t i = 0; i < values.size(); ++i) {
+    if (i != 0) out << ',';
+    out << csv_escape(values[i]);
+  }
+  out << '\n';
   return out.good();
 }
 
@@ -106,6 +289,7 @@ int main(int argc, char **argv) {
   std::int64_t memory_mib = static_cast<std::int64_t>(tile_npu::monitor::DEFAULT_MEMORY_MIB);
   std::int64_t steps = -1;
   std::string stats_json;
+  std::string stats_csv;
   std::string uarch_config_path;
   std::string dump_uarch_config;
   std::vector<std::string> uarch_sets;
@@ -124,6 +308,7 @@ int main(int argc, char **argv) {
   app.add_option("-m,--memory", memory_mib, "RAM size in MiB")->check(CLI::PositiveNumber);
   app.add_option("-s,--steps", steps, "Retired-instruction limit (-1: unlimited)");
   app.add_option("--stats-json", stats_json, "Write the final status and counters as JSON");
+  app.add_option("--stats-csv", stats_csv, "Write the final status and counters as one CSV row");
   app.add_option("--uarch-config", uarch_config_path,
                  "Load uarch timing parameters from a JSON object");
   app.add_option("--uarch-set", uarch_sets,
@@ -263,6 +448,10 @@ int main(int argc, char **argv) {
 
   if (!stats_json.empty() &&
       !write_run_json(stats_json, mode, uarch_config, machine, result, exit_code)) {
+    return 1;
+  }
+  if (!stats_csv.empty() &&
+      !write_run_csv(stats_csv, mode, uarch_config, machine, result, exit_code)) {
     return 1;
   }
   return exit_code;

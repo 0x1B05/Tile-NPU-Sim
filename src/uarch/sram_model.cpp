@@ -33,7 +33,8 @@ SramModel::SramModel(SramConfig config, SramStats *stats)
 
 void SramModel::reset() {
   for (auto &domain_banks : banks_) {
-    for (auto &bank : domain_banks) bank.reset();
+    for (auto &bank : domain_banks)
+      bank.reset();
   }
   *stats_ = SramStats{};
 }
@@ -44,8 +45,21 @@ const SramDomainConfig &SramModel::domain_config(Domain domain) const {
   return config_.domains[index];
 }
 
-void SramModel::touch_stats(bool write, std::uint32_t bytes, std::uint64_t busy_cycles,
-                            bool conflict) {
+void SramModel::touch_stats(Domain domain, bool write, std::uint32_t bytes,
+                            std::uint64_t busy_cycles, bool conflict) {
+  auto update = [&](SramDomainStats &target) {
+    ++target.accesses;
+    if (write) {
+      ++target.writes;
+      target.write_bytes += bytes;
+    } else {
+      ++target.reads;
+      target.read_bytes += bytes;
+    }
+    target.busy_cycles += busy_cycles;
+    if (conflict) ++target.conflicts;
+  };
+
   ++stats_->accesses;
   if (write) {
     ++stats_->writes;
@@ -56,6 +70,7 @@ void SramModel::touch_stats(bool write, std::uint32_t bytes, std::uint64_t busy_
   }
   stats_->busy_cycles += busy_cycles;
   if (conflict) ++stats_->conflicts;
+  update(stats_->domains[domain_index(domain)]);
 }
 
 SramReservation SramModel::reserve_stream(Domain domain, std::uint8_t index, std::uint64_t now,
@@ -81,7 +96,7 @@ SramReservation SramModel::reserve_stream(Domain domain, std::uint8_t index, std
       std::min(domain_banks.size() - 1, static_cast<std::size_t>(index) * domain_banks.size() /
                                             std::max<std::size_t>(1, config.registers));
   const auto result = domain_banks[bank_index].reserve(now, earliest, cycles);
-  touch_stats(write, 0, cycles, result.conflict);
+  touch_stats(domain, write, 0, cycles, result.conflict);
   return result;
 }
 
@@ -122,14 +137,15 @@ SramReservation SramModel::access(Domain domain, std::uint8_t index, std::uint32
   }
 
   if (start == std::numeric_limits<std::uint64_t>::max()) start = std::max(now, earliest);
-  touch_stats(write, bytes, beats, conflict);
+  touch_stats(domain, write, bytes, beats, conflict);
   return SramReservation{.start = start, .end = end, .conflict = conflict};
 }
 
 std::size_t SramModel::retained_intervals() const {
   std::size_t count = 0;
   for (const auto &domain_banks : banks_) {
-    for (const auto &bank : domain_banks) count += bank.retained_intervals();
+    for (const auto &bank : domain_banks)
+      count += bank.retained_intervals();
   }
   return count;
 }

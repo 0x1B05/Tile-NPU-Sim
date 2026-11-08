@@ -91,6 +91,8 @@ python3 scripts/uarch/sweep.py \
 
 Use `--images mma ecmp` to restrict the image set, `--base` for a base configuration, `--set KEY=VALUE` for fixed overrides, and `--jobs N` for parallel runs. `python3 tests/run.py uarch --build` checks the end-to-end regression against `tests/uarch/baseline.json`; rerun with `--update-uarch-baseline` after an intentional timing-model change.
 
+The stats record reports per-unit instruction counts, busy cycles, utilization and peak in-flight instructions, front-end dispatch stalls, dependency and memory-order stalls, queue occupancy/peak, aggregate and per-domain SRAM reads/writes/conflicts/bandwidth, and off-chip memory transfers/bytes/bandwidth. `--stats-csv run.csv` writes the same counters as a single CSV row, so multiple runs can be concatenated for plotting; `scripts/uarch/sweep.py` emits one row per image and sweep point.
+
 ## Guest tests
 
 Guest programs under `tests/guest/` are C or assembly sources cross-compiled with a RISC-V toolchain (`riscv64-linux-gnu-` by default; override the prefix with `xmake f --riscv_cross=<prefix>`) and linked into flat binaries against a minimal `crt0.S`. `xmake build guest_images` only produces the images; it does not register tests. `python3 tests/run.py guest --build` builds the images and `sim_guest_tests`, then runs the in-process guest checks and the `rv64im` self-checking images. Use `--filter` to select a test or image by name.

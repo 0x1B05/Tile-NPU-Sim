@@ -209,6 +209,15 @@ bool EventUarchEngine::has_ready_work() const {
 void EventUarchEngine::refresh_sample() {
   sample_ = {};
   const auto memory_head = next_memory_id();
+  for (const auto &pair : scoreboard_.entries()) {
+    const auto &entry = pair.second;
+    if (entry.issued) {
+      const auto unit = unit_index(entry.inst.unit);
+      ++sample_.active[unit];
+      state_.stats.unit_in_flight_peak[unit] = std::max(
+          state_.stats.unit_in_flight_peak[unit], static_cast<std::uint64_t>(sample_.active[unit]));
+    }
+  }
   for (std::size_t unit = 0; unit < UNIT_COUNT; ++unit) {
     const auto &queue = queues_[unit];
     sample_.occupancy[unit] = queue.size();
@@ -230,6 +239,7 @@ void EventUarchEngine::sample_queues(std::uint64_t now) {
     for (std::size_t unit = 0; unit < UNIT_COUNT; ++unit) {
       state_.stats.queue_occupancy_cycles[unit] +=
           static_cast<std::uint64_t>(sample_.occupancy[unit]) * delta;
+      if (sample_.active[unit] != 0) state_.stats.unit_busy_cycles[unit] += delta;
       state_.stats.dependency_stall_cycles[unit] += sample_.dependency_waits[unit] * delta;
     }
     state_.stats.memory_order_stall_cycles += sample_.memory_waits * delta;
