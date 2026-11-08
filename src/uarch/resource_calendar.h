@@ -22,6 +22,11 @@ public:
   // in the past is clamped to `now`. Returns the interval start.
   std::uint64_t reserve_from(std::uint64_t now, std::uint64_t earliest, std::uint64_t duration);
 
+  // Start of the earliest fitting gap without booking it. Used by a bank to
+  // choose the least-loaded port before committing the reservation.
+  std::uint64_t earliest_start(std::uint64_t now, std::uint64_t earliest,
+                               std::uint64_t duration) const;
+
   void clear();
 
   // Number of retained (not yet pruned) intervals.

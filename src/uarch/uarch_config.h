@@ -1,6 +1,8 @@
 #pragma once
 
 #include "tile_npu/dyn_inst.h"
+#include "uarch/memory_service.h"
+#include "uarch/sram_model.h"
 
 #include <array>
 #include <cstddef>
@@ -29,6 +31,11 @@ struct UarchConfig {
   }();
 
   std::size_t depth(Unit unit) const { return queue_depth[unit_index(unit)]; }
+
+  // Tile/Acc/Vec bank, port, and width configuration shared by all units.
+  SramConfig sram{};
+  // Off-chip bus model used by DMA through MemoryService.
+  MemoryConfig memory{};
 };
 
 } // namespace tile_npu

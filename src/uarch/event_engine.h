@@ -81,6 +81,7 @@ private:
 
   UarchConfig config_{};
   UarchState state_{};
+  SramModel sram_{};
   Scoreboard scoreboard_{};
   MmaUnit mma_{};
   DmaUnit dma_{};

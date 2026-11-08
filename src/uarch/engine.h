@@ -1,34 +1,12 @@
 #pragma once
 
 #include "tile_npu/dyn_inst.h"
+#include "uarch/uarch_stats.h"
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
 
 namespace tile_npu {
-
-struct UarchStats {
-  std::uint64_t cycles = 0;
-  // Instructions whose timing has completed.
-  std::uint64_t retired = 0;
-  // Instruction counts, indexed by Unit.
-  std::array<std::uint64_t, UNIT_COUNT> unit_count{};
-
-  // Front-end cycles lost because the dispatch window was full, or because a
-  // target unit's issue queue had no free entry.
-  std::uint64_t window_stall_cycles = 0;
-  std::array<std::uint64_t, UNIT_COUNT> dispatch_stall_cycles{};
-  // Instruction-cycles queued but not issueable because of a register hazard.
-  std::array<std::uint64_t, UNIT_COUNT> dependency_stall_cycles{};
-  // Older memory operations holding the in-order DMA issue slot.
-  std::uint64_t memory_order_stall_cycles = 0;
-  // Sum of per-cycle queue occupancy and the observed high-water mark.
-  std::array<std::uint64_t, UNIT_COUNT> queue_occupancy_cycles{};
-  std::array<std::uint64_t, UNIT_COUNT> queue_peak{};
-
-  std::uint64_t count(Unit unit) const { return unit_count[unit_index(unit)]; }
-};
 
 // Timing-only backend. It never computes architectural values or resolves
 // control flow; the functional executor feeds it one DynInst at a time.

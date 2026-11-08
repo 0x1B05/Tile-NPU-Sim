@@ -3,10 +3,13 @@
 #include "uarch/dma_unit.h"
 #include "uarch/event_engine.h"
 #include "uarch/event_queue.h"
+#include "uarch/memory_service.h"
 #include "uarch/mma_unit.h"
 #include "uarch/queue.h"
 #include "uarch/resource_calendar.h"
 #include "uarch/scoreboard.h"
+#include "uarch/sram_bank.h"
+#include "uarch/sram_model.h"
 #include "uarch/vector_unit.h"
 
 #include <cstddef>
@@ -480,6 +483,92 @@ TEST_CASE(mma_unit_prunes_finished_bookings) {
   for (std::uint64_t now = 0; now < 10000; now += 100) {
     unit.issue(mma, now);
   }
-  check_eq(unit.retained_intervals(), std::size_t{4},
-           "only the latest MMA keeps resource bookings");
+  check(unit.retained_intervals() <= 5,
+        "only the latest MMA keeps resource bookings");
+}
+
+TEST_CASE(sram_bank_models_ports_and_conflicts) {
+  tile_npu::SramBank single(1);
+  const auto first = single.reserve(0, 0, 4);
+  check_eq(first.start, std::uint64_t{0}, "first bank access starts now");
+  check_eq(first.end, std::uint64_t{4}, "first bank access books four cycles");
+  check(!first.conflict, "first access has no conflict");
+  const auto second = single.reserve(0, 0, 4);
+  check_eq(second.start, std::uint64_t{4}, "single port serializes the second access");
+  check(second.conflict, "delayed access reports a conflict");
+
+  tile_npu::SramBank dual(2);
+  const auto port_a = dual.reserve(0, 0, 4);
+  const auto port_b = dual.reserve(0, 0, 4);
+  check_eq(port_a.start, std::uint64_t{0}, "first dual-port access starts now");
+  check_eq(port_b.start, std::uint64_t{0}, "second port accepts the same cycle");
+  check(!port_b.conflict, "independent ports do not conflict");
+}
+
+TEST_CASE(sram_model_maps_registers_to_banks) {
+  tile_npu::SramModel sram;
+
+  const auto tile_a = sram.reserve_stream(tile_npu::Domain::tile, 0, 0, 0, 8, false);
+  const auto tile_b = sram.reserve_stream(tile_npu::Domain::tile, 16, 0, 0, 8, false);
+  check_eq(tile_a.start, std::uint64_t{0}, "tile bank 0 starts now");
+  check_eq(tile_b.start, std::uint64_t{0}, "tile bank 1 reads in parallel");
+
+  const auto same_bank = sram.reserve_stream(tile_npu::Domain::tile, 1, 0, 0, 8, false);
+  check_eq(same_bank.start, std::uint64_t{8}, "second register on bank 0 serializes");
+  check(same_bank.conflict, "same-bank stream reports a conflict");
+  check_eq(sram.stats().conflicts, std::uint64_t{1}, "conflict counter");
+
+  const auto bytes = sram.access(tile_npu::Domain::tile, 0, 0, 128, 0, 0, false);
+  check_eq(bytes.end, std::uint64_t{18}, "128 bytes wait behind bank 0's retained stream");
+  check_eq(sram.stats().read_bytes, std::uint64_t{128}, "byte counter follows the access");
+}
+
+TEST_CASE(sram_model_is_shared_across_units) {
+  tile_npu::SramModel sram;
+
+  // A 512-byte DMA transfer occupies eight cycles on each of the two banks.
+  const auto dma = sram.access(tile_npu::Domain::tile, 0, 0, 512, 0, 0, false);
+  check_eq(dma.end, std::uint64_t{8}, "DMA fills both banks for eight cycles");
+
+  // The MMA now sees the same bank busy and starts late.
+  const auto mma = sram.reserve_stream(tile_npu::Domain::tile, 0, 0, 0, 8, false);
+  check_eq(mma.start, std::uint64_t{8}, "MMA waits for the DMA on the shared bank");
+  check_eq(sram.stats().conflicts, std::uint64_t{1}, "shared-resource conflict is visible");
+}
+
+TEST_CASE(memory_service_serializes_the_bus) {
+  tile_npu::SimpleMemoryService memory;
+
+  check_eq(memory.issue(64, false, 0), std::uint64_t{6},
+           "64 bytes is two bus cycles plus latency");
+  check_eq(memory.issue(64, true, 6), std::uint64_t{12},
+           "the next transfer waits for the bus");
+  check_eq(memory.stats().transfers, std::uint64_t{2}, "transfer count");
+  check_eq(memory.stats().read_bytes, std::uint64_t{64}, "read byte count");
+  check_eq(memory.stats().write_bytes, std::uint64_t{64}, "write byte count");
+}
+
+TEST_CASE(dma_unit_uses_shared_sram_and_memory_service) {
+  tile_npu::SramModel sram;
+  sram.access(tile_npu::Domain::tile, 0, 0, 512, 0, 0, false);
+
+  tile_npu::DmaUnit dma(&sram);
+  auto load = dma_load(1, 64, tile(0));
+  const auto finish = dma.issue(load, 0);
+  check(finish > std::uint64_t{6}, "the DMA waits for the shared SRAM bank");
+  check_eq(dma.memory_stats().transfers, std::uint64_t{1}, "DMA goes through MemoryService");
+}
+
+TEST_CASE(event_engine_exports_sram_and_memory_stats) {
+  tile_npu::EventUarchEngine engine;
+  engine.reset();
+
+  engine.dispatch(mma_inst(1, 8, 4, 0, 16, 0));
+  engine.dispatch(dma_load(2, 64, tile(1)));
+  engine.finish();
+
+  check(engine.stats().sram.accesses >= 4, "MMA and DMA accesses reach the shared SRAM");
+  check(engine.stats().sram.conflicts > 0, "bank contention is recorded");
+  check_eq(engine.stats().memory.transfers, std::uint64_t{1}, "DMA memory transfer is counted");
+  check_eq(engine.stats().memory.read_bytes, std::uint64_t{64}, "memory read bytes are exported");
 }

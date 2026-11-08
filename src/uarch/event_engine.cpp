@@ -16,7 +16,12 @@ constexpr std::uint64_t SINGLE_CYCLE = 1;
 
 } // namespace
 
-EventUarchEngine::EventUarchEngine(UarchConfig config) : config_(std::move(config)) {
+EventUarchEngine::EventUarchEngine(UarchConfig config)
+    : config_(std::move(config)),
+      sram_(config_.sram, &state_.stats.sram),
+      mma_(&sram_),
+      dma_(&sram_, std::make_unique<SimpleMemoryService>(config_.memory)),
+      vector_(&sram_) {
   for (std::size_t i = 0; i < UNIT_COUNT; ++i) {
     queues_[i] = Queue(config_.queue_depth[i]);
   }
@@ -24,6 +29,7 @@ EventUarchEngine::EventUarchEngine(UarchConfig config) : config_(std::move(confi
 
 void EventUarchEngine::reset() {
   state_ = UarchState{};
+  sram_.reset();
   scoreboard_.reset();
   mma_.reset();
   dma_.reset();
@@ -109,7 +115,10 @@ void EventUarchEngine::issue_one(std::uint64_t id, std::uint64_t now) {
   std::uint64_t finish = now + SINGLE_CYCLE;
   switch (inst.unit) {
   case Unit::mma: finish = mma_.issue(inst, now); break;
-  case Unit::dma: finish = dma_.issue(inst, now); break;
+  case Unit::dma:
+    finish = dma_.issue(inst, now);
+    state_.stats.memory = dma_.memory_stats();
+    break;
   case Unit::vector: finish = vector_.issue(inst, now); break;
   case Unit::scalar:
   case Unit::config:

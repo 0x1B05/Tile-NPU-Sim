@@ -238,7 +238,7 @@ def suite_uarch(args: argparse.Namespace) -> int:
                 )
 
             expected = baseline.get("images", {}).get(name)
-            if expected is not None:
+            if expected is not None and not args.update_uarch_baseline:
                 for key in ("cycles", "retired", "arch_digest"):
                     if uarch.get(key) != expected.get(key):
                         errors.append(

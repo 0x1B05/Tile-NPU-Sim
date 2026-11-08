@@ -39,7 +39,12 @@ std::uint64_t op_latency(DynOp op, std::uint64_t elements) {
 
 } // namespace
 
-void VectorUnit::reset() { pipeline_.clear(); }
+VectorUnit::VectorUnit(SramModel *sram) : sram_(sram != nullptr ? sram : &owned_sram_) {}
+
+void VectorUnit::reset() {
+  if (sram_ == &owned_sram_) owned_sram_.reset();
+  pipeline_.clear();
+}
 
 std::uint64_t VectorUnit::issue(const DynInst &inst, std::uint64_t now) {
   const auto elements =
@@ -48,8 +53,33 @@ std::uint64_t VectorUnit::issue(const DynInst &inst, std::uint64_t now) {
           : std::max<std::uint64_t>(inst.len, static_cast<std::uint64_t>(inst.rows) * inst.cols);
   const auto beats = std::max<std::uint64_t>(1, ceil_div(elements, LANES));
   const auto latency = op_latency(inst.op, elements);
-  const auto start = pipeline_.reserve(now, beats);
-  return start + beats + latency - 1;
+
+  // Source streams must be available before the pipeline starts.
+  auto operand_start = now;
+  std::uint64_t src_end = now;
+  for (std::uint8_t i = 0; i < inst.src_count; ++i) {
+    const auto &src = inst.src[i];
+    if (src.domain == Domain::scalar) continue;
+    const auto read = sram_->reserve_stream(src.domain, src.index, now, operand_start, beats, false);
+    operand_start = std::max(operand_start, read.start);
+    src_end = std::max(src_end, read.end);
+  }
+
+  const auto start = pipeline_.reserve_from(now, operand_start, beats);
+  auto finish = start + beats + latency - 1;
+
+  // Destination writeback occupies the final `beats` cycles of the pipeline;
+  // with an uncontended bank it ends exactly at the old completion time. It
+  // still competes for the shared banks with younger work.
+  const auto write_earliest = finish > beats ? finish - beats : now;
+  for (std::uint8_t i = 0; i < inst.dst_count; ++i) {
+    const auto &dst = inst.dst[i];
+    if (dst.domain == Domain::scalar) continue;
+    const auto write = sram_->reserve_stream(dst.domain, dst.index, now, write_earliest, beats, true);
+    finish = std::max(finish, write.end);
+  }
+
+  return std::max(finish, src_end);
 }
 
 } // namespace tile_npu

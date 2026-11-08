@@ -21,10 +21,8 @@ std::uint64_t ResourceCalendar::reserve(std::uint64_t now, std::uint64_t duratio
   return reserve_from(now, now, duration);
 }
 
-std::uint64_t ResourceCalendar::reserve_from(std::uint64_t now, std::uint64_t earliest,
-                                             std::uint64_t duration) {
-  prune(now);
-
+std::uint64_t ResourceCalendar::earliest_start(std::uint64_t now, std::uint64_t earliest,
+                                               std::uint64_t duration) const {
   std::uint64_t start = std::max(earliest, now);
   if (duration == 0) return start;
   if (start > MAX_TIME - duration) return MAX_TIME;
@@ -36,6 +34,15 @@ std::uint64_t ResourceCalendar::reserve_from(std::uint64_t now, std::uint64_t ea
     start = interval.end;
     if (start > MAX_TIME - duration) return MAX_TIME;
   }
+  return start;
+}
+
+std::uint64_t ResourceCalendar::reserve_from(std::uint64_t now, std::uint64_t earliest,
+                                             std::uint64_t duration) {
+  prune(now);
+
+  const auto start = earliest_start(now, earliest, duration);
+  if (duration == 0 || start == MAX_TIME) return start;
 
   const Interval booked{.begin = start, .end = start + duration};
   const auto pos = std::lower_bound(

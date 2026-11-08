@@ -2,13 +2,16 @@
 
 #include "tile_npu/dyn_inst.h"
 #include "uarch/resource_calendar.h"
+#include "uarch/sram_model.h"
 
 #include <cstdint>
 
 namespace tile_npu {
 
-// Instruction-level model of the matrix unit. It reserves the two Tile SRAM
-// read ports, the systolic array, and the Acc write port for one MMA.
+// Instruction-level model of the matrix unit. It reserves two Tile SRAM
+// operand streams, the systolic array, and the Acc/Vec write stream for one
+// MMA. The SRAM reservations go through the shared SramModel, so they contend
+// with DMA and Vector accesses on the same banks.
 //
 // Cycle convention (shared by all uarch components):
 //   * issue() is called in cycle `now`; the first Tile read request is driven
@@ -33,17 +36,21 @@ public:
     return READ_LATENCY + k + INPUT_SKEW + OUTPUT_SKEW + m;
   }
 
+  // A null shared model gives the unit a private default model, which keeps
+  // component tests independent of the engine.
+  explicit MmaUnit(SramModel *sram = nullptr);
+
   void reset();
 
   // Returns the absolute completion time. `now` is the current uarch cycle.
   std::uint64_t issue(const DynInst &inst, std::uint64_t now);
 
-  // Number of retained bookings across all calendars; diagnostics only.
+  // Number of retained bookings; diagnostics only.
   std::size_t retained_intervals() const;
 
 private:
-  ResourceCalendar tile_read_[2];
-  ResourceCalendar acc_write_[2];
+  SramModel owned_sram_{};
+  SramModel *sram_ = &owned_sram_;
   ResourceCalendar array_;
 };
 
