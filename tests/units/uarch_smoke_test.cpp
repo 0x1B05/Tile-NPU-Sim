@@ -2,6 +2,7 @@
 #include "tile_npu/platform/ram.h"
 #include "uarch/machine.h"
 #include "units/execute_helpers.h"
+#include "units/mma_helpers.h"
 
 using namespace tile_npu::test;
 
@@ -27,6 +28,23 @@ TEST_CASE(machine_functional_and_uarch_match) {
   check_eq(uarch.stats().cycles, std::uint64_t{1}, "uarch one-cycle placeholder");
   const auto uarch_stop = uarch.step();
   check_eq(uarch_stop.status, tile_npu::StepStatus::breakpoint, "uarch ebreak status");
+}
+
+TEST_CASE(machine_uarch_times_an_mma) {
+  tile_npu::Ram memory(CODE_BASE, 8);
+  write_word(memory, CODE_BASE, make_mma(0, 0, 0, 16)); // mma.nt.zero a0, t0, t16
+
+  tile_npu::Machine machine(memory, tile_npu::ExecutionMode::uarch);
+  machine.reset(CODE_BASE);
+  auto &state = machine.state();
+  tile_cfg(state, 0, tile_npu::DType::i8, 4, 8);
+  tile_cfg(state, 16, tile_npu::DType::i8, 5, 8);
+  acc_cfg(state, 0, tile_npu::DType::i32, 4, 5);
+
+  const auto result = machine.step();
+  check_eq(result.status, tile_npu::StepStatus::retired, "MMA retires");
+  check_eq(machine.stats().cycles, std::uint64_t{75}, "MMA timing reaches the uarch engine");
+  check_eq(machine.stats().retired, std::uint64_t{1}, "MMA retires once");
 }
 
 TEST_CASE(step_with_dyn_inst_fills_scalar_record) {
