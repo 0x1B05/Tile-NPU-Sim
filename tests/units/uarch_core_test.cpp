@@ -391,6 +391,12 @@ TEST_CASE(vector_unit_uses_beats_and_op_class) {
   check_eq(unit.issue(op, 0), std::uint64_t{12}, "reduction adds a log2 tree");
 
   unit.reset();
+  op.work_elements = 128;
+  check_eq(unit.issue(op, 0), std::uint64_t{26},
+           "reduction timing follows the source work, not the destination length");
+
+  unit.reset();
+  op.work_elements = 0;
   op.op = tile_npu::DynOp::quant;
   check_eq(unit.issue(op, 0), std::uint64_t{13}, "quantization walks the beats twice");
 }

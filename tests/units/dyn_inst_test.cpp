@@ -268,3 +268,79 @@ TEST_CASE(dyn_inst_records_matrix_side_operands) {
   check(has_dst(vreduce_inst, Domain::vec32, 2), "vreduce.argmax value destination");
   check(has_src(vreduce_inst, Domain::vec32, 3), "vreduce.argmax source");
 }
+
+TEST_CASE(dyn_inst_records_reduce_work_elements) {
+  State state{};
+  state.ac[2] = AccConfig{.dtype = DType::f32, .rows = 4, .cols = 32};
+  state.vc[1] = Vec32Config{.dtype = DType::f32, .len = 4};
+  state.vc[3] = Vec32Config{.dtype = DType::f32, .len = 32};
+  state.vc[4] = Vec32Config{.dtype = DType::f32, .len = 4};
+  state.vc[5] = Vec32Config{.dtype = DType::f32, .len = 4};
+  state.vc[6] = Vec32Config{.dtype = DType::f32, .len = 4};
+
+  const AreduceInstr areduce{.op = ReduceOp::sum,
+                             .dest = NpuRegister{.domain = NpuDomain::vec32, .index = 1},
+                             .src = NpuRegister{.domain = NpuDomain::acc, .index = 2}};
+  const auto areduce_inst = make_dyn_inst(40, 0x80000060, DecodedNpuInstr{areduce}, state);
+  check_eq(areduce_inst.work_elements, std::uint32_t{128},
+           "areduce work is the source rows times columns");
+  check_eq(areduce_inst.cols, std::uint32_t{4}, "areduce keeps the destination shape");
+
+  const VreduceInstr vreduce{.op = ReduceOp::sum,
+                             .dest = NpuRegister{.domain = NpuDomain::vec32, .index = 4},
+                             .src = NpuRegister{.domain = NpuDomain::vec32, .index = 3}};
+  const auto vreduce_inst = make_dyn_inst(41, 0x80000064, DecodedNpuInstr{vreduce}, state);
+  check_eq(vreduce_inst.work_elements, std::uint32_t{32},
+           "vreduce work is the source vector length");
+  check_eq(vreduce_inst.len, std::uint32_t{4}, "vreduce keeps the destination length");
+
+  const AreduceArgmaxInstr areduce_argmax{
+      .index_dest = NpuRegister{.domain = NpuDomain::vec32, .index = 5},
+      .value_dest = NpuRegister{.domain = NpuDomain::vec32, .index = 6},
+      .src = NpuRegister{.domain = NpuDomain::acc, .index = 2}};
+  const auto argmax_inst = make_dyn_inst(42, 0x80000068, DecodedNpuInstr{areduce_argmax}, state);
+  check_eq(argmax_inst.work_elements, std::uint32_t{128},
+           "areduce.argmax work is the source rows times columns");
+
+  const VreduceArgmaxInstr vreduce_argmax{
+      .index_dest = NpuRegister{.domain = NpuDomain::vec32, .index = 5},
+      .value_dest = NpuRegister{.domain = NpuDomain::vec32, .index = 6},
+      .src = NpuRegister{.domain = NpuDomain::vec32, .index = 3}};
+  const auto vargmax_inst = make_dyn_inst(43, 0x8000006c, DecodedNpuInstr{vreduce_argmax}, state);
+  check_eq(vargmax_inst.work_elements, std::uint32_t{32},
+           "vreduce.argmax work is the source vector length");
+}
+
+TEST_CASE(dyn_inst_gather_uses_effective_length) {
+  State state{};
+  state.tc[4] = TileConfig{.dtype = DType::i8, .rows = 4, .cols = 8};
+  state.vc[1] = Vec32Config{.dtype = DType::u32, .len = 2};
+  state.vc[2] = Vec32Config{.dtype = DType::u32, .len = 32};
+  state.vc[3] = Vec32Config{.dtype = DType::i8, .len = 8};
+
+  const auto tile = NpuRegister{.domain = NpuDomain::tile, .index = 4};
+  const MblkInstr short_tile{.op = MblkOp::gather, .reg = tile, .gather_src = 1};
+  const auto short_tile_inst = make_dyn_inst(50, 0x80000070, DecodedNpuInstr{short_tile}, state);
+  check_eq(short_tile_inst.rows, std::uint32_t{2}, "tile gather is bounded by the index length");
+  check_eq(short_tile_inst.cols, std::uint32_t{8}, "tile gather keeps the row width");
+  check_eq(short_tile_inst.bytes, std::uint32_t{16}, "tile gather counts only indexed rows");
+
+  const MblkInstr long_tile{.op = MblkOp::gather, .reg = tile, .gather_src = 2};
+  const auto long_tile_inst = make_dyn_inst(51, 0x80000074, DecodedNpuInstr{long_tile}, state);
+  check_eq(long_tile_inst.rows, std::uint32_t{4}, "tile gather is bounded by the tile rows");
+  check_eq(long_tile_inst.bytes, std::uint32_t{32}, "extra indices do not add transfers");
+
+  const auto vector = NpuRegister{.domain = NpuDomain::vec32, .index = 3};
+  const MblkInstr short_vector{.op = MblkOp::gather, .reg = vector, .gather_src = 1};
+  const auto short_vector_inst =
+      make_dyn_inst(52, 0x80000078, DecodedNpuInstr{short_vector}, state);
+  check_eq(short_vector_inst.len, std::uint32_t{2}, "vector gather is bounded by the index length");
+  check_eq(short_vector_inst.bytes, std::uint32_t{2}, "vector gather counts indexed lanes");
+  check(has_dst(short_vector_inst, Domain::vec32, 3), "vector gather writes its destination");
+
+  const MblkInstr long_vector{.op = MblkOp::gather, .reg = vector, .gather_src = 2};
+  const auto long_vector_inst = make_dyn_inst(53, 0x8000007c, DecodedNpuInstr{long_vector}, state);
+  check_eq(long_vector_inst.len, std::uint32_t{8},
+           "vector gather is bounded by the destination length");
+  check_eq(long_vector_inst.bytes, std::uint32_t{8}, "extra indices do not add transfers");
+}

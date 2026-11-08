@@ -2,6 +2,7 @@
 
 #include "domain.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <type_traits>
 #include <variant>
@@ -137,8 +138,8 @@ void fill_mblk(DynInst &inst, const MblkInstr &instr, const State &state) {
     inst.col_stride = descriptor.col_stride_bytes;
     inst.transpose = descriptor.transform != 0;
     if (instr.op == MblkOp::gather) {
-      const auto indexed = state.vc[instr.gather_src].len;
-      inst.rows = indexed;
+      // Rows beyond the index vector are zero-filled, not transferred.
+      inst.rows = std::min<std::uint32_t>(config.rows, state.vc[instr.gather_src].len);
       add_src(inst, Domain::vec32, instr.gather_src);
       add_dst(inst, Domain::tile, instr.reg.index);
     } else if (instr.op == MblkOp::store) {
@@ -184,7 +185,8 @@ void fill_mblk(DynInst &inst, const MblkInstr &instr, const State &state) {
     inst.addr = descriptor.base_addr;
     inst.col_stride = descriptor.stride_bytes;
     if (instr.op == MblkOp::gather) {
-      const auto indexed = state.vc[instr.gather_src].len;
+      // Lanes beyond the index vector are zero-filled, not transferred.
+      const auto indexed = std::min<std::uint32_t>(config.len, state.vc[instr.gather_src].len);
       inst.len = indexed;
       inst.rows = indexed;
       inst.cols = 1;
@@ -351,6 +353,16 @@ DynInst make_dyn_inst(std::uint64_t id, std::uint64_t pc, const DecodedNpuInstr 
             out.op = DynOp::quant;
           } else {
             out.op = DynOp::other;
+          }
+
+          // Reductions process the source, whose shape is not the destination
+          // shape: areduce walks rows*cols, vreduce walks the source length.
+          if constexpr (std::is_same_v<T, AreduceInstr> || std::is_same_v<T, AreduceArgmaxInstr>) {
+            const auto &src = state.ac[decoded.src.index];
+            out.work_elements = static_cast<std::uint32_t>(src.rows) * src.cols;
+          } else if constexpr (std::is_same_v<T, VreduceInstr> ||
+                               std::is_same_v<T, VreduceArgmaxInstr>) {
+            out.work_elements = state.vc[decoded.src.index].len;
           }
 
           if constexpr (requires { decoded.dest; }) {

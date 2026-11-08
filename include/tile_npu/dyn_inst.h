@@ -84,6 +84,10 @@ struct DynInst {
   std::uint32_t cols = 0;
   std::uint32_t k = 0;
   std::uint32_t len = 0;
+  // Effective element count when the destination shape does not describe the
+  // work, notably reductions (source rows*cols, or source vector length).
+  // Zero means the consumer falls back to len and rows*cols.
+  std::uint32_t work_elements = 0;
   std::uint32_t bytes = 0;
   std::uint32_t macs = 0;
   std::uint64_t addr = 0;
