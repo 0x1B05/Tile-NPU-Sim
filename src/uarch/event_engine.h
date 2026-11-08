@@ -17,6 +17,10 @@ namespace tile_npu {
 // instructions overlap across units; dependent instructions wait in the
 // scoreboard until their producer completes. Memory operations issue in
 // program order, matching the reference dispatch/scoreboard design.
+//
+// Units have no finite request queue yet: each unit may have up to
+// WINDOW_DEPTH operations in flight and may reserve resources far into the
+// future, so WINDOW_DEPTH is the only backpressure in the model.
 class EventUarchEngine final : public UarchEngine {
 public:
   // Dispatch window capacity. It bounds how far the functional oracle may run
