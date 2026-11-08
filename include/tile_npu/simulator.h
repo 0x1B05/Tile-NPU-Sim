@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tile_npu/decode.h"
+#include "tile_npu/dyn_inst.h"
 #ifdef CONFIG_ITRACE
 #include "trace/window.h"
 #endif
@@ -96,6 +97,11 @@ public:
   void reset(std::uint64_t entry_pc);
   StepResult step();
 
+  // Same execution path, but also fills the dynamic record for the uarch
+  // engine. Building happens before execute so the record sees the effective
+  // configuration and descriptor base of this instruction.
+  StepResult step_with_dyn_inst(DynInst *out);
+
 #ifdef CONFIG_ITRACE
   void set_itrace_callback(ItraceCallback callback) { itrace_callback_ = std::move(callback); }
 
@@ -119,8 +125,11 @@ public:
 #endif
 
 private:
+  StepResult step_impl(DynInst *out);
+
   AddressSpace &memory_;
   State state_{};
+  std::uint64_t next_instr_id_ = 0;
 #ifdef CONFIG_ITRACE
   ItraceCallback itrace_callback_;
   trace::TraceWindow itrace_window_;

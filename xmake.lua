@@ -41,7 +41,8 @@ local trace_flush_records = tonumber(get_config("trace_flush_records") or "4096"
 target("sim_core", function()
 	set_kind("static")
 	set_default(false)
-	add_files("src/*.cpp|main.cpp", "src/decode/*.cpp|disasm.cpp", "src/execute/*.cpp", "src/platform/*.cpp")
+	add_files("src/*.cpp|main.cpp|uarch_main.cpp", "src/dataflow/*.cpp",
+		"src/decode/*.cpp|disasm.cpp", "src/execute/*.cpp", "src/platform/*.cpp")
 	if trace_mode ~= "none" then
 		add_defines("CONFIG_TRACE", { public = true })
 		add_defines("TRACE_FLUSH_RECORDS=" .. trace_flush_records, { public = true })
@@ -76,6 +77,27 @@ target("sim", function()
 	end
 end)
 
+-- The timing backend is a library so both the runner and host tests link the
+-- same implementation without pulling in CLI code.
+target("uarch_core", function()
+	set_kind("static")
+	set_default(false)
+	add_deps("sim_core")
+	add_files("src/uarch/*.cpp")
+	add_includedirs("src", "include")
+end)
+
+-- Functional/uarch runner. sim_core stays the functional front end; the
+-- uarch target links the same object library and adds the timing backend.
+target("sim_uarch", function()
+	set_kind("binary")
+	set_default(false)
+	add_deps("uarch_core")
+	add_files("src/uarch_main.cpp")
+	add_includedirs("src", "include")
+	add_packages("cli11")
+end)
+
 option("sdb", function()
 	set_default(false)
 	set_showmenu(true)
@@ -86,7 +108,7 @@ end)
 target("sim_tests", function()
 	set_kind("binary")
 	set_default(false)
-	add_deps("sim_core")
+	add_deps("sim_core", "uarch_core")
 	add_files("tests/units/*.cpp")
 	add_includedirs("src", "tests/include")
 	add_tests("core")
