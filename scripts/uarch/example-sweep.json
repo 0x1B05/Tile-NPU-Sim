@@ -1,0 +1,7 @@
+{
+  "vector.lanes": [4, 8, 16],
+  "sram.tile.banks": [1, 2, 4],
+  "sram.acc.banks": [1, 2, 4],
+  "memory.bytes_per_cycle": [16, 32, 64],
+  "memory.latency": [0, 4, 16]
+}

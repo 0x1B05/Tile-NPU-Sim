@@ -17,11 +17,10 @@ constexpr std::uint64_t SINGLE_CYCLE = 1;
 } // namespace
 
 EventUarchEngine::EventUarchEngine(UarchConfig config)
-    : config_(std::move(config)),
-      sram_(config_.sram, &state_.stats.sram),
-      mma_(&sram_),
+    : config_(std::move(config)), sram_(config_.sram, &state_.stats.sram),
+      mma_(&sram_, config_.mma),
       dma_(&sram_, std::make_unique<SimpleMemoryService>(config_.memory)),
-      vector_(&sram_) {
+      vector_(&sram_, config_.vector) {
   for (std::size_t i = 0; i < UNIT_COUNT; ++i) {
     queues_[i] = Queue(config_.queue_depth[i]);
   }
@@ -34,7 +33,8 @@ void EventUarchEngine::reset() {
   mma_.reset();
   dma_.reset();
   vector_.reset();
-  for (auto &queue : queues_) queue.clear();
+  for (auto &queue : queues_)
+    queue.clear();
   issue_cycle_.reset();
   unit_used_.fill(false);
   wakeup_.reset();
@@ -140,15 +140,11 @@ void EventUarchEngine::fence(FenceKind kind) {
   }
 }
 
-bool EventUarchEngine::can_accept() const {
-  return scoreboard_.size() < config_.window_depth;
-}
+bool EventUarchEngine::can_accept() const { return scoreboard_.size() < config_.window_depth; }
 
 bool EventUarchEngine::window_full() const { return !can_accept(); }
 
-bool EventUarchEngine::queue_full(Unit unit) const {
-  return queues_[unit_index(unit)].full();
-}
+bool EventUarchEngine::queue_full(Unit unit) const { return queues_[unit_index(unit)].full(); }
 
 bool EventUarchEngine::can_dispatch(const DynInst &inst) const {
   return can_accept() && !queue_full(inst.unit);

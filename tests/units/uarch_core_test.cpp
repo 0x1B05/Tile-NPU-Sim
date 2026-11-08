@@ -10,6 +10,7 @@
 #include "uarch/scoreboard.h"
 #include "uarch/sram_bank.h"
 #include "uarch/sram_model.h"
+#include "uarch/uarch_config_json.h"
 #include "uarch/vector_unit.h"
 
 #include <cstddef>
@@ -387,21 +388,18 @@ TEST_CASE(event_engine_reports_dependency_and_memory_stalls) {
   engine.reset();
 
   engine.dispatch(mma_inst(1, 8, 4, 0, 16, 0)); // writes acc0
-  engine.dispatch(scalar_read(2, acc(0), 1));    // waits on the MMA
-  engine.dispatch(dma_store(3, 32, acc(0)));     // waits on the MMA
-  engine.dispatch(dma_load(4, 64, tile(1)));     // ready, blocked behind the store
+  engine.dispatch(scalar_read(2, acc(0), 1));   // waits on the MMA
+  engine.dispatch(dma_store(3, 32, acc(0)));    // waits on the MMA
+  engine.dispatch(dma_load(4, 64, tile(1)));    // ready, blocked behind the store
   engine.finish();
 
-  check(engine.stats().dependency_stall_cycles[tile_npu::unit_index(
-            tile_npu::Unit::scalar)] > 0,
+  check(engine.stats().dependency_stall_cycles[tile_npu::unit_index(tile_npu::Unit::scalar)] > 0,
         "scalar dependency wait is attributed");
-  check(engine.stats().dependency_stall_cycles[tile_npu::unit_index(
-            tile_npu::Unit::dma)] > 0,
+  check(engine.stats().dependency_stall_cycles[tile_npu::unit_index(tile_npu::Unit::dma)] > 0,
         "DMA dependency wait is attributed");
   check(engine.stats().memory_order_stall_cycles > 0,
         "younger memory work waiting behind the head is attributed");
-  check(engine.stats().queue_occupancy_cycles[tile_npu::unit_index(
-            tile_npu::Unit::dma)] > 0,
+  check(engine.stats().queue_occupancy_cycles[tile_npu::unit_index(tile_npu::Unit::dma)] > 0,
         "DMA queue occupancy is accumulated");
 }
 
@@ -483,8 +481,7 @@ TEST_CASE(mma_unit_prunes_finished_bookings) {
   for (std::uint64_t now = 0; now < 10000; now += 100) {
     unit.issue(mma, now);
   }
-  check(unit.retained_intervals() <= 5,
-        "only the latest MMA keeps resource bookings");
+  check(unit.retained_intervals() <= 5, "only the latest MMA keeps resource bookings");
 }
 
 TEST_CASE(sram_bank_models_ports_and_conflicts) {
@@ -539,10 +536,8 @@ TEST_CASE(sram_model_is_shared_across_units) {
 TEST_CASE(memory_service_serializes_the_bus) {
   tile_npu::SimpleMemoryService memory;
 
-  check_eq(memory.issue(64, false, 0), std::uint64_t{6},
-           "64 bytes is two bus cycles plus latency");
-  check_eq(memory.issue(64, true, 6), std::uint64_t{12},
-           "the next transfer waits for the bus");
+  check_eq(memory.issue(64, false, 0), std::uint64_t{6}, "64 bytes is two bus cycles plus latency");
+  check_eq(memory.issue(64, true, 6), std::uint64_t{12}, "the next transfer waits for the bus");
   check_eq(memory.stats().transfers, std::uint64_t{2}, "transfer count");
   check_eq(memory.stats().read_bytes, std::uint64_t{64}, "read byte count");
   check_eq(memory.stats().write_bytes, std::uint64_t{64}, "write byte count");
@@ -571,4 +566,151 @@ TEST_CASE(event_engine_exports_sram_and_memory_stats) {
   check(engine.stats().sram.conflicts > 0, "bank contention is recorded");
   check_eq(engine.stats().memory.transfers, std::uint64_t{1}, "DMA memory transfer is counted");
   check_eq(engine.stats().memory.read_bytes, std::uint64_t{64}, "memory read bytes are exported");
+}
+
+TEST_CASE(uarch_config_json_parses_nested_overrides) {
+  tile_npu::UarchConfig config;
+  std::string error;
+  const std::string text = R"({
+    "window_depth": 6,
+    "queue_depth": {"mma": 3, "vector": 2},
+    "mma": {"read_latency": 2, "input_skew": 7, "output_skew": 9},
+    "vector": {"lanes": 16},
+    "memory": {"bytes_per_cycle": 64, "latency": 11},
+    "sram": {"tile": {"banks": 4, "ports": 2, "width": 16}}
+  })";
+
+  check(tile_npu::apply_uarch_config_json(text, config, error), error);
+  check_eq(config.window_depth, std::size_t{6}, "window depth");
+  check_eq(config.depth(tile_npu::Unit::mma), std::size_t{3}, "MMA queue depth");
+  check_eq(config.depth(tile_npu::Unit::vector), std::size_t{2}, "vector queue depth");
+  check_eq(config.depth(tile_npu::Unit::dma), std::size_t{8},
+           "unmentioned queue keeps its default");
+  check_eq(config.mma.read_latency, std::uint64_t{2}, "MMA read latency");
+  check_eq(config.mma.input_skew, std::uint64_t{7}, "MMA input skew");
+  check_eq(config.mma.output_skew, std::uint64_t{9}, "MMA output skew");
+  check_eq(config.vector.lanes, std::uint64_t{16}, "vector lanes");
+  check_eq(config.memory.bytes_per_cycle, std::uint64_t{64}, "memory bus width");
+  check_eq(config.memory.latency, std::uint64_t{11}, "memory latency");
+  const auto &tile = config.sram.domains[static_cast<std::size_t>(tile_npu::Domain::tile)];
+  check_eq(tile.banks, std::size_t{4}, "tile bank count");
+  check_eq(tile.ports_per_bank, std::size_t{2}, "tile ports per bank");
+  check_eq(tile.bank_width_bytes, std::size_t{16}, "tile bank width");
+}
+
+TEST_CASE(uarch_config_rejects_unknown_or_invalid_settings) {
+  tile_npu::UarchConfig config;
+  std::string error;
+
+  check(!tile_npu::apply_uarch_config_json(R"({"no_such_key": 1})", config, error),
+        "unknown key is rejected");
+  check(error.find("unknown uarch setting") != std::string::npos, "error names the setting");
+
+  check(!tile_npu::apply_uarch_config_json(R"({"sram": {"tile": {"banks": 0}}})", config, error),
+        "zero bank count is rejected");
+
+  check(!tile_npu::apply_uarch_config_json(R"({"window_depth": "many"})", config, error),
+        "non-numeric value is rejected");
+
+  check(!tile_npu::apply_uarch_config_json(R"({"window_depth": 4 trailing})", config, error),
+        "trailing JSON is rejected");
+
+  check(!tile_npu::apply_uarch_setting("window_depth", config, error), "KEY=VALUE is required");
+}
+
+TEST_CASE(uarch_config_round_trips_through_json) {
+  tile_npu::UarchConfig config;
+  std::string error;
+  check(tile_npu::apply_uarch_setting("window_depth=12", config, error), error);
+  check(tile_npu::apply_uarch_setting("queue_depth.dma=3", config, error), error);
+  check(tile_npu::apply_uarch_setting("mma.input_skew=5", config, error), error);
+  check(tile_npu::apply_uarch_setting("vector.lanes=4", config, error), error);
+  check(tile_npu::apply_uarch_setting("sram.acc.banks=8", config, error), error);
+  check(tile_npu::apply_uarch_setting("memory.latency=0", config, error), error);
+
+  const auto text = tile_npu::uarch_config_json(config);
+  tile_npu::UarchConfig reparsed;
+  check(tile_npu::apply_uarch_config_json(text, reparsed, error), error);
+  check_eq(reparsed.window_depth, config.window_depth, "round-trip window depth");
+  check_eq(reparsed.depth(tile_npu::Unit::dma), config.depth(tile_npu::Unit::dma),
+           "round-trip queue depth");
+  check_eq(reparsed.mma.input_skew, config.mma.input_skew, "round-trip MMA skew");
+  check_eq(reparsed.vector.lanes, config.vector.lanes, "round-trip vector lanes");
+  check_eq(reparsed.sram.domains[static_cast<std::size_t>(tile_npu::Domain::acc)].banks,
+           config.sram.domains[static_cast<std::size_t>(tile_npu::Domain::acc)].banks,
+           "round-trip Acc banks");
+  check_eq(reparsed.memory.latency, config.memory.latency, "round-trip memory latency");
+}
+
+TEST_CASE(uarch_config_parameters_change_timing) {
+  tile_npu::UarchConfig default_config;
+  tile_npu::EventUarchEngine default_engine(default_config);
+  default_engine.reset();
+  default_engine.dispatch(mma_inst(1, 8, 4, 0, 16, 0));
+  default_engine.finish();
+
+  tile_npu::UarchConfig fast_config;
+  fast_config.mma.read_latency = 0;
+  fast_config.mma.input_skew = 0;
+  fast_config.mma.output_skew = 0;
+  tile_npu::EventUarchEngine fast_engine(fast_config);
+  fast_engine.reset();
+  fast_engine.dispatch(mma_inst(1, 8, 4, 0, 16, 0));
+  fast_engine.finish();
+
+  check_eq(default_engine.stats().cycles, std::uint64_t{75}, "default MMA latency");
+  check_eq(fast_engine.stats().cycles, std::uint64_t{12}, "parameterised MMA latency is K + M");
+
+  tile_npu::UarchConfig wide_vector;
+  wide_vector.vector.lanes = 16;
+  tile_npu::EventUarchEngine wide_engine(wide_vector);
+  wide_engine.reset();
+  wide_engine.dispatch(vector_inst(1, tile_npu::DynOp::elementwise, 16, vec(0), vec(1)));
+  wide_engine.finish();
+
+  tile_npu::UarchConfig narrow_vector;
+  narrow_vector.vector.lanes = 4;
+  tile_npu::EventUarchEngine narrow_engine(narrow_vector);
+  narrow_engine.reset();
+  narrow_engine.dispatch(vector_inst(1, tile_npu::DynOp::elementwise, 16, vec(0), vec(1)));
+  narrow_engine.finish();
+
+  check(wide_engine.stats().cycles < narrow_engine.stats().cycles,
+        "more lanes reduce the vector beat count");
+}
+
+TEST_CASE(uarch_sram_and_memory_parameters_change_timing) {
+  tile_npu::UarchConfig single_bank;
+  single_bank.sram.domains[static_cast<std::size_t>(tile_npu::Domain::tile)].banks = 1;
+  tile_npu::EventUarchEngine single_engine(single_bank);
+  single_engine.reset();
+  single_engine.dispatch(mma_inst(1, 8, 4, 0, 16, 0));
+  single_engine.finish();
+
+  tile_npu::UarchConfig two_banks;
+  two_banks.sram.domains[static_cast<std::size_t>(tile_npu::Domain::tile)].banks = 2;
+  tile_npu::EventUarchEngine two_engine(two_banks);
+  two_engine.reset();
+  two_engine.dispatch(mma_inst(1, 8, 4, 0, 16, 0));
+  two_engine.finish();
+
+  check(single_engine.stats().cycles > two_engine.stats().cycles,
+        "one Tile bank serialises the two MMA operands");
+
+  tile_npu::UarchConfig slow_memory;
+  slow_memory.memory.latency = 20;
+  tile_npu::EventUarchEngine slow_engine(slow_memory);
+  slow_engine.reset();
+  slow_engine.dispatch(dma_load(1, 64, tile(0)));
+  slow_engine.finish();
+
+  tile_npu::UarchConfig fast_memory;
+  fast_memory.memory.latency = 0;
+  tile_npu::EventUarchEngine fast_engine(fast_memory);
+  fast_engine.reset();
+  fast_engine.dispatch(dma_load(1, 64, tile(0)));
+  fast_engine.finish();
+
+  check(slow_engine.stats().cycles > fast_engine.stats().cycles,
+        "memory latency parameter reaches the DMA path");
 }

@@ -3,6 +3,7 @@
 #include "tile_npu/dyn_inst.h"
 #include "uarch/resource_calendar.h"
 #include "uarch/sram_model.h"
+#include "uarch/uarch_config.h"
 
 #include <cstdint>
 
@@ -16,7 +17,7 @@ class VectorUnit {
 public:
   static constexpr std::uint64_t LANES = 8;
 
-  explicit VectorUnit(SramModel *sram = nullptr);
+  explicit VectorUnit(SramModel *sram = nullptr, VectorConfig config = {});
 
   void reset();
   std::uint64_t issue(const DynInst &inst, std::uint64_t now);
@@ -24,6 +25,7 @@ public:
 private:
   SramModel owned_sram_{};
   SramModel *sram_ = &owned_sram_;
+  VectorConfig config_{};
   ResourceCalendar pipeline_;
 };
 

@@ -3,6 +3,7 @@
 #include "tile_npu/dyn_inst.h"
 #include "uarch/resource_calendar.h"
 #include "uarch/sram_model.h"
+#include "uarch/uarch_config.h"
 
 #include <cstdint>
 
@@ -38,7 +39,7 @@ public:
 
   // A null shared model gives the unit a private default model, which keeps
   // component tests independent of the engine.
-  explicit MmaUnit(SramModel *sram = nullptr);
+  explicit MmaUnit(SramModel *sram = nullptr, MmaConfig config = {});
 
   void reset();
 
@@ -51,6 +52,7 @@ public:
 private:
   SramModel owned_sram_{};
   SramModel *sram_ = &owned_sram_;
+  MmaConfig config_{};
   ResourceCalendar array_;
 };
 

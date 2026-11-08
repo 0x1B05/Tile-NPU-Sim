@@ -20,7 +20,7 @@ std::uint64_t log2_ceil(std::uint64_t value) {
   return result;
 }
 
-std::uint64_t op_latency(DynOp op, std::uint64_t elements) {
+std::uint64_t op_latency(DynOp op, std::uint64_t elements, std::uint64_t lanes) {
   switch (op) {
   case DynOp::elementwise: return 6;
   case DynOp::compare:
@@ -32,14 +32,15 @@ std::uint64_t op_latency(DynOp op, std::uint64_t elements) {
   case DynOp::lane:
   case DynOp::row: return 2;
   case DynOp::reduce: return 4 + log2_ceil(std::max<std::uint64_t>(1, elements));
-  case DynOp::quant: return 2 + 2 * ceil_div(elements, VectorUnit::LANES);
+  case DynOp::quant: return 2 + 2 * ceil_div(elements, std::max<std::uint64_t>(1, lanes));
   default: return 2;
   }
 }
 
 } // namespace
 
-VectorUnit::VectorUnit(SramModel *sram) : sram_(sram != nullptr ? sram : &owned_sram_) {}
+VectorUnit::VectorUnit(SramModel *sram, VectorConfig config)
+    : sram_(sram != nullptr ? sram : &owned_sram_), config_(config) {}
 
 void VectorUnit::reset() {
   if (sram_ == &owned_sram_) owned_sram_.reset();
@@ -51,8 +52,9 @@ std::uint64_t VectorUnit::issue(const DynInst &inst, std::uint64_t now) {
       inst.work_elements != 0
           ? std::uint64_t{inst.work_elements}
           : std::max<std::uint64_t>(inst.len, static_cast<std::uint64_t>(inst.rows) * inst.cols);
-  const auto beats = std::max<std::uint64_t>(1, ceil_div(elements, LANES));
-  const auto latency = op_latency(inst.op, elements);
+  const auto lanes = std::max<std::uint64_t>(1, config_.lanes);
+  const auto beats = std::max<std::uint64_t>(1, ceil_div(elements, lanes));
+  const auto latency = op_latency(inst.op, elements, lanes);
 
   // Source streams must be available before the pipeline starts.
   auto operand_start = now;
@@ -60,7 +62,8 @@ std::uint64_t VectorUnit::issue(const DynInst &inst, std::uint64_t now) {
   for (std::uint8_t i = 0; i < inst.src_count; ++i) {
     const auto &src = inst.src[i];
     if (src.domain == Domain::scalar) continue;
-    const auto read = sram_->reserve_stream(src.domain, src.index, now, operand_start, beats, false);
+    const auto read =
+        sram_->reserve_stream(src.domain, src.index, now, operand_start, beats, false);
     operand_start = std::max(operand_start, read.start);
     src_end = std::max(src_end, read.end);
   }
@@ -75,7 +78,8 @@ std::uint64_t VectorUnit::issue(const DynInst &inst, std::uint64_t now) {
   for (std::uint8_t i = 0; i < inst.dst_count; ++i) {
     const auto &dst = inst.dst[i];
     if (dst.domain == Domain::scalar) continue;
-    const auto write = sram_->reserve_stream(dst.domain, dst.index, now, write_earliest, beats, true);
+    const auto write =
+        sram_->reserve_stream(dst.domain, dst.index, now, write_earliest, beats, true);
     finish = std::max(finish, write.end);
   }
 

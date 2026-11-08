@@ -54,6 +54,43 @@ xmake run sim -i path/to/program.bin
 
 The runner is always built as `sim`; the internal core library is only a dependency.
 
+## Uarch timing mode
+
+`sim_uarch` shares the functional front end and its decoder/IR with `sim`, then feeds each retired instruction into an event-driven timing backend:
+
+```sh
+xmake build sim_uarch
+./build/linux/x86_64/release/sim_uarch --mode=uarch \
+    --stats-json run.json build/guest/mma.bin
+```
+
+The JSON record contains the stop status, `a0`, an architectural-state digest, cycle/retire counts, and per-unit instruction counts. Functional state still commits at dispatch, so this is an online trace-driven timing model with a bounded run-ahead window; it is not a commit-on-completion execution-driven model.
+
+Timing parameters can be loaded from a JSON object and overridden on the command line. `--uarch-set` may be repeated and is applied after `--uarch-config`; convenience flags cover the common sweep axes:
+
+```sh
+./build/linux/x86_64/release/sim_uarch --mode=uarch \
+    --uarch-config base.json \
+    --uarch-set sram.tile.banks=4 \
+    --uarch-set mma.input_skew=15 \
+    --window-depth 64 --queue-depth 16 --vector-lanes 16 \
+    --mem-bytes-per-cycle 64 --mem-latency 8 \
+    --dump-uarch-config effective.json \
+    --stats-json run.json build/guest/mma.bin
+```
+
+Supported keys are `window_depth`, `queue_depth.<unit>`, `mma.read_latency`, `mma.input_skew`, `mma.output_skew`, `vector.lanes`, `memory.bytes_per_cycle`, `memory.latency`, and `sram.<tile|acc|vec32>.<banks|ports|width>`. Unknown keys are errors, so a sweep typo cannot silently fall back to defaults.
+
+`scripts/uarch/sweep.py` expands a sweep file into a Cartesian product, runs every image, and writes CSV/JSON for plotting:
+
+```sh
+python3 scripts/uarch/sweep.py \
+    --sweep scripts/uarch/example-sweep.json \
+    --csv build/uarch-sweep.csv --json build/uarch-sweep.json
+```
+
+Use `--images mma ecmp` to restrict the image set, `--base` for a base configuration, `--set KEY=VALUE` for fixed overrides, and `--jobs N` for parallel runs. `python3 tests/run.py uarch --build` checks the end-to-end regression against `tests/uarch/baseline.json`; rerun with `--update-uarch-baseline` after an intentional timing-model change.
+
 ## Guest tests
 
 Guest programs under `tests/guest/` are C or assembly sources cross-compiled with a RISC-V toolchain (`riscv64-linux-gnu-` by default; override the prefix with `xmake f --riscv_cross=<prefix>`) and linked into flat binaries against a minimal `crt0.S`. `xmake build guest_images` only produces the images; it does not register tests. `python3 tests/run.py guest --build` builds the images and `sim_guest_tests`, then runs the in-process guest checks and the `rv64im` self-checking images. Use `--filter` to select a test or image by name.

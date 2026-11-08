@@ -13,9 +13,19 @@ namespace tile_npu {
 inline constexpr std::size_t DEFAULT_WINDOW_DEPTH = 32;
 inline constexpr std::size_t DEFAULT_QUEUE_DEPTH = 8;
 
+struct MmaConfig {
+  std::uint64_t read_latency = 1;
+  std::uint64_t input_skew = 31;
+  std::uint64_t output_skew = 31;
+};
+
+struct VectorConfig {
+  std::uint64_t lanes = 8;
+};
+
 // Timing parameters of the uarch backend. The functional front end does not
 // read this structure; it only changes how the timing model accounts for
-// resources. P3 grows this into the full DSE configuration surface.
+// resources. Every field is part of the design-space sweep surface.
 struct UarchConfig {
   // Dispatch window capacity. It bounds how far the functional oracle may run
   // ahead, independent of the per-unit queues.
@@ -31,6 +41,9 @@ struct UarchConfig {
   }();
 
   std::size_t depth(Unit unit) const { return queue_depth[unit_index(unit)]; }
+
+  MmaConfig mma{};
+  VectorConfig vector{};
 
   // Tile/Acc/Vec bank, port, and width configuration shared by all units.
   SramConfig sram{};

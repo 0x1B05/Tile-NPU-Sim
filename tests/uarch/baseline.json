@@ -15,7 +15,7 @@
     },
     "ebcast": {
       "arch_digest": "0xe973903decf2ab2b",
-      "cycles": 120,
+      "cycles": 118,
       "retired": 118,
       "unit_count": {
         "config": 19,
@@ -28,7 +28,7 @@
     },
     "ecmp": {
       "arch_digest": "0x4c041fb0d17c0c18",
-      "cycles": 255,
+      "cycles": 253,
       "retired": 251,
       "unit_count": {
         "config": 20,
@@ -54,7 +54,7 @@
     },
     "er4": {
       "arch_digest": "0xb37afaf652241bdd",
-      "cycles": 101,
+      "cycles": 99,
       "retired": 95,
       "unit_count": {
         "config": 22,
@@ -67,7 +67,7 @@
     },
     "eun": {
       "arch_digest": "0x8853aae6ca288fa5",
-      "cycles": 247,
+      "cycles": 242,
       "retired": 222,
       "unit_count": {
         "config": 23,
@@ -93,7 +93,7 @@
     },
     "init": {
       "arch_digest": "0x2670b337478ab1f0",
-      "cycles": 78,
+      "cycles": 75,
       "retired": 64,
       "unit_count": {
         "config": 15,
@@ -106,7 +106,7 @@
     },
     "mem": {
       "arch_digest": "0x3e7f9cf238f74513",
-      "cycles": 139,
+      "cycles": 138,
       "retired": 106,
       "unit_count": {
         "config": 35,
@@ -119,7 +119,7 @@
     },
     "mma": {
       "arch_digest": "0x769957b23c3d9b8e",
-      "cycles": 651,
+      "cycles": 649,
       "retired": 236,
       "unit_count": {
         "config": 42,
@@ -132,7 +132,7 @@
     },
     "qnt": {
       "arch_digest": "0x8014a3e662f3cf58",
-      "cycles": 137,
+      "cycles": 130,
       "retired": 115,
       "unit_count": {
         "config": 26,
@@ -145,7 +145,7 @@
     },
     "reduce": {
       "arch_digest": "0xaa325127e194ed1a",
-      "cycles": 171,
+      "cycles": 168,
       "retired": 152,
       "unit_count": {
         "config": 31,
@@ -158,7 +158,7 @@
     },
     "rowlane": {
       "arch_digest": "0x73394c86a77447b9",
-      "cycles": 91,
+      "cycles": 88,
       "retired": 70,
       "unit_count": {
         "config": 15,
