@@ -28,10 +28,9 @@ public:
   static constexpr std::uint64_t INPUT_SKEW = 31;
   static constexpr std::uint64_t OUTPUT_SKEW = 31;
 
+  // `k` and `m` are the effective (non-zero) reduction depth and row count.
   static constexpr std::uint64_t base_latency(std::uint64_t k, std::uint64_t m) {
-    const auto depth = k == 0 ? 1 : k;
-    const auto rows = m == 0 ? 1 : m;
-    return READ_LATENCY + depth + INPUT_SKEW + OUTPUT_SKEW + rows;
+    return READ_LATENCY + k + INPUT_SKEW + OUTPUT_SKEW + m;
   }
 
   void reset();

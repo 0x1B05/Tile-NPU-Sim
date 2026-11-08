@@ -12,12 +12,17 @@ constexpr std::uint64_t MAX_TIME = std::numeric_limits<std::uint64_t>::max();
 
 void ResourceCalendar::prune(std::uint64_t now) {
   if (now > pruned_before_) pruned_before_ = now;
-  while (!busy_.empty() && busy_.front().end <= pruned_before_)
+  while (!busy_.empty() && busy_.front().end <= pruned_before_) {
     busy_.pop_front();
+  }
 }
 
-std::uint64_t ResourceCalendar::reserve(std::uint64_t now, std::uint64_t earliest,
-                                        std::uint64_t duration) {
+std::uint64_t ResourceCalendar::reserve(std::uint64_t now, std::uint64_t duration) {
+  return reserve_from(now, now, duration);
+}
+
+std::uint64_t ResourceCalendar::reserve_from(std::uint64_t now, std::uint64_t earliest,
+                                             std::uint64_t duration) {
   prune(now);
 
   std::uint64_t start = std::max(earliest, now);

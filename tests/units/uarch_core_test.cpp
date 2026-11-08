@@ -12,6 +12,23 @@
 #include <cstdint>
 #include <vector>
 
+namespace {
+
+tile_npu::DynInst mma_inst(std::uint32_t k, std::uint32_t rows, std::uint8_t src_a,
+                           std::uint8_t src_b, std::uint8_t dst) {
+  tile_npu::DynInst inst{};
+  inst.unit = tile_npu::Unit::mma;
+  inst.k = k;
+  inst.rows = rows;
+  inst.src_count = 2;
+  inst.src[0] = tile_npu::DataRef{.domain = tile_npu::Domain::tile, .index = src_a};
+  inst.src[1] = tile_npu::DataRef{.domain = tile_npu::Domain::tile, .index = src_b};
+  inst.dst = tile_npu::DataRef{.domain = tile_npu::Domain::acc, .index = dst};
+  return inst;
+}
+
+} // namespace
+
 TEST_CASE(event_queue_orders_by_time_and_schedule_order) {
   tile_npu::EventQueue events;
   std::vector<int> order;
@@ -31,14 +48,14 @@ TEST_CASE(event_queue_orders_by_time_and_schedule_order) {
   check_eq(order[2], 5, "later event runs last");
 }
 
-TEST_CASE(resource_calendar_reserves_gaps) {
+TEST_CASE(resource_calendar_avoids_overlaps) {
   tile_npu::ResourceCalendar calendar;
-  check_eq(calendar.reserve(0, 0, 10), std::uint64_t{0}, "first reservation starts at earliest");
-  check_eq(calendar.reserve(0, 5, 3), std::uint64_t{10},
+  check_eq(calendar.reserve(0, 10), std::uint64_t{0}, "first reservation starts now");
+  check_eq(calendar.reserve_from(0, 5, 3), std::uint64_t{10},
            "overlapping reservation moves past the end");
-  check_eq(calendar.reserve(0, 10, 5), std::uint64_t{13},
+  check_eq(calendar.reserve_from(0, 10, 5), std::uint64_t{13},
            "reservation starts after the booked interval");
-  check_eq(calendar.reserve(0, 18, 5), std::uint64_t{18},
+  check_eq(calendar.reserve_from(0, 18, 5), std::uint64_t{18},
            "back-to-back reservation reuses the end");
   check(!calendar.free_at(7), "booked interval is busy");
   check(calendar.free_at(23), "time after all reservations is free");
@@ -49,23 +66,30 @@ TEST_CASE(resource_calendar_reserves_gaps) {
 
 TEST_CASE(resource_calendar_fills_gaps_between_future_bookings) {
   tile_npu::ResourceCalendar calendar;
-  check_eq(calendar.reserve(0, 0, 10), std::uint64_t{0}, "first interval");
-  check_eq(calendar.reserve(0, 20, 10), std::uint64_t{20}, "future interval leaves a gap");
-  check_eq(calendar.reserve(0, 12, 5), std::uint64_t{12}, "gap is used");
-  check_eq(calendar.reserve(0, 10, 2), std::uint64_t{10}, "exact fit in the gap");
-  check_eq(calendar.reserve(0, 10, 3), std::uint64_t{17}, "next fitting gap is used");
+  check_eq(calendar.reserve(0, 10), std::uint64_t{0}, "first interval");
+  check_eq(calendar.reserve_from(0, 20, 10), std::uint64_t{20}, "future interval leaves a gap");
+  check_eq(calendar.reserve_from(0, 12, 5), std::uint64_t{12}, "gap is used");
+  check_eq(calendar.reserve_from(0, 10, 2), std::uint64_t{10}, "exact fit in the gap");
+  check_eq(calendar.reserve_from(0, 10, 3), std::uint64_t{17}, "next fitting gap is used");
+}
+
+TEST_CASE(resource_calendar_clamps_past_requests) {
+  tile_npu::ResourceCalendar calendar;
+  check_eq(calendar.reserve_from(10, 5, 2), std::uint64_t{10}, "past request starts at now");
+  check_eq(calendar.reserve_from(10, 0, 1), std::uint64_t{12}, "next slot follows the booking");
 }
 
 TEST_CASE(resource_calendar_prunes_finished_intervals) {
   tile_npu::ResourceCalendar calendar;
   for (std::uint64_t now = 0; now < 64; ++now) {
-    check_eq(calendar.reserve(now, now, 1), now, "each cycle books one slot");
+    check_eq(calendar.reserve(now, 1), now, "each cycle books one slot");
     check_eq(calendar.size(), std::size_t{1}, "finished intervals are pruned");
   }
 
-  check_eq(calendar.reserve(64, 200, 4), std::uint64_t{200}, "future booking is retained");
+  check_eq(calendar.reserve_from(64, 200, 4), std::uint64_t{200}, "future booking is retained");
   check_eq(calendar.size(), std::size_t{1}, "calendar size stays bounded");
-  check_eq(calendar.reserve(300, 300, 1), std::uint64_t{300}, "later booking advances the horizon");
+  check_eq(calendar.reserve_from(300, 300, 1), std::uint64_t{300},
+           "later booking advances the horizon");
   check_eq(calendar.size(), std::size_t{1}, "old future booking is pruned");
   check(!calendar.free_at(250), "pruned history is not reported free");
 }
@@ -88,15 +112,8 @@ TEST_CASE(event_engine_uses_component_latencies) {
   tile_npu::EventUarchEngine engine;
   engine.reset();
 
-  tile_npu::DynInst mma{};
+  auto mma = mma_inst(8, 4, 0, 16, 0);
   mma.id = 1;
-  mma.unit = tile_npu::Unit::mma;
-  mma.k = 8;
-  mma.rows = 4;
-  mma.src_count = 2;
-  mma.src[0] = tile_npu::DataRef{.domain = tile_npu::Domain::tile, .index = 0};
-  mma.src[1] = tile_npu::DataRef{.domain = tile_npu::Domain::tile, .index = 16};
-  mma.dst = tile_npu::DataRef{.domain = tile_npu::Domain::acc, .index = 0};
   engine.issue(mma);
   engine.retire(1);
   check_eq(engine.stats().cycles, std::uint64_t{75}, "MMA K + skew + M latency");
@@ -148,15 +165,7 @@ TEST_CASE(vector_unit_uses_beats_and_op_class) {
 }
 
 TEST_CASE(mma_unit_prefers_separate_banks) {
-  tile_npu::DynInst mma{};
-  mma.id = 1;
-  mma.unit = tile_npu::Unit::mma;
-  mma.k = 8;
-  mma.rows = 4;
-  mma.src_count = 2;
-  mma.src[0] = tile_npu::DataRef{.domain = tile_npu::Domain::tile, .index = 0};
-  mma.src[1] = tile_npu::DataRef{.domain = tile_npu::Domain::tile, .index = 16};
-  mma.dst = tile_npu::DataRef{.domain = tile_npu::Domain::acc, .index = 0};
+  auto mma = mma_inst(8, 4, 0, 16, 0);
 
   tile_npu::MmaUnit unit;
   const auto separate_banks = unit.issue(mma, 0);
@@ -172,14 +181,7 @@ TEST_CASE(mma_unit_prefers_separate_banks) {
 }
 
 TEST_CASE(mma_unit_prunes_finished_bookings) {
-  tile_npu::DynInst mma{};
-  mma.unit = tile_npu::Unit::mma;
-  mma.k = 8;
-  mma.rows = 4;
-  mma.src_count = 2;
-  mma.src[0] = tile_npu::DataRef{.domain = tile_npu::Domain::tile, .index = 0};
-  mma.src[1] = tile_npu::DataRef{.domain = tile_npu::Domain::tile, .index = 16};
-  mma.dst = tile_npu::DataRef{.domain = tile_npu::Domain::acc, .index = 0};
+  const auto mma = mma_inst(8, 4, 0, 16, 0);
 
   tile_npu::MmaUnit unit;
   for (std::uint64_t now = 0; now < 10000; now += 100) {

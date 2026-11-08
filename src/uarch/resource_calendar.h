@@ -15,9 +15,13 @@ namespace tile_npu {
 // therefore stay bounded by the booking window rather than program length.
 class ResourceCalendar {
 public:
+  // Reserves `duration` cycles starting at the current cycle.
+  std::uint64_t reserve(std::uint64_t now, std::uint64_t duration);
+
   // Reserves the earliest `duration` cycles at or after `earliest`; a request
   // in the past is clamped to `now`. Returns the interval start.
-  std::uint64_t reserve(std::uint64_t now, std::uint64_t earliest, std::uint64_t duration);
+  std::uint64_t reserve_from(std::uint64_t now, std::uint64_t earliest, std::uint64_t duration);
+
   void clear();
 
   // Number of retained (not yet pruned) intervals.
