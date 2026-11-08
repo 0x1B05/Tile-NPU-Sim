@@ -63,6 +63,13 @@ tile_npu::DynInst scalar_inst(std::uint64_t id, std::uint8_t dst) {
   return inst;
 }
 
+tile_npu::DynInst scalar_read(std::uint64_t id, tile_npu::DataRef src, std::uint8_t dst) {
+  auto inst = scalar_inst(id, dst);
+  inst.src[0] = src;
+  inst.src_count = 1;
+  return inst;
+}
+
 tile_npu::DynInst dma_load(std::uint64_t id, std::uint32_t bytes, tile_npu::DataRef dst) {
   tile_npu::DynInst inst{};
   inst.id = id;
@@ -233,6 +240,23 @@ TEST_CASE(event_engine_overlaps_independent_units) {
   check_eq(engine.stats().cycles, std::uint64_t{75},
            "the scalar does not extend the MMA completion");
   check_eq(engine.stats().retired, std::uint64_t{2}, "both instructions retire");
+}
+
+TEST_CASE(event_engine_arbitrates_once_per_cycle) {
+  tile_npu::EventUarchEngine engine;
+  engine.reset();
+
+  // The MMA and the DMA both complete in cycle 75. They release a scalar
+  // consumer each; both consumers are on the scalar unit, so only one may
+  // issue in that cycle.
+  engine.dispatch(mma_inst(1, 8, 4, 0, 16, 0)); // completes in 75
+  engine.dispatch(dma_load(2, 2240, tile(1)));  // issued in 1, completes in 75
+  engine.dispatch(scalar_read(3, acc(0), 1));
+  engine.dispatch(scalar_read(4, tile(1), 2));
+  engine.finish();
+
+  check_eq(engine.stats().cycles, std::uint64_t{77},
+           "same-cycle completions share one per-unit arbitration");
 }
 
 TEST_CASE(event_engine_waits_for_raw_dependency) {

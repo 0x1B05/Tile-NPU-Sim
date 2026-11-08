@@ -6,6 +6,7 @@
 #include "uarch/uarch_state.h"
 #include "uarch/vector_unit.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -33,10 +34,15 @@ public:
 
 private:
   // Issues every instruction that is ready in the current cycle, at most one
-  // per unit, and schedules a wakeup when more are waiting for a slot.
+  // per unit. Several completions may land in the same cycle, so this can be
+  // re-entered for the same `now`; unit_used_ makes those calls share one
+  // arbitration instead of each starting a fresh one.
   bool issue_ready(std::uint64_t now);
   void issue_one(std::uint64_t id, std::uint64_t now);
   void complete(std::uint64_t id);
+
+  // Coalesces same-cycle wakeups: at most one event per target cycle.
+  void schedule_wakeup(std::uint64_t when);
 
   // The oldest memory operation not yet issued. Younger memory operations may
   // not pass it, so it is the only DMA candidate in a cycle.
@@ -50,6 +56,10 @@ private:
   MmaUnit mma_{};
   DmaUnit dma_{};
   VectorUnit vector_{};
+
+  std::optional<std::uint64_t> issue_cycle_;
+  std::array<bool, UNIT_COUNT> unit_used_{};
+  std::optional<std::uint64_t> wakeup_;
 };
 
 } // namespace tile_npu

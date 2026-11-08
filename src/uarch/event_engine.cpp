@@ -19,6 +19,9 @@ void EventUarchEngine::reset() {
   mma_.reset();
   dma_.reset();
   vector_.reset();
+  issue_cycle_.reset();
+  unit_used_.fill(false);
+  wakeup_.reset();
 }
 
 void EventUarchEngine::dispatch(const DynInst &inst) {
@@ -39,27 +42,40 @@ void EventUarchEngine::dispatch(const DynInst &inst) {
 }
 
 bool EventUarchEngine::issue_ready(std::uint64_t now) {
+  // Completion callbacks at the same timestamp each call this function; the
+  // first call starts the cycle's arbitration and the rest join it.
+  if (issue_cycle_ != now) {
+    issue_cycle_ = now;
+    unit_used_.fill(false);
+  }
+
   bool issued = false;
-  std::array<bool, UNIT_COUNT> unit_busy{};
   const auto memory_head = next_memory_id();
 
   for (const auto &[id, entry] : scoreboard_.entries()) {
     if (!can_issue(entry, memory_head)) continue;
 
     const auto index = unit_index(entry.inst.unit);
-    if (unit_busy[index]) continue;
+    if (unit_used_[index]) continue;
 
-    unit_busy[index] = true;
+    unit_used_[index] = true;
     issue_one(id, now);
     issued = true;
   }
 
   // Instructions left over because their unit already issued this cycle get
   // another look next cycle; completion events alone would serialize them.
-  if (issued && has_ready_work()) {
-    state_.events.schedule(now + SINGLE_CYCLE, [this] { issue_ready(state_.events.now()); });
-  }
+  if (issued && has_ready_work()) schedule_wakeup(now + SINGLE_CYCLE);
   return issued;
+}
+
+void EventUarchEngine::schedule_wakeup(std::uint64_t when) {
+  if (wakeup_ == when) return;
+  wakeup_ = when;
+  state_.events.schedule(when, [this, when] {
+    if (wakeup_ == when) wakeup_.reset();
+    issue_ready(when);
+  });
 }
 
 void EventUarchEngine::issue_one(std::uint64_t id, std::uint64_t now) {

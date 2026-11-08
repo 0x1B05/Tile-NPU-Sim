@@ -8,8 +8,9 @@
 
 namespace tile_npu {
 
-// Deterministic event queue: ties are resolved by scheduling order, which is
-// the program order of the instruction that scheduled the event.
+// Deterministic event queue. Events at the same time run in scheduling order;
+// this is a stable tie-break, not a program-order guarantee. Same-cycle issue
+// arbitration in the engine is per cycle, independent of this ordering.
 class EventQueue {
 public:
   using Time = std::uint64_t;
