@@ -1,6 +1,7 @@
 #include "uarch/mma_unit.h"
 
 #include <algorithm>
+#include <cstddef>
 
 namespace tile_npu {
 namespace {
@@ -9,12 +10,6 @@ std::uint8_t bank_of(Domain domain, std::uint8_t index) {
   if (domain == Domain::tile) return index >= 16 ? 1 : 0;
   if (domain == Domain::acc) return index >= 8 ? 1 : 0;
   return 0;
-}
-
-std::uint64_t fallback_latency(const DynInst &inst, std::uint64_t now) {
-  const auto k = std::max<std::uint64_t>(1, inst.k);
-  const auto m = std::max<std::uint64_t>(1, inst.rows);
-  return now + k + 62 + m;
 }
 
 } // namespace
@@ -30,7 +25,7 @@ void MmaUnit::reset() {
 std::uint64_t MmaUnit::issue(const DynInst &inst, std::uint64_t now) {
   if (inst.src_count < 2 || !inst.dst || inst.src[0].domain != Domain::tile ||
       inst.src[1].domain != Domain::tile) {
-    return fallback_latency(inst, now);
+    return now + base_latency(inst.k, inst.rows);
   }
 
   const auto k = std::max<std::uint64_t>(1, inst.k);
@@ -38,18 +33,20 @@ std::uint64_t MmaUnit::issue(const DynInst &inst, std::uint64_t now) {
   const auto bank_a = bank_of(inst.src[0].domain, inst.src[0].index);
   const auto bank_b = bank_of(inst.src[1].domain, inst.src[1].index);
 
-  const auto read_a = tile_read_[bank_a].reserve(now, k);
+  const auto read_a = tile_read_[bank_a].reserve(now, now, k);
   // The two banks can read in parallel; the same bank serializes the two
   // operand streams because it has one read port.
   const auto read_b_earliest = bank_a == bank_b ? read_a + k : now;
-  const auto read_b = tile_read_[bank_b].reserve(read_b_earliest, k);
+  const auto read_b = tile_read_[bank_b].reserve(now, read_b_earliest, k);
   const auto read_end_a = read_a + k;
   const auto read_end_b = read_b + k;
 
-  // The array starts after the first operand pair is available and runs for
-  // K cycles plus the input-side skew.
-  const auto array_span = k + 31;
-  const auto array_start = array_.reserve(std::max(read_a, read_b) + 1, array_span);
+  // Both streams must have started before the first operand pair is available.
+  // The synchronous Tile return costs one cycle; the array then runs for K
+  // cycles plus the input-side skew.
+  const auto array_span = k + INPUT_SKEW;
+  const auto first_pair = std::max(read_a, read_b) + READ_LATENCY;
+  const auto array_start = array_.reserve(now, first_pair, array_span);
   const auto array_end = array_start + array_span;
 
   auto finish = std::max({read_end_a, read_end_b, array_end});
@@ -58,12 +55,17 @@ std::uint64_t MmaUnit::issue(const DynInst &inst, std::uint64_t now) {
   // its own RF model later; for now it only occupies the array.
   if (inst.dst->domain == Domain::acc) {
     const auto bank_d = bank_of(Domain::acc, inst.dst->index);
-    const auto write_start = array_end + 31;
-    const auto write_end = acc_write_[bank_d].reserve(write_start, m) + m;
+    const auto write_start = array_end + OUTPUT_SKEW;
+    const auto write_end = acc_write_[bank_d].reserve(now, write_start, m) + m;
     finish = std::max(finish, write_end);
   }
 
   return finish;
+}
+
+std::size_t MmaUnit::retained_intervals() const {
+  return tile_read_[0].size() + tile_read_[1].size() + acc_write_[0].size() + acc_write_[1].size() +
+         array_.size();
 }
 
 } // namespace tile_npu

@@ -7,32 +7,7 @@
 namespace tile_npu {
 namespace {
 
-std::uint64_t ceil_div(std::uint64_t value, std::uint64_t divisor) {
-  return (value + divisor - 1) / divisor;
-}
-
-std::uint64_t latency_of(const DynInst &inst) {
-  switch (inst.unit) {
-  case Unit::mma: {
-    // K reads plus the input skew, the array pipeline, the output skew, and
-    // M row writebacks. The constants stay in this table until MmaUnit owns
-    // the real resource calendars.
-    const auto k = std::max<std::uint64_t>(1, inst.k);
-    const auto m = std::max<std::uint64_t>(1, inst.rows);
-    return k + 62 + m;
-  }
-  case Unit::dma: return 4 + ceil_div(inst.bytes, 32);
-  case Unit::vector: {
-    const auto elements =
-        std::max<std::uint64_t>(inst.len, static_cast<std::uint64_t>(inst.rows) * inst.cols);
-    return std::max<std::uint64_t>(1, ceil_div(elements, 8));
-  }
-  case Unit::config:
-  case Unit::sync:
-  case Unit::scalar: return 1;
-  }
-  return 1;
-}
+constexpr std::uint64_t SINGLE_CYCLE = 1;
 
 } // namespace
 
@@ -46,14 +21,18 @@ void EventUarchEngine::reset() {
 
 void EventUarchEngine::issue(const DynInst &inst) {
   ++state_.stats.unit_count[static_cast<std::size_t>(inst.unit)];
-  std::uint64_t finish = state_.events.now() + latency_of(inst);
-  if (inst.unit == Unit::mma) {
-    finish = mma_.issue(inst, state_.events.now());
-  } else if (inst.unit == Unit::dma) {
-    finish = dma_.issue(inst, state_.events.now());
-  } else if (inst.unit == Unit::vector) {
-    finish = vector_.issue(inst, state_.events.now());
+
+  const auto now = state_.events.now();
+  std::uint64_t finish = now + SINGLE_CYCLE;
+  switch (inst.unit) {
+  case Unit::mma: finish = mma_.issue(inst, now); break;
+  case Unit::dma: finish = dma_.issue(inst, now); break;
+  case Unit::vector: finish = vector_.issue(inst, now); break;
+  case Unit::scalar:
+  case Unit::config:
+  case Unit::sync: break;
   }
+
   completion_[inst.id] = finish;
   state_.events.schedule(
       finish, [this, finish] { state_.stats.cycles = std::max(state_.stats.cycles, finish); });

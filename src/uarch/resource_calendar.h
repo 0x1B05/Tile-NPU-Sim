@@ -1,18 +1,30 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
-#include <vector>
+#include <deque>
 
 namespace tile_npu {
 
-// A single-port resource. reserve() finds the earliest interval at or after
-// `earliest` that can hold `duration` cycles, records it, and returns its
-// start. One calendar is used per SRAM bank, port, or functional unit.
+// A single-port resource. Reservations use half-open cycle intervals:
+// [begin, end) occupies cycles begin .. end-1.
+//
+// `now` is the current simulated cycle and must not decrease across calls.
+// It is the pruning horizon: intervals that ended at or before `now` cannot
+// affect any future reservation, so they are dropped. Memory and search cost
+// therefore stay bounded by the booking window rather than program length.
 class ResourceCalendar {
 public:
-  std::uint64_t reserve(std::uint64_t earliest, std::uint64_t duration);
+  // Reserves the earliest `duration` cycles at or after `earliest`; a request
+  // in the past is clamped to `now`. Returns the interval start.
+  std::uint64_t reserve(std::uint64_t now, std::uint64_t earliest, std::uint64_t duration);
   void clear();
 
+  // Number of retained (not yet pruned) intervals.
+  std::size_t size() const;
+
+  // Only meaningful at or after the most recent `now`. Earlier history has
+  // been discarded, so the query conservatively reports busy.
   bool free_at(std::uint64_t time) const;
 
 private:
@@ -21,7 +33,10 @@ private:
     std::uint64_t end = 0;
   };
 
-  std::vector<Interval> busy_;
+  void prune(std::uint64_t now);
+
+  std::deque<Interval> busy_;
+  std::uint64_t pruned_before_ = 0;
 };
 
 } // namespace tile_npu

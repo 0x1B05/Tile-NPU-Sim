@@ -46,7 +46,7 @@ std::uint64_t VectorUnit::issue(const DynInst &inst, std::uint64_t now) {
       std::max<std::uint64_t>(inst.len, static_cast<std::uint64_t>(inst.rows) * inst.cols);
   const auto beats = std::max<std::uint64_t>(1, ceil_div(elements, LANES));
   const auto latency = op_latency(inst.op, elements);
-  const auto start = pipeline_.reserve(now, beats);
+  const auto start = pipeline_.reserve(now, now, beats);
   return start + beats + latency - 1;
 }
 

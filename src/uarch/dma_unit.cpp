@@ -15,7 +15,7 @@ void DmaUnit::reset() { bus_.clear(); }
 
 std::uint64_t DmaUnit::issue(const DynInst &inst, std::uint64_t now) {
   const auto cycles = transfer_cycles(inst.bytes);
-  const auto start = bus_.reserve(now, cycles);
+  const auto start = bus_.reserve(now, now, cycles);
   return start + LATENCY + cycles;
 }
 

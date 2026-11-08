@@ -16,6 +16,14 @@ struct UarchStats {
 
 // Timing-only backend. It never computes architectural values or resolves
 // control flow; the functional executor feeds it one DynInst at a time.
+//
+// Cycle convention shared by the engine and its components:
+//   * issue() is called in the engine's current cycle;
+//   * work occupies half-open intervals [begin, end), i.e. cycles begin ..
+//     end-1;
+//   * a component issue() returns the completion cycle, the first cycle after
+//     its last action, when the done event fires. A one-cycle instruction
+//     issued in cycle c therefore completes at c + 1.
 class UarchEngine {
 public:
   virtual ~UarchEngine() = default;
