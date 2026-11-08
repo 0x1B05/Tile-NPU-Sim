@@ -1,6 +1,7 @@
 #pragma once
 
 #include "uarch/engine.h"
+#include "uarch/event_queue.h"
 
 namespace tile_npu {
 
@@ -9,6 +10,7 @@ namespace tile_npu {
 // reset, difftest, or serialization.
 struct UarchState {
   UarchStats stats{};
+  EventQueue events{};
 };
 
 } // namespace tile_npu
