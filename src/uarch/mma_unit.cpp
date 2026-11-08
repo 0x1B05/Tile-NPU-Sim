@@ -26,7 +26,7 @@ std::uint64_t MmaUnit::issue(const DynInst &inst, std::uint64_t now) {
   const auto k = std::max<std::uint64_t>(1, inst.k);
   const auto m = std::max<std::uint64_t>(1, inst.rows);
 
-  if (inst.src_count < 2 || !inst.dst || inst.src[0].domain != Domain::tile ||
+  if (inst.src_count < 2 || inst.dst_count == 0 || inst.src[0].domain != Domain::tile ||
       inst.src[1].domain != Domain::tile) {
     return now + base_latency(k, m);
   }
@@ -54,8 +54,8 @@ std::uint64_t MmaUnit::issue(const DynInst &inst, std::uint64_t now) {
 
   // MMA writes FP32 rows back to Acc. VMMA writes a Vec32 register, which has
   // its own RF model later; for now it only occupies the array.
-  if (inst.dst->domain == Domain::acc) {
-    const auto bank_d = bank_of(Domain::acc, inst.dst->index);
+  if (inst.dst[0].domain == Domain::acc) {
+    const auto bank_d = bank_of(Domain::acc, inst.dst[0].index);
     const auto write_start = array_end + OUTPUT_SKEW;
     const auto write_end = acc_write_[bank_d].reserve_from(now, write_start, m) + m;
     finish = std::max(finish, write_end);

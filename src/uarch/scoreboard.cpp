@@ -45,8 +45,10 @@ std::vector<std::uint64_t> Scoreboard::dependencies(const DynInst &inst) const {
     const auto &reg = stat(src);
     if (reg.busy) deps.push_back(reg.producer);
   }
-  if (inst.dst && !is_zero(*inst.dst)) {
-    const auto &reg = stat(*inst.dst);
+  for (std::uint8_t i = 0; i < inst.dst_count; ++i) {
+    const auto &dst = inst.dst[i];
+    if (is_zero(dst)) continue;
+    const auto &reg = stat(dst);
     if (reg.busy) deps.push_back(reg.producer);                      // WAW
     deps.insert(deps.end(), reg.readers.begin(), reg.readers.end()); // WAR
   }
@@ -61,8 +63,10 @@ void Scoreboard::register_operands(const DynInst &inst) {
     const auto &src = inst.src[i];
     if (!is_zero(src)) stat(src).readers.push_back(inst.id);
   }
-  if (inst.dst && !is_zero(*inst.dst)) {
-    auto &reg = stat(*inst.dst);
+  for (std::uint8_t i = 0; i < inst.dst_count; ++i) {
+    const auto &dst = inst.dst[i];
+    if (is_zero(dst)) continue;
+    auto &reg = stat(dst);
     reg.busy = true;
     reg.producer = inst.id;
   }
@@ -93,8 +97,10 @@ bool Scoreboard::complete(std::uint64_t id) {
     const auto &src = inst.src[i];
     if (!is_zero(src)) std::erase(stat(src).readers, id);
   }
-  if (inst.dst && !is_zero(*inst.dst)) {
-    auto &reg = stat(*inst.dst);
+  for (std::uint8_t i = 0; i < inst.dst_count; ++i) {
+    const auto &dst = inst.dst[i];
+    if (is_zero(dst)) continue;
+    auto &reg = stat(dst);
     if (reg.producer == id) reg.busy = false;
   }
 

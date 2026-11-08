@@ -25,8 +25,46 @@ void add_src(DynInst &inst, Domain domain, std::uint8_t index) {
   inst.src[inst.src_count++] = DataRef{.domain = domain, .index = index};
 }
 
-void set_dst(DynInst &inst, Domain domain, std::uint8_t index) {
-  inst.dst = DataRef{.domain = domain, .index = index};
+void add_dst(DynInst &inst, Domain domain, std::uint8_t index) {
+  if (inst.dst_count >= inst.dst.size()) return;
+  inst.dst[inst.dst_count++] = DataRef{.domain = domain, .index = index};
+}
+
+void add_npu_src(DynInst &inst, const NpuRegister &reg) {
+  add_src(inst, to_domain(reg.domain), reg.index);
+}
+
+void add_npu_dst(DynInst &inst, const NpuRegister &reg) {
+  add_dst(inst, to_domain(reg.domain), reg.index);
+}
+
+// x0 is hard-wired: a read never waits and a write is discarded.
+void add_scalar_src(DynInst &inst, RegisterIndex index) {
+  if (index != 0) add_src(inst, Domain::scalar, index);
+}
+
+void add_scalar_dst(DynInst &inst, RegisterIndex index) {
+  if (index != 0) add_dst(inst, Domain::scalar, index);
+}
+
+void add_index_src(DynInst &inst, const IndexOperand &index) {
+  if (const auto *reg = std::get_if<ScalarRegister>(&index)) add_scalar_src(inst, reg->index);
+}
+
+void add_npu_operand(DynInst &inst, const NpuOperand &operand) {
+  if (const auto *reg = std::get_if<NpuRegister>(&operand)) {
+    add_npu_src(inst, *reg);
+  } else if (const auto *reg = std::get_if<ScalarRegister>(&operand)) {
+    add_scalar_src(inst, reg->index);
+  }
+}
+
+void add_fill_src(DynInst &inst, const FillOperand &fill) {
+  if (const auto *reg = std::get_if<ScalarRegister>(&fill)) add_scalar_src(inst, reg->index);
+}
+
+void add_fill_src(DynInst &inst, const std::variant<FillImm16, ScalarRegister> &value) {
+  if (const auto *reg = std::get_if<ScalarRegister>(&value)) add_scalar_src(inst, reg->index);
 }
 
 void fill_mma(DynInst &inst, const MmaInstr &instr, const State &state) {
@@ -49,7 +87,7 @@ void fill_mma(DynInst &inst, const MmaInstr &instr, const State &state) {
   add_src(inst, Domain::tile, instr.src_a.index);
   add_src(inst, Domain::tile, instr.src_b.index);
   if (instr.op == MmaOp::nt_acc) add_src(inst, Domain::acc, instr.dest.index);
-  set_dst(inst, Domain::acc, instr.dest.index);
+  add_dst(inst, Domain::acc, instr.dest.index);
 }
 
 void fill_vmma(DynInst &inst, const VmmaInstr &instr, const State &state) {
@@ -72,7 +110,7 @@ void fill_vmma(DynInst &inst, const VmmaInstr &instr, const State &state) {
   add_src(inst, Domain::tile, instr.src_a.index);
   add_src(inst, Domain::tile, instr.src_b.index);
   if (instr.op == VmmaOp::nt_acc) add_src(inst, Domain::vec32, instr.dest.index);
-  set_dst(inst, Domain::vec32, instr.dest.index);
+  add_dst(inst, Domain::vec32, instr.dest.index);
 }
 
 void fill_mblk(DynInst &inst, const MblkInstr &instr, const State &state) {
@@ -102,11 +140,11 @@ void fill_mblk(DynInst &inst, const MblkInstr &instr, const State &state) {
       const auto indexed = state.vc[instr.gather_src].len;
       inst.rows = indexed;
       add_src(inst, Domain::vec32, instr.gather_src);
-      set_dst(inst, Domain::tile, instr.reg.index);
+      add_dst(inst, Domain::tile, instr.reg.index);
     } else if (instr.op == MblkOp::store) {
       add_src(inst, Domain::tile, instr.reg.index);
     } else {
-      set_dst(inst, Domain::tile, instr.reg.index);
+      add_dst(inst, Domain::tile, instr.reg.index);
     }
     break;
   }
@@ -125,11 +163,11 @@ void fill_mblk(DynInst &inst, const MblkInstr &instr, const State &state) {
     inst.transpose = descriptor.transform != 0;
     if (instr.op == MblkOp::gather) {
       add_src(inst, Domain::vec32, instr.gather_src);
-      set_dst(inst, Domain::acc, instr.reg.index);
+      add_dst(inst, Domain::acc, instr.reg.index);
     } else if (instr.op == MblkOp::store) {
       add_src(inst, Domain::acc, instr.reg.index);
     } else {
-      set_dst(inst, Domain::acc, instr.reg.index);
+      add_dst(inst, Domain::acc, instr.reg.index);
     }
     break;
   }
@@ -151,21 +189,18 @@ void fill_mblk(DynInst &inst, const MblkInstr &instr, const State &state) {
       inst.rows = indexed;
       inst.cols = 1;
       add_src(inst, Domain::vec32, instr.gather_src);
+      add_dst(inst, Domain::vec32, instr.reg.index);
     } else if (instr.op == MblkOp::store) {
       add_src(inst, Domain::vec32, instr.reg.index);
     } else {
-      set_dst(inst, Domain::vec32, instr.reg.index);
+      add_dst(inst, Domain::vec32, instr.reg.index);
     }
     break;
   }
   default: break;
   }
 
-  if (inst.op == DynOp::gather) {
-    inst.bytes = inst.rows * inst.cols * inst.elem_bytes;
-  } else {
-    inst.bytes = inst.rows * inst.cols * inst.elem_bytes;
-  }
+  inst.bytes = inst.rows * inst.cols * inst.elem_bytes;
 }
 
 void fill_from_config(DynInst &inst, const State &state, Domain domain, std::uint8_t index) {
@@ -218,12 +253,13 @@ void fill_row(DynInst &inst, const RowInstr &instr, const State &state) {
   inst.dtype = static_cast<std::uint8_t>(matrix.dtype);
   inst.elem_bytes = dtype_bytes(matrix.dtype);
   inst.bytes = inst.cols * inst.elem_bytes;
+  add_index_src(inst, instr.index);
   if (instr.op == RowOp::insert) {
     add_src(inst, Domain::vec32, instr.vector.index);
-    set_dst(inst, Domain::acc, instr.matrix.index);
+    add_dst(inst, Domain::acc, instr.matrix.index);
   } else {
     add_src(inst, Domain::acc, instr.matrix.index);
-    set_dst(inst, Domain::vec32, instr.vector.index);
+    add_dst(inst, Domain::vec32, instr.vector.index);
   }
 }
 
@@ -248,11 +284,9 @@ void fill_sys(DynInst &inst, const SysInstr &instr) {
 
 DynInst make_scalar_dyn_inst(std::uint64_t id, std::uint64_t pc, const DecodedScalarInstr &instr) {
   DynInst out{.id = id, .pc = pc, .op = DynOp::scalar, .unit = Unit::scalar};
-  // x0 is hard-wired; leaving it out keeps the record free of hazards that
-  // the scoreboard would discard anyway.
-  if (instr.regs.src1 != 0) add_src(out, Domain::scalar, instr.regs.src1);
-  if (instr.regs.src2 != 0) add_src(out, Domain::scalar, instr.regs.src2);
-  if (instr.regs.dest != 0) set_dst(out, Domain::scalar, instr.regs.dest);
+  add_scalar_src(out, instr.regs.src1);
+  add_scalar_src(out, instr.regs.src2);
+  add_scalar_dst(out, instr.regs.dest);
   return out;
 }
 
@@ -278,14 +312,20 @@ DynInst make_dyn_inst(std::uint64_t id, std::uint64_t pc, const DecodedNpuInstr 
                              std::is_same_v<T, CfgSetwInstr> || std::is_same_v<T, CfgGetwInstr>) {
           out.op = DynOp::config;
           out.unit = Unit::config;
+          // Config registers themselves are not scoreboard registers: every
+          // consumer freezes the values it needs at dispatch. Only the scalar
+          // operand crosses the register file.
+          if constexpr (std::is_same_v<T, CfgSetxInstr> || std::is_same_v<T, CfgSetwInstr>) {
+            add_scalar_src(out, decoded.src);
+          } else if constexpr (std::is_same_v<T, CfgGetInstr> || std::is_same_v<T, CfgGetwInstr>) {
+            add_scalar_dst(out, decoded.dest);
+          }
         } else {
           out.unit = Unit::vector;
           if constexpr (std::is_same_v<T, FillInstr>) {
             out.op = DynOp::fill;
           } else if constexpr (std::is_same_v<T, MoveInstr>) {
             out.op = DynOp::move;
-          } else if constexpr (std::is_same_v<T, RowInstr>) {
-            out.op = DynOp::row;
           } else if constexpr (std::is_same_v<T, LaneExtractInstr> ||
                                std::is_same_v<T, LaneInsertInstr> ||
                                std::is_same_v<T, LaneBroadcastInstr>) {
@@ -314,30 +354,56 @@ DynInst make_dyn_inst(std::uint64_t id, std::uint64_t pc, const DecodedNpuInstr 
           }
 
           if constexpr (requires { decoded.dest; }) {
-            if constexpr (std::is_same_v<std::remove_cvref_t<decltype(decoded.dest)>,
-                                         NpuRegister>) {
+            using Dest = std::remove_cvref_t<decltype(decoded.dest)>;
+            if constexpr (std::is_same_v<Dest, NpuRegister>) {
               const auto domain = to_domain(decoded.dest.domain);
-              set_dst(out, domain, decoded.dest.index);
+              add_dst(out, domain, decoded.dest.index);
               fill_from_config(out, state, domain, decoded.dest.index);
+            } else if constexpr (std::is_same_v<Dest, ScalarRegister>) {
+              add_scalar_dst(out, decoded.dest.index);
             }
           }
           if constexpr (requires { decoded.src; }) {
-            if constexpr (std::is_same_v<std::remove_cvref_t<decltype(decoded.src)>, NpuRegister>) {
-              add_src(out, to_domain(decoded.src.domain), decoded.src.index);
+            using Src = std::remove_cvref_t<decltype(decoded.src)>;
+            if constexpr (std::is_same_v<Src, NpuRegister>) {
+              add_npu_src(out, decoded.src);
+            } else if constexpr (std::is_same_v<Src, ScalarRegister>) {
+              add_scalar_src(out, decoded.src.index);
             }
           }
           if constexpr (requires { decoded.src1; }) {
-            if constexpr (std::is_same_v<std::remove_cvref_t<decltype(decoded.src1)>,
-                                         NpuRegister>) {
-              add_src(out, to_domain(decoded.src1.domain), decoded.src1.index);
-            }
+            add_npu_src(out, decoded.src1);
           }
           if constexpr (requires { decoded.src2; }) {
-            if constexpr (std::is_same_v<T, EbinInstr> || std::is_same_v<T, CmpInstr>) {
-              if (const auto *reg = std::get_if<NpuRegister>(&decoded.src2)) {
-                add_src(out, to_domain(reg->domain), reg->index);
-              }
+            using Src2 = std::remove_cvref_t<decltype(decoded.src2)>;
+            if constexpr (std::is_same_v<Src2, NpuOperand>) {
+              add_npu_operand(out, decoded.src2);
+            } else if constexpr (std::is_same_v<Src2, NpuRegister>) {
+              add_npu_src(out, decoded.src2);
             }
+          }
+          if constexpr (requires { decoded.vector; }) add_npu_src(out, decoded.vector);
+          if constexpr (requires { decoded.arg; }) add_npu_src(out, decoded.arg);
+          if constexpr (requires { decoded.index; }) add_index_src(out, decoded.index);
+          if constexpr (requires { decoded.fill; }) add_fill_src(out, decoded.fill);
+          if constexpr (requires { decoded.value; }) add_fill_src(out, decoded.value);
+          if constexpr (requires { decoded.bound; }) add_scalar_src(out, decoded.bound);
+          if constexpr (requires { decoded.col_scale; }) {
+            add_src(out, Domain::vec32, decoded.col_scale);
+          }
+          if constexpr (requires { decoded.row_scale; }) {
+            add_src(out, Domain::vec32, decoded.row_scale);
+          }
+          if constexpr (requires { decoded.scale; }) {
+            add_src(out, Domain::vec32, decoded.scale);
+          }
+          if constexpr (requires { decoded.index_dest; }) {
+            // Argmax has two architectural destinations; freeze the source
+            // shape because there is no single `dest` config to read.
+            add_npu_dst(out, decoded.index_dest);
+            add_npu_dst(out, decoded.value_dest);
+            const auto domain = to_domain(decoded.src.domain);
+            fill_from_config(out, state, domain, decoded.src.index);
           }
         }
       },

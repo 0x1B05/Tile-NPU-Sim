@@ -75,7 +75,10 @@ struct DynInst {
 
   std::array<DataRef, 4> src{};
   std::uint8_t src_count = 0;
-  std::optional<DataRef> dst;
+  // Argmax writes an index destination and a value destination; every other
+  // instruction writes at most one register.
+  std::array<DataRef, 2> dst{};
+  std::uint8_t dst_count = 0;
 
   std::uint32_t rows = 0;
   std::uint32_t cols = 0;

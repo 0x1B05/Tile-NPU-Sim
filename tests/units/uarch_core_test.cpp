@@ -37,7 +37,8 @@ tile_npu::DynInst mma_inst(std::uint64_t id, std::uint32_t k, std::uint32_t rows
   inst.src_count = 2;
   inst.src[0] = tile(src_a);
   inst.src[1] = tile(src_b);
-  inst.dst = acc(dst);
+  inst.dst[0] = acc(dst);
+  inst.dst_count = 1;
   return inst;
 }
 
@@ -50,7 +51,8 @@ tile_npu::DynInst vector_inst(std::uint64_t id, tile_npu::DynOp op, std::uint32_
   inst.len = len;
   inst.src[0] = src;
   inst.src_count = 1;
-  inst.dst = dst;
+  inst.dst[0] = dst;
+  inst.dst_count = 1;
   return inst;
 }
 
@@ -59,7 +61,8 @@ tile_npu::DynInst scalar_inst(std::uint64_t id, std::uint8_t dst) {
   inst.id = id;
   inst.unit = tile_npu::Unit::scalar;
   inst.op = tile_npu::DynOp::scalar;
-  inst.dst = tile_npu::DataRef{.domain = tile_npu::Domain::scalar, .index = dst};
+  inst.dst[0] = tile_npu::DataRef{.domain = tile_npu::Domain::scalar, .index = dst};
+  inst.dst_count = 1;
   return inst;
 }
 
@@ -76,7 +79,8 @@ tile_npu::DynInst dma_load(std::uint64_t id, std::uint32_t bytes, tile_npu::Data
   inst.unit = tile_npu::Unit::dma;
   inst.op = tile_npu::DynOp::load;
   inst.bytes = bytes;
-  inst.dst = dst;
+  inst.dst[0] = dst;
+  inst.dst_count = 1;
   return inst;
 }
 
@@ -191,7 +195,8 @@ TEST_CASE(scoreboard_tracks_register_hazards) {
   tile_npu::DynInst zero_write{};
   zero_write.id = 4;
   zero_write.unit = tile_npu::Unit::scalar;
-  zero_write.dst = tile_npu::DataRef{.domain = tile_npu::Domain::scalar, .index = 0};
+  zero_write.dst[0] = tile_npu::DataRef{.domain = tile_npu::Domain::scalar, .index = 0};
+  zero_write.dst_count = 1;
   board.dispatch(zero_write);
   tile_npu::DynInst zero_read{};
   zero_read.id = 5;
@@ -206,9 +211,30 @@ TEST_CASE(scoreboard_tracks_register_hazards) {
   in_place.unit = tile_npu::Unit::vector;
   in_place.src[0] = vec(2);
   in_place.src_count = 1;
-  in_place.dst = vec(2);
+  in_place.dst[0] = vec(2);
+  in_place.dst_count = 1;
   board.dispatch(in_place);
   check(board.ready(6), "source and destination do not self-block");
+}
+
+TEST_CASE(scoreboard_tracks_dual_destination) {
+  tile_npu::Scoreboard board;
+  tile_npu::DynInst argmax{};
+  argmax.id = 1;
+  argmax.unit = tile_npu::Unit::vector;
+  argmax.dst[0] = vec(0);
+  argmax.dst[1] = vec(1);
+  argmax.dst_count = 2;
+  board.dispatch(argmax);
+
+  board.dispatch(vector_inst(2, tile_npu::DynOp::elementwise, 8, vec(0), vec(2)));
+  board.dispatch(vector_inst(3, tile_npu::DynOp::elementwise, 8, vec(1), vec(3)));
+  check(!board.ready(2), "first destination waits for the dual write");
+  check(!board.ready(3), "second destination waits for the dual write");
+
+  board.complete(1);
+  check(board.ready(2), "completing the writer releases the first destination");
+  check(board.ready(3), "completing the writer releases the second destination");
 }
 
 TEST_CASE(event_engine_uses_component_latencies) {
