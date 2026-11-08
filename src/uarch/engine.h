@@ -2,6 +2,7 @@
 
 #include "tile_npu/dyn_inst.h"
 
+#include <array>
 #include <cstdint>
 
 namespace tile_npu {
@@ -9,6 +10,8 @@ namespace tile_npu {
 struct UarchStats {
   std::uint64_t cycles = 0;
   std::uint64_t retired = 0;
+  // Indexed by Unit: scalar, mma, vector, dma, config, sync.
+  std::array<std::uint64_t, 6> unit_count{};
 };
 
 // Timing-only backend. It never computes architectural values or resolves

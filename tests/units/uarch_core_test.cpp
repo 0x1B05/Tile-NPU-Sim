@@ -8,6 +8,7 @@
 #include "uarch/resource_calendar.h"
 #include "uarch/vector_unit.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -75,6 +76,8 @@ TEST_CASE(event_engine_uses_component_latencies) {
   engine.retire(1);
   check_eq(engine.stats().cycles, std::uint64_t{75}, "MMA K + skew + M latency");
   check_eq(engine.stats().retired, std::uint64_t{1}, "MMA retires");
+  check_eq(engine.stats().unit_count[static_cast<std::size_t>(tile_npu::Unit::mma)],
+           std::uint64_t{1}, "MMA unit is counted");
 
   tile_npu::DynInst dma{};
   dma.id = 2;

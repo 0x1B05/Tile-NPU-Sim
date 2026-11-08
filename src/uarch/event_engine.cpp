@@ -1,6 +1,7 @@
 #include "uarch/event_engine.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 
 namespace tile_npu {
@@ -44,6 +45,7 @@ void EventUarchEngine::reset() {
 }
 
 void EventUarchEngine::issue(const DynInst &inst) {
+  ++state_.stats.unit_count[static_cast<std::size_t>(inst.unit)];
   std::uint64_t finish = state_.events.now() + latency_of(inst);
   if (inst.unit == Unit::mma) {
     finish = mma_.issue(inst, state_.events.now());
