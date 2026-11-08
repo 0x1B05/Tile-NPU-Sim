@@ -37,11 +37,13 @@ std::uint64_t latency_of(const DynInst &inst) {
 
 void EventUarchEngine::reset() {
   state_ = UarchState{};
+  mma_.reset();
   completion_.clear();
 }
 
 void EventUarchEngine::issue(const DynInst &inst) {
-  const auto finish = state_.events.now() + latency_of(inst);
+  const auto finish = inst.unit == Unit::mma ? mma_.issue(inst, state_.events.now())
+                                             : state_.events.now() + latency_of(inst);
   completion_[inst.id] = finish;
   state_.events.schedule(
       finish, [this, finish] { state_.stats.cycles = std::max(state_.stats.cycles, finish); });

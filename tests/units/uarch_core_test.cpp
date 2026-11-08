@@ -2,6 +2,7 @@
 
 #include "uarch/event_engine.h"
 #include "uarch/event_queue.h"
+#include "uarch/mma_unit.h"
 #include "uarch/queue.h"
 #include "uarch/resource_calendar.h"
 
@@ -64,9 +65,13 @@ TEST_CASE(event_engine_uses_component_latencies) {
   mma.unit = tile_npu::Unit::mma;
   mma.k = 8;
   mma.rows = 4;
+  mma.src_count = 2;
+  mma.src[0] = tile_npu::DataRef{.domain = tile_npu::Domain::tile, .index = 0};
+  mma.src[1] = tile_npu::DataRef{.domain = tile_npu::Domain::tile, .index = 16};
+  mma.dst = tile_npu::DataRef{.domain = tile_npu::Domain::acc, .index = 0};
   engine.issue(mma);
   engine.retire(1);
-  check_eq(engine.stats().cycles, std::uint64_t{74}, "MMA K + skew + M latency");
+  check_eq(engine.stats().cycles, std::uint64_t{75}, "MMA K + skew + M latency");
   check_eq(engine.stats().retired, std::uint64_t{1}, "MMA retires");
 
   tile_npu::DynInst dma{};
@@ -75,6 +80,28 @@ TEST_CASE(event_engine_uses_component_latencies) {
   dma.bytes = 64;
   engine.issue(dma);
   engine.retire(2);
-  check_eq(engine.stats().cycles, std::uint64_t{80}, "DMA latency follows bytes");
+  check_eq(engine.stats().cycles, std::uint64_t{81}, "DMA latency follows bytes");
   check_eq(engine.stats().retired, std::uint64_t{2}, "DMA retires");
+}
+
+TEST_CASE(mma_unit_prefers_separate_banks) {
+  tile_npu::DynInst mma{};
+  mma.id = 1;
+  mma.unit = tile_npu::Unit::mma;
+  mma.k = 8;
+  mma.rows = 4;
+  mma.src_count = 2;
+  mma.src[0] = tile_npu::DataRef{.domain = tile_npu::Domain::tile, .index = 0};
+  mma.src[1] = tile_npu::DataRef{.domain = tile_npu::Domain::tile, .index = 16};
+  mma.dst = tile_npu::DataRef{.domain = tile_npu::Domain::acc, .index = 0};
+
+  tile_npu::MmaUnit unit;
+  const auto separate_banks = unit.issue(mma, 0);
+  check_eq(separate_banks, std::uint64_t{75}, "separate Tile banks read in parallel");
+
+  unit.reset();
+  mma.src[1] = tile_npu::DataRef{.domain = tile_npu::Domain::tile, .index = 1};
+  const auto same_bank = unit.issue(mma, 0);
+  check_eq(same_bank, std::uint64_t{83}, "same Tile bank serializes the two reads");
+  check(same_bank > separate_banks, "bank conflict costs cycles");
 }

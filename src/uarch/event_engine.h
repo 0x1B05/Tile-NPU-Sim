@@ -1,5 +1,6 @@
 #pragma once
 
+#include "uarch/mma_unit.h"
 #include "uarch/uarch_state.h"
 
 #include <cstdint>
@@ -24,6 +25,7 @@ public:
 
 private:
   UarchState state_{};
+  MmaUnit mma_;
   std::unordered_map<std::uint64_t, std::uint64_t> completion_;
 };
 
