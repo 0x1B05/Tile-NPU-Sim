@@ -1,5 +1,6 @@
 #include "framework.h"
 
+#include "uarch/dma_unit.h"
 #include "uarch/event_engine.h"
 #include "uarch/event_queue.h"
 #include "uarch/mma_unit.h"
@@ -82,6 +83,18 @@ TEST_CASE(event_engine_uses_component_latencies) {
   engine.retire(2);
   check_eq(engine.stats().cycles, std::uint64_t{81}, "DMA latency follows bytes");
   check_eq(engine.stats().retired, std::uint64_t{2}, "DMA retires");
+}
+
+TEST_CASE(dma_unit_reserves_the_shared_bus) {
+  tile_npu::DmaUnit dma;
+  tile_npu::DynInst transfer{};
+  transfer.unit = tile_npu::Unit::dma;
+  transfer.bytes = 64;
+
+  const auto first = dma.issue(transfer, 0);
+  check_eq(first, std::uint64_t{6}, "64-byte transfer is two bus cycles plus latency");
+  const auto second = dma.issue(transfer, first);
+  check_eq(second, std::uint64_t{12}, "the next transfer waits for the bus");
 }
 
 TEST_CASE(mma_unit_prefers_separate_banks) {

@@ -38,12 +38,17 @@ std::uint64_t latency_of(const DynInst &inst) {
 void EventUarchEngine::reset() {
   state_ = UarchState{};
   mma_.reset();
+  dma_.reset();
   completion_.clear();
 }
 
 void EventUarchEngine::issue(const DynInst &inst) {
-  const auto finish = inst.unit == Unit::mma ? mma_.issue(inst, state_.events.now())
-                                             : state_.events.now() + latency_of(inst);
+  std::uint64_t finish = state_.events.now() + latency_of(inst);
+  if (inst.unit == Unit::mma) {
+    finish = mma_.issue(inst, state_.events.now());
+  } else if (inst.unit == Unit::dma) {
+    finish = dma_.issue(inst, state_.events.now());
+  }
   completion_[inst.id] = finish;
   state_.events.schedule(
       finish, [this, finish] { state_.stats.cycles = std::max(state_.stats.cycles, finish); });
