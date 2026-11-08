@@ -19,12 +19,15 @@ StepResult Machine::step() {
     return functional_.step();
   }
 
+  // The functional oracle runs ahead of timing, but never further than the
+  // dispatch window. When it is full, advance timing until a slot frees.
+  while (!uarch_->can_accept())
+    uarch_->advance();
+
   DynInst inst;
   const auto result = functional_.step_with_dyn_inst(&inst);
   if (result.status == StepStatus::retired) {
-    uarch_->issue(inst);
-    uarch_->retire(inst.id);
-    uarch_->advance();
+    uarch_->dispatch(inst);
   } else {
     uarch_->fence(FenceKind::all);
     uarch_->finish();

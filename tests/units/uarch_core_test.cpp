@@ -6,6 +6,7 @@
 #include "uarch/mma_unit.h"
 #include "uarch/queue.h"
 #include "uarch/resource_calendar.h"
+#include "uarch/scoreboard.h"
 #include "uarch/vector_unit.h"
 
 #include <cstddef>
@@ -14,16 +15,73 @@
 
 namespace {
 
-tile_npu::DynInst mma_inst(std::uint32_t k, std::uint32_t rows, std::uint8_t src_a,
-                           std::uint8_t src_b, std::uint8_t dst) {
+tile_npu::DataRef acc(std::uint8_t index) {
+  return tile_npu::DataRef{.domain = tile_npu::Domain::acc, .index = index};
+}
+
+tile_npu::DataRef tile(std::uint8_t index) {
+  return tile_npu::DataRef{.domain = tile_npu::Domain::tile, .index = index};
+}
+
+tile_npu::DataRef vec(std::uint8_t index) {
+  return tile_npu::DataRef{.domain = tile_npu::Domain::vec32, .index = index};
+}
+
+tile_npu::DynInst mma_inst(std::uint64_t id, std::uint32_t k, std::uint32_t rows,
+                           std::uint8_t src_a, std::uint8_t src_b, std::uint8_t dst) {
   tile_npu::DynInst inst{};
+  inst.id = id;
   inst.unit = tile_npu::Unit::mma;
   inst.k = k;
   inst.rows = rows;
   inst.src_count = 2;
-  inst.src[0] = tile_npu::DataRef{.domain = tile_npu::Domain::tile, .index = src_a};
-  inst.src[1] = tile_npu::DataRef{.domain = tile_npu::Domain::tile, .index = src_b};
-  inst.dst = tile_npu::DataRef{.domain = tile_npu::Domain::acc, .index = dst};
+  inst.src[0] = tile(src_a);
+  inst.src[1] = tile(src_b);
+  inst.dst = acc(dst);
+  return inst;
+}
+
+tile_npu::DynInst vector_inst(std::uint64_t id, tile_npu::DynOp op, std::uint32_t len,
+                              tile_npu::DataRef src, tile_npu::DataRef dst) {
+  tile_npu::DynInst inst{};
+  inst.id = id;
+  inst.unit = tile_npu::Unit::vector;
+  inst.op = op;
+  inst.len = len;
+  inst.src[0] = src;
+  inst.src_count = 1;
+  inst.dst = dst;
+  return inst;
+}
+
+tile_npu::DynInst scalar_inst(std::uint64_t id, std::uint8_t dst) {
+  tile_npu::DynInst inst{};
+  inst.id = id;
+  inst.unit = tile_npu::Unit::scalar;
+  inst.op = tile_npu::DynOp::scalar;
+  inst.dst = tile_npu::DataRef{.domain = tile_npu::Domain::scalar, .index = dst};
+  return inst;
+}
+
+tile_npu::DynInst dma_load(std::uint64_t id, std::uint32_t bytes, tile_npu::DataRef dst) {
+  tile_npu::DynInst inst{};
+  inst.id = id;
+  inst.unit = tile_npu::Unit::dma;
+  inst.op = tile_npu::DynOp::load;
+  inst.bytes = bytes;
+  inst.dst = dst;
+  return inst;
+}
+
+tile_npu::DynInst dma_store(std::uint64_t id, std::uint32_t bytes, tile_npu::DataRef src) {
+  tile_npu::DynInst inst{};
+  inst.id = id;
+  inst.unit = tile_npu::Unit::dma;
+  inst.op = tile_npu::DynOp::store;
+  inst.bytes = bytes;
+  inst.src[0] = src;
+  inst.src_count = 1;
+  inst.is_store = true;
   return inst;
 }
 
@@ -108,27 +166,151 @@ TEST_CASE(queue_models_capacity_and_order) {
   check(queue.empty(), "queue empties");
 }
 
+TEST_CASE(scoreboard_tracks_register_hazards) {
+  tile_npu::Scoreboard board;
+  board.dispatch(vector_inst(1, tile_npu::DynOp::elementwise, 8, acc(0), vec(0)));
+  board.dispatch(mma_inst(2, 8, 4, 0, 16, 0));
+
+  check(board.ready(1), "an instruction with no producer is ready");
+  check(!board.ready(2), "a writer waits for the older reader (WAR)");
+  board.complete(1);
+  check(board.ready(2), "completion releases the reader");
+
+  board.dispatch(vector_inst(3, tile_npu::DynOp::elementwise, 8, acc(0), vec(1)));
+  check(!board.ready(3), "a reader waits for the live writer (RAW)");
+  board.complete(2);
+  check(board.ready(3), "completion releases the writer");
+
+  tile_npu::DynInst zero_write{};
+  zero_write.id = 4;
+  zero_write.unit = tile_npu::Unit::scalar;
+  zero_write.dst = tile_npu::DataRef{.domain = tile_npu::Domain::scalar, .index = 0};
+  board.dispatch(zero_write);
+  tile_npu::DynInst zero_read{};
+  zero_read.id = 5;
+  zero_read.unit = tile_npu::Unit::scalar;
+  zero_read.src[0] = tile_npu::DataRef{.domain = tile_npu::Domain::scalar, .index = 0};
+  zero_read.src_count = 1;
+  board.dispatch(zero_read);
+  check(board.ready(5), "x0 never carries a hazard");
+
+  tile_npu::DynInst in_place{};
+  in_place.id = 6;
+  in_place.unit = tile_npu::Unit::vector;
+  in_place.src[0] = vec(2);
+  in_place.src_count = 1;
+  in_place.dst = vec(2);
+  board.dispatch(in_place);
+  check(board.ready(6), "source and destination do not self-block");
+}
+
 TEST_CASE(event_engine_uses_component_latencies) {
   tile_npu::EventUarchEngine engine;
   engine.reset();
 
-  auto mma = mma_inst(8, 4, 0, 16, 0);
-  mma.id = 1;
-  engine.issue(mma);
-  engine.retire(1);
+  engine.dispatch(mma_inst(1, 8, 4, 0, 16, 0));
+  check_eq(engine.stats().retired, std::uint64_t{0}, "a long MMA is still in flight");
+  engine.finish();
   check_eq(engine.stats().cycles, std::uint64_t{75}, "MMA K + skew + M latency");
   check_eq(engine.stats().retired, std::uint64_t{1}, "MMA retires");
   check_eq(engine.stats().unit_count[static_cast<std::size_t>(tile_npu::Unit::mma)],
            std::uint64_t{1}, "MMA unit is counted");
 
-  tile_npu::DynInst dma{};
-  dma.id = 2;
-  dma.unit = tile_npu::Unit::dma;
-  dma.bytes = 64;
-  engine.issue(dma);
-  engine.retire(2);
+  engine.dispatch(dma_load(2, 64, tile(0)));
+  engine.finish();
   check_eq(engine.stats().cycles, std::uint64_t{81}, "DMA latency follows bytes");
   check_eq(engine.stats().retired, std::uint64_t{2}, "DMA retires");
+}
+
+TEST_CASE(event_engine_overlaps_independent_units) {
+  tile_npu::EventUarchEngine engine;
+  engine.reset();
+
+  engine.dispatch(mma_inst(1, 8, 4, 0, 16, 0));
+  engine.dispatch(scalar_inst(2, 1));
+  check_eq(engine.stats().retired, std::uint64_t{1}, "the scalar finishes while the MMA runs");
+  engine.finish();
+
+  check_eq(engine.stats().cycles, std::uint64_t{75},
+           "the scalar does not extend the MMA completion");
+  check_eq(engine.stats().retired, std::uint64_t{2}, "both instructions retire");
+}
+
+TEST_CASE(event_engine_waits_for_raw_dependency) {
+  tile_npu::EventUarchEngine engine;
+  engine.reset();
+
+  engine.dispatch(mma_inst(1, 8, 4, 0, 16, 0)); // writes acc0
+  engine.dispatch(vector_inst(2, tile_npu::DynOp::elementwise, 8, acc(0), vec(0)));
+  engine.finish();
+
+  check_eq(engine.stats().cycles, std::uint64_t{81},
+           "the vector starts after the MMA and still pays its pipeline");
+}
+
+TEST_CASE(event_engine_waits_for_war_dependency) {
+  tile_npu::EventUarchEngine engine;
+  engine.reset();
+
+  engine.dispatch(vector_inst(1, tile_npu::DynOp::elementwise, 8, acc(0), vec(0)));
+  engine.dispatch(mma_inst(2, 8, 4, 0, 16, 0)); // overwrites acc0
+  engine.finish();
+
+  check_eq(engine.stats().cycles, std::uint64_t{81}, "the MMA waits for the older Acc reader");
+}
+
+TEST_CASE(event_engine_waits_for_waw_dependency) {
+  tile_npu::EventUarchEngine engine;
+  engine.reset();
+
+  engine.dispatch(mma_inst(1, 8, 4, 0, 16, 0));
+  engine.dispatch(vector_inst(2, tile_npu::DynOp::elementwise, 8, vec(1), acc(0)));
+  engine.finish();
+
+  check_eq(engine.stats().cycles, std::uint64_t{81}, "the younger writer waits for the MMA");
+}
+
+TEST_CASE(event_engine_issues_memory_in_program_order) {
+  tile_npu::EventUarchEngine engine;
+  engine.reset();
+
+  engine.dispatch(mma_inst(1, 8, 4, 0, 16, 0)); // writes acc0
+  engine.dispatch(dma_store(2, 32, acc(0)));    // waits for acc0
+  engine.dispatch(dma_load(3, 64, tile(0)));    // ready, but younger than the store
+  engine.finish();
+
+  check_eq(engine.stats().cycles, std::uint64_t{82},
+           "the load issues after the store instead of bypassing it");
+}
+
+TEST_CASE(event_engine_window_limits_run_ahead) {
+  tile_npu::EventUarchEngine engine;
+  engine.reset();
+
+  for (std::uint64_t i = 0; i < tile_npu::EventUarchEngine::WINDOW_DEPTH; ++i) {
+    check(engine.can_accept(), "window has room before the limit");
+    engine.dispatch(mma_inst(i, 8, 4, 0, 16, static_cast<std::uint8_t>(i % 16)));
+  }
+  check(!engine.can_accept(), "window is full");
+
+  engine.advance();
+  check(engine.can_accept(), "a completion frees a window slot");
+}
+
+TEST_CASE(event_engine_fence_waits_for_named_backend) {
+  tile_npu::EventUarchEngine engine;
+  engine.reset();
+
+  engine.dispatch(mma_inst(1, 8, 4, 0, 16, 0));
+  engine.dispatch(dma_load(2, 32, tile(2)));
+
+  engine.fence(tile_npu::FenceKind::sa);
+  check_eq(engine.stats().cycles, std::uint64_t{75}, "fence.sa waits for the MMA");
+  check_eq(engine.stats().retired, std::uint64_t{2}, "the DMA finished earlier");
+
+  engine.dispatch(scalar_inst(3, 1));
+  engine.finish();
+  check_eq(engine.stats().cycles, std::uint64_t{76}, "younger work starts at the fence");
 }
 
 TEST_CASE(dma_unit_reserves_the_shared_bus) {
@@ -165,7 +347,7 @@ TEST_CASE(vector_unit_uses_beats_and_op_class) {
 }
 
 TEST_CASE(mma_unit_prefers_separate_banks) {
-  auto mma = mma_inst(8, 4, 0, 16, 0);
+  auto mma = mma_inst(1, 8, 4, 0, 16, 0);
 
   tile_npu::MmaUnit unit;
   const auto separate_banks = unit.issue(mma, 0);
@@ -181,7 +363,7 @@ TEST_CASE(mma_unit_prefers_separate_banks) {
 }
 
 TEST_CASE(mma_unit_prunes_finished_bookings) {
-  const auto mma = mma_inst(8, 4, 0, 16, 0);
+  const auto mma = mma_inst(1, 8, 4, 0, 16, 0);
 
   tile_npu::MmaUnit unit;
   for (std::uint64_t now = 0; now < 10000; now += 100) {

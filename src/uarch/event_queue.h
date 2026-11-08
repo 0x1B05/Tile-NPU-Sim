@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <queue>
 #include <vector>
 
@@ -22,6 +23,12 @@ public:
   Time now() const { return now_; }
 
   bool empty() const { return events_.empty(); }
+
+  // Time of the earliest pending event, if any.
+  std::optional<Time> next_time() const {
+    if (events_.empty()) return std::nullopt;
+    return events_.top().when;
+  }
 
 private:
   struct Event {
