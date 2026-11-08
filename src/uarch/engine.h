@@ -8,17 +8,24 @@
 
 namespace tile_npu {
 
-// One counter per Unit; Unit::sync must remain the last enumerator.
-inline constexpr std::size_t unit_index(Unit unit) { return static_cast<std::size_t>(unit); }
-
-inline constexpr std::size_t UNIT_COUNT = unit_index(Unit::sync) + 1;
-
 struct UarchStats {
   std::uint64_t cycles = 0;
   // Instructions whose timing has completed.
   std::uint64_t retired = 0;
   // Instruction counts, indexed by Unit.
   std::array<std::uint64_t, UNIT_COUNT> unit_count{};
+
+  // Front-end cycles lost because the dispatch window was full, or because a
+  // target unit's issue queue had no free entry.
+  std::uint64_t window_stall_cycles = 0;
+  std::array<std::uint64_t, UNIT_COUNT> dispatch_stall_cycles{};
+  // Instruction-cycles queued but not issueable because of a register hazard.
+  std::array<std::uint64_t, UNIT_COUNT> dependency_stall_cycles{};
+  // Older memory operations holding the in-order DMA issue slot.
+  std::uint64_t memory_order_stall_cycles = 0;
+  // Sum of per-cycle queue occupancy and the observed high-water mark.
+  std::array<std::uint64_t, UNIT_COUNT> queue_occupancy_cycles{};
+  std::array<std::uint64_t, UNIT_COUNT> queue_peak{};
 
   std::uint64_t count(Unit unit) const { return unit_count[unit_index(unit)]; }
 };
@@ -47,7 +54,15 @@ public:
   virtual void dispatch(const DynInst &inst) = 0;
   // Waits until all in-flight work covered by `kind` has completed.
   virtual void fence(FenceKind kind) = 0;
+  // True when the dispatch window has room. This is only a fast pre-check:
+  // the target unit queue can still reject the instruction, so callers that
+  // need a hard guarantee use can_dispatch(inst).
   virtual bool can_accept() const = 0;
+  virtual bool can_dispatch(const DynInst &inst) const = 0;
+  virtual bool window_full() const = 0;
+  // Accounts front-end cycles lost to a full window or a full unit queue.
+  virtual void record_window_stall(std::uint64_t cycles) = 0;
+  virtual void record_dispatch_stall(Unit unit, std::uint64_t cycles) = 0;
   // Advances timing to the next scheduled completion.
   virtual void advance() = 0;
   // Drains all outstanding work; used at kernel end and on stops.

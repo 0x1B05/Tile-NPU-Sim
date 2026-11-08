@@ -2,9 +2,11 @@
 
 #include "tile_npu/simulator.h"
 #include "uarch/engine.h"
+#include "uarch/uarch_config.h"
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 
 namespace tile_npu {
 
@@ -21,7 +23,7 @@ enum class ExecutionMode { functional, uarch };
 // model execution-driven at the cost of a much larger state-management layer.
 class Machine {
 public:
-  Machine(AddressSpace &memory, ExecutionMode mode);
+  Machine(AddressSpace &memory, ExecutionMode mode, UarchConfig config = {});
   ~Machine();
 
   Machine(const Machine &) = delete;
@@ -39,9 +41,18 @@ public:
   const UarchStats &stats() const { return uarch_->stats(); }
 
 private:
+  // The functional step commits before the timing engine accepts the record.
+  // Holding the record here lets a full unit queue stall dispatch without
+  // losing or re-executing the instruction.
+  struct Pending {
+    DynInst inst{};
+    StepResult result{};
+  };
+
   ExecutionMode mode_;
   Simulator functional_;
   std::unique_ptr<UarchEngine> uarch_;
+  std::optional<Pending> pending_;
 };
 
 } // namespace tile_npu

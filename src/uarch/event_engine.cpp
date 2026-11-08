@@ -2,9 +2,12 @@
 
 #include "utils/common.h"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
+#include <utility>
 
 namespace tile_npu {
 namespace {
@@ -13,19 +16,28 @@ constexpr std::uint64_t SINGLE_CYCLE = 1;
 
 } // namespace
 
+EventUarchEngine::EventUarchEngine(UarchConfig config) : config_(std::move(config)) {
+  for (std::size_t i = 0; i < UNIT_COUNT; ++i) {
+    queues_[i] = Queue(config_.queue_depth[i]);
+  }
+}
+
 void EventUarchEngine::reset() {
   state_ = UarchState{};
   scoreboard_.reset();
   mma_.reset();
   dma_.reset();
   vector_.reset();
+  for (auto &queue : queues_) queue.clear();
   issue_cycle_.reset();
   unit_used_.fill(false);
   wakeup_.reset();
+  sample_cycle_ = 0;
+  sample_ = {};
 }
 
 void EventUarchEngine::dispatch(const DynInst &inst) {
-  if (!can_accept()) unreachable("dispatch into a full uarch window");
+  if (!can_dispatch(inst)) unreachable("dispatch into a full uarch window or unit queue");
 
   // A fence is a completion boundary for the backends it names. Waiting here
   // also delays every younger instruction, because dispatch advances in
@@ -34,6 +46,9 @@ void EventUarchEngine::dispatch(const DynInst &inst) {
 
   ++state_.stats.unit_count[unit_index(inst.unit)];
   scoreboard_.dispatch(inst);
+  if (!queues_[unit_index(inst.unit)].push(inst.id)) {
+    unreachable("dispatch into a full unit queue");
+  }
   issue_ready(state_.events.now());
 
   // The front end accepts one instruction per cycle.
@@ -52,20 +67,29 @@ bool EventUarchEngine::issue_ready(std::uint64_t now) {
   bool issued = false;
   const auto memory_head = next_memory_id();
 
-  for (const auto &[id, entry] : scoreboard_.entries()) {
-    if (!can_issue(entry, memory_head)) continue;
+  for (std::size_t unit = 0; unit < UNIT_COUNT; ++unit) {
+    if (unit_used_[unit]) continue;
 
-    const auto index = unit_index(entry.inst.unit);
-    if (unit_used_[index]) continue;
+    auto &queue = queues_[unit];
+    std::optional<std::uint64_t> candidate;
+    for (const auto id : queue.entries()) {
+      if (can_issue(scoreboard_.entries().at(id), memory_head)) {
+        candidate = id;
+        break;
+      }
+    }
+    if (!candidate) continue;
 
-    unit_used_[index] = true;
-    issue_one(id, now);
+    unit_used_[unit] = true;
+    queues_[unit].remove(*candidate);
+    issue_one(*candidate, now);
     issued = true;
   }
 
   // Instructions left over because their unit already issued this cycle get
   // another look next cycle; completion events alone would serialize them.
   if (issued && has_ready_work()) schedule_wakeup(now + SINGLE_CYCLE);
+  sample_queues(now);
   return issued;
 }
 
@@ -107,7 +131,27 @@ void EventUarchEngine::fence(FenceKind kind) {
   }
 }
 
-bool EventUarchEngine::can_accept() const { return scoreboard_.size() < WINDOW_DEPTH; }
+bool EventUarchEngine::can_accept() const {
+  return scoreboard_.size() < config_.window_depth;
+}
+
+bool EventUarchEngine::window_full() const { return !can_accept(); }
+
+bool EventUarchEngine::queue_full(Unit unit) const {
+  return queues_[unit_index(unit)].full();
+}
+
+bool EventUarchEngine::can_dispatch(const DynInst &inst) const {
+  return can_accept() && !queue_full(inst.unit);
+}
+
+void EventUarchEngine::record_window_stall(std::uint64_t cycles) {
+  state_.stats.window_stall_cycles += cycles;
+}
+
+void EventUarchEngine::record_dispatch_stall(Unit unit, std::uint64_t cycles) {
+  state_.stats.dispatch_stall_cycles[unit_index(unit)] += cycles;
+}
 
 void EventUarchEngine::advance() {
   if (const auto next = state_.events.next_time()) {
@@ -155,6 +199,38 @@ bool EventUarchEngine::has_ready_work() const {
     if (can_issue(pair.second, memory_head)) return true;
   }
   return false;
+}
+
+void EventUarchEngine::refresh_sample() {
+  sample_ = {};
+  const auto memory_head = next_memory_id();
+  for (std::size_t unit = 0; unit < UNIT_COUNT; ++unit) {
+    const auto &queue = queues_[unit];
+    sample_.occupancy[unit] = queue.size();
+    state_.stats.queue_peak[unit] = std::max(state_.stats.queue_peak[unit], queue.size());
+    for (const auto id : queue.entries()) {
+      const auto &entry = scoreboard_.entries().at(id);
+      if (!entry.deps.empty()) {
+        ++sample_.dependency_waits[unit];
+      } else if (entry.inst.unit == Unit::dma && memory_head != id) {
+        ++sample_.memory_waits;
+      }
+    }
+  }
+}
+
+void EventUarchEngine::sample_queues(std::uint64_t now) {
+  if (now > sample_cycle_) {
+    const auto delta = now - sample_cycle_;
+    for (std::size_t unit = 0; unit < UNIT_COUNT; ++unit) {
+      state_.stats.queue_occupancy_cycles[unit] +=
+          static_cast<std::uint64_t>(sample_.occupancy[unit]) * delta;
+      state_.stats.dependency_stall_cycles[unit] += sample_.dependency_waits[unit] * delta;
+    }
+    state_.stats.memory_order_stall_cycles += sample_.memory_waits * delta;
+    sample_cycle_ = now;
+  }
+  refresh_sample();
 }
 
 const UarchStats &EventUarchEngine::stats() const { return state_.stats; }

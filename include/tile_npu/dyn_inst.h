@@ -3,6 +3,7 @@
 #include "tile_npu/state.h"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 
@@ -15,6 +16,11 @@ enum class Domain : std::uint8_t { scalar, tile, acc, vec32 };
 // Execution resource a dynamic instruction belongs to. The functional
 // executor ignores this; the uarch engine uses it to dispatch to a component.
 enum class Unit : std::uint8_t { scalar, mma, vector, dma, config, sync };
+
+// One counter per Unit; Unit::sync must remain the last enumerator.
+inline constexpr std::size_t unit_index(Unit unit) { return static_cast<std::size_t>(unit); }
+
+inline constexpr std::size_t UNIT_COUNT = unit_index(Unit::sync) + 1;
 
 // Broad semantic class. It is intentionally coarser than the decoded IR:
 // timing cares about the resource class and shape, not the exact opcode.

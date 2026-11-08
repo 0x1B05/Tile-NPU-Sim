@@ -333,7 +333,12 @@ TEST_CASE(event_engine_issues_memory_in_program_order) {
 }
 
 TEST_CASE(event_engine_window_limits_run_ahead) {
-  tile_npu::EventUarchEngine engine;
+  // Isolate the dispatch window from the per-unit queues: both are large
+  // enough that only the window can reject the next MMA.
+  tile_npu::UarchConfig config;
+  config.window_depth = tile_npu::EventUarchEngine::WINDOW_DEPTH;
+  config.queue_depth.fill(tile_npu::EventUarchEngine::WINDOW_DEPTH);
+  tile_npu::EventUarchEngine engine(config);
   engine.reset();
 
   for (std::uint64_t i = 0; i < tile_npu::EventUarchEngine::WINDOW_DEPTH; ++i) {
@@ -344,6 +349,57 @@ TEST_CASE(event_engine_window_limits_run_ahead) {
 
   engine.advance();
   check(engine.can_accept(), "a completion frees a window slot");
+}
+
+TEST_CASE(event_engine_unit_queue_limits_dispatch) {
+  tile_npu::UarchConfig config;
+  config.window_depth = 16;
+  config.queue_depth.fill(4);
+  config.queue_depth[tile_npu::unit_index(tile_npu::Unit::scalar)] = 2;
+  tile_npu::EventUarchEngine engine(config);
+  engine.reset();
+
+  engine.dispatch(mma_inst(1, 8, 4, 0, 16, 0)); // long producer on acc0
+  engine.dispatch(scalar_read(2, acc(0), 1));
+  engine.dispatch(scalar_read(3, acc(0), 2));
+  check(!engine.can_dispatch(scalar_read(4, acc(0), 3)),
+        "a full scalar queue rejects younger scalar work");
+  check(engine.window_full() == false, "the window is not the blocker");
+
+  while (!engine.can_dispatch(scalar_read(4, acc(0), 3))) {
+    engine.advance();
+  }
+  engine.dispatch(scalar_read(4, acc(0), 3));
+  engine.finish();
+  check(engine.stats().retired == 4, "all instructions eventually retire");
+  check(engine.stats().queue_peak[tile_npu::unit_index(tile_npu::Unit::scalar)] >= 2,
+        "queue high-water mark is recorded");
+}
+
+TEST_CASE(event_engine_reports_dependency_and_memory_stalls) {
+  tile_npu::UarchConfig config;
+  config.window_depth = 16;
+  config.queue_depth.fill(8);
+  tile_npu::EventUarchEngine engine(config);
+  engine.reset();
+
+  engine.dispatch(mma_inst(1, 8, 4, 0, 16, 0)); // writes acc0
+  engine.dispatch(scalar_read(2, acc(0), 1));    // waits on the MMA
+  engine.dispatch(dma_store(3, 32, acc(0)));     // waits on the MMA
+  engine.dispatch(dma_load(4, 64, tile(1)));     // ready, blocked behind the store
+  engine.finish();
+
+  check(engine.stats().dependency_stall_cycles[tile_npu::unit_index(
+            tile_npu::Unit::scalar)] > 0,
+        "scalar dependency wait is attributed");
+  check(engine.stats().dependency_stall_cycles[tile_npu::unit_index(
+            tile_npu::Unit::dma)] > 0,
+        "DMA dependency wait is attributed");
+  check(engine.stats().memory_order_stall_cycles > 0,
+        "younger memory work waiting behind the head is attributed");
+  check(engine.stats().queue_occupancy_cycles[tile_npu::unit_index(
+            tile_npu::Unit::dma)] > 0,
+        "DMA queue occupancy is accumulated");
 }
 
 TEST_CASE(event_engine_fence_waits_for_named_backend) {

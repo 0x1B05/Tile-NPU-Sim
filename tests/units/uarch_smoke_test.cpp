@@ -77,6 +77,34 @@ TEST_CASE(machine_uarch_overlaps_mma_and_scalar) {
   check_eq(machine.stats().retired, std::uint64_t{2}, "both instructions complete on drain");
 }
 
+TEST_CASE(machine_uarch_counts_dispatch_window_stalls) {
+  tile_npu::Ram memory(CODE_BASE, 16);
+  write_word(memory, CODE_BASE, make_mma(0, 0, 0, 16)); // mma.nt.zero a0, t0, t16
+  write_word(memory, CODE_BASE + 4, make_mma(0, 1, 0, 16)); // mma.nt.zero a1, t0, t16
+  write_word(memory, CODE_BASE + 8, 0x00100073u);          // ebreak
+
+  tile_npu::UarchConfig config;
+  config.window_depth = 1;
+  tile_npu::Machine machine(memory, tile_npu::ExecutionMode::uarch, config);
+  machine.reset(CODE_BASE);
+  auto &state = machine.state();
+  tile_cfg(state, 0, tile_npu::DType::i8, 4, 8);
+  tile_cfg(state, 16, tile_npu::DType::i8, 5, 8);
+  acc_cfg(state, 0, tile_npu::DType::i32, 4, 5);
+  acc_cfg(state, 1, tile_npu::DType::i32, 4, 5);
+
+  check_eq(machine.step().status, tile_npu::StepStatus::retired, "first MMA step");
+  check_eq(machine.stats().cycles, std::uint64_t{1}, "window holds the first MMA");
+
+  check_eq(machine.step().status, tile_npu::StepStatus::retired, "second MMA step");
+  check(machine.stats().window_stall_cycles > 0,
+        "the second dispatch waits for the one-entry window");
+  check_eq(machine.stats().cycles, std::uint64_t{76}, "window stall delays the second MMA");
+
+  check_eq(machine.step().status, tile_npu::StepStatus::breakpoint, "ebreak drains the machine");
+  check_eq(machine.stats().retired, std::uint64_t{2}, "both MMAs retire");
+}
+
 TEST_CASE(machine_uarch_fence_blocks_younger_work) {
   tile_npu::Ram memory(CODE_BASE, 16);
   write_word(memory, CODE_BASE, make_mma(0, 0, 0, 16)); // mma.nt.zero a0, t0, t16

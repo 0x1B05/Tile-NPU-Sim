@@ -24,7 +24,14 @@ public:
   bool push(std::uint64_t id);
   std::optional<std::uint64_t> front() const;
   void pop();
+  // Out-of-order removal used when a younger ready instruction bypasses a
+  // blocked older one.
+  bool remove(std::uint64_t id);
   void clear();
+
+  // Entries in dispatch order. The engine scans this to find a ready
+  // instruction that is allowed to issue in the current cycle.
+  const std::deque<std::uint64_t> &entries() const { return entries_; }
 
 private:
   std::size_t depth_ = 0;

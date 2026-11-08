@@ -1,5 +1,7 @@
 #include "uarch/queue.h"
 
+#include <algorithm>
+
 namespace tile_npu {
 
 bool Queue::push(std::uint64_t id) {
@@ -15,6 +17,13 @@ std::optional<std::uint64_t> Queue::front() const {
 
 void Queue::pop() {
   if (!entries_.empty()) entries_.pop_front();
+}
+
+bool Queue::remove(std::uint64_t id) {
+  const auto it = std::find(entries_.begin(), entries_.end(), id);
+  if (it == entries_.end()) return false;
+  entries_.erase(it);
+  return true;
 }
 
 void Queue::clear() { entries_.clear(); }
