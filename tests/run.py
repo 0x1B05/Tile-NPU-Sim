@@ -9,13 +9,17 @@ xmake.
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 RV64IM_SRCDIR = ROOT / "tests" / "guest" / "rv64im"
-SUITES = ("host", "guest", "riscv-tests", "qwen3")
+NPU_SRCDIR = ROOT / "tests" / "guest" / "npu"
+UARCH_BASELINE = ROOT / "tests" / "uarch" / "baseline.json"
+SUITES = ("host", "guest", "uarch", "riscv-tests", "qwen3")
 
 
 class MissingPrerequisite(RuntimeError):
@@ -77,6 +81,12 @@ def rv64im_names() -> list[str]:
     return sorted(names)
 
 
+def uarch_image_names() -> list[str]:
+    names = {path.stem for path in NPU_SRCDIR.glob("*.S")}
+    names |= set(rv64im_names())
+    return sorted(names)
+
+
 def suite_host(args: argparse.Namespace) -> int:
     build_dir, _, _ = build_dirs(args)
     if args.build:
@@ -135,6 +145,134 @@ def suite_guest(args: argparse.Namespace) -> int:
 
     if not driver_names and not image_names:
         raise MissingPrerequisite(f"no guest tests match filter: {args.filter!r}")
+    return 1 if failures else 0
+
+
+def suite_uarch(args: argparse.Namespace) -> int:
+    build_dir, guest_dir, _ = build_dirs(args)
+    if args.build:
+        xmake_build(["guest_images", "sim", "sim_uarch"])
+
+    simulator = find_artifact("sim_uarch", args.simulator_uarch, build_dir)
+    if args.update_uarch_baseline and args.filter:
+        raise MissingPrerequisite("--update-uarch-baseline cannot be combined with --filter")
+
+    baseline: dict = {}
+    if UARCH_BASELINE.is_file():
+        baseline = json.loads(UARCH_BASELINE.read_text())
+    elif not args.update_uarch_baseline:
+        raise MissingPrerequisite(
+            f"missing uarch baseline: {UARCH_BASELINE} "
+            "(rerun with --update-uarch-baseline)"
+        )
+
+    image_names = [
+        name for name in uarch_image_names() if not args.filter or args.filter in name
+    ]
+    if not image_names:
+        raise MissingPrerequisite(f"no uarch guest images match filter: {args.filter!r}")
+
+    updates: dict[str, dict] = {}
+    failures = 0
+    with tempfile.TemporaryDirectory(prefix="tile-npu-uarch-") as tmp:
+        tmpdir = Path(tmp)
+        for name in image_names:
+            image = guest_dir / f"{name}.bin"
+            if not image.is_file():
+                raise MissingPrerequisite(f"missing guest image: {image}")
+
+            runs: dict[str, dict] = {}
+            for mode in ("functional", "uarch"):
+                json_path = tmpdir / f"{name}-{mode}.json"
+                cmd = [
+                    str(simulator),
+                    f"--mode={mode}",
+                    "--stats-json",
+                    str(json_path),
+                    str(image),
+                ]
+                result = subprocess.run(cmd, cwd=ROOT, text=True, capture_output=True)
+                if not json_path.is_file():
+                    print(
+                        f"[FAIL] uarch/{name} {mode}: no stats JSON\n{result.stderr}",
+                        file=sys.stderr,
+                    )
+                    failures += 1
+                    break
+                runs[mode] = json.loads(json_path.read_text())
+                runs[mode]["_returncode"] = result.returncode
+                if result.returncode != 0:
+                    print(
+                        f"[FAIL] uarch/{name} {mode}: exit {result.returncode}\n"
+                        f"{result.stderr}",
+                        file=sys.stderr,
+                    )
+                    failures += 1
+                    break
+
+            if "uarch" not in runs or "functional" not in runs:
+                continue
+
+            functional = runs["functional"]
+            uarch = runs["uarch"]
+            errors: list[str] = []
+            if functional["_returncode"] != uarch["_returncode"]:
+                errors.append(
+                    f"exit code differs: functional={functional['_returncode']} "
+                    f"uarch={uarch['_returncode']}"
+                )
+            if functional["exit_code"] != uarch["exit_code"]:
+                errors.append(
+                    f"a0 differs: functional={functional['exit_code']} "
+                    f"uarch={uarch['exit_code']}"
+                )
+            if functional["status"] != uarch["status"]:
+                errors.append(
+                    f"stop status differs: functional={functional['status']} "
+                    f"uarch={uarch['status']}"
+                )
+            if functional["arch_digest"] != uarch["arch_digest"]:
+                errors.append(
+                    f"architectural state differs: functional={functional['arch_digest']} "
+                    f"uarch={uarch['arch_digest']}"
+                )
+
+            expected = baseline.get("images", {}).get(name)
+            if expected is not None:
+                for key in ("cycles", "retired", "arch_digest"):
+                    if uarch.get(key) != expected.get(key):
+                        errors.append(
+                            f"{key} {uarch.get(key)!r} != baseline {expected.get(key)!r}"
+                        )
+                if uarch.get("unit_count") != expected.get("unit_count"):
+                    errors.append(
+                        f"unit_count {uarch.get('unit_count')!r} != "
+                        f"baseline {expected.get('unit_count')!r}"
+                    )
+            elif not args.update_uarch_baseline:
+                errors.append("no baseline entry (rerun with --update-uarch-baseline)")
+
+            updates[name] = {
+                "cycles": uarch.get("cycles"),
+                "retired": uarch.get("retired"),
+                "arch_digest": uarch.get("arch_digest"),
+                "unit_count": uarch.get("unit_count"),
+            }
+            if errors:
+                print(f"[FAIL] uarch/{name}: " + "; ".join(errors), file=sys.stderr)
+                failures += 1
+            else:
+                print(
+                    f"[PASS] uarch/{name} cycles={uarch.get('cycles')} "
+                    f"retired={uarch.get('retired')} digest={uarch.get('arch_digest')}"
+                )
+
+    if args.update_uarch_baseline:
+        UARCH_BASELINE.parent.mkdir(parents=True, exist_ok=True)
+        payload = {"schema": 1, "images": updates}
+        UARCH_BASELINE.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        print(f"updated uarch baseline: {UARCH_BASELINE}")
+
     return 1 if failures else 0
 
 
@@ -231,6 +369,8 @@ def run_suite(args: argparse.Namespace, suite: str) -> int:
         return suite_host(args)
     if suite == "guest":
         return suite_guest(args)
+    if suite == "uarch":
+        return suite_uarch(args)
     if suite == "riscv-tests":
         return suite_riscv_tests(args)
     if suite == "qwen3":
@@ -258,8 +398,14 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="for 'all', fail when an optional suite is unavailable",
     )
+    parser.add_argument(
+        "--update-uarch-baseline",
+        action="store_true",
+        help="rewrite tests/uarch/baseline.json from the current uarch runs",
+    )
     parser.add_argument("--build-dir", help="xmake build directory (default: build)")
     parser.add_argument("--sim-run", dest="simulator", help="sim executable")
+    parser.add_argument("--sim-uarch", dest="simulator_uarch", help="sim_uarch executable")
     parser.add_argument("--sim-tests", help="sim_tests executable")
     parser.add_argument("--sim-guest-tests", help="sim_guest_tests executable")
     parser.add_argument("--guest-dir", help="guest image directory")
@@ -276,7 +422,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             result = run_suite(args, suite)
         except MissingPrerequisite as error:
-            if args.suite == "all" and not args.strict and suite not in ("host", "guest"):
+            if args.suite == "all" and not args.strict and suite not in ("host", "guest", "uarch"):
                 print(f"[SKIP] {suite}: {error}", file=sys.stderr)
                 continue
             print(f"error: {suite}: {error}", file=sys.stderr)

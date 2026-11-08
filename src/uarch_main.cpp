@@ -4,10 +4,12 @@
 #include "tile_npu/platform/ram.h"
 #include "tile_npu/platform/serial.h"
 #include "uarch/machine.h"
+#include "uarch/state_digest.h"
 #include "utils/format.h"
 
 #include <CLI/CLI.hpp>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
@@ -31,6 +33,43 @@ bool parse_image_arg(std::string_view arg, Image &image) {
   image.address = tile_npu::monitor::MEMORY_BASE;
   if (at == std::string_view::npos) return !image.path.empty();
   return tile_npu::monitor::parse_u64(arg.substr(at + 1), image.address);
+}
+
+constexpr std::array<const char *, tile_npu::UNIT_COUNT> UNIT_NAMES{
+    "scalar", "mma", "vector", "dma", "config", "sync"};
+
+bool write_run_json(const std::string &path, tile_npu::ExecutionMode mode,
+                    const tile_npu::Machine &machine, const tile_npu::StepResult &result,
+                    int exit_code) {
+  std::ofstream out(path, std::ios::out | std::ios::trunc);
+  if (!out) {
+    std::cerr << "cannot open stats file: " << path << '\n';
+    return false;
+  }
+
+  const auto &state = machine.state();
+  out << "{\n";
+  out << "  \"mode\": \"" << (mode == tile_npu::ExecutionMode::uarch ? "uarch" : "functional")
+      << "\",\n";
+  out << "  \"status\": \"" << tile_npu::monitor::status_name(result.status) << "\",\n";
+  out << "  \"pc\": \"" << tile_npu::hex64(result.pc) << "\",\n";
+  out << "  \"a0\": " << state.scalar.read_x(tile_npu::monitor::EXIT_CODE_REG) << ",\n";
+  out << "  \"exit_code\": " << exit_code << ",\n";
+  out << "  \"arch_digest\": \"" << tile_npu::hex64(tile_npu::architectural_digest(state))
+      << "\"";
+  if (mode == tile_npu::ExecutionMode::uarch) {
+    const auto &stats = machine.stats();
+    out << ",\n  \"cycles\": " << stats.cycles;
+    out << ",\n  \"retired\": " << stats.retired;
+    out << ",\n  \"unit_count\": {";
+    for (std::size_t i = 0; i < tile_npu::UNIT_COUNT; ++i) {
+      if (i != 0) out << ", ";
+      out << '"' << UNIT_NAMES[i] << "\": " << stats.unit_count[i];
+    }
+    out << "}";
+  }
+  out << "\n}\n";
+  return out.good();
 }
 
 bool load_image(const Image &image, tile_npu::Ram &memory) {
@@ -65,6 +104,7 @@ int main(int argc, char **argv) {
   std::string mode_name = "functional";
   std::int64_t memory_mib = static_cast<std::int64_t>(tile_npu::monitor::DEFAULT_MEMORY_MIB);
   std::int64_t steps = -1;
+  std::string stats_json;
   std::vector<std::string> image_args;
 
   CLI::App app{"Tile-NPU functional/uarch simulator"};
@@ -73,6 +113,7 @@ int main(int argc, char **argv) {
       ->default_val("functional");
   app.add_option("-m,--memory", memory_mib, "RAM size in MiB")->check(CLI::PositiveNumber);
   app.add_option("-s,--steps", steps, "Retired-instruction limit (-1: unlimited)");
+  app.add_option("--stats-json", stats_json, "Write the final status and counters as JSON");
   app.add_option("images", image_args, "Program and data images (path[@0xADDR])")->required();
   CLI11_PARSE(app, argc, argv);
 
@@ -125,25 +166,32 @@ int main(int argc, char **argv) {
               << " sync=" << stats.count(tile_npu::Unit::sync) << '\n';
   }
 
+  int exit_code = 1;
   if (!stopped) {
     std::cerr << "step limit reached\n";
-    return 1;
+  } else {
+    switch (result.status) {
+    case tile_npu::StepStatus::breakpoint:
+    case tile_npu::StepStatus::kernel_end: {
+      const auto a0 = machine.state().scalar.read_x(tile_npu::monitor::EXIT_CODE_REG);
+      if (a0 != 0) {
+        std::cerr << "guest exited with a0=" << a0 << '\n';
+      }
+      exit_code = static_cast<int>(a0);
+      break;
+    }
+    default:
+      std::cerr << tile_npu::status_name(result.status) << " at pc="
+                << tile_npu::hex64(result.pc);
+      if (result.instr) std::cerr << " instruction=" << tile_npu::hex32(*result.instr);
+      if (result.fault_address) std::cerr << " address=" << tile_npu::hex64(*result.fault_address);
+      std::cerr << '\n';
+      break;
+    }
   }
 
-  switch (result.status) {
-  case tile_npu::StepStatus::breakpoint:
-  case tile_npu::StepStatus::kernel_end: {
-    const auto exit_code = machine.state().scalar.read_x(tile_npu::monitor::EXIT_CODE_REG);
-    if (exit_code != 0) {
-      std::cerr << "guest exited with a0=" << exit_code << '\n';
-    }
-    return static_cast<int>(exit_code);
-  }
-  default:
-    std::cerr << tile_npu::status_name(result.status) << " at pc=" << tile_npu::hex64(result.pc);
-    if (result.instr) std::cerr << " instruction=" << tile_npu::hex32(*result.instr);
-    if (result.fault_address) std::cerr << " address=" << tile_npu::hex64(*result.fault_address);
-    std::cerr << '\n';
+  if (!stats_json.empty() && !write_run_json(stats_json, mode, machine, result, exit_code)) {
     return 1;
   }
+  return exit_code;
 }

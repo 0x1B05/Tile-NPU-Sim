@@ -1,0 +1,187 @@
+{
+  "images": {
+    "cfg": {
+      "arch_digest": "0x7a97d2a4591a41a2",
+      "cycles": 22,
+      "retired": 22,
+      "unit_count": {
+        "config": 11,
+        "dma": 0,
+        "mma": 0,
+        "scalar": 11,
+        "sync": 0,
+        "vector": 0
+      }
+    },
+    "ebcast": {
+      "arch_digest": "0xe973903decf2ab2b",
+      "cycles": 118,
+      "retired": 118,
+      "unit_count": {
+        "config": 19,
+        "dma": 6,
+        "mma": 0,
+        "scalar": 89,
+        "sync": 2,
+        "vector": 2
+      }
+    },
+    "ecmp": {
+      "arch_digest": "0x4c041fb0d17c0c18",
+      "cycles": 251,
+      "retired": 251,
+      "unit_count": {
+        "config": 20,
+        "dma": 9,
+        "mma": 0,
+        "scalar": 212,
+        "sync": 5,
+        "vector": 5
+      }
+    },
+    "emask": {
+      "arch_digest": "0xb588b9f0fecd2270",
+      "cycles": 157,
+      "retired": 155,
+      "unit_count": {
+        "config": 20,
+        "dma": 4,
+        "mma": 0,
+        "scalar": 127,
+        "sync": 2,
+        "vector": 2
+      }
+    },
+    "er4": {
+      "arch_digest": "0xb37afaf652241bdd",
+      "cycles": 95,
+      "retired": 95,
+      "unit_count": {
+        "config": 22,
+        "dma": 8,
+        "mma": 0,
+        "scalar": 61,
+        "sync": 2,
+        "vector": 2
+      }
+    },
+    "eun": {
+      "arch_digest": "0x8853aae6ca288fa5",
+      "cycles": 242,
+      "retired": 222,
+      "unit_count": {
+        "config": 23,
+        "dma": 10,
+        "mma": 0,
+        "scalar": 179,
+        "sync": 5,
+        "vector": 5
+      }
+    },
+    "factorial": {
+      "arch_digest": "0xb199b23e558e5f69",
+      "cycles": 91,
+      "retired": 91,
+      "unit_count": {
+        "config": 0,
+        "dma": 0,
+        "mma": 0,
+        "scalar": 91,
+        "sync": 0,
+        "vector": 0
+      }
+    },
+    "init": {
+      "arch_digest": "0x2670b337478ab1f0",
+      "cycles": 75,
+      "retired": 64,
+      "unit_count": {
+        "config": 15,
+        "dma": 3,
+        "mma": 0,
+        "scalar": 39,
+        "sync": 3,
+        "vector": 4
+      }
+    },
+    "mem": {
+      "arch_digest": "0x3e7f9cf238f74513",
+      "cycles": 138,
+      "retired": 106,
+      "unit_count": {
+        "config": 35,
+        "dma": 13,
+        "mma": 0,
+        "scalar": 52,
+        "sync": 5,
+        "vector": 1
+      }
+    },
+    "mma": {
+      "arch_digest": "0x769957b23c3d9b8e",
+      "cycles": 550,
+      "retired": 236,
+      "unit_count": {
+        "config": 42,
+        "dma": 8,
+        "mma": 6,
+        "scalar": 165,
+        "sync": 6,
+        "vector": 9
+      }
+    },
+    "qnt": {
+      "arch_digest": "0x8014a3e662f3cf58",
+      "cycles": 130,
+      "retired": 115,
+      "unit_count": {
+        "config": 26,
+        "dma": 5,
+        "mma": 0,
+        "scalar": 74,
+        "sync": 3,
+        "vector": 7
+      }
+    },
+    "reduce": {
+      "arch_digest": "0xaa325127e194ed1a",
+      "cycles": 166,
+      "retired": 152,
+      "unit_count": {
+        "config": 31,
+        "dma": 10,
+        "mma": 0,
+        "scalar": 103,
+        "sync": 4,
+        "vector": 4
+      }
+    },
+    "rowlane": {
+      "arch_digest": "0x73394c86a77447b9",
+      "cycles": 88,
+      "retired": 70,
+      "unit_count": {
+        "config": 15,
+        "dma": 5,
+        "mma": 0,
+        "scalar": 41,
+        "sync": 4,
+        "vector": 5
+      }
+    },
+    "sys": {
+      "arch_digest": "0xb255a085025f7fda",
+      "cycles": 24,
+      "retired": 21,
+      "unit_count": {
+        "config": 6,
+        "dma": 1,
+        "mma": 0,
+        "scalar": 10,
+        "sync": 3,
+        "vector": 1
+      }
+    }
+  },
+  "schema": 1
+}
