@@ -15,14 +15,8 @@ namespace tile_npu {
 // the memory bus.
 class DmaUnit {
 public:
-  // Defaults of SimpleMemoryService; retained here for readability of the
-  // baseline timing documentation.
-  static constexpr std::uint64_t BUS_BYTES_PER_CYCLE = 32;
-  static constexpr std::uint64_t LATENCY = 4;
-
   // Null resources give the unit private defaults for component tests.
-  explicit DmaUnit(SramModel *sram = nullptr,
-                   std::unique_ptr<MemoryService> memory = nullptr);
+  explicit DmaUnit(SramModel *sram = nullptr, std::unique_ptr<MemoryService> memory = nullptr);
 
   void reset();
   std::uint64_t issue(const DynInst &inst, std::uint64_t now);

@@ -19,7 +19,7 @@ bool Scoreboard::is_zero(const DataRef &ref) {
 }
 
 std::pair<std::size_t, std::size_t> Scoreboard::locate(const DataRef &ref) {
-  const auto domain = static_cast<std::size_t>(ref.domain);
+  const auto domain = domain_index(ref.domain);
   if (domain >= DOMAIN_COUNT || ref.index >= DOMAIN_REGISTERS[domain]) {
     unreachable("dynamic instruction references an invalid register");
   }

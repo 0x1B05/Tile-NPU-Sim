@@ -340,12 +340,12 @@ TEST_CASE(event_engine_window_limits_run_ahead) {
   // Isolate the dispatch window from the per-unit queues: both are large
   // enough that only the window can reject the next MMA.
   tile_npu::UarchConfig config;
-  config.window_depth = tile_npu::EventUarchEngine::WINDOW_DEPTH;
-  config.queue_depth.fill(tile_npu::EventUarchEngine::WINDOW_DEPTH);
+  config.window_depth = tile_npu::DEFAULT_WINDOW_DEPTH;
+  config.queue_depth.fill(tile_npu::DEFAULT_WINDOW_DEPTH);
   tile_npu::EventUarchEngine engine(config);
   engine.reset();
 
-  for (std::uint64_t i = 0; i < tile_npu::EventUarchEngine::WINDOW_DEPTH; ++i) {
+  for (std::uint64_t i = 0; i < tile_npu::DEFAULT_WINDOW_DEPTH; ++i) {
     check(engine.can_accept(), "window has room before the limit");
     engine.dispatch(mma_inst(i, 8, 4, 0, 16, static_cast<std::uint8_t>(i % 16)));
   }
@@ -464,7 +464,7 @@ TEST_CASE(mma_unit_prefers_separate_banks) {
   tile_npu::MmaUnit unit;
   const auto separate_banks = unit.issue(mma, 0);
   check_eq(separate_banks, std::uint64_t{75}, "separate Tile banks read in parallel");
-  check_eq(tile_npu::MmaUnit::base_latency(8, 4), separate_banks,
+  check_eq(tile_npu::MmaConfig{}.latency(8, 4), separate_banks,
            "issue latency matches the component formula");
 
   unit.reset();

@@ -7,8 +7,7 @@
 namespace tile_npu {
 
 Machine::Machine(AddressSpace &memory, ExecutionMode mode, UarchConfig config)
-    : mode_(mode),
-      functional_(memory),
+    : mode_(mode), functional_(memory),
       uarch_(std::make_unique<EventUarchEngine>(std::move(config))) {}
 
 Machine::~Machine() = default;
@@ -42,9 +41,7 @@ StepResult Machine::step() {
   // cycle to the blocking structure.
   while (!uarch_->can_dispatch(pending_->inst)) {
     const bool blocked_by_window = uarch_->window_full();
-    const auto before = uarch_->stats().cycles;
-    uarch_->advance();
-    const auto waited = uarch_->stats().cycles - before;
+    const auto waited = uarch_->advance();
     if (blocked_by_window) {
       uarch_->record_window_stall(waited);
     } else {

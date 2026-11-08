@@ -15,8 +15,6 @@ namespace tile_npu {
 // with DMA and MMA traffic.
 class VectorUnit {
 public:
-  static constexpr std::uint64_t LANES = 8;
-
   explicit VectorUnit(SramModel *sram = nullptr, VectorConfig config = {});
 
   void reset();

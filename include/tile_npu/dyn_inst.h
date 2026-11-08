@@ -13,6 +13,13 @@ namespace tile_npu {
 // domains because ScalarState lives outside the Tile/Acc/Vec arrays.
 enum class Domain : std::uint8_t { scalar, tile, acc, vec32 };
 
+inline constexpr std::size_t domain_index(Domain domain) {
+  return static_cast<std::size_t>(domain);
+}
+
+// One counter per Domain; Domain::vec32 must remain the last enumerator.
+inline constexpr std::size_t DOMAIN_COUNT = domain_index(Domain::vec32) + 1;
+
 // Execution resource a dynamic instruction belongs to. The functional
 // executor ignores this; the uarch engine uses it to dispatch to a component.
 enum class Unit : std::uint8_t { scalar, mma, vector, dma, config, sync };

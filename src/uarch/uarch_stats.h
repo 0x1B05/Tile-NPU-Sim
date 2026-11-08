@@ -11,7 +11,8 @@ namespace tile_npu {
 // Domain order matches enum Domain: scalar, tile, acc, vec32. The scalar
 // domain does not have a register-file SRAM model, but keeping the slot makes
 // the array index equal to the Domain value.
-inline constexpr std::size_t SRAM_DOMAIN_COUNT = static_cast<std::size_t>(Domain::vec32) + 1;
+inline constexpr std::size_t SRAM_DOMAIN_COUNT = DOMAIN_COUNT;
+inline constexpr std::size_t FIRST_SRAM_DOMAIN = domain_index(Domain::tile);
 
 // On-chip SRAM activity for one register-file domain.
 struct SramDomainStats {

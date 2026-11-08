@@ -12,7 +12,8 @@ The sweep file is a JSON object mapping a --uarch-set key to a list of values:
 Every image is run for the Cartesian product of those values. The base
 configuration is a normal uarch JSON file and is applied before the sweep
 overrides. Results are written as CSV (one row per image and point) and JSON
-(with the full nested run record) for plotting.
+(with the full nested run record) for plotting. CSV column names are flattened
+with underscores and match the columns written by --stats-csv.
 
 Examples:
 
@@ -98,7 +99,7 @@ def sweep_points(sweep: dict[str, Any]) -> list[dict[str, Any]]:
 def flatten(prefix: str, value: Any, out: dict[str, Any]) -> None:
     if isinstance(value, dict):
         for key, child in value.items():
-            flatten(f"{prefix}.{key}" if prefix else str(key), child, out)
+            flatten(f"{prefix}_{key}" if prefix else str(key), child, out)
     elif isinstance(value, list):
         out[prefix] = json.dumps(value, separators=(",", ":"))
     else:
@@ -153,9 +154,17 @@ def run_one(
 
 def record_flat(record: dict[str, Any]) -> dict[str, Any]:
     flat: dict[str, Any] = {}
-    flatten("", {key: value for key, value in record.items() if key not in ("sweep", "stderr")}, flat)
+    for key, value in record.items():
+        if key in ("sweep", "stderr"):
+            continue
+        # Merge the effective configuration into the top level so its columns
+        # match the config fields written by --stats-csv.
+        if key == "uarch_config":
+            flatten("", value, flat)
+        else:
+            flatten("", {key: value}, flat)
     for key, value in record.get("sweep", {}).items():
-        flat[key] = value
+        flat[key.replace(".", "_")] = value
     return flat
 
 

@@ -1,14 +1,12 @@
 #include "uarch/vector_unit.h"
 
+#include "utils/common.h"
+
 #include <algorithm>
 #include <cstdint>
 
 namespace tile_npu {
 namespace {
-
-std::uint64_t ceil_div(std::uint64_t value, std::uint64_t divisor) {
-  return (value + divisor - 1) / divisor;
-}
 
 std::uint64_t log2_ceil(std::uint64_t value) {
   std::uint64_t result = 0;

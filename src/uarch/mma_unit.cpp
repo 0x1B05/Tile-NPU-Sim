@@ -17,7 +17,7 @@ std::uint64_t MmaUnit::issue(const DynInst &inst, std::uint64_t now) {
   const auto k = std::max<std::uint64_t>(1, inst.k);
   const auto m = std::max<std::uint64_t>(1, inst.rows);
 
-  const auto latency = config_.read_latency + k + config_.input_skew + config_.output_skew + m;
+  const auto latency = config_.latency(k, m);
   if (inst.src_count < 2 || inst.dst_count == 0 || inst.src[0].domain != Domain::tile ||
       inst.src[1].domain != Domain::tile) {
     return now + latency;

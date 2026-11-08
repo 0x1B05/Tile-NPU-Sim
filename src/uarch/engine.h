@@ -41,8 +41,9 @@ public:
   // Accounts front-end cycles lost to a full window or a full unit queue.
   virtual void record_window_stall(std::uint64_t cycles) = 0;
   virtual void record_dispatch_stall(Unit unit, std::uint64_t cycles) = 0;
-  // Advances timing to the next scheduled completion.
-  virtual void advance() = 0;
+  // Advances timing to the next scheduled completion and returns the number
+  // of cycles that elapsed. Used by the front end to attribute dispatch stalls.
+  virtual std::uint64_t advance() = 0;
   // Drains all outstanding work; used at kernel end and on stops.
   virtual void finish() = 0;
 

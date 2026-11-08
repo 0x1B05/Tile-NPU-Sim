@@ -25,19 +25,18 @@ struct SramDomainConfig {
 struct SramConfig {
   std::array<SramDomainConfig, SRAM_DOMAIN_COUNT> domains = [] {
     std::array<SramDomainConfig, SRAM_DOMAIN_COUNT> result{};
-    result[static_cast<std::size_t>(Domain::tile)] =
-        SramDomainConfig{.banks = 2,
-                         .ports_per_bank = 1,
-                         .bank_width_bytes = 32,
-                         .registers = TILE_REGISTERS,
-                         .bytes_per_register = MATRIX_ELEMENTS};
-    result[static_cast<std::size_t>(Domain::acc)] =
+    result[domain_index(Domain::tile)] = SramDomainConfig{.banks = 2,
+                                                          .ports_per_bank = 1,
+                                                          .bank_width_bytes = 32,
+                                                          .registers = TILE_REGISTERS,
+                                                          .bytes_per_register = MATRIX_ELEMENTS};
+    result[domain_index(Domain::acc)] =
         SramDomainConfig{.banks = 2,
                          .ports_per_bank = 1,
                          .bank_width_bytes = 32,
                          .registers = ACC_REGISTERS,
                          .bytes_per_register = MATRIX_ELEMENTS * sizeof(std::uint32_t)};
-    result[static_cast<std::size_t>(Domain::vec32)] =
+    result[domain_index(Domain::vec32)] =
         SramDomainConfig{.banks = 2,
                          .ports_per_bank = 1,
                          .bank_width_bytes = 32,

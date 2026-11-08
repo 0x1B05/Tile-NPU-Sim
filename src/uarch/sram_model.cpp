@@ -9,19 +9,10 @@
 #include <vector>
 
 namespace tile_npu {
-namespace {
-
-std::size_t domain_index(Domain domain) { return static_cast<std::size_t>(domain); }
-
-std::uint64_t ceil_div(std::uint64_t value, std::uint64_t divisor) {
-  return (value + divisor - 1) / divisor;
-}
-
-} // namespace
 
 SramModel::SramModel(SramConfig config, SramStats *stats)
     : config_(config), stats_(stats != nullptr ? stats : &local_stats_) {
-  for (std::size_t domain = 1; domain < SRAM_DOMAIN_COUNT; ++domain) {
+  for (std::size_t domain = FIRST_SRAM_DOMAIN; domain < SRAM_DOMAIN_COUNT; ++domain) {
     const auto &domain_config_value = config_.domains[domain];
     auto &domain_banks = banks_[domain];
     domain_banks.reserve(domain_config_value.banks);
@@ -47,7 +38,7 @@ const SramDomainConfig &SramModel::domain_config(Domain domain) const {
 
 void SramModel::touch_stats(Domain domain, bool write, std::uint32_t bytes,
                             std::uint64_t busy_cycles, bool conflict) {
-  auto update = [&](SramDomainStats &target) {
+  const auto update = [&](auto &target) {
     ++target.accesses;
     if (write) {
       ++target.writes;
@@ -60,16 +51,7 @@ void SramModel::touch_stats(Domain domain, bool write, std::uint32_t bytes,
     if (conflict) ++target.conflicts;
   };
 
-  ++stats_->accesses;
-  if (write) {
-    ++stats_->writes;
-    stats_->write_bytes += bytes;
-  } else {
-    ++stats_->reads;
-    stats_->read_bytes += bytes;
-  }
-  stats_->busy_cycles += busy_cycles;
-  if (conflict) ++stats_->conflicts;
+  update(*stats_);
   update(stats_->domains[domain_index(domain)]);
 }
 

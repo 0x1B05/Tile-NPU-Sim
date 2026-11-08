@@ -1,11 +1,17 @@
 #pragma once
 
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <source_location>
 #include <string_view>
 
 namespace tile_npu {
+
+// Unsigned ceiling division for positive divisors.
+inline constexpr std::uint64_t ceil_div(std::uint64_t value, std::uint64_t divisor) {
+  return (value + divisor - 1) / divisor;
+}
 
 // Composes several lambdas into one std::visit visitor.
 template <typename... Ts> struct Overloaded : Ts... {

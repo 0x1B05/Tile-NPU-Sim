@@ -17,6 +17,10 @@ struct MmaConfig {
   std::uint64_t read_latency = 1;
   std::uint64_t input_skew = 31;
   std::uint64_t output_skew = 31;
+
+  constexpr std::uint64_t latency(std::uint64_t k, std::uint64_t m) const {
+    return read_latency + k + input_skew + output_skew + m;
+  }
 };
 
 struct VectorConfig {

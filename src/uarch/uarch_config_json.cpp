@@ -1,5 +1,7 @@
 #include "uarch/uarch_config_json.h"
 
+#include "uarch/uarch_names.h"
+
 #include <charconv>
 #include <cstddef>
 #include <cstdint>
@@ -13,12 +15,6 @@
 
 namespace tile_npu {
 namespace {
-
-constexpr std::array<const char *, UNIT_COUNT> UNIT_NAMES{"scalar", "mma",    "vector",
-                                                          "dma",    "config", "sync"};
-
-constexpr std::array<const char *, SRAM_DOMAIN_COUNT> DOMAIN_NAMES{"scalar", "tile", "acc",
-                                                                   "vec32"};
 
 std::string full_key(std::string_view prefix, std::string_view key) {
   if (prefix.empty()) return std::string(key);
@@ -149,40 +145,76 @@ bool parse_u64(std::string_view text, std::uint64_t &value) {
   return result.ec == std::errc{} && result.ptr == end;
 }
 
-bool parse_unit(std::string_view text, Unit &unit) {
-  for (std::size_t i = 0; i < UNIT_COUNT; ++i) {
-    if (text == UNIT_NAMES[i]) {
-      unit = static_cast<Unit>(i);
-      return true;
-    }
-  }
-  return false;
-}
-
-bool parse_domain(std::string_view text, Domain &domain) {
-  if (text == "tile") {
-    domain = Domain::tile;
-    return true;
-  }
-  if (text == "acc") {
-    domain = Domain::acc;
-    return true;
-  }
-  if (text == "vec32" || text == "vec") {
-    domain = Domain::vec32;
-    return true;
-  }
-  return false;
-}
-
-bool set_value(std::uint64_t value, std::uint64_t minimum, std::string_view key, std::string &error,
-               std::uint64_t &slot) {
+template <typename T>
+bool set_number(std::uint64_t value, std::uint64_t minimum, std::string_view key,
+                std::string &error, T &slot) {
   if (value < minimum) {
     error = std::string(key) + " must be at least " + std::to_string(minimum);
     return false;
   }
-  slot = value;
+  slot = static_cast<T>(value);
   return true;
+}
+
+bool apply_setting(std::string_view key, std::string_view text, UarchConfig &config,
+                   std::string &error) {
+  std::uint64_t value = 0;
+  if (!parse_u64(text, value)) {
+    error = "invalid unsigned integer for " + std::string(key) + ": " + std::string(text);
+    return false;
+  }
+
+  if (key == "window_depth") return set_number(value, 1, key, error, config.window_depth);
+
+  constexpr std::string_view queue_prefix = "queue_depth.";
+  if (key.starts_with(queue_prefix)) {
+    const auto unit = parse_unit(key.substr(queue_prefix.size()));
+    if (!unit) {
+      error = "unknown unit in " + std::string(key);
+      return false;
+    }
+    return set_number(value, 1, key, error, config.queue_depth[unit_index(*unit)]);
+  }
+
+  if (key == "mma.read_latency") {
+    return set_number(value, 0, key, error, config.mma.read_latency);
+  }
+  if (key == "mma.input_skew") return set_number(value, 0, key, error, config.mma.input_skew);
+  if (key == "mma.output_skew") return set_number(value, 0, key, error, config.mma.output_skew);
+  if (key == "vector.lanes") return set_number(value, 1, key, error, config.vector.lanes);
+  if (key == "memory.bytes_per_cycle") {
+    return set_number(value, 1, key, error, config.memory.bytes_per_cycle);
+  }
+  if (key == "memory.latency") return set_number(value, 0, key, error, config.memory.latency);
+
+  constexpr std::string_view sram_prefix = "sram.";
+  if (key.starts_with(sram_prefix)) {
+    const auto rest = key.substr(sram_prefix.size());
+    const auto dot = rest.rfind('.');
+    if (dot == std::string_view::npos) {
+      error = "expected sram.<domain>.<field>: " + std::string(key);
+      return false;
+    }
+    const auto domain = parse_sram_domain(rest.substr(0, dot));
+    if (!domain) {
+      error = "unknown SRAM domain in " + std::string(key);
+      return false;
+    }
+    const auto field = rest.substr(dot + 1);
+    auto &domain_config = config.sram.domains[domain_index(*domain)];
+    if (field == "banks") return set_number(value, 1, key, error, domain_config.banks);
+    if (field == "ports" || field == "ports_per_bank") {
+      return set_number(value, 1, key, error, domain_config.ports_per_bank);
+    }
+    if (field == "width" || field == "bank_width_bytes") {
+      return set_number(value, 1, key, error, domain_config.bank_width_bytes);
+    }
+    error = "unknown SRAM field in " + std::string(key);
+    return false;
+  }
+
+  error = "unknown uarch setting: " + std::string(key);
+  return false;
 }
 
 } // namespace
@@ -193,100 +225,7 @@ bool apply_uarch_setting(std::string_view setting, UarchConfig &config, std::str
     error = "expected key=value";
     return false;
   }
-  const auto key = setting.substr(0, equals);
-  const auto text = setting.substr(equals + 1);
-  std::uint64_t value = 0;
-  if (!parse_u64(text, value)) {
-    error = "invalid unsigned integer for " + std::string(key) + ": " + std::string(text);
-    return false;
-  }
-
-  if (key == "window_depth") {
-    std::uint64_t bounded = 0;
-    if (!set_value(value, 1, key, error, bounded)) return false;
-    config.window_depth = static_cast<std::size_t>(bounded);
-    return true;
-  }
-
-  constexpr std::string_view queue_prefix = "queue_depth.";
-  if (key.starts_with(queue_prefix)) {
-    Unit unit{};
-    if (!parse_unit(key.substr(queue_prefix.size()), unit)) {
-      error = "unknown unit in " + std::string(key);
-      return false;
-    }
-    std::uint64_t bounded = 0;
-    if (!set_value(value, 1, key, error, bounded)) return false;
-    config.queue_depth[unit_index(unit)] = static_cast<std::size_t>(bounded);
-    return true;
-  }
-
-  if (key == "mma.read_latency") {
-    config.mma.read_latency = value;
-    return true;
-  }
-  if (key == "mma.input_skew") {
-    config.mma.input_skew = value;
-    return true;
-  }
-  if (key == "mma.output_skew") {
-    config.mma.output_skew = value;
-    return true;
-  }
-  if (key == "vector.lanes") {
-    std::uint64_t bounded = 0;
-    if (!set_value(value, 1, key, error, bounded)) return false;
-    config.vector.lanes = bounded;
-    return true;
-  }
-  if (key == "memory.bytes_per_cycle") {
-    std::uint64_t bounded = 0;
-    if (!set_value(value, 1, key, error, bounded)) return false;
-    config.memory.bytes_per_cycle = bounded;
-    return true;
-  }
-  if (key == "memory.latency") {
-    config.memory.latency = value;
-    return true;
-  }
-
-  constexpr std::string_view sram_prefix = "sram.";
-  if (key.starts_with(sram_prefix)) {
-    const auto rest = key.substr(sram_prefix.size());
-    const auto dot = rest.rfind('.');
-    if (dot == std::string_view::npos) {
-      error = "expected sram.<domain>.<field>: " + std::string(key);
-      return false;
-    }
-    Domain domain{};
-    if (!parse_domain(rest.substr(0, dot), domain)) {
-      error = "unknown SRAM domain in " + std::string(key);
-      return false;
-    }
-    const auto field = rest.substr(dot + 1);
-    auto &domain_config = config.sram.domains[static_cast<std::size_t>(domain)];
-    std::uint64_t bounded = 0;
-    if (field == "banks") {
-      if (!set_value(value, 1, key, error, bounded)) return false;
-      domain_config.banks = static_cast<std::size_t>(bounded);
-      return true;
-    }
-    if (field == "ports" || field == "ports_per_bank") {
-      if (!set_value(value, 1, key, error, bounded)) return false;
-      domain_config.ports_per_bank = static_cast<std::size_t>(bounded);
-      return true;
-    }
-    if (field == "width" || field == "bank_width_bytes") {
-      if (!set_value(value, 1, key, error, bounded)) return false;
-      domain_config.bank_width_bytes = static_cast<std::size_t>(bounded);
-      return true;
-    }
-    error = "unknown SRAM field in " + std::string(key);
-    return false;
-  }
-
-  error = "unknown uarch setting: " + std::string(key);
-  return false;
+  return apply_setting(setting.substr(0, equals), setting.substr(equals + 1), config, error);
 }
 
 bool apply_uarch_config_json(std::string_view text, UarchConfig &config, std::string &error) {
@@ -295,7 +234,7 @@ bool apply_uarch_config_json(std::string_view text, UarchConfig &config, std::st
   if (!parser.parse(values, error)) return false;
 
   for (const auto &[key, value] : values) {
-    if (!apply_uarch_setting(key + "=" + value, config, error)) return false;
+    if (!apply_setting(key, value, config, error)) return false;
   }
   return true;
 }
@@ -328,9 +267,9 @@ std::string uarch_config_json(const UarchConfig &config) {
   out << "  \"memory\": {\"bytes_per_cycle\": " << config.memory.bytes_per_cycle
       << ", \"latency\": " << config.memory.latency << "},\n";
   out << "  \"sram\": {\n";
-  for (std::size_t domain = 1; domain < SRAM_DOMAIN_COUNT; ++domain) {
+  for (std::size_t domain = FIRST_SRAM_DOMAIN; domain < SRAM_DOMAIN_COUNT; ++domain) {
     const auto &domain_config = config.sram.domains[domain];
-    out << "    \"" << DOMAIN_NAMES[domain] << "\": {\"banks\": " << domain_config.banks
+    out << "    \"" << SRAM_DOMAIN_NAMES[domain] << "\": {\"banks\": " << domain_config.banks
         << ", \"ports\": " << domain_config.ports_per_bank
         << ", \"width\": " << domain_config.bank_width_bytes << "}";
     if (domain + 1 != SRAM_DOMAIN_COUNT) out << ',';

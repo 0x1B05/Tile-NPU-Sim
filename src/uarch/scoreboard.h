@@ -62,7 +62,6 @@ private:
   };
 
   // Domain order matches the enum: scalar, tile, acc, vec32.
-  static constexpr std::size_t DOMAIN_COUNT = static_cast<std::size_t>(Domain::vec32) + 1;
   static constexpr std::array<std::size_t, DOMAIN_COUNT> DOMAIN_REGISTERS{
       SCALAR_REGISTERS, TILE_REGISTERS, ACC_REGISTERS, VECTOR_REGISTERS};
   static constexpr std::size_t REG_COUNT =

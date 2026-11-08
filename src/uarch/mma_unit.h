@@ -21,22 +21,13 @@ namespace tile_npu {
 //   * issue() returns the completion cycle, i.e. the first cycle after the
 //     last action, when the done event fires.
 //
-// Uncontended latency is therefore
-//   READ_LATENCY + K + INPUT_SKEW + OUTPUT_SKEW + M = K + 63 + M
-// cycles. READ_LATENCY covers the synchronous Tile return, INPUT_SKEW covers
-// the 31-lane array fill, OUTPUT_SKEW covers the 31-cycle output alignment,
-// and M is one Acc writeback per result row.
+// Uncontended latency is
+//   read_latency + K + input_skew + output_skew + M = K + 63 + M
+// cycles with the default configuration. read_latency covers the synchronous
+// Tile return, input_skew covers the 31-lane array fill, output_skew covers
+// the 31-cycle output alignment, and M is one Acc writeback per result row.
 class MmaUnit {
 public:
-  static constexpr std::uint64_t READ_LATENCY = 1;
-  static constexpr std::uint64_t INPUT_SKEW = 31;
-  static constexpr std::uint64_t OUTPUT_SKEW = 31;
-
-  // `k` and `m` are the effective (non-zero) reduction depth and row count.
-  static constexpr std::uint64_t base_latency(std::uint64_t k, std::uint64_t m) {
-    return READ_LATENCY + k + INPUT_SKEW + OUTPUT_SKEW + m;
-  }
-
   // A null shared model gives the unit a private default model, which keeps
   // component tests independent of the engine.
   explicit MmaUnit(SramModel *sram = nullptr, MmaConfig config = {});

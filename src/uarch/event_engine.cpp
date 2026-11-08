@@ -14,6 +14,15 @@ namespace {
 
 constexpr std::uint64_t SINGLE_CYCLE = 1;
 
+constexpr bool fence_covers(FenceKind kind, Unit unit) {
+  switch (kind) {
+  case FenceKind::mem: return unit == Unit::dma;
+  case FenceKind::sa: return unit == Unit::mma;
+  case FenceKind::all: return true;
+  }
+  return false;
+}
+
 } // namespace
 
 EventUarchEngine::EventUarchEngine(UarchConfig config)
@@ -33,8 +42,9 @@ void EventUarchEngine::reset() {
   mma_.reset();
   dma_.reset();
   vector_.reset();
-  for (auto &queue : queues_)
+  for (auto &queue : queues_) {
     queue.clear();
+  }
   issue_cycle_.reset();
   unit_used_.fill(false);
   wakeup_.reset();
@@ -158,13 +168,15 @@ void EventUarchEngine::record_dispatch_stall(Unit unit, std::uint64_t cycles) {
   state_.stats.dispatch_stall_cycles[unit_index(unit)] += cycles;
 }
 
-void EventUarchEngine::advance() {
+std::uint64_t EventUarchEngine::advance() {
+  const auto before = state_.stats.cycles;
   if (const auto next = state_.events.next_time()) {
     state_.events.run_until(*next);
   } else if (!issue_ready(state_.events.now())) {
     unreachable("uarch window cannot make progress");
   }
   state_.stats.cycles = state_.events.now();
+  return state_.stats.cycles - before;
 }
 
 void EventUarchEngine::finish() {
@@ -175,10 +187,7 @@ void EventUarchEngine::finish() {
 
 bool EventUarchEngine::has_work(FenceKind kind) const {
   for (const auto &pair : scoreboard_.entries()) {
-    const auto unit = pair.second.inst.unit;
-    const bool covered = kind == FenceKind::all || (kind == FenceKind::mem && unit == Unit::dma) ||
-                         (kind == FenceKind::sa && unit == Unit::mma);
-    if (covered) return true;
+    if (fence_covers(kind, pair.second.inst.unit)) return true;
   }
   return false;
 }

@@ -91,7 +91,7 @@ python3 scripts/uarch/sweep.py \
 
 Use `--images mma ecmp` to restrict the image set, `--base` for a base configuration, `--set KEY=VALUE` for fixed overrides, and `--jobs N` for parallel runs. `python3 tests/run.py uarch --build` checks the end-to-end regression against `tests/uarch/baseline.json`; rerun with `--update-uarch-baseline` after an intentional timing-model change.
 
-The stats record reports per-unit instruction counts, busy cycles, utilization and peak in-flight instructions, front-end dispatch stalls, dependency and memory-order stalls, queue occupancy/peak, aggregate and per-domain SRAM reads/writes/conflicts/bandwidth, and off-chip memory transfers/bytes/bandwidth. `--stats-csv run.csv` writes the same counters as a single CSV row, so multiple runs can be concatenated for plotting; `scripts/uarch/sweep.py` emits one row per image and sweep point.
+The stats record reports per-unit instruction counts, busy cycles, utilization and peak in-flight instructions, front-end dispatch stalls, dependency and memory-order stalls, queue occupancy/peak, aggregate and per-domain SRAM reads/writes/conflicts/bandwidth, and off-chip memory transfers/bytes/bandwidth. `--stats-csv run.csv` writes the same counters as a single CSV row, so multiple runs can be concatenated for plotting; `scripts/uarch/sweep.py` emits one row per image and sweep point with the same underscore-separated column names.
 
 ## Guest tests
 

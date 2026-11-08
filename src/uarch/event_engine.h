@@ -27,10 +27,6 @@ namespace tile_npu {
 // future reservations.
 class EventUarchEngine final : public UarchEngine {
 public:
-  // Default dispatch window capacity; an instance may override it through
-  // UarchConfig.
-  static constexpr std::size_t WINDOW_DEPTH = DEFAULT_WINDOW_DEPTH;
-
   explicit EventUarchEngine(UarchConfig config = {});
 
   void reset() override;
@@ -41,7 +37,7 @@ public:
   bool window_full() const override;
   void record_window_stall(std::uint64_t cycles) override;
   void record_dispatch_stall(Unit unit, std::uint64_t cycles) override;
-  void advance() override;
+  std::uint64_t advance() override;
   void finish() override;
 
   const UarchStats &stats() const override;

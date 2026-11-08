@@ -1,17 +1,11 @@
 #include "uarch/memory_service.h"
 
+#include "utils/common.h"
+
 #include <algorithm>
 #include <cstdint>
 
 namespace tile_npu {
-namespace {
-
-std::uint64_t transfer_cycles(std::uint64_t bytes, std::uint64_t bytes_per_cycle) {
-  const auto width = std::max<std::uint64_t>(1, bytes_per_cycle);
-  return (bytes + width - 1) / width;
-}
-
-} // namespace
 
 void SimpleMemoryService::reset() {
   bus_.clear();
@@ -19,7 +13,8 @@ void SimpleMemoryService::reset() {
 }
 
 std::uint64_t SimpleMemoryService::issue(std::uint64_t bytes, bool write, std::uint64_t now) {
-  const auto cycles = transfer_cycles(bytes, config_.bytes_per_cycle);
+  const auto width = std::max<std::uint64_t>(1, config_.bytes_per_cycle);
+  const auto cycles = ceil_div(bytes, width);
   const auto start = bus_.reserve(now, cycles);
 
   ++stats_.transfers;
