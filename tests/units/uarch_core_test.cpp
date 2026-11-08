@@ -6,6 +6,7 @@
 #include "uarch/mma_unit.h"
 #include "uarch/queue.h"
 #include "uarch/resource_calendar.h"
+#include "uarch/vector_unit.h"
 
 #include <cstdint>
 #include <vector>
@@ -95,6 +96,27 @@ TEST_CASE(dma_unit_reserves_the_shared_bus) {
   check_eq(first, std::uint64_t{6}, "64-byte transfer is two bus cycles plus latency");
   const auto second = dma.issue(transfer, first);
   check_eq(second, std::uint64_t{12}, "the next transfer waits for the bus");
+}
+
+TEST_CASE(vector_unit_uses_beats_and_op_class) {
+  tile_npu::VectorUnit unit;
+  tile_npu::DynInst op{};
+  op.len = 32;
+
+  op.op = tile_npu::DynOp::elementwise;
+  check_eq(unit.issue(op, 0), std::uint64_t{9}, "32 lanes is four beats plus the long pipeline");
+
+  unit.reset();
+  op.op = tile_npu::DynOp::move;
+  check_eq(unit.issue(op, 0), std::uint64_t{5}, "short path only pays two stages");
+
+  unit.reset();
+  op.op = tile_npu::DynOp::reduce;
+  check_eq(unit.issue(op, 0), std::uint64_t{12}, "reduction adds a log2 tree");
+
+  unit.reset();
+  op.op = tile_npu::DynOp::quant;
+  check_eq(unit.issue(op, 0), std::uint64_t{13}, "quantization walks the beats twice");
 }
 
 TEST_CASE(mma_unit_prefers_separate_banks) {

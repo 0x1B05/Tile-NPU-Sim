@@ -168,6 +168,65 @@ void fill_mblk(DynInst &inst, const MblkInstr &instr, const State &state) {
   }
 }
 
+void fill_from_config(DynInst &inst, const State &state, Domain domain, std::uint8_t index) {
+  switch (domain) {
+  case Domain::tile: {
+    const auto &config = state.tc[index];
+    inst.config.tile_d = config;
+    inst.rows = config.rows;
+    inst.cols = config.cols;
+    inst.dtype = static_cast<std::uint8_t>(config.dtype);
+    inst.elem_bytes = dtype_bytes(config.dtype);
+    inst.bytes = inst.rows * inst.cols * inst.elem_bytes;
+    break;
+  }
+  case Domain::acc: {
+    const auto &config = state.ac[index];
+    inst.config.acc_d = config;
+    inst.rows = config.rows;
+    inst.cols = config.cols;
+    inst.dtype = static_cast<std::uint8_t>(config.dtype);
+    inst.elem_bytes = dtype_bytes(config.dtype);
+    inst.bytes = inst.rows * inst.cols * inst.elem_bytes;
+    break;
+  }
+  case Domain::vec32: {
+    const auto &config = state.vc[index];
+    inst.config.vec_d = config;
+    inst.len = config.len;
+    inst.rows = 1;
+    inst.cols = config.len;
+    inst.dtype = static_cast<std::uint8_t>(config.dtype);
+    inst.elem_bytes = dtype_bytes(config.dtype);
+    inst.bytes = inst.len * inst.elem_bytes;
+    break;
+  }
+  case Domain::scalar: break;
+  }
+}
+
+void fill_row(DynInst &inst, const RowInstr &instr, const State &state) {
+  const auto &matrix = state.ac[instr.matrix.index];
+  const auto &vector = state.vc[instr.vector.index];
+  inst.op = DynOp::row;
+  inst.unit = Unit::vector;
+  inst.config.acc_d = matrix;
+  inst.config.vec_d = vector;
+  inst.rows = 1;
+  inst.cols = matrix.cols;
+  inst.len = vector.len;
+  inst.dtype = static_cast<std::uint8_t>(matrix.dtype);
+  inst.elem_bytes = dtype_bytes(matrix.dtype);
+  inst.bytes = inst.cols * inst.elem_bytes;
+  if (instr.op == RowOp::insert) {
+    add_src(inst, Domain::vec32, instr.vector.index);
+    set_dst(inst, Domain::acc, instr.matrix.index);
+  } else {
+    add_src(inst, Domain::acc, instr.matrix.index);
+    set_dst(inst, Domain::vec32, instr.vector.index);
+  }
+}
+
 void fill_sys(DynInst &inst, const SysInstr &instr) {
   inst.unit = Unit::sync;
   inst.kernel_end = instr.op == SysOp::kernel_end;
@@ -204,6 +263,8 @@ DynInst make_dyn_inst(std::uint64_t id, std::uint64_t pc, const DecodedNpuInstr 
           fill_vmma(out, decoded, state);
         } else if constexpr (std::is_same_v<T, MblkInstr>) {
           fill_mblk(out, decoded, state);
+        } else if constexpr (std::is_same_v<T, RowInstr>) {
+          fill_row(out, decoded, state);
         } else if constexpr (std::is_same_v<T, SysInstr>) {
           fill_sys(out, decoded);
         } else if constexpr (std::is_same_v<T, CfgSetiInstr> || std::is_same_v<T, CfgSetxInstr> ||
@@ -249,7 +310,9 @@ DynInst make_dyn_inst(std::uint64_t id, std::uint64_t pc, const DecodedNpuInstr 
           if constexpr (requires { decoded.dest; }) {
             if constexpr (std::is_same_v<std::remove_cvref_t<decltype(decoded.dest)>,
                                          NpuRegister>) {
-              set_dst(out, to_domain(decoded.dest.domain), decoded.dest.index);
+              const auto domain = to_domain(decoded.dest.domain);
+              set_dst(out, domain, decoded.dest.index);
+              fill_from_config(out, state, domain, decoded.dest.index);
             }
           }
           if constexpr (requires { decoded.src; }) {
@@ -261,6 +324,13 @@ DynInst make_dyn_inst(std::uint64_t id, std::uint64_t pc, const DecodedNpuInstr 
             if constexpr (std::is_same_v<std::remove_cvref_t<decltype(decoded.src1)>,
                                          NpuRegister>) {
               add_src(out, to_domain(decoded.src1.domain), decoded.src1.index);
+            }
+          }
+          if constexpr (requires { decoded.src2; }) {
+            if constexpr (std::is_same_v<T, EbinInstr> || std::is_same_v<T, CmpInstr>) {
+              if (const auto *reg = std::get_if<NpuRegister>(&decoded.src2)) {
+                add_src(out, to_domain(reg->domain), reg->index);
+              }
             }
           }
         }

@@ -39,6 +39,7 @@ void EventUarchEngine::reset() {
   state_ = UarchState{};
   mma_.reset();
   dma_.reset();
+  vector_.reset();
   completion_.clear();
 }
 
@@ -48,6 +49,8 @@ void EventUarchEngine::issue(const DynInst &inst) {
     finish = mma_.issue(inst, state_.events.now());
   } else if (inst.unit == Unit::dma) {
     finish = dma_.issue(inst, state_.events.now());
+  } else if (inst.unit == Unit::vector) {
+    finish = vector_.issue(inst, state_.events.now());
   }
   completion_[inst.id] = finish;
   state_.events.schedule(
