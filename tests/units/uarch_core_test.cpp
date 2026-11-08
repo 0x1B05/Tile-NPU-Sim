@@ -213,8 +213,7 @@ TEST_CASE(event_engine_uses_component_latencies) {
   engine.finish();
   check_eq(engine.stats().cycles, std::uint64_t{75}, "MMA K + skew + M latency");
   check_eq(engine.stats().retired, std::uint64_t{1}, "MMA retires");
-  check_eq(engine.stats().unit_count[static_cast<std::size_t>(tile_npu::Unit::mma)],
-           std::uint64_t{1}, "MMA unit is counted");
+  check_eq(engine.stats().count(tile_npu::Unit::mma), std::uint64_t{1}, "MMA unit is counted");
 
   engine.dispatch(dma_load(2, 64, tile(0)));
   engine.finish();

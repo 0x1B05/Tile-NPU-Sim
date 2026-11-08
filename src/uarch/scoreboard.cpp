@@ -18,19 +18,27 @@ bool Scoreboard::is_zero(const DataRef &ref) {
   return ref.domain == Domain::scalar && ref.index == 0;
 }
 
-Scoreboard::RegisterStat &Scoreboard::stat(const DataRef &ref) {
+std::pair<std::size_t, std::size_t> Scoreboard::locate(const DataRef &ref) {
   const auto domain = static_cast<std::size_t>(ref.domain);
-  if (domain >= DOMAIN_COUNT || ref.index >= REG_COUNT) {
+  if (domain >= DOMAIN_COUNT || ref.index >= DOMAIN_REGISTERS[domain]) {
     unreachable("dynamic instruction references an invalid register");
   }
-  return regs_[domain][ref.index];
+  return {domain, ref.index};
 }
 
-void Scoreboard::dispatch(const DynInst &inst) {
+const Scoreboard::RegisterStat &Scoreboard::stat(const DataRef &ref) const {
+  const auto [domain, index] = locate(ref);
+  return regs_[domain][index];
+}
+
+Scoreboard::RegisterStat &Scoreboard::stat(const DataRef &ref) {
+  const auto [domain, index] = locate(ref);
+  return regs_[domain][index];
+}
+
+std::vector<std::uint64_t> Scoreboard::dependencies(const DynInst &inst) const {
   std::vector<std::uint64_t> deps;
 
-  // Snapshot the hazards before registering this instruction, so a register
-  // that is both a source and a destination does not depend on itself.
   for (std::uint8_t i = 0; i < inst.src_count; ++i) {
     const auto &src = inst.src[i];
     if (is_zero(src)) continue;
@@ -45,7 +53,10 @@ void Scoreboard::dispatch(const DynInst &inst) {
 
   std::sort(deps.begin(), deps.end());
   deps.erase(std::unique(deps.begin(), deps.end()), deps.end());
+  return deps;
+}
 
+void Scoreboard::register_operands(const DynInst &inst) {
   for (std::uint8_t i = 0; i < inst.src_count; ++i) {
     const auto &src = inst.src[i];
     if (!is_zero(src)) stat(src).readers.push_back(inst.id);
@@ -55,7 +66,11 @@ void Scoreboard::dispatch(const DynInst &inst) {
     reg.busy = true;
     reg.producer = inst.id;
   }
+}
 
+void Scoreboard::dispatch(const DynInst &inst) {
+  auto deps = dependencies(inst);
+  register_operands(inst);
   const auto inserted = window_.emplace(inst.id, Entry{.inst = inst, .deps = std::move(deps)});
   if (!inserted.second) unreachable("duplicate dynamic instruction id");
 }

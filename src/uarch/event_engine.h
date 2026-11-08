@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 
 namespace tile_npu {
 
@@ -36,8 +37,13 @@ private:
   bool issue_ready(std::uint64_t now);
   void issue_one(std::uint64_t id, std::uint64_t now);
   void complete(std::uint64_t id);
-  bool has_work(FenceKind kind) const;
+
+  // The oldest memory operation not yet issued. Younger memory operations may
+  // not pass it, so it is the only DMA candidate in a cycle.
+  std::optional<std::uint64_t> next_memory_id() const;
+  bool can_issue(const Scoreboard::Entry &entry, std::optional<std::uint64_t> memory_head) const;
   bool has_ready_work() const;
+  bool has_work(FenceKind kind) const;
 
   UarchState state_{};
   Scoreboard scoreboard_{};

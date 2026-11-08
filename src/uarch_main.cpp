@@ -117,13 +117,12 @@ int main(int argc, char **argv) {
   if (mode == tile_npu::ExecutionMode::uarch) {
     const auto &stats = machine.stats();
     std::cerr << "mode=uarch cycles=" << stats.cycles << " retired=" << stats.retired
-              << " scalar=" << stats.unit_count[static_cast<std::size_t>(tile_npu::Unit::scalar)]
-              << " mma=" << stats.unit_count[static_cast<std::size_t>(tile_npu::Unit::mma)]
-              << " vector=" << stats.unit_count[static_cast<std::size_t>(tile_npu::Unit::vector)]
-              << " dma=" << stats.unit_count[static_cast<std::size_t>(tile_npu::Unit::dma)]
-              << " config=" << stats.unit_count[static_cast<std::size_t>(tile_npu::Unit::config)]
-              << " sync=" << stats.unit_count[static_cast<std::size_t>(tile_npu::Unit::sync)]
-              << '\n';
+              << " scalar=" << stats.count(tile_npu::Unit::scalar)
+              << " mma=" << stats.count(tile_npu::Unit::mma)
+              << " vector=" << stats.count(tile_npu::Unit::vector)
+              << " dma=" << stats.count(tile_npu::Unit::dma)
+              << " config=" << stats.count(tile_npu::Unit::config)
+              << " sync=" << stats.count(tile_npu::Unit::sync) << '\n';
   }
 
   if (!stopped) {

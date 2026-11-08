@@ -2,10 +2,12 @@
 
 #include "tile_npu/dyn_inst.h"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <utility>
 #include <vector>
 
 namespace tile_npu {
@@ -36,8 +38,6 @@ public:
 
   std::size_t size() const { return window_.size(); }
 
-  bool contains(std::uint64_t id) const { return window_.contains(id); }
-
   // Adds one instruction and records its hazards. The caller owns capacity.
   void dispatch(const DynInst &inst);
 
@@ -61,12 +61,26 @@ private:
     std::vector<std::uint64_t> readers;
   };
 
-  static constexpr std::size_t DOMAIN_COUNT = 4;
-  static constexpr std::size_t REG_COUNT = 32;
+  // Domain order matches the enum: scalar, tile, acc, vec32.
+  static constexpr std::size_t DOMAIN_COUNT = static_cast<std::size_t>(Domain::vec32) + 1;
+  static constexpr std::array<std::size_t, DOMAIN_COUNT> DOMAIN_REGISTERS{
+      SCALAR_REGISTERS, TILE_REGISTERS, ACC_REGISTERS, VECTOR_REGISTERS};
+  static constexpr std::size_t REG_COUNT =
+      std::max({SCALAR_REGISTERS, TILE_REGISTERS, ACC_REGISTERS, VECTOR_REGISTERS});
 
   static bool is_zero(const DataRef &ref);
 
+  // Domain and index of a legal register reference. Aborts on an operand the
+  // functional builder could not have produced.
+  static std::pair<std::size_t, std::size_t> locate(const DataRef &ref);
+
+  const RegisterStat &stat(const DataRef &ref) const;
   RegisterStat &stat(const DataRef &ref);
+
+  // Producer ids this instruction must wait for. Must run before
+  // register_operands(), so a read-modify-write operand does not self-block.
+  std::vector<std::uint64_t> dependencies(const DynInst &inst) const;
+  void register_operands(const DynInst &inst);
 
   std::array<std::array<RegisterStat, REG_COUNT>, DOMAIN_COUNT> regs_{};
   std::map<std::uint64_t, Entry> window_;

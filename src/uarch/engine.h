@@ -3,16 +3,24 @@
 #include "tile_npu/dyn_inst.h"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 
 namespace tile_npu {
+
+// One counter per Unit; Unit::sync must remain the last enumerator.
+inline constexpr std::size_t unit_index(Unit unit) { return static_cast<std::size_t>(unit); }
+
+inline constexpr std::size_t UNIT_COUNT = unit_index(Unit::sync) + 1;
 
 struct UarchStats {
   std::uint64_t cycles = 0;
   // Instructions whose timing has completed.
   std::uint64_t retired = 0;
-  // Indexed by Unit: scalar, mma, vector, dma, config, sync.
-  std::array<std::uint64_t, 6> unit_count{};
+  // Instruction counts, indexed by Unit.
+  std::array<std::uint64_t, UNIT_COUNT> unit_count{};
+
+  std::uint64_t count(Unit unit) const { return unit_count[unit_index(unit)]; }
 };
 
 // Timing-only backend. It never computes architectural values or resolves
