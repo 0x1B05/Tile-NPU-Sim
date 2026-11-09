@@ -2,13 +2,17 @@
 
 #include "tile_npu/decode.h"
 #include "tile_npu/platform/address_space.h"
-#include "tile_npu/simulator.h"
 #include "tile_npu/state.h"
+#include "tile_npu/step.h"
 
 #include <cstdint>
 #include <optional>
 
 namespace tile_npu {
+
+#ifdef CONFIG_MTRACE
+class MtraceRecorder;
+#endif
 
 // Executors report the step pipeline's public status vocabulary, but only
 // ever produce the execution-stage subset of it.
