@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "source": "synthetic example generated from target timing parameters; replace with RTL measurements",
+  "target": {
+    "mma.read_latency": 0,
+    "mma.input_skew": 8,
+    "mma.output_skew": 8,
+    "memory.latency": 8,
+    "memory.bytes_per_cycle": 16
+  },
+  "workloads": [
+    {"name": "mma", "image": "mma", "cycles": 405},
+    {"name": "mem", "image": "mem", "cycles": 210},
+    {"name": "qnt", "image": "qnt", "cycles": 148},
+    {"name": "reduce", "image": "reduce", "cycles": 205},
+    {"name": "rowlane", "image": "rowlane", "cycles": 115},
+    {"name": "ebcast", "image": "ebcast", "cycles": 138}
+  ]
+}

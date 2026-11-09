@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run host, guest, riscv-tests, and Qwen3 test suites.
+"""Run host, guest, uarch, trace, calibration, riscv-tests, and Qwen3 suites.
 
 The build system produces test artifacts; this runner decides which artifacts
 to execute. It deliberately does not register individual guest images with
@@ -10,16 +10,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 RV64IM_SRCDIR = ROOT / "tests" / "guest" / "rv64im"
 NPU_SRCDIR = ROOT / "tests" / "guest" / "npu"
 UARCH_BASELINE = ROOT / "tests" / "uarch" / "baseline.json"
-SUITES = ("host", "guest", "uarch", "riscv-tests", "qwen3")
+SUITES = ("host", "guest", "uarch", "trace", "calibration", "riscv-tests", "qwen3")
 
 
 class MissingPrerequisite(RuntimeError):
@@ -154,6 +156,8 @@ def uarch_stats_errors(stats: dict) -> list[str]:
     required = (
         "cycles",
         "retired",
+        "macs",
+        "bytes",
         "unit_count",
         "unit_busy_cycles",
         "unit_utilization",
@@ -348,6 +352,182 @@ def suite_uarch(args: argparse.Namespace) -> int:
     return 1 if failures else 0
 
 
+def suite_trace(args: argparse.Namespace) -> int:
+    """Check that a recorded DynInst trace replays to identical timing stats."""
+    build_dir, guest_dir, _ = build_dirs(args)
+    if args.build:
+        xmake_build(["guest_images", "sim", "sim_uarch"])
+
+    simulator = find_artifact("sim_uarch", args.simulator_uarch, build_dir)
+    image_names = [
+        name for name in uarch_image_names() if not args.filter or args.filter in name
+    ]
+    if not image_names:
+        raise MissingPrerequisite(f"no trace images match filter: {args.filter!r}")
+
+    failures = 0
+    compared = (
+        "cycles",
+        "retired",
+        "macs",
+        "bytes",
+        "unit_count",
+        "sram",
+        "memory",
+    )
+    with tempfile.TemporaryDirectory(prefix="tile-npu-trace-") as tmp:
+        tmpdir = Path(tmp)
+        for name in image_names:
+            image = guest_dir / f"{name}.bin"
+            if not image.is_file():
+                raise MissingPrerequisite(f"missing guest image: {image}")
+            trace = tmpdir / f"{name}.utr"
+            online_path = tmpdir / f"{name}-online.json"
+            replay_path = tmpdir / f"{name}-replay.json"
+            online_start = time.perf_counter()
+            online = subprocess.run(
+                [
+                    str(simulator),
+                    "--mode=uarch",
+                    "--trace-out",
+                    str(trace),
+                    "--stats-json",
+                    str(online_path),
+                    str(image),
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+            )
+            online_elapsed = time.perf_counter() - online_start
+            replay_start = time.perf_counter()
+            replay = subprocess.run(
+                [
+                    str(simulator),
+                    "--mode=replay",
+                    "--trace-in",
+                    str(trace),
+                    "--stats-json",
+                    str(replay_path),
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+            )
+            replay_elapsed = time.perf_counter() - replay_start
+            if online.returncode != 0 or replay.returncode != 0:
+                print(
+                    f"[FAIL] trace/{name}: online={online.returncode} "
+                    f"replay={replay.returncode}\n{online.stderr}{replay.stderr}",
+                    file=sys.stderr,
+                )
+                failures += 1
+                continue
+            if not online_path.is_file() or not replay_path.is_file():
+                print(f"[FAIL] trace/{name}: missing stats JSON", file=sys.stderr)
+                failures += 1
+                continue
+            left = json.loads(online_path.read_text())
+            right = json.loads(replay_path.read_text())
+            errors = [key for key in compared if left.get(key) != right.get(key)]
+            if errors:
+                print(
+                    f"[FAIL] trace/{name}: differs in {', '.join(errors)}",
+                    file=sys.stderr,
+                )
+                failures += 1
+            else:
+                trace_bytes = trace.stat().st_size
+                size_text = (
+                    f"{trace_bytes / 1024:.1f}KiB"
+                    if trace_bytes < 1024 * 1024
+                    else f"{trace_bytes / (1024 * 1024):.2f}MiB"
+                )
+                speedup = online_elapsed / replay_elapsed if replay_elapsed > 0 else 0.0
+                compressed = ""
+                zstd = shutil.which("zstd")
+                if zstd is not None:
+                    zst = tmpdir / f"{name}.utr.zst"
+                    subprocess.run(
+                        [zstd, "-q", "-f", "-19", str(trace), "-o", str(zst)],
+                        cwd=ROOT,
+                        check=True,
+                    )
+                    zstd_bytes = zst.stat().st_size
+                    zstd_text = (
+                        f"{zstd_bytes / 1024:.1f}KiB"
+                        if zstd_bytes < 1024 * 1024
+                        else f"{zstd_bytes / (1024 * 1024):.2f}MiB"
+                    )
+                    compressed = f" zstd={zstd_text}"
+                print(
+                    f"[PASS] trace/{name} cycles={left.get('cycles')} "
+                    f"retired={left.get('retired')} size={size_text}{compressed} "
+                    f"online={online_elapsed:.3f}s replay={replay_elapsed:.3f}s "
+                    f"speedup={speedup:.2f}x"
+                )
+    return 1 if failures else 0
+
+
+def suite_calibration(args: argparse.Namespace) -> int:
+    """Smoke-test the calibration harness on the synthetic example dataset."""
+    build_dir, guest_dir, _ = build_dirs(args)
+    if args.build:
+        xmake_build(["guest_images", "sim_uarch"])
+
+    simulator = find_artifact("sim_uarch", args.simulator_uarch, build_dir)
+    measurements = ROOT / "tests" / "uarch" / "calibration-example.json"
+    parameters = ROOT / "scripts" / "uarch" / "calibration-params.json"
+    if not measurements.is_file() or not parameters.is_file():
+        raise MissingPrerequisite("calibration example dataset is missing")
+
+    with tempfile.TemporaryDirectory(prefix="tile-npu-cal-suite-") as tmp:
+        output = Path(tmp) / "result.json"
+        result = run(
+            [
+                sys.executable,
+                str(ROOT / "scripts" / "uarch" / "calibrate.py"),
+                "--measurements",
+                str(measurements),
+                "--parameters",
+                str(parameters),
+                "--sim",
+                str(simulator),
+                "--image-dir",
+                str(guest_dir),
+                "--samples",
+                "12",
+                "--passes",
+                "1",
+                "--holdout",
+                "0.25",
+                "--output",
+                str(output),
+            ]
+        )
+        if result.returncode != 0 or not output.is_file():
+            return 1
+        data = json.loads(output.read_text())
+        for section in ("train", "holdout"):
+            metrics = data.get(section, {})
+            if metrics.get("count", 0) < 1 or metrics.get("mape") is None:
+                print(f"[FAIL] calibration/{section}: missing metrics", file=sys.stderr)
+                return 1
+            if metrics["mape"] > 15.0:
+                print(
+                    f"[FAIL] calibration/{section}: mape={metrics['mape']:.2f}%",
+                    file=sys.stderr,
+                )
+                return 1
+        print(
+            "[PASS] calibration "
+            f"train_mape={data['train']['mape']:.3f}% "
+            f"holdout_mape={data['holdout']['mape']:.3f}% "
+            f"fitted={data['fitted_overrides']}"
+        )
+    return 0
+
+
 def suite_riscv_tests(args: argparse.Namespace) -> int:
     build_dir, guest_dir, _ = build_dirs(args)
     if args.build:
@@ -443,6 +623,10 @@ def run_suite(args: argparse.Namespace, suite: str) -> int:
         return suite_guest(args)
     if suite == "uarch":
         return suite_uarch(args)
+    if suite == "trace":
+        return suite_trace(args)
+    if suite == "calibration":
+        return suite_calibration(args)
     if suite == "riscv-tests":
         return suite_riscv_tests(args)
     if suite == "qwen3":

@@ -1,0 +1,7 @@
+{
+  "mma.read_latency": [0, 1, 2],
+  "mma.input_skew": [0, 8, 16, 24, 31],
+  "mma.output_skew": [0, 8, 16, 24, 31],
+  "memory.latency": [0, 4, 8, 12],
+  "memory.bytes_per_cycle": [16, 32, 64]
+}
