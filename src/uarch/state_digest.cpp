@@ -1,8 +1,10 @@
 #include "uarch/state_digest.h"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 
 namespace tile_npu {
 namespace {
@@ -31,9 +33,9 @@ public:
 
   void u8(std::uint8_t value) { byte(value); }
 
-  template <typename T, std::size_t N>
-  void array(const std::array<T, N> &values) {
-    for (const auto &value : values) u8(static_cast<std::uint8_t>(value));
+  template <typename T, std::size_t N> void array(const std::array<T, N> &values) {
+    for (const auto &value : values)
+      u8(static_cast<std::uint8_t>(value));
   }
 
   std::uint64_t value() const { return hash_; }
@@ -48,14 +50,18 @@ std::uint64_t architectural_digest(const State &state) {
   Hasher hash;
 
   hash.u64(state.scalar.pc);
-  for (std::size_t i = 1; i < SCALAR_REGISTERS; ++i) hash.u64(state.scalar.read_x(i));
+  for (std::size_t i = 1; i < SCALAR_REGISTERS; ++i)
+    hash.u64(state.scalar.read_x(i));
 
-  for (const auto &reg : state.t) hash.array(reg);
+  for (const auto &reg : state.t)
+    hash.array(reg);
   for (const auto &reg : state.a) {
-    for (const auto value : reg) hash.u32(value);
+    for (const auto value : reg)
+      hash.u32(value);
   }
   for (const auto &reg : state.v) {
-    for (const auto value : reg) hash.u32(value);
+    for (const auto value : reg)
+      hash.u32(value);
   }
 
   for (const auto &cfg : state.tc) {
@@ -95,6 +101,24 @@ std::uint64_t architectural_digest(const State &state) {
     hash.u8(desc.flags);
   }
 
+  return hash.value();
+}
+
+std::optional<std::uint64_t> memory_digest(const AddressSpace &memory, std::uint64_t address,
+                                           std::size_t size) {
+  Hasher hash;
+  std::array<std::byte, 4096> buffer{};
+  std::size_t offset = 0;
+  while (offset < size) {
+    const auto chunk = std::min(buffer.size(), size - offset);
+    if (!memory.read(address + offset, std::span<std::byte>(buffer.data(), chunk))) {
+      return std::nullopt;
+    }
+    for (std::size_t i = 0; i < chunk; ++i) {
+      hash.byte(std::to_integer<std::uint8_t>(buffer[i]));
+    }
+    offset += chunk;
+  }
   return hash.value();
 }
 

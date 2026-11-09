@@ -68,6 +68,19 @@ void add_fill_src(DynInst &inst, const std::variant<FillImm16, ScalarRegister> &
   if (const auto *reg = std::get_if<ScalarRegister>(&value)) add_scalar_src(inst, reg->index);
 }
 
+void capture_gather_indices(DynInst &inst, const State &state, std::uint8_t index,
+                            std::uint32_t count) {
+  const auto &source = state.v[index];
+  const auto &config = state.vc[index];
+  GatherInfo gather;
+  gather.count = static_cast<std::uint8_t>(std::min<std::uint32_t>(
+      {count, static_cast<std::uint32_t>(config.len), static_cast<std::uint32_t>(VECTOR_LANES)}));
+  for (std::uint8_t i = 0; i < gather.count; ++i) {
+    gather.indices[i] = source[i];
+  }
+  inst.gather = gather;
+}
+
 void fill_mma(DynInst &inst, const MmaInstr &instr, const State &state) {
   const auto &lhs = state.tc[instr.src_a.index];
   const auto &rhs = state.tc[instr.src_b.index];
@@ -97,6 +110,9 @@ void fill_vmma(DynInst &inst, const VmmaInstr &instr, const State &state) {
   const auto &dst = state.vc[instr.dest.index];
 
   inst.op = DynOp::vmma;
+  // VMMA remains on the MMA queue in the current model. If the RTL routes it
+  // through the Reduce/Dot backend instead, this is the single mapping to
+  // change to Unit::reduce.
   inst.unit = Unit::mma;
   inst.config.tile_a = lhs;
   inst.config.tile_b = rhs;
@@ -140,6 +156,7 @@ void fill_mblk(DynInst &inst, const MblkInstr &instr, const State &state) {
     if (instr.op == MblkOp::gather) {
       // Rows beyond the index vector are zero-filled, not transferred.
       inst.rows = std::min<std::uint32_t>(config.rows, state.vc[instr.gather_src].len);
+      capture_gather_indices(inst, state, instr.gather_src, inst.rows);
       add_src(inst, Domain::vec32, instr.gather_src);
       add_dst(inst, Domain::tile, instr.reg.index);
     } else if (instr.op == MblkOp::store) {
@@ -190,6 +207,7 @@ void fill_mblk(DynInst &inst, const MblkInstr &instr, const State &state) {
       inst.len = indexed;
       inst.rows = indexed;
       inst.cols = 1;
+      capture_gather_indices(inst, state, instr.gather_src, indexed);
       add_src(inst, Domain::vec32, instr.gather_src);
       add_dst(inst, Domain::vec32, instr.reg.index);
     } else if (instr.op == MblkOp::store) {
@@ -246,7 +264,7 @@ void fill_row(DynInst &inst, const RowInstr &instr, const State &state) {
   const auto &matrix = state.ac[instr.matrix.index];
   const auto &vector = state.vc[instr.vector.index];
   inst.op = DynOp::row;
-  inst.unit = Unit::vector;
+  inst.unit = Unit::vec32;
   inst.config.acc_d = matrix;
   inst.config.vec_d = vector;
   inst.rows = 1;
@@ -323,7 +341,11 @@ DynInst make_dyn_inst(std::uint64_t id, std::uint64_t pc, const DecodedNpuInstr 
             add_scalar_dst(out, decoded.dest);
           }
         } else {
-          out.unit = Unit::vector;
+          // Vec32 is the only vector ALU in the current ISA. Fill/copy,
+          // row/lane moves and broadcasts use its fast path; reductions and
+          // quantisation have their own queues because they have distinct
+          // execution resources.
+          out.unit = Unit::vec32;
           if constexpr (std::is_same_v<T, FillInstr>) {
             out.op = DynOp::fill;
           } else if constexpr (std::is_same_v<T, MoveInstr>) {
@@ -347,10 +369,12 @@ DynInst make_dyn_inst(std::uint64_t id, std::uint64_t pc, const DecodedNpuInstr 
                                std::is_same_v<T, VreduceInstr> ||
                                std::is_same_v<T, VreduceArgmaxInstr>) {
             out.op = DynOp::reduce;
+            out.unit = Unit::reduce;
           } else if constexpr (std::is_same_v<T, AquantInstr> || std::is_same_v<T, TdequantInstr> ||
                                std::is_same_v<T, AdequantInstr> ||
                                std::is_same_v<T, VdequantInstr>) {
             out.op = DynOp::quant;
+            out.unit = Unit::quant;
           } else {
             out.op = DynOp::other;
           }

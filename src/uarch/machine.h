@@ -10,6 +10,8 @@
 
 namespace tile_npu {
 
+class UarchTraceWriter;
+
 enum class ExecutionMode { functional, uarch };
 
 // Orchestrates the shared functional front end and the optional uarch
@@ -32,6 +34,10 @@ public:
   void reset(std::uint64_t entry_pc);
   StepResult step();
 
+  // Optional capture of the exact DynInst stream consumed by the timing
+  // engine. The writer is owned by the caller.
+  void set_trace_writer(UarchTraceWriter *writer) { trace_writer_ = writer; }
+
   State &state() { return functional_.state(); }
 
   const State &state() const { return functional_.state(); }
@@ -39,6 +45,10 @@ public:
   ExecutionMode mode() const { return mode_; }
 
   const UarchStats &stats() const { return uarch_->stats(); }
+
+  void set_timeline_enabled(bool enabled) { uarch_->set_timeline_enabled(enabled); }
+
+  const std::vector<TimelineRecord> &timeline() const { return uarch_->timeline(); }
 
 private:
   // The functional step commits before the timing engine accepts the record.
@@ -53,6 +63,7 @@ private:
   Simulator functional_;
   std::unique_ptr<UarchEngine> uarch_;
   std::optional<Pending> pending_;
+  UarchTraceWriter *trace_writer_ = nullptr;
 };
 
 } // namespace tile_npu

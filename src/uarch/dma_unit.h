@@ -6,13 +6,21 @@
 
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 namespace tile_npu {
 
-// Instruction-level DMA model. The off-chip transfer occupies MemoryService
-// and the on-chip register access occupies the shared SramModel. The two may
-// overlap, so a DMA competes with MMA/Vector for banks while it is also using
-// the memory bus.
+// One contiguous memory transfer derived from a descriptor access.
+struct DmaSegment {
+  std::uint64_t addr = 0;
+  std::uint32_t bytes = 0;
+};
+
+// Instruction-level DMA model. The descriptor is decomposed into contiguous
+// memory segments using its address, strides and Tile transpose mode; the
+// off-chip transfer occupies MemoryService and the on-chip register access
+// occupies the shared SramModel. Loads read memory before writing SRAM;
+// stores read SRAM before writing memory.
 class DmaUnit {
 public:
   // Null resources give the unit private defaults for component tests.
@@ -23,7 +31,15 @@ public:
 
   const MemoryStats &memory_stats() const { return memory_->stats(); }
 
+  // Exposed for tests and for trace diagnostics.
+  std::vector<DmaSegment> segments(const DynInst &inst) const;
+
 private:
+  std::uint64_t read_operands(const DynInst &inst, std::uint64_t at);
+  std::uint64_t write_operands(const DynInst &inst, std::uint64_t at);
+  std::uint64_t issue_memory(const std::vector<DmaSegment> &segments, std::uint64_t at, bool write,
+                             std::uint64_t *first_data = nullptr);
+
   SramModel owned_sram_{};
   SramModel *sram_ = &owned_sram_;
   std::unique_ptr<MemoryService> memory_;

@@ -5,8 +5,10 @@
 #include "tile_npu/platform/serial.h"
 #include "uarch/machine.h"
 #include "uarch/state_digest.h"
+#include "uarch/trace_replay.h"
 #include "uarch/uarch_config_json.h"
 #include "uarch/uarch_names.h"
+#include "uarch/uarch_trace.h"
 #include "utils/format.h"
 
 #include <CLI/CLI.hpp>
@@ -17,6 +19,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <span>
 #include <sstream>
 #include <string>
@@ -96,8 +99,45 @@ void write_memory(std::ostream &out, const tile_npu::MemoryStats &stats, std::ui
   out << "{\"transfers\": " << stats.transfers << ", \"reads\": " << stats.reads
       << ", \"writes\": " << stats.writes << ", \"read_bytes\": " << stats.read_bytes
       << ", \"write_bytes\": " << stats.write_bytes << ", \"busy_cycles\": " << stats.busy_cycles
-      << ", \"bandwidth_bytes_per_cycle\": "
+      << ", \"row_hits\": " << stats.row_hits << ", \"row_misses\": " << stats.row_misses
+      << ", \"bank_conflicts\": " << stats.bank_conflicts
+      << ", \"outstanding_peak\": " << stats.outstanding_peak << ", \"bandwidth_bytes_per_cycle\": "
       << per_cycle(stats.read_bytes + stats.write_bytes, cycles) << '}';
+}
+
+void write_uarch_json_fields(std::ostream &out, const tile_npu::UarchConfig &config,
+                             const tile_npu::UarchStats &stats) {
+  out << "\"uarch_config\": " << tile_npu::uarch_config_json(config);
+  out << ",\n  \"cycles\": " << stats.cycles;
+  out << ",\n  \"retired\": " << stats.retired;
+  out << ",\n  \"macs\": " << stats.macs;
+  out << ",\n  \"bytes\": " << stats.bytes;
+  out << ",\n  \"ipc\": " << per_cycle(stats.retired, stats.cycles);
+  out << ",\n  \"macs_per_cycle\": " << per_cycle(stats.macs, stats.cycles);
+  out << ",\n  \"arithmetic_intensity\": "
+      << (stats.bytes == 0 ? 0.0 : static_cast<double>(stats.macs) / stats.bytes);
+  out << ",\n  \"window_stall_cycles\": " << stats.window_stall_cycles;
+  out << ",\n  \"memory_order_stall_cycles\": " << stats.memory_order_stall_cycles;
+  out << ",\n  \"unit_count\": ";
+  write_u64_object(out, stats.unit_count);
+  out << ",\n  \"unit_busy_cycles\": ";
+  write_u64_object(out, stats.unit_busy_cycles);
+  out << ",\n  \"unit_utilization\": ";
+  write_ratio_object(out, stats.unit_busy_cycles, stats.cycles);
+  out << ",\n  \"unit_in_flight_peak\": ";
+  write_u64_object(out, stats.unit_in_flight_peak);
+  out << ",\n  \"dispatch_stall_cycles\": ";
+  write_u64_object(out, stats.dispatch_stall_cycles);
+  out << ",\n  \"dependency_stall_cycles\": ";
+  write_u64_object(out, stats.dependency_stall_cycles);
+  out << ",\n  \"queue_occupancy_cycles\": ";
+  write_u64_object(out, stats.queue_occupancy_cycles);
+  out << ",\n  \"queue_peak\": ";
+  write_u64_object(out, stats.queue_peak);
+  out << ",\n  \"sram\": ";
+  write_sram(out, stats.sram, stats.cycles);
+  out << ",\n  \"memory\": ";
+  write_memory(out, stats.memory, stats.cycles);
 }
 
 bool write_run_json(const std::string &path, tile_npu::ExecutionMode mode,
@@ -119,34 +159,22 @@ bool write_run_json(const std::string &path, tile_npu::ExecutionMode mode,
   out << "  \"exit_code\": " << exit_code << ",\n";
   out << "  \"arch_digest\": \"" << tile_npu::hex64(tile_npu::architectural_digest(state)) << "\"";
   if (mode == tile_npu::ExecutionMode::uarch) {
-    const auto &stats = machine.stats();
-    out << ",\n  \"uarch_config\": " << tile_npu::uarch_config_json(config);
-    out << ",\n  \"cycles\": " << stats.cycles;
-    out << ",\n  \"retired\": " << stats.retired;
-    out << ",\n  \"ipc\": " << per_cycle(stats.retired, stats.cycles);
-    out << ",\n  \"window_stall_cycles\": " << stats.window_stall_cycles;
-    out << ",\n  \"memory_order_stall_cycles\": " << stats.memory_order_stall_cycles;
-    out << ",\n  \"unit_count\": ";
-    write_u64_object(out, stats.unit_count);
-    out << ",\n  \"unit_busy_cycles\": ";
-    write_u64_object(out, stats.unit_busy_cycles);
-    out << ",\n  \"unit_utilization\": ";
-    write_ratio_object(out, stats.unit_busy_cycles, stats.cycles);
-    out << ",\n  \"unit_in_flight_peak\": ";
-    write_u64_object(out, stats.unit_in_flight_peak);
-    out << ",\n  \"dispatch_stall_cycles\": ";
-    write_u64_object(out, stats.dispatch_stall_cycles);
-    out << ",\n  \"dependency_stall_cycles\": ";
-    write_u64_object(out, stats.dependency_stall_cycles);
-    out << ",\n  \"queue_occupancy_cycles\": ";
-    write_u64_object(out, stats.queue_occupancy_cycles);
-    out << ",\n  \"queue_peak\": ";
-    write_u64_object(out, stats.queue_peak);
-    out << ",\n  \"sram\": ";
-    write_sram(out, stats.sram, stats.cycles);
-    out << ",\n  \"memory\": ";
-    write_memory(out, stats.memory, stats.cycles);
+    out << ",\n  ";
+    write_uarch_json_fields(out, config, machine.stats());
   }
+  out << "\n}\n";
+  return out.good();
+}
+
+bool write_replay_json(const std::string &path, const tile_npu::UarchConfig &config,
+                       const tile_npu::UarchStats &stats) {
+  std::ofstream out(path, std::ios::out | std::ios::trunc);
+  if (!out) {
+    std::cerr << "cannot open stats file: " << path << '\n';
+    return false;
+  }
+  out << "{\n  \"mode\": \"replay\",\n  \"status\": \"trace_end\",\n  ";
+  write_uarch_json_fields(out, config, stats);
   out << "\n}\n";
   return out.good();
 }
@@ -166,6 +194,53 @@ std::string number(double value) {
   std::ostringstream text;
   text << value;
   return text.str();
+}
+
+bool write_timeline_json(const std::string &path,
+                         const std::vector<tile_npu::TimelineRecord> &timeline) {
+  std::ofstream out(path, std::ios::out | std::ios::trunc);
+  if (!out) {
+    std::cerr << "cannot open timeline file: " << path << '\n';
+    return false;
+  }
+  out << "[\n";
+  for (std::size_t i = 0; i < timeline.size(); ++i) {
+    const auto &record = timeline[i];
+    out << "  {\"id\": " << record.id << ", \"pc\": \"" << tile_npu::hex64(record.pc)
+        << "\", \"op\": \"" << tile_npu::dyn_op_name(record.op) << "\", \"unit\": \""
+        << tile_npu::UNIT_NAMES[tile_npu::unit_index(record.unit)]
+        << "\", \"dispatch\": " << record.dispatch_cycle << ", \"ready\": " << record.ready_cycle
+        << ", \"issue\": " << record.issue_cycle << ", \"complete\": " << record.complete_cycle
+        << ", \"dependency_wait\": " << record.dependency_wait
+        << ", \"memory_order_wait\": " << record.memory_order_wait
+        << ", \"config_wait\": " << record.config_wait
+        << ", \"arbitration_wait\": " << record.arbitration_wait << ", \"reason\": \""
+        << tile_npu::stall_reason_name(record.reason) << "\"}";
+    if (i + 1 != timeline.size()) out << ',';
+    out << '\n';
+  }
+  out << "]\n";
+  return out.good();
+}
+
+bool write_timeline_csv(const std::string &path,
+                        const std::vector<tile_npu::TimelineRecord> &timeline) {
+  std::ofstream out(path, std::ios::out | std::ios::trunc);
+  if (!out) {
+    std::cerr << "cannot open timeline file: " << path << '\n';
+    return false;
+  }
+  out << "id,pc,op,unit,dispatch,ready,issue,complete,dependency_wait,memory_order_wait,"
+         "config_wait,arbitration_wait,reason\n";
+  for (const auto &record : timeline) {
+    out << record.id << ',' << tile_npu::hex64(record.pc) << ',' << tile_npu::dyn_op_name(record.op)
+        << ',' << tile_npu::UNIT_NAMES[tile_npu::unit_index(record.unit)] << ','
+        << record.dispatch_cycle << ',' << record.ready_cycle << ',' << record.issue_cycle << ','
+        << record.complete_cycle << ',' << record.dependency_wait << ',' << record.memory_order_wait
+        << ',' << record.config_wait << ',' << record.arbitration_wait << ','
+        << tile_npu::stall_reason_name(record.reason) << '\n';
+  }
+  return out.good();
 }
 
 bool write_run_csv(const std::string &path, tile_npu::ExecutionMode mode,
@@ -188,7 +263,12 @@ bool write_run_csv(const std::string &path, tile_npu::ExecutionMode mode,
     const auto &stats = machine.stats();
     add("cycles", std::to_string(stats.cycles));
     add("retired", std::to_string(stats.retired));
+    add("macs", std::to_string(stats.macs));
+    add("bytes", std::to_string(stats.bytes));
     add("ipc", number(per_cycle(stats.retired, stats.cycles)));
+    add("macs_per_cycle", number(per_cycle(stats.macs, stats.cycles)));
+    add("arithmetic_intensity",
+        number(stats.bytes == 0 ? 0.0 : static_cast<double>(stats.macs) / stats.bytes));
     add("window_stall_cycles", std::to_string(stats.window_stall_cycles));
     add("memory_order_stall_cycles", std::to_string(stats.memory_order_stall_cycles));
     add("window_depth", std::to_string(config.window_depth));
@@ -242,6 +322,10 @@ bool write_run_csv(const std::string &path, tile_npu::ExecutionMode mode,
     add("memory_read_bytes", std::to_string(stats.memory.read_bytes));
     add("memory_write_bytes", std::to_string(stats.memory.write_bytes));
     add("memory_busy_cycles", std::to_string(stats.memory.busy_cycles));
+    add("memory_row_hits", std::to_string(stats.memory.row_hits));
+    add("memory_row_misses", std::to_string(stats.memory.row_misses));
+    add("memory_bank_conflicts", std::to_string(stats.memory.bank_conflicts));
+    add("memory_outstanding_peak", std::to_string(stats.memory.outstanding_peak));
     add("memory_bandwidth_bytes_per_cycle",
         number(per_cycle(stats.memory.read_bytes + stats.memory.write_bytes, stats.cycles)));
   }
@@ -298,6 +382,12 @@ int main(int argc, char **argv) {
   std::int64_t steps = -1;
   std::string stats_json;
   std::string stats_csv;
+  std::string trace_out;
+  std::string trace_in;
+  std::string timeline_json;
+  std::string timeline_csv;
+  std::uint64_t trace_start = 0;
+  std::uint64_t trace_count = 0;
   std::string uarch_config_path;
   std::string dump_uarch_config;
   std::vector<std::string> uarch_sets;
@@ -310,13 +400,21 @@ int main(int argc, char **argv) {
   std::vector<std::string> image_args;
 
   CLI::App app{"Tile-NPU functional/uarch simulator"};
-  app.add_option("--mode", mode_name, "Execution mode: functional or uarch")
-      ->check(CLI::IsMember({"functional", "uarch"}))
+  app.add_option("--mode", mode_name, "Execution mode: functional, uarch, or replay")
+      ->check(CLI::IsMember({"functional", "uarch", "replay"}))
       ->default_val("functional");
   app.add_option("-m,--memory", memory_mib, "RAM size in MiB")->check(CLI::PositiveNumber);
   app.add_option("-s,--steps", steps, "Retired-instruction limit (-1: unlimited)");
   app.add_option("--stats-json", stats_json, "Write the final status and counters as JSON");
   app.add_option("--stats-csv", stats_csv, "Write the final status and counters as one CSV row");
+  app.add_option("--trace-out", trace_out, "Write the DynInst stream as a UARCH trace");
+  app.add_option("--trace-in", trace_in, "Replay a UARCH trace (requires --mode=replay)");
+  app.add_option("--timeline-json", timeline_json,
+                 "Write per-instruction dispatch/issue/complete history as JSON");
+  app.add_option("--timeline-csv", timeline_csv,
+                 "Write per-instruction dispatch/issue/complete history as CSV");
+  app.add_option("--trace-start", trace_start, "First DynInst id to record (default 0)");
+  app.add_option("--trace-count", trace_count, "Maximum records to record (0: all)");
   app.add_option("--uarch-config", uarch_config_path,
                  "Load uarch timing parameters from a JSON object");
   app.add_option("--uarch-set", uarch_sets,
@@ -335,7 +433,7 @@ int main(int argc, char **argv) {
       ->check(CLI::PositiveNumber);
   app.add_option("--mem-latency", mem_latency, "Off-chip memory latency in cycles")
       ->check(CLI::NonNegativeNumber);
-  app.add_option("images", image_args, "Program and data images (path[@0xADDR])")->required();
+  app.add_option("images", image_args, "Program and data images (path[@0xADDR])");
   CLI11_PARSE(app, argc, argv);
 
   tile_npu::UarchConfig uarch_config;
@@ -385,6 +483,55 @@ int main(int argc, char **argv) {
     }
   }
 
+  const bool want_timeline = !timeline_json.empty() || !timeline_csv.empty();
+  if (mode_name == "replay") {
+    if (trace_in.empty()) {
+      std::cerr << "replay mode requires --trace-in\n";
+      return 2;
+    }
+    if (!trace_out.empty()) {
+      std::cerr << "replay mode cannot write --trace-out\n";
+      return 2;
+    }
+    if (!stats_csv.empty()) {
+      std::cerr << "replay mode currently supports --stats-json only\n";
+      return 2;
+    }
+    tile_npu::TraceReplay replay(uarch_config, trace_in, want_timeline);
+    std::string replay_error;
+    if (!replay.run(replay_error)) {
+      std::cerr << "trace replay: " << replay_error << '\n';
+      return 1;
+    }
+    const auto &stats = replay.stats();
+    std::cerr << "mode=replay cycles=" << stats.cycles << " retired=" << stats.retired;
+    for (std::size_t unit = 0; unit < tile_npu::UNIT_COUNT; ++unit) {
+      std::cerr << ' ' << UNIT_NAMES[unit] << '=' << stats.unit_count[unit];
+    }
+    std::cerr << '\n';
+    if (!stats_json.empty() && !write_replay_json(stats_json, uarch_config, stats)) return 1;
+    if (!timeline_json.empty() && !write_timeline_json(timeline_json, replay.timeline())) {
+      return 1;
+    }
+    if (!timeline_csv.empty() && !write_timeline_csv(timeline_csv, replay.timeline())) {
+      return 1;
+    }
+    return 0;
+  }
+
+  if (want_timeline && mode_name == "functional") {
+    std::cerr << "timeline output requires --mode=uarch or --mode=replay\n";
+    return 2;
+  }
+  if (image_args.empty()) {
+    std::cerr << "at least one program image is required\n";
+    return 2;
+  }
+  if (!trace_in.empty()) {
+    std::cerr << "--trace-in is only valid with --mode=replay\n";
+    return 2;
+  }
+
   std::vector<Image> images;
   images.reserve(image_args.size());
   for (const auto &arg : image_args) {
@@ -410,6 +557,18 @@ int main(int argc, char **argv) {
       mode_name == "uarch" ? tile_npu::ExecutionMode::uarch : tile_npu::ExecutionMode::functional;
   tile_npu::Machine machine(bus, mode, uarch_config);
   machine.reset(tile_npu::monitor::MEMORY_BASE);
+  if (want_timeline) machine.set_timeline_enabled(true);
+
+  std::unique_ptr<tile_npu::UarchTraceWriter> trace_writer;
+  if (!trace_out.empty()) {
+    trace_writer =
+        std::make_unique<tile_npu::UarchTraceWriter>(trace_out, trace_start, trace_count);
+    if (!trace_writer->good()) {
+      std::cerr << "cannot open trace output: " << trace_out << '\n';
+      return 1;
+    }
+    machine.set_trace_writer(trace_writer.get());
+  }
 
   const auto limit =
       steps < 0 ? std::numeric_limits<std::uint64_t>::max() : static_cast<std::uint64_t>(steps);
@@ -422,8 +581,15 @@ int main(int argc, char **argv) {
       break;
     }
   }
+  if (trace_writer) trace_writer->close();
 
   if (mode == tile_npu::ExecutionMode::uarch) {
+    if (!timeline_json.empty() && !write_timeline_json(timeline_json, machine.timeline())) {
+      return 1;
+    }
+    if (!timeline_csv.empty() && !write_timeline_csv(timeline_csv, machine.timeline())) {
+      return 1;
+    }
     const auto &stats = machine.stats();
     std::cerr << "mode=uarch cycles=" << stats.cycles << " retired=" << stats.retired;
     for (std::size_t unit = 0; unit < tile_npu::UNIT_COUNT; ++unit) {

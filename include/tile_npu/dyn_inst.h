@@ -22,7 +22,11 @@ inline constexpr std::size_t DOMAIN_COUNT = domain_index(Domain::vec32) + 1;
 
 // Execution resource a dynamic instruction belongs to. The functional
 // executor ignores this; the uarch engine uses it to dispatch to a component.
-enum class Unit : std::uint8_t { scalar, mma, vector, dma, config, sync };
+//
+// The NPU classes follow the current ISA rather than the retired Vec8/Transform
+// design: transpose is a descriptor operation handled by DMA, so there is no
+// separate transform engine, and Vec32 is the only vector ALU domain.
+enum class Unit : std::uint8_t { scalar, vec32, reduce, quant, mma, dma, config, sync };
 
 // One counter per Unit; Unit::sync must remain the last enumerator.
 inline constexpr std::size_t unit_index(Unit unit) { return static_cast<std::size_t>(unit); }
@@ -66,6 +70,14 @@ struct DataRef {
 // actually uses, captured before execution. The uarch engine must not read
 // the live State: the functional executor may already have advanced PC or a
 // descriptor base, and cfg writes take effect at dispatch.
+// Gather indices are captured from the Vec32 source before execution. A
+// timing trace and the DMA model need the actual indices because the address
+// depends on data, not only on the descriptor.
+struct GatherInfo {
+  std::array<std::uint32_t, VECTOR_LANES> indices{};
+  std::uint8_t count = 0;
+};
+
 struct ConfigSnapshot {
   TileConfig tile_a{};
   TileConfig tile_b{};
@@ -110,6 +122,7 @@ struct DynInst {
   std::uint8_t elem_bytes = 0;
 
   ConfigSnapshot config{};
+  std::optional<GatherInfo> gather;
 
   // Filled after the functional executor resolves a control transfer.
   std::optional<std::uint64_t> redirect;

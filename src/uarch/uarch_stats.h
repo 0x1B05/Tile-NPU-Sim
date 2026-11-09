@@ -47,12 +47,50 @@ struct MemoryStats {
   std::uint64_t read_bytes = 0;
   std::uint64_t write_bytes = 0;
   std::uint64_t busy_cycles = 0;
+  std::uint64_t row_hits = 0;
+  std::uint64_t row_misses = 0;
+  std::uint64_t bank_conflicts = 0;
+  std::uint64_t outstanding_peak = 0;
+};
+
+enum class StallReason : std::uint8_t {
+  none,
+  dependency,
+  memory_order,
+  config,
+  arbitration,
+};
+
+// One instruction's timing history. `ready_cycle` is the first cycle at which
+// all register dependencies were satisfied; waits before that are dependency
+// stalls, and waits after it are memory-order, config-barrier, or arbitration
+// stalls. Timeline collection is opt-in because long traces can be large.
+struct TimelineRecord {
+  std::uint64_t id = 0;
+  std::uint64_t pc = 0;
+  DynOp op = DynOp::other;
+  Unit unit = Unit::scalar;
+  std::uint64_t dispatch_cycle = 0;
+  std::uint64_t ready_cycle = 0;
+  std::uint64_t issue_cycle = 0;
+  std::uint64_t complete_cycle = 0;
+  std::uint64_t dependency_wait = 0;
+  std::uint64_t memory_order_wait = 0;
+  std::uint64_t config_wait = 0;
+  std::uint64_t arbitration_wait = 0;
+  bool ready_seen = false;
+  bool memory_blocked = false;
+  bool config_blocked = false;
+  StallReason reason = StallReason::none;
 };
 
 struct UarchStats {
   std::uint64_t cycles = 0;
   // Instructions whose timing has completed.
   std::uint64_t retired = 0;
+  // Aggregate work reported by the recorded dynamic instructions.
+  std::uint64_t macs = 0;
+  std::uint64_t bytes = 0;
   // Instruction counts, indexed by Unit.
   std::array<std::uint64_t, UNIT_COUNT> unit_count{};
 

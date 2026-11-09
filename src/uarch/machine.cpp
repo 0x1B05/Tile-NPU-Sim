@@ -1,6 +1,7 @@
 #include "uarch/machine.h"
 
 #include "uarch/event_engine.h"
+#include "uarch/uarch_trace.h"
 
 #include <utility>
 
@@ -20,7 +21,11 @@ void Machine::reset(std::uint64_t entry_pc) {
 
 StepResult Machine::step() {
   if (mode_ == ExecutionMode::functional) {
-    return functional_.step();
+    if (trace_writer_ == nullptr) return functional_.step();
+    DynInst inst;
+    auto result = functional_.step_with_dyn_inst(&inst);
+    if (result.status == StepStatus::retired) trace_writer_->write(inst);
+    return result;
   }
 
   if (!pending_) {
@@ -32,6 +37,7 @@ StepResult Machine::step() {
       uarch_->finish();
       return result;
     }
+    if (trace_writer_ != nullptr) trace_writer_->write(inst);
     pending_ = Pending{.inst = inst, .result = result};
   }
 

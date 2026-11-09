@@ -12,6 +12,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <unordered_map>
+#include <vector>
 
 namespace tile_npu {
 
@@ -41,6 +43,10 @@ public:
   void finish() override;
 
   const UarchStats &stats() const override;
+
+  void set_timeline_enabled(bool enabled) override { timeline_enabled_ = enabled; }
+
+  const std::vector<TimelineRecord> &timeline() const override { return timeline_; }
 
   const UarchConfig &config() const { return config_; }
 
@@ -76,13 +82,25 @@ private:
   void sample_queues(std::uint64_t now);
   void refresh_sample();
 
+  // Timeline bookkeeping. No-ops when timeline collection is disabled.
+  void mark_ready(std::uint64_t id, std::uint64_t now);
+  void mark_memory_blocked(std::uint64_t id);
+  void mark_config_blocked(std::uint64_t id);
+  void record_issue(std::uint64_t id, std::uint64_t now);
+  void record_complete(std::uint64_t id, std::uint64_t now);
+
   UarchConfig config_{};
   UarchState state_{};
   SramModel sram_{};
   Scoreboard scoreboard_{};
   MmaUnit mma_{};
   DmaUnit dma_{};
-  VectorUnit vector_{};
+  // The current ISA has one Vec32 ALU plus separate reduction and
+  // quantisation backends. Each keeps its own pipeline calendar so work in
+  // different classes can overlap; all three share the SramModel.
+  VectorUnit vec32_{};
+  VectorUnit reduce_{};
+  VectorUnit quant_{};
   std::array<Queue, UNIT_COUNT> queues_;
 
   std::optional<std::uint64_t> issue_cycle_;
@@ -90,6 +108,11 @@ private:
   std::optional<std::uint64_t> wakeup_;
   std::uint64_t sample_cycle_ = 0;
   QueueSample sample_{};
+
+  bool timeline_enabled_ = false;
+  std::vector<TimelineRecord> timeline_;
+  std::unordered_map<std::uint64_t, std::size_t> timeline_index_;
+  std::optional<std::uint64_t> config_barrier_;
 };
 
 } // namespace tile_npu

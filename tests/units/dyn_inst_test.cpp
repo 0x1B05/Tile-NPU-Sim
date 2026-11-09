@@ -311,6 +311,46 @@ TEST_CASE(dyn_inst_records_reduce_work_elements) {
            "vreduce.argmax work is the source vector length");
 }
 
+TEST_CASE(dyn_inst_maps_current_isa_units) {
+  State state{};
+  state.ac[2] = AccConfig{.dtype = DType::i32, .rows = 2, .cols = 8};
+  state.vc[1] = Vec32Config{.dtype = DType::i32, .len = 8};
+
+  const EbinInstr ebin{.op = EbinOp::add,
+                       .dest = NpuRegister{.domain = NpuDomain::vec32, .index = 1},
+                       .src1 = NpuRegister{.domain = NpuDomain::vec32, .index = 2},
+                       .src2 = NpuRegister{.domain = NpuDomain::vec32, .index = 3}};
+  check_eq(make_dyn_inst(60, 0, DecodedNpuInstr{ebin}, state).unit, Unit::vec32,
+           "elementwise uses the Vec32 ALU");
+
+  const AreduceInstr reduce{.op = ReduceOp::sum,
+                            .dest = NpuRegister{.domain = NpuDomain::vec32, .index = 1},
+                            .src = NpuRegister{.domain = NpuDomain::acc, .index = 2}};
+  check_eq(make_dyn_inst(61, 0, DecodedNpuInstr{reduce}, state).unit, Unit::reduce,
+           "reduction has its own queue");
+
+  const AquantInstr quant{.dest = NpuRegister{.domain = NpuDomain::tile, .index = 1},
+                          .src = NpuRegister{.domain = NpuDomain::acc, .index = 2},
+                          .scale = 1};
+  check_eq(make_dyn_inst(62, 0, DecodedNpuInstr{quant}, state).unit, Unit::quant,
+           "quantisation has its own queue");
+
+  const MmaInstr mma{.op = MmaOp::nt_zero,
+                     .dest = NpuRegister{.domain = NpuDomain::acc, .index = 2},
+                     .src_a = NpuRegister{.domain = NpuDomain::tile, .index = 0},
+                     .src_b = NpuRegister{.domain = NpuDomain::tile, .index = 1}};
+  check_eq(make_dyn_inst(63, 0, DecodedNpuInstr{mma}, state).unit, Unit::mma,
+           "MMA uses the matrix unit");
+
+  const MblkInstr load{.op = MblkOp::load,
+                       .reg = NpuRegister{.domain = NpuDomain::tile, .index = 0}};
+  check_eq(make_dyn_inst(64, 0, DecodedNpuInstr{load}, state).unit, Unit::dma, "load uses DMA");
+
+  const SysInstr fence{.op = SysOp::fence_all};
+  check_eq(make_dyn_inst(65, 0, DecodedNpuInstr{fence}, state).unit, Unit::sync,
+           "fence uses the sync unit");
+}
+
 TEST_CASE(dyn_inst_gather_uses_effective_length) {
   State state{};
   state.tc[4] = TileConfig{.dtype = DType::i8, .rows = 4, .cols = 8};

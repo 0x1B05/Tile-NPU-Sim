@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 namespace tile_npu {
 
@@ -48,6 +49,11 @@ public:
   virtual void finish() = 0;
 
   virtual const UarchStats &stats() const = 0;
+
+  // Opt-in per-instruction history. Disabled by default because long traces
+  // can contain millions of records.
+  virtual void set_timeline_enabled(bool enabled) = 0;
+  virtual const std::vector<TimelineRecord> &timeline() const = 0;
 };
 
 } // namespace tile_npu

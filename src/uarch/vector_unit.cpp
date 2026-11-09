@@ -54,8 +54,10 @@ std::uint64_t VectorUnit::issue(const DynInst &inst, std::uint64_t now) {
   const auto beats = std::max<std::uint64_t>(1, ceil_div(elements, lanes));
   const auto latency = op_latency(inst.op, elements, lanes);
 
-  // Source streams must be available before the pipeline starts.
-  auto operand_start = now;
+  // Source streams must be available before the pipeline starts. Reserve them
+  // from the pipeline's earliest start rather than at issue time so a queued
+  // vector op does not hold a shared bank while it waits behind older work.
+  auto operand_start = pipeline_.earliest_start(now, now, beats);
   std::uint64_t src_end = now;
   for (std::uint8_t i = 0; i < inst.src_count; ++i) {
     const auto &src = inst.src[i];

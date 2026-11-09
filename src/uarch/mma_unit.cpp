@@ -1,5 +1,7 @@
 #include "uarch/mma_unit.h"
 
+#include "utils/common.h"
+
 #include <algorithm>
 #include <cstddef>
 
@@ -23,27 +25,43 @@ std::uint64_t MmaUnit::issue(const DynInst &inst, std::uint64_t now) {
     return now + latency;
   }
 
-  const auto read_a = sram_->reserve_stream(Domain::tile, inst.src[0].index, now, now, k, false);
+  // Reserve the operand streams when the array can actually consume them,
+  // not at issue time. Reserving at `now` would let a queued MMA hold Tile
+  // banks while it waits behind an earlier array operation and create false
+  // conflicts for DMA/vector work.
+  const auto array_span = k + config_.input_skew;
+  const auto array_hint = array_.earliest_start(now, now + config_.read_latency, array_span);
+  const auto read_earliest =
+      array_hint > config_.read_latency ? array_hint - config_.read_latency : now;
+  const auto read_a =
+      sram_->reserve_stream(Domain::tile, inst.src[0].index, now, read_earliest, k, false);
   // The two banks can read in parallel; the same bank serializes the two
   // operand streams because it has one read port.
-  const auto read_b = sram_->reserve_stream(Domain::tile, inst.src[1].index, now, now, k, false);
+  const auto read_b =
+      sram_->reserve_stream(Domain::tile, inst.src[1].index, now, read_earliest, k, false);
 
   // Both streams must have started before the first operand pair is available.
   // The synchronous Tile return costs one cycle; the array then runs for K
   // cycles plus the input-side skew.
-  const auto array_span = k + config_.input_skew;
   const auto first_pair = std::max(read_a.start, read_b.start) + config_.read_latency;
   const auto array_start = array_.reserve_from(now, first_pair, array_span);
   const auto array_end = array_start + array_span;
 
   auto finish = std::max({read_a.end, read_b.end, array_end});
 
-  // MMA writes rows back to Acc; VMMA writes a Vec32 register. Both go
-  // through the same shared SRAM model as DMA and Vector.
+  // MMA writes one Acc row per cycle. VMMA writes a Vec32 row, which is
+  // consumed `vector_lanes` at a time by the vector write port.
   const auto &dst = inst.dst[0];
   if (dst.domain == Domain::acc || dst.domain == Domain::vec32) {
     const auto write_start = array_end + config_.output_skew;
-    const auto write = sram_->reserve_stream(dst.domain, dst.index, now, write_start, m, true);
+    const auto n = std::max<std::uint64_t>(1, inst.cols);
+    const auto write_cycles =
+        dst.domain == Domain::vec32
+            ? std::max<std::uint64_t>(1,
+                                      ceil_div(n, std::max<std::uint64_t>(1, config_.vector_lanes)))
+            : m;
+    const auto write =
+        sram_->reserve_stream(dst.domain, dst.index, now, write_start, write_cycles, true);
     finish = std::max(finish, write.end);
   }
 

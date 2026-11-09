@@ -29,7 +29,8 @@ EventUarchEngine::EventUarchEngine(UarchConfig config)
     : config_(std::move(config)), sram_(config_.sram, &state_.stats.sram),
       mma_(&sram_, config_.mma),
       dma_(&sram_, std::make_unique<SimpleMemoryService>(config_.memory)),
-      vector_(&sram_, config_.vector) {
+      vec32_(&sram_, config_.vector), reduce_(&sram_, config_.vector),
+      quant_(&sram_, config_.vector) {
   for (std::size_t i = 0; i < UNIT_COUNT; ++i) {
     queues_[i] = Queue(config_.queue_depth[i]);
   }
@@ -41,7 +42,9 @@ void EventUarchEngine::reset() {
   scoreboard_.reset();
   mma_.reset();
   dma_.reset();
-  vector_.reset();
+  vec32_.reset();
+  reduce_.reset();
+  quant_.reset();
   for (auto &queue : queues_) {
     queue.clear();
   }
@@ -50,6 +53,9 @@ void EventUarchEngine::reset() {
   wakeup_.reset();
   sample_cycle_ = 0;
   sample_ = {};
+  timeline_.clear();
+  timeline_index_.clear();
+  config_barrier_.reset();
 }
 
 void EventUarchEngine::dispatch(const DynInst &inst) {
@@ -61,7 +67,20 @@ void EventUarchEngine::dispatch(const DynInst &inst) {
   if (inst.unit == Unit::sync) fence(inst.fence);
 
   ++state_.stats.unit_count[unit_index(inst.unit)];
+  state_.stats.macs += inst.macs;
+  state_.stats.bytes += inst.bytes;
   scoreboard_.dispatch(inst);
+  if (timeline_enabled_) {
+    const auto index = timeline_.size();
+    timeline_.push_back(TimelineRecord{.id = inst.id,
+                                       .pc = inst.pc,
+                                       .op = inst.op,
+                                       .unit = inst.unit,
+                                       .dispatch_cycle = state_.events.now()});
+    timeline_index_[inst.id] = index;
+    if (scoreboard_.ready(inst.id)) mark_ready(inst.id, state_.events.now());
+  }
+  if (inst.unit == Unit::config) config_barrier_ = inst.id;
   if (!queues_[unit_index(inst.unit)].push(inst.id)) {
     unreachable("dispatch into a full unit queue");
   }
@@ -82,6 +101,19 @@ bool EventUarchEngine::issue_ready(std::uint64_t now) {
 
   bool issued = false;
   const auto memory_head = next_memory_id();
+
+  if (timeline_enabled_) {
+    for (std::size_t unit = 0; unit < UNIT_COUNT; ++unit) {
+      for (const auto id : queues_[unit].entries()) {
+        const auto &entry = scoreboard_.entries().at(id);
+        if (entry.deps.empty()) mark_ready(id, now);
+        if (entry.inst.unit == Unit::dma && memory_head != id) mark_memory_blocked(id);
+        if (config_barrier_ && id > *config_barrier_ && entry.inst.unit != Unit::config) {
+          mark_config_blocked(id);
+        }
+      }
+    }
+  }
 
   for (std::size_t unit = 0; unit < UNIT_COUNT; ++unit) {
     if (unit_used_[unit]) continue;
@@ -121,6 +153,7 @@ void EventUarchEngine::schedule_wakeup(std::uint64_t when) {
 void EventUarchEngine::issue_one(std::uint64_t id, std::uint64_t now) {
   const auto &inst = scoreboard_.inst(id);
   scoreboard_.mark_issued(id);
+  record_issue(id, now);
 
   std::uint64_t finish = now + SINGLE_CYCLE;
   switch (inst.unit) {
@@ -129,9 +162,11 @@ void EventUarchEngine::issue_one(std::uint64_t id, std::uint64_t now) {
     finish = dma_.issue(inst, now);
     state_.stats.memory = dma_.memory_stats();
     break;
-  case Unit::vector: finish = vector_.issue(inst, now); break;
+  case Unit::vec32: finish = vec32_.issue(inst, now); break;
+  case Unit::reduce: finish = reduce_.issue(inst, now); break;
+  case Unit::quant: finish = quant_.issue(inst, now); break;
+  case Unit::config: finish = now + config_.config_latency; break;
   case Unit::scalar:
-  case Unit::config:
   case Unit::sync: break;
   }
 
@@ -140,6 +175,8 @@ void EventUarchEngine::issue_one(std::uint64_t id, std::uint64_t now) {
 
 void EventUarchEngine::complete(std::uint64_t id) {
   if (!scoreboard_.complete(id)) return;
+  if (config_barrier_ == id) config_barrier_.reset();
+  record_complete(id, state_.events.now());
   ++state_.stats.retired;
   issue_ready(state_.events.now());
 }
@@ -202,6 +239,13 @@ std::optional<std::uint64_t> EventUarchEngine::next_memory_id() const {
 bool EventUarchEngine::can_issue(const Scoreboard::Entry &entry,
                                  std::optional<std::uint64_t> memory_head) const {
   if (entry.issued || !entry.deps.empty()) return false;
+  // A configuration write is a serialization point for younger work. The
+  // functional snapshot is already captured at dispatch, so the timing model
+  // must not let a younger consumer use the new configuration before the
+  // write completes.
+  if (config_barrier_ && entry.inst.id > *config_barrier_ && entry.inst.unit != Unit::config) {
+    return false;
+  }
   // The memory queue issues in program order: only the oldest unissued memory
   // operation may issue, and younger ones may not pass it while it waits.
   return entry.inst.unit != Unit::dma || memory_head == entry.inst.id;
@@ -258,5 +302,72 @@ void EventUarchEngine::sample_queues(std::uint64_t now) {
 }
 
 const UarchStats &EventUarchEngine::stats() const { return state_.stats; }
+
+void EventUarchEngine::mark_ready(std::uint64_t id, std::uint64_t now) {
+  if (!timeline_enabled_) return;
+  const auto it = timeline_index_.find(id);
+  if (it == timeline_index_.end()) return;
+  auto &record = timeline_[it->second];
+  if (!record.ready_seen) {
+    record.ready_seen = true;
+    record.ready_cycle = now;
+  }
+}
+
+void EventUarchEngine::mark_memory_blocked(std::uint64_t id) {
+  if (!timeline_enabled_) return;
+  const auto it = timeline_index_.find(id);
+  if (it != timeline_index_.end()) timeline_[it->second].memory_blocked = true;
+}
+
+void EventUarchEngine::mark_config_blocked(std::uint64_t id) {
+  if (!timeline_enabled_) return;
+  const auto it = timeline_index_.find(id);
+  if (it != timeline_index_.end()) timeline_[it->second].config_blocked = true;
+}
+
+void EventUarchEngine::record_issue(std::uint64_t id, std::uint64_t now) {
+  if (!timeline_enabled_) return;
+  const auto it = timeline_index_.find(id);
+  if (it == timeline_index_.end()) return;
+  auto &record = timeline_[it->second];
+  record.issue_cycle = now;
+  if (!record.ready_seen) {
+    record.ready_seen = true;
+    record.ready_cycle = now;
+  }
+}
+
+void EventUarchEngine::record_complete(std::uint64_t id, std::uint64_t now) {
+  if (!timeline_enabled_) return;
+  const auto it = timeline_index_.find(id);
+  if (it == timeline_index_.end()) return;
+  auto &record = timeline_[it->second];
+  record.complete_cycle = now;
+
+  if (record.ready_seen) {
+    record.dependency_wait = record.ready_cycle - record.dispatch_cycle;
+    const auto after_ready = record.issue_cycle - record.ready_cycle;
+    if (record.memory_blocked) record.memory_order_wait = after_ready;
+    if (record.config_blocked) {
+      record.config_wait =
+          after_ready > record.memory_order_wait ? after_ready - record.memory_order_wait : 0;
+    }
+    const auto accounted = record.memory_order_wait + record.config_wait;
+    record.arbitration_wait = after_ready > accounted ? after_ready - accounted : 0;
+  } else {
+    record.dependency_wait = record.issue_cycle - record.dispatch_cycle;
+  }
+
+  if (record.dependency_wait != 0) {
+    record.reason = StallReason::dependency;
+  } else if (record.config_wait != 0) {
+    record.reason = StallReason::config;
+  } else if (record.memory_order_wait != 0) {
+    record.reason = StallReason::memory_order;
+  } else if (record.arbitration_wait != 0) {
+    record.reason = StallReason::arbitration;
+  }
+}
 
 } // namespace tile_npu

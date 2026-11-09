@@ -17,6 +17,9 @@ struct MmaConfig {
   std::uint64_t read_latency = 1;
   std::uint64_t input_skew = 31;
   std::uint64_t output_skew = 31;
+  // VMMA writes a Vec32 row rather than an Acc row; the writeback is split
+  // into this many lanes per cycle.
+  std::uint64_t vector_lanes = 8;
 
   constexpr std::uint64_t latency(std::uint64_t k, std::uint64_t m) const {
     return read_latency + k + input_skew + output_skew + m;
@@ -40,6 +43,8 @@ struct UarchConfig {
   std::array<std::size_t, UNIT_COUNT> queue_depth = [] {
     std::array<std::size_t, UNIT_COUNT> depths{};
     depths.fill(DEFAULT_QUEUE_DEPTH);
+    // The MXU control keeps two commands (one executing, one waiting).
+    depths[unit_index(Unit::mma)] = 2;
     depths[unit_index(Unit::sync)] = 1;
     return depths;
   }();
@@ -48,6 +53,8 @@ struct UarchConfig {
 
   MmaConfig mma{};
   VectorConfig vector{};
+  // Configuration writes are serialization points for younger consumers.
+  std::uint64_t config_latency = 1;
 
   // Tile/Acc/Vec bank, port, and width configuration shared by all units.
   SramConfig sram{};

@@ -1,5 +1,6 @@
 #include "framework.h"
 
+#include "tile_npu/platform/ram.h"
 #include "uarch/dma_unit.h"
 #include "uarch/event_engine.h"
 #include "uarch/event_queue.h"
@@ -10,11 +11,16 @@
 #include "uarch/scoreboard.h"
 #include "uarch/sram_bank.h"
 #include "uarch/sram_model.h"
+#include "uarch/state_digest.h"
+#include "uarch/trace_replay.h"
 #include "uarch/uarch_config_json.h"
+#include "uarch/uarch_trace.h"
 #include "uarch/vector_unit.h"
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
+#include <string>
 #include <vector>
 
 namespace {
@@ -50,7 +56,7 @@ tile_npu::DynInst vector_inst(std::uint64_t id, tile_npu::DynOp op, std::uint32_
                               tile_npu::DataRef src, tile_npu::DataRef dst) {
   tile_npu::DynInst inst{};
   inst.id = id;
-  inst.unit = tile_npu::Unit::vector;
+  inst.unit = tile_npu::Unit::vec32;
   inst.op = op;
   inst.len = len;
   inst.src[0] = src;
@@ -212,7 +218,7 @@ TEST_CASE(scoreboard_tracks_register_hazards) {
 
   tile_npu::DynInst in_place{};
   in_place.id = 6;
-  in_place.unit = tile_npu::Unit::vector;
+  in_place.unit = tile_npu::Unit::vec32;
   in_place.src[0] = vec(2);
   in_place.src_count = 1;
   in_place.dst[0] = vec(2);
@@ -225,7 +231,7 @@ TEST_CASE(scoreboard_tracks_dual_destination) {
   tile_npu::Scoreboard board;
   tile_npu::DynInst argmax{};
   argmax.id = 1;
-  argmax.unit = tile_npu::Unit::vector;
+  argmax.unit = tile_npu::Unit::vec32;
   argmax.dst[0] = vec(0);
   argmax.dst[1] = vec(1);
   argmax.dst_count = 2;
@@ -332,7 +338,7 @@ TEST_CASE(event_engine_issues_memory_in_program_order) {
   engine.dispatch(dma_load(3, 64, tile(0)));    // ready, but younger than the store
   engine.finish();
 
-  check_eq(engine.stats().cycles, std::uint64_t{82},
+  check_eq(engine.stats().cycles, std::uint64_t{84},
            "the load issues after the store instead of bypassing it");
 }
 
@@ -536,11 +542,17 @@ TEST_CASE(sram_model_is_shared_across_units) {
 TEST_CASE(memory_service_serializes_the_bus) {
   tile_npu::SimpleMemoryService memory;
 
-  check_eq(memory.issue(64, false, 0), std::uint64_t{6}, "64 bytes is two bus cycles plus latency");
-  check_eq(memory.issue(64, true, 6), std::uint64_t{12}, "the next transfer waits for the bus");
+  const auto first =
+      memory.issue(tile_npu::MemoryRequest{.addr = 0, .bytes = 64, .write = false}, 0);
+  check_eq(first.complete, std::uint64_t{6}, "64 bytes is two bus cycles plus latency");
+  const auto second =
+      memory.issue(tile_npu::MemoryRequest{.addr = 0, .bytes = 64, .write = true}, 6);
+  check_eq(second.complete, std::uint64_t{13},
+           "the next transfer waits for the bus and read/write turnaround");
   check_eq(memory.stats().transfers, std::uint64_t{2}, "transfer count");
   check_eq(memory.stats().read_bytes, std::uint64_t{64}, "read byte count");
   check_eq(memory.stats().write_bytes, std::uint64_t{64}, "write byte count");
+  check_eq(memory.stats().row_hits, std::uint64_t{1}, "the second access hits the open row");
 }
 
 TEST_CASE(dma_unit_uses_shared_sram_and_memory_service) {
@@ -573,25 +585,34 @@ TEST_CASE(uarch_config_json_parses_nested_overrides) {
   std::string error;
   const std::string text = R"({
     "window_depth": 6,
-    "queue_depth": {"mma": 3, "vector": 2},
-    "mma": {"read_latency": 2, "input_skew": 7, "output_skew": 9},
+    "queue_depth": {"mma": 3, "vec32": 2},
+    "mma": {"read_latency": 2, "input_skew": 7, "output_skew": 9, "vector_lanes": 4},
     "vector": {"lanes": 16},
-    "memory": {"bytes_per_cycle": 64, "latency": 11},
+    "config": {"latency": 3},
+    "memory": {"bytes_per_cycle": 64, "latency": 11, "banks": 2, "row_bytes": 128,
+               "max_outstanding": 3, "turnaround": 2, "row_miss_penalty": 5},
     "sram": {"tile": {"banks": 4, "ports": 2, "width": 16}}
   })";
 
   check(tile_npu::apply_uarch_config_json(text, config, error), error);
   check_eq(config.window_depth, std::size_t{6}, "window depth");
   check_eq(config.depth(tile_npu::Unit::mma), std::size_t{3}, "MMA queue depth");
-  check_eq(config.depth(tile_npu::Unit::vector), std::size_t{2}, "vector queue depth");
+  check_eq(config.depth(tile_npu::Unit::vec32), std::size_t{2}, "Vec32 queue depth");
   check_eq(config.depth(tile_npu::Unit::dma), std::size_t{8},
            "unmentioned queue keeps its default");
   check_eq(config.mma.read_latency, std::uint64_t{2}, "MMA read latency");
   check_eq(config.mma.input_skew, std::uint64_t{7}, "MMA input skew");
   check_eq(config.mma.output_skew, std::uint64_t{9}, "MMA output skew");
+  check_eq(config.mma.vector_lanes, std::uint64_t{4}, "VMMA writeback lanes");
   check_eq(config.vector.lanes, std::uint64_t{16}, "vector lanes");
+  check_eq(config.config_latency, std::uint64_t{3}, "config write latency");
   check_eq(config.memory.bytes_per_cycle, std::uint64_t{64}, "memory bus width");
   check_eq(config.memory.latency, std::uint64_t{11}, "memory latency");
+  check_eq(config.memory.banks, std::uint64_t{2}, "memory bank count");
+  check_eq(config.memory.row_bytes, std::uint64_t{128}, "memory row size");
+  check_eq(config.memory.max_outstanding, std::uint64_t{3}, "memory outstanding limit");
+  check_eq(config.memory.turnaround, std::uint64_t{2}, "memory turnaround");
+  check_eq(config.memory.row_miss_penalty, std::uint64_t{5}, "memory row miss penalty");
   const auto &tile = config.sram.domains[static_cast<std::size_t>(tile_npu::Domain::tile)];
   check_eq(tile.banks, std::size_t{4}, "tile bank count");
   check_eq(tile.ports_per_bank, std::size_t{2}, "tile ports per bank");
@@ -624,9 +645,13 @@ TEST_CASE(uarch_config_round_trips_through_json) {
   check(tile_npu::apply_uarch_setting("window_depth=12", config, error), error);
   check(tile_npu::apply_uarch_setting("queue_depth.dma=3", config, error), error);
   check(tile_npu::apply_uarch_setting("mma.input_skew=5", config, error), error);
+  check(tile_npu::apply_uarch_setting("mma.vector_lanes=16", config, error), error);
   check(tile_npu::apply_uarch_setting("vector.lanes=4", config, error), error);
+  check(tile_npu::apply_uarch_setting("config.latency=3", config, error), error);
   check(tile_npu::apply_uarch_setting("sram.acc.banks=8", config, error), error);
   check(tile_npu::apply_uarch_setting("memory.latency=0", config, error), error);
+  check(tile_npu::apply_uarch_setting("memory.banks=4", config, error), error);
+  check(tile_npu::apply_uarch_setting("memory.max_outstanding=8", config, error), error);
 
   const auto text = tile_npu::uarch_config_json(config);
   tile_npu::UarchConfig reparsed;
@@ -635,11 +660,16 @@ TEST_CASE(uarch_config_round_trips_through_json) {
   check_eq(reparsed.depth(tile_npu::Unit::dma), config.depth(tile_npu::Unit::dma),
            "round-trip queue depth");
   check_eq(reparsed.mma.input_skew, config.mma.input_skew, "round-trip MMA skew");
+  check_eq(reparsed.mma.vector_lanes, config.mma.vector_lanes, "round-trip VMMA lanes");
   check_eq(reparsed.vector.lanes, config.vector.lanes, "round-trip vector lanes");
+  check_eq(reparsed.config_latency, config.config_latency, "round-trip config latency");
   check_eq(reparsed.sram.domains[static_cast<std::size_t>(tile_npu::Domain::acc)].banks,
            config.sram.domains[static_cast<std::size_t>(tile_npu::Domain::acc)].banks,
            "round-trip Acc banks");
   check_eq(reparsed.memory.latency, config.memory.latency, "round-trip memory latency");
+  check_eq(reparsed.memory.banks, config.memory.banks, "round-trip memory banks");
+  check_eq(reparsed.memory.max_outstanding, config.memory.max_outstanding,
+           "round-trip memory outstanding");
 }
 
 TEST_CASE(uarch_config_parameters_change_timing) {
@@ -752,4 +782,277 @@ TEST_CASE(sram_model_reports_per_domain_stats) {
   check_eq(stats.domains[vec].accesses, std::uint64_t{0}, "unused domain stays zero");
   check_eq(stats.reads, std::uint64_t{1}, "aggregate reads");
   check_eq(stats.writes, std::uint64_t{1}, "aggregate writes");
+}
+
+TEST_CASE(mma_vmma_writes_vec32_in_lanes) {
+  tile_npu::MmaConfig config;
+  config.read_latency = 0;
+  config.input_skew = 0;
+  config.output_skew = 0;
+  config.vector_lanes = 8;
+
+  tile_npu::DynInst vmma{};
+  vmma.unit = tile_npu::Unit::mma;
+  vmma.op = tile_npu::DynOp::vmma;
+  vmma.rows = 1;
+  vmma.cols = 32;
+  vmma.k = 8;
+  vmma.src_count = 2;
+  vmma.src[0] = tile(0);
+  vmma.src[1] = tile(1);
+  vmma.dst_count = 1;
+  vmma.dst[0] = vec(0);
+
+  tile_npu::MmaUnit narrow(nullptr, config);
+  check_eq(narrow.issue(vmma, 0), std::uint64_t{20},
+           "VMMA writes 32 lanes in four eight-lane beats");
+
+  config.vector_lanes = 16;
+  tile_npu::MmaUnit wide(nullptr, config);
+  check_eq(wide.issue(vmma, 0), std::uint64_t{18}, "wider Vec32 writeback shortens VMMA");
+}
+
+TEST_CASE(dma_segments_follow_descriptor_layout) {
+  tile_npu::DmaUnit dma;
+
+  tile_npu::DynInst block{};
+  block.unit = tile_npu::Unit::dma;
+  block.op = tile_npu::DynOp::load;
+  block.rows = 2;
+  block.cols = 3;
+  block.elem_bytes = 4;
+  block.addr = 0x1000;
+  block.row_stride = 16;
+  block.col_stride = 4;
+  block.dst_count = 1;
+  block.dst[0] = tile(0);
+
+  const auto row_segments = dma.segments(block);
+  check_eq(row_segments.size(), std::size_t{2}, "row-major block has one segment per row");
+  check_eq(row_segments[0].addr, std::uint64_t{0x1000}, "first row address");
+  check_eq(row_segments[0].bytes, std::uint32_t{12}, "first row bytes");
+  check_eq(row_segments[1].addr, std::uint64_t{0x1010}, "second row address");
+
+  block.transpose = true;
+  const auto transpose_segments = dma.segments(block);
+  check_eq(transpose_segments.size(), std::size_t{3}, "transpose walks three columns");
+  check_eq(transpose_segments[0].addr, std::uint64_t{0x1000}, "first transposed column");
+  check_eq(transpose_segments[1].addr, std::uint64_t{0x1010}, "second transposed column");
+  check_eq(transpose_segments[0].bytes, std::uint32_t{8}, "transposed column bytes");
+
+  block.transpose = false;
+  block.col_stride = 8;
+  const auto element_segments = dma.segments(block);
+  check_eq(element_segments.size(), std::size_t{6}, "non-contiguous columns fall back to elements");
+  check_eq(element_segments[0].bytes, std::uint32_t{4}, "element segment bytes");
+}
+
+TEST_CASE(dma_segments_use_gather_indices) {
+  tile_npu::DmaUnit dma;
+  tile_npu::DynInst gather{};
+  gather.unit = tile_npu::Unit::dma;
+  gather.op = tile_npu::DynOp::gather;
+  gather.rows = 2;
+  gather.cols = 2;
+  gather.elem_bytes = 1;
+  gather.addr = 0x2000;
+  gather.row_stride = 16;
+  gather.col_stride = 1;
+  gather.dst_count = 1;
+  gather.dst[0] = tile(0);
+  tile_npu::GatherInfo info;
+  info.count = 2;
+  info.indices[0] = 3;
+  info.indices[1] = 5;
+  gather.gather = info;
+
+  const auto segments = dma.segments(gather);
+  check_eq(segments.size(), std::size_t{2}, "one segment per gather row");
+  check_eq(segments[0].addr, std::uint64_t{0x2030}, "first gather row address");
+  check_eq(segments[1].addr, std::uint64_t{0x2050}, "second gather row address");
+  check_eq(segments[0].bytes, std::uint32_t{2}, "gather row bytes");
+}
+
+TEST_CASE(memory_service_tracks_rows_and_outstanding) {
+  tile_npu::MemoryConfig config;
+  config.bytes_per_cycle = 32;
+  config.latency = 4;
+  config.banks = 2;
+  config.row_bytes = 64;
+  config.max_outstanding = 2;
+  config.turnaround = 0;
+  config.row_miss_penalty = 2;
+  tile_npu::SimpleMemoryService memory(config);
+
+  const auto first =
+      memory.issue(tile_npu::MemoryRequest{.addr = 0, .bytes = 32, .write = false}, 0);
+  const auto second =
+      memory.issue(tile_npu::MemoryRequest{.addr = 0, .bytes = 32, .write = false}, 0);
+  check_eq(first.complete, std::uint64_t{7},
+           "first row miss pays latency, service and miss penalty");
+  check_eq(second.complete, std::uint64_t{8}, "same-row access can reuse the open row");
+  check(memory.stats().row_hits >= 1, "row hit is counted");
+  check(memory.stats().outstanding_peak >= 1, "outstanding high-water mark is reported");
+}
+
+TEST_CASE(memory_digest_detects_stores) {
+  tile_npu::Ram memory(0x1000, 64);
+  std::array<std::byte, 4> first{std::byte{1}, std::byte{2}, std::byte{3}, std::byte{4}};
+  check(memory.write(0x1000, first), "initial store");
+  const auto initial = tile_npu::memory_digest(memory, 0x1000, 64);
+  check(initial.has_value(), "memory digest reads the range");
+
+  std::array<std::byte, 4> second{std::byte{1}, std::byte{2}, std::byte{3}, std::byte{5}};
+  check(memory.write(0x1000, second), "changed store");
+  const auto changed = tile_npu::memory_digest(memory, 0x1000, 64);
+  check(changed.has_value(), "memory digest reads the changed range");
+  check(initial != changed, "memory digest changes when a store changes data");
+
+  check(memory.write(0x1000, first), "restore store");
+  const auto restored = tile_npu::memory_digest(memory, 0x1000, 64);
+  check_eq(restored, initial, "memory digest is stable for identical contents");
+
+  check(!tile_npu::memory_digest(memory, 0x1000, 128).has_value(),
+        "out-of-range memory digest fails instead of hashing partial data");
+}
+
+TEST_CASE(uarch_trace_roundtrip) {
+  const auto path = std::filesystem::temp_directory_path() / "tile_npu_uarch_trace_test.utr";
+  std::filesystem::remove(path);
+
+  tile_npu::DynInst input{};
+  input.id = 42;
+  input.pc = 0x80000000;
+  input.op = tile_npu::DynOp::gather;
+  input.unit = tile_npu::Unit::dma;
+  input.src_count = 1;
+  input.src[0] = vec(3);
+  input.dst_count = 1;
+  input.dst[0] = tile(4);
+  input.rows = 2;
+  input.cols = 3;
+  input.elem_bytes = 1;
+  input.bytes = 6;
+  input.addr = 0x3000;
+  input.row_stride = 16;
+  input.col_stride = 1;
+  tile_npu::GatherInfo info;
+  info.count = 2;
+  info.indices[0] = 7;
+  info.indices[1] = 9;
+  input.gather = info;
+
+  {
+    tile_npu::UarchTraceWriter writer(path.string());
+    check(writer.good(), "trace writer opens");
+    writer.write(input);
+    writer.close();
+  }
+
+  tile_npu::UarchTraceReader reader(path.string());
+  check(reader.good(), "trace reader opens");
+  tile_npu::DynInst output;
+  tile_npu::UarchTraceType type = tile_npu::UarchTraceType::inst;
+  check(reader.next(output, type), "trace reader returns one record");
+  check_eq(type, tile_npu::UarchTraceType::inst, "record type");
+  check_eq(output.id, input.id, "trace id");
+  check_eq(output.pc, input.pc, "trace pc");
+  check_eq(output.unit, input.unit, "trace unit");
+  check_eq(output.addr, input.addr, "trace address");
+  check_eq(output.gather->count, std::uint8_t{2}, "trace gather count");
+  check_eq(output.gather->indices[1], std::uint32_t{9}, "trace gather index");
+  std::filesystem::remove(path);
+}
+
+TEST_CASE(trace_replay_matches_online_engine) {
+  const auto path = std::filesystem::temp_directory_path() / "tile_npu_uarch_replay_test.utr";
+  std::filesystem::remove(path);
+
+  tile_npu::UarchConfig config;
+  config.window_depth = 16;
+  std::vector<tile_npu::DynInst> stream;
+  stream.push_back(mma_inst(1, 8, 4, 0, 16, 0));
+  stream.push_back(dma_load(2, 64, tile(1)));
+  stream.push_back(scalar_read(3, acc(0), 1));
+  tile_npu::DynInst fence{};
+  fence.id = 4;
+  fence.unit = tile_npu::Unit::sync;
+  fence.op = tile_npu::DynOp::fence;
+  fence.fence = tile_npu::FenceKind::all;
+  stream.push_back(fence);
+
+  tile_npu::EventUarchEngine online(config);
+  online.reset();
+  for (const auto &inst : stream) {
+    while (!online.can_dispatch(inst))
+      online.advance();
+    online.dispatch(inst);
+  }
+  online.finish();
+
+  {
+    tile_npu::UarchTraceWriter writer(path.string());
+    for (const auto &inst : stream)
+      writer.write(inst);
+    writer.close();
+  }
+
+  tile_npu::TraceReplay replay(config, path.string());
+  std::string error;
+  check(replay.run(error), error);
+  check_eq(replay.stats().cycles, online.stats().cycles, "replay cycles match online");
+  check_eq(replay.stats().retired, online.stats().retired, "replay retired matches online");
+  for (std::size_t unit = 0; unit < tile_npu::UNIT_COUNT; ++unit) {
+    check_eq(replay.stats().unit_count[unit], online.stats().unit_count[unit],
+             "replay unit count matches online");
+  }
+  check_eq(replay.stats().sram.accesses, online.stats().sram.accesses,
+           "replay SRAM activity matches online");
+  check_eq(replay.stats().memory.transfers, online.stats().memory.transfers,
+           "replay memory activity matches online");
+  std::filesystem::remove(path);
+}
+
+TEST_CASE(event_engine_records_timeline) {
+  tile_npu::EventUarchEngine engine;
+  engine.set_timeline_enabled(true);
+  engine.reset();
+
+  engine.dispatch(mma_inst(1, 8, 4, 0, 16, 0));
+  engine.dispatch(scalar_read(2, acc(0), 1));
+  engine.finish();
+
+  const auto &timeline = engine.timeline();
+  check_eq(timeline.size(), std::size_t{2}, "one timeline record per instruction");
+  check_eq(timeline[0].id, std::uint64_t{1}, "first timeline id");
+  check_eq(timeline[0].unit, tile_npu::Unit::mma, "first timeline unit");
+  check(timeline[0].dispatch_cycle <= timeline[0].issue_cycle, "dispatch before issue");
+  check(timeline[0].issue_cycle <= timeline[0].complete_cycle, "issue before complete");
+  check(timeline[1].dependency_wait > 0, "scalar waits for the MMA result");
+  check_eq(timeline[1].reason, tile_npu::StallReason::dependency, "dependency stall reason");
+}
+
+TEST_CASE(config_write_serializes_younger_work) {
+  tile_npu::UarchConfig config;
+  config.config_latency = 4;
+  tile_npu::EventUarchEngine engine(config);
+  engine.set_timeline_enabled(true);
+  engine.reset();
+
+  tile_npu::DynInst cfg{};
+  cfg.id = 1;
+  cfg.unit = tile_npu::Unit::config;
+  cfg.op = tile_npu::DynOp::config;
+  engine.dispatch(cfg);
+  engine.dispatch(scalar_inst(2, 1));
+  engine.finish();
+
+  const auto &timeline = engine.timeline();
+  check_eq(timeline.size(), std::size_t{2}, "config and scalar records");
+  check_eq(timeline[0].complete_cycle, std::uint64_t{4}, "config write completes at its latency");
+  check_eq(timeline[1].issue_cycle, std::uint64_t{4},
+           "younger work waits for the configuration write");
+  check(timeline[1].config_wait > 0, "config barrier wait is attributed");
+  check_eq(timeline[1].reason, tile_npu::StallReason::config, "config stall reason");
+  check_eq(engine.stats().cycles, std::uint64_t{5}, "config barrier extends the timeline");
 }

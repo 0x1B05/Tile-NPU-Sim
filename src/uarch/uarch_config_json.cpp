@@ -181,11 +181,26 @@ bool apply_setting(std::string_view key, std::string_view text, UarchConfig &con
   }
   if (key == "mma.input_skew") return set_number(value, 0, key, error, config.mma.input_skew);
   if (key == "mma.output_skew") return set_number(value, 0, key, error, config.mma.output_skew);
+  if (key == "mma.vector_lanes") {
+    return set_number(value, 1, key, error, config.mma.vector_lanes);
+  }
   if (key == "vector.lanes") return set_number(value, 1, key, error, config.vector.lanes);
+  if (key == "config.latency") return set_number(value, 0, key, error, config.config_latency);
   if (key == "memory.bytes_per_cycle") {
     return set_number(value, 1, key, error, config.memory.bytes_per_cycle);
   }
   if (key == "memory.latency") return set_number(value, 0, key, error, config.memory.latency);
+  if (key == "memory.banks") return set_number(value, 1, key, error, config.memory.banks);
+  if (key == "memory.row_bytes") return set_number(value, 1, key, error, config.memory.row_bytes);
+  if (key == "memory.max_outstanding") {
+    return set_number(value, 1, key, error, config.memory.max_outstanding);
+  }
+  if (key == "memory.turnaround") {
+    return set_number(value, 0, key, error, config.memory.turnaround);
+  }
+  if (key == "memory.row_miss_penalty") {
+    return set_number(value, 0, key, error, config.memory.row_miss_penalty);
+  }
 
   constexpr std::string_view sram_prefix = "sram.";
   if (key.starts_with(sram_prefix)) {
@@ -262,10 +277,16 @@ std::string uarch_config_json(const UarchConfig &config) {
   out << "},\n";
   out << "  \"mma\": {\"read_latency\": " << config.mma.read_latency
       << ", \"input_skew\": " << config.mma.input_skew
-      << ", \"output_skew\": " << config.mma.output_skew << "},\n";
+      << ", \"output_skew\": " << config.mma.output_skew
+      << ", \"vector_lanes\": " << config.mma.vector_lanes << "},\n";
   out << "  \"vector\": {\"lanes\": " << config.vector.lanes << "},\n";
+  out << "  \"config\": {\"latency\": " << config.config_latency << "},\n";
   out << "  \"memory\": {\"bytes_per_cycle\": " << config.memory.bytes_per_cycle
-      << ", \"latency\": " << config.memory.latency << "},\n";
+      << ", \"latency\": " << config.memory.latency << ", \"banks\": " << config.memory.banks
+      << ", \"row_bytes\": " << config.memory.row_bytes
+      << ", \"max_outstanding\": " << config.memory.max_outstanding
+      << ", \"turnaround\": " << config.memory.turnaround
+      << ", \"row_miss_penalty\": " << config.memory.row_miss_penalty << "},\n";
   out << "  \"sram\": {\n";
   for (std::size_t domain = FIRST_SRAM_DOMAIN; domain < SRAM_DOMAIN_COUNT; ++domain) {
     const auto &domain_config = config.sram.domains[domain];
