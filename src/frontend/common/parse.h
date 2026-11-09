@@ -5,7 +5,7 @@
 #include <string>
 #include <string_view>
 
-namespace tile_npu::monitor {
+namespace tile_npu::frontend {
 
 // Shared numeric parser for command-line and sdb command operands: base 0
 // (a 0x prefix is accepted) and the whole text must be consumed.
@@ -19,4 +19,4 @@ inline bool parse_u64(std::string_view text, std::uint64_t &value) {
   }
 }
 
-} // namespace tile_npu::monitor
+} // namespace tile_npu::frontend

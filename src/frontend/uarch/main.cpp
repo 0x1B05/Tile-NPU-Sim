@@ -1,8 +1,7 @@
-#include "monitor/monitor.h"
-#include "monitor/parse.h"
-#include "tile_npu/platform/bus.h"
-#include "tile_npu/platform/ram.h"
-#include "tile_npu/platform/serial.h"
+#include "frontend/common/constants.h"
+#include "frontend/common/image.h"
+#include "frontend/common/parse.h"
+#include "frontend/common/platform.h"
 #include "uarch/machine.h"
 #include "uarch/state_digest.h"
 #include "uarch/trace_replay.h"
@@ -28,19 +27,6 @@
 #include <vector>
 
 namespace {
-
-struct Image {
-  std::string path;
-  std::uint64_t address = tile_npu::monitor::MEMORY_BASE;
-};
-
-bool parse_image_arg(std::string_view arg, Image &image) {
-  const auto at = arg.find('@');
-  image.path = std::string(arg.substr(0, at));
-  image.address = tile_npu::monitor::MEMORY_BASE;
-  if (at == std::string_view::npos) return !image.path.empty();
-  return tile_npu::monitor::parse_u64(arg.substr(at + 1), image.address);
-}
 
 using tile_npu::SRAM_DOMAIN_NAMES;
 using tile_npu::UNIT_NAMES;
@@ -153,9 +139,9 @@ bool write_run_json(const std::string &path, tile_npu::ExecutionMode mode,
   out << "{\n";
   out << "  \"mode\": \"" << (mode == tile_npu::ExecutionMode::uarch ? "uarch" : "functional")
       << "\",\n";
-  out << "  \"status\": \"" << tile_npu::monitor::status_name(result.status) << "\",\n";
+  out << "  \"status\": \"" << tile_npu::status_name(result.status) << "\",\n";
   out << "  \"pc\": \"" << tile_npu::hex64(result.pc) << "\",\n";
-  out << "  \"a0\": " << state.scalar.read_x(tile_npu::monitor::EXIT_CODE_REG) << ",\n";
+  out << "  \"a0\": " << state.scalar.read_x(tile_npu::frontend::EXIT_CODE_REG) << ",\n";
   out << "  \"exit_code\": " << exit_code << ",\n";
   out << "  \"arch_digest\": \"" << tile_npu::hex64(tile_npu::architectural_digest(state)) << "\"";
   if (mode == tile_npu::ExecutionMode::uarch) {
@@ -253,9 +239,9 @@ bool write_run_csv(const std::string &path, tile_npu::ExecutionMode mode,
 
   const auto &state = machine.state();
   add("mode", mode == tile_npu::ExecutionMode::uarch ? "uarch" : "functional");
-  add("status", std::string(tile_npu::monitor::status_name(result.status)));
+  add("status", std::string(tile_npu::status_name(result.status)));
   add("pc", tile_npu::hex64(result.pc));
-  add("a0", std::to_string(state.scalar.read_x(tile_npu::monitor::EXIT_CODE_REG)));
+  add("a0", std::to_string(state.scalar.read_x(tile_npu::frontend::EXIT_CODE_REG)));
   add("exit_code", std::to_string(exit_code));
   add("arch_digest", tile_npu::hex64(tile_npu::architectural_digest(state)));
 
@@ -348,37 +334,11 @@ bool write_run_csv(const std::string &path, tile_npu::ExecutionMode mode,
   return out.good();
 }
 
-bool load_image(const Image &image, tile_npu::Ram &memory) {
-  std::ifstream input(image.path, std::ios::binary | std::ios::ate);
-  if (!input) {
-    std::cerr << "cannot open image: " << image.path << '\n';
-    return false;
-  }
-  const auto end = input.tellg();
-  if (end <= 0) {
-    std::cerr << "invalid image size: " << image.path << '\n';
-    return false;
-  }
-  std::vector<std::byte> bytes(static_cast<std::size_t>(end));
-  input.seekg(0);
-  if (!input.read(reinterpret_cast<char *>(bytes.data()),
-                  static_cast<std::streamsize>(bytes.size()))) {
-    std::cerr << "cannot read image: " << image.path << '\n';
-    return false;
-  }
-  if (!memory.write(image.address, std::span<const std::byte>(bytes))) {
-    std::cerr << "cannot load image at " << tile_npu::hex64(image.address) << ": " << image.path
-              << '\n';
-    return false;
-  }
-  return true;
-}
-
 } // namespace
 
 int main(int argc, char **argv) {
   std::string mode_name = "functional";
-  std::int64_t memory_mib = static_cast<std::int64_t>(tile_npu::monitor::DEFAULT_MEMORY_MIB);
+  std::int64_t memory_mib = static_cast<std::int64_t>(tile_npu::frontend::DEFAULT_MEMORY_MIB);
   std::int64_t steps = -1;
   std::string stats_json;
   std::string stats_csv;
@@ -532,31 +492,24 @@ int main(int argc, char **argv) {
     return 2;
   }
 
-  std::vector<Image> images;
+  std::vector<tile_npu::frontend::Image> images;
   images.reserve(image_args.size());
   for (const auto &arg : image_args) {
-    Image image{};
-    if (!parse_image_arg(arg, image)) {
+    tile_npu::frontend::Image image{};
+    if (!tile_npu::frontend::parse_image(arg, image)) {
       std::cerr << "invalid image: " << arg << '\n';
       return 2;
     }
     images.push_back(std::move(image));
   }
 
-  tile_npu::Ram ram(tile_npu::monitor::MEMORY_BASE,
-                    static_cast<std::size_t>(memory_mib) * 1024 * 1024);
-  for (const auto &image : images) {
-    if (!load_image(image, ram)) return 1;
-  }
-
-  tile_npu::SerialConsole serial(std::cout);
-  tile_npu::SystemBus bus(
-      ram, {{&serial, tile_npu::SerialConsole::BASE, tile_npu::SerialConsole::SIZE}});
+  tile_npu::frontend::Platform platform(static_cast<std::size_t>(memory_mib));
+  if (!platform.load_images(images)) return 1;
 
   const auto mode =
       mode_name == "uarch" ? tile_npu::ExecutionMode::uarch : tile_npu::ExecutionMode::functional;
-  tile_npu::Machine machine(bus, mode, uarch_config);
-  machine.reset(tile_npu::monitor::MEMORY_BASE);
+  tile_npu::Machine machine(platform.bus(), mode, uarch_config);
+  machine.reset(tile_npu::frontend::MEMORY_BASE);
   if (want_timeline) machine.set_timeline_enabled(true);
 
   std::unique_ptr<tile_npu::UarchTraceWriter> trace_writer;
@@ -605,7 +558,7 @@ int main(int argc, char **argv) {
     switch (result.status) {
     case tile_npu::StepStatus::breakpoint:
     case tile_npu::StepStatus::kernel_end: {
-      const auto a0 = machine.state().scalar.read_x(tile_npu::monitor::EXIT_CODE_REG);
+      const auto a0 = machine.state().scalar.read_x(tile_npu::frontend::EXIT_CODE_REG);
       if (a0 != 0) {
         std::cerr << "guest exited with a0=" << a0 << '\n';
       }

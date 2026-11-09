@@ -41,8 +41,8 @@ local trace_flush_records = tonumber(get_config("trace_flush_records") or "4096"
 target("sim_core", function()
 	set_kind("static")
 	set_default(false)
-	add_files("src/*.cpp|main.cpp|uarch_main.cpp",
-		"src/decode/*.cpp|disasm.cpp", "src/execute/*.cpp", "src/platform/*.cpp")
+	add_files("src/*.cpp", "src/decode/*.cpp|disasm.cpp", "src/execute/*.cpp",
+		"src/platform/*.cpp")
 	if trace_mode ~= "none" then
 		add_defines("CONFIG_TRACE", { public = true })
 		add_defines("TRACE_FLUSH_RECORDS=" .. trace_flush_records, { public = true })
@@ -60,16 +60,25 @@ end)
 
 add_requires("cli11 2.7.2")
 
+-- Host-side image loading and platform construction shared by both frontends.
+target("frontend_common", function()
+	set_kind("static")
+	set_default(false)
+	add_deps("sim_core")
+	add_files("src/frontend/common/*.cpp")
+	add_includedirs("src", "include")
+end)
+
 -- The default target is the runnable simulator.
 target("sim", function()
 	set_kind("binary")
 	set_default(true)
-	add_deps("sim_core")
-	add_files("src/main.cpp", "src/monitor/monitor.cpp")
+	add_deps("sim_core", "frontend_common")
+	add_files("src/frontend/func/main.cpp", "src/frontend/func/run.cpp")
 	add_includedirs("src")
 	add_packages("cli11")
 	if has_config("sdb") then
-		add_files("src/monitor/sdb.cpp")
+		add_files("src/frontend/func/sdb.cpp")
 		add_defines("CONFIG_SDB")
 	end
 	if trace_mode == "itrace" or trace_mode == "all" then
@@ -92,8 +101,8 @@ end)
 target("sim_uarch", function()
 	set_kind("binary")
 	set_default(false)
-	add_deps("uarch_core")
-	add_files("src/uarch_main.cpp")
+	add_deps("uarch_core", "frontend_common")
+	add_files("src/frontend/uarch/main.cpp")
 	add_includedirs("src", "include")
 	add_packages("cli11")
 end)

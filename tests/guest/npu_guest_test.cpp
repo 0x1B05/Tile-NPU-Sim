@@ -13,8 +13,8 @@
 #include <string_view>
 #include <vector>
 
+#include "frontend/common/constants.h"
 #include "guest/guest_image.h"
-#include "monitor/monitor.h"
 #include "utils/endian.h"
 
 using namespace tile_npu::test;
@@ -69,14 +69,12 @@ void check_guest_image(std::string_view name, std::uint64_t memory_size,
   sim.reset(IMAGE_BASE);
   const auto result = run_until_stop(sim, memory);
   check(result.status == stop, std::string(name) + " image stops (status=" +
-                                   std::string(tile_npu::monitor::status_name(result.status)) +
-                                   ")");
-  check_eq(hex(sim.state().scalar.read_x(tile_npu::monitor::EXIT_CODE_REG)), hex(0x0u),
+                                   std::string(tile_npu::status_name(result.status)) + ")");
+  check_eq(hex(sim.state().scalar.read_x(tile_npu::frontend::EXIT_CODE_REG)), hex(0x0u),
            std::string(name) + " image reports success via a0");
 }
 
 } // namespace
-
 
 TEST_CASE(npu_guest_mem) {
   // tests/guest/npu/mem.S self-configures descriptors and configs, then

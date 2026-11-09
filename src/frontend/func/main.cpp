@@ -1,5 +1,6 @@
-#include "monitor/monitor.h"
-#include "monitor/parse.h"
+#include "frontend/common/image.h"
+#include "frontend/common/parse.h"
+#include "frontend/func/run.h"
 
 #include <CLI/CLI.hpp>
 
@@ -10,7 +11,7 @@
 #include <vector>
 
 int main(int argc, char **argv) {
-  tile_npu::monitor::Options options;
+  tile_npu::frontend::func::Options options;
   CLI::App app{"Tile-NPU simulator"};
   std::vector<std::string> image_args;
   std::int64_t steps = -1;
@@ -79,7 +80,7 @@ int main(int argc, char **argv) {
   }
   options.trace_dir = trace_dir;
   const auto parse_pc = [](const std::string &text, std::uint64_t &value) {
-    return !text.empty() && text.front() != '-' && tile_npu::monitor::parse_u64(text, value);
+    return !text.empty() && text.front() != '-' && tile_npu::frontend::parse_u64(text, value);
   };
   if (!trace_pc_start_arg.empty() && !parse_pc(trace_pc_start_arg, options.trace_pc_start)) {
     std::cerr << "invalid trace PC start: " << trace_pc_start_arg << '\n';
@@ -96,20 +97,20 @@ int main(int argc, char **argv) {
 #endif
   options.step_limit = static_cast<std::uint64_t>(steps);
   if (!dump_range.empty()) {
-    tile_npu::monitor::DumpRange range{};
-    if (!tile_npu::monitor::parse_dump_range(dump_range, range)) {
+    tile_npu::frontend::func::DumpRange range{};
+    if (!tile_npu::frontend::func::parse_dump_range(dump_range, range)) {
       std::cerr << "invalid dump range: " << dump_range << '\n';
       return 2;
     }
     options.dump_range = std::move(range);
   }
   for (const auto &arg : image_args) {
-    tile_npu::monitor::Image image{};
-    if (!tile_npu::monitor::parse_image(arg, image)) {
+    tile_npu::frontend::Image image{};
+    if (!tile_npu::frontend::parse_image(arg, image)) {
       std::cerr << "invalid image: " << arg << '\n';
       return 2;
     }
     options.images.push_back(std::move(image));
   }
-  return tile_npu::monitor::run_images(options);
+  return tile_npu::frontend::func::run_images(options);
 }

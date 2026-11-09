@@ -5,8 +5,8 @@
 
 #include <string>
 
-namespace tile_npu::monitor {
+namespace tile_npu::frontend::func {
 
 void sdb_loop(Simulator &sim, AddressSpace &memory);
 
-} // namespace tile_npu::monitor
+} // namespace tile_npu::frontend::func

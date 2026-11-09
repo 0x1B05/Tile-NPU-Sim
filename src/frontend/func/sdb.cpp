@@ -1,7 +1,7 @@
-#include "sdb.h"
+#include "frontend/func/sdb.h"
 
-#include "monitor.h"
-#include "parse.h"
+#include "frontend/common/parse.h"
+#include "frontend/func/run.h"
 #include "utils/endian.h"
 
 #include <algorithm>
@@ -15,7 +15,7 @@
 #include <string_view>
 #include <utility>
 
-namespace tile_npu::monitor {
+namespace tile_npu::frontend::func {
 namespace {
 
 // clang-format off
@@ -159,4 +159,4 @@ void sdb_loop(Simulator &sim, AddressSpace &memory) {
   }
 }
 
-} // namespace tile_npu::monitor
+} // namespace tile_npu::frontend::func

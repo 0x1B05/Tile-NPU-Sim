@@ -1,4 +1,4 @@
-#include "monitor.h"
+#include "frontend/func/run.h"
 
 #ifdef CONFIG_ITRACE
 #include "trace/itrace/itrace_writer.h"
@@ -6,14 +6,12 @@
 #ifdef CONFIG_MTRACE
 #include "trace/mtrace/mtrace_writer.h"
 #endif
-#include "parse.h"
+#include "frontend/common/image.h"
+#include "frontend/common/parse.h"
+#include "frontend/common/platform.h"
 #ifdef CONFIG_SDB
-#include "sdb.h"
+#include "frontend/func/sdb.h"
 #endif
-
-#include "tile_npu/platform/bus.h"
-#include "tile_npu/platform/ram.h"
-#include "tile_npu/platform/serial.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -22,39 +20,13 @@
 #include <iostream>
 #include <limits>
 #include <optional>
-#include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
 
-namespace tile_npu::monitor {
+namespace tile_npu::frontend::func {
 namespace {
-
-bool load_image(const Image &image, Ram &memory) {
-  std::ifstream input(image.path, std::ios::binary | std::ios::ate);
-  if (!input) {
-    std::cerr << "cannot open image: " << image.path << '\n';
-    return false;
-  }
-  const auto end = input.tellg();
-  if (end <= 0) {
-    std::cerr << "invalid image size: " << image.path << '\n';
-    return false;
-  }
-  std::vector<std::byte> bytes(static_cast<std::size_t>(end));
-  input.seekg(0);
-  if (!input.read(reinterpret_cast<char *>(bytes.data()),
-                  static_cast<std::streamsize>(bytes.size()))) {
-    std::cerr << "cannot read image: " << image.path << '\n';
-    return false;
-  }
-  if (!memory.write(image.address, std::span<const std::byte>(bytes))) {
-    std::cerr << "cannot load image at " << hex64(image.address) << ": " << image.path << '\n';
-    return false;
-  }
-  return true;
-}
 
 #ifdef CONFIG_TRACE
 std::string trace_path(const Options &options, const char *filename) {
@@ -112,14 +84,6 @@ std::string halt_message(const StepResult &result) {
   return out.str();
 }
 
-bool parse_image(std::string_view arg, Image &image) {
-  const auto at = arg.find('@');
-  image.path = std::string(arg.substr(0, at));
-  image.address = MEMORY_BASE;
-  if (at == std::string_view::npos) return true;
-  return parse_u64(arg.substr(at + 1), image.address);
-}
-
 bool parse_dump_range(std::string_view arg, DumpRange &range) {
   const auto at = arg.rfind('@');
   if (at == std::string_view::npos) return false;
@@ -144,10 +108,8 @@ std::optional<StepResult> npu_exec(Simulator &sim, std::uint64_t step_limit) {
 }
 
 int run_images(const Options &options) {
-  tile_npu::Ram ram(MEMORY_BASE, options.memory_mib * 1024 * 1024);
-  for (const auto &image : options.images) {
-    if (!load_image(image, ram)) return 1;
-  }
+  frontend::Platform platform(options.memory_mib);
+  if (!platform.load_images(options.images)) return 1;
 #ifdef CONFIG_TRACE
   bool tracing = false;
 #ifdef CONFIG_ITRACE
@@ -158,9 +120,6 @@ int run_images(const Options &options) {
 #endif
   if (tracing && !ensure_trace_dir(options)) return 1;
 #endif
-  tile_npu::SerialConsole serial(std::cout);
-  tile_npu::SystemBus bus(
-      ram, {{&serial, tile_npu::SerialConsole::BASE, tile_npu::SerialConsole::SIZE}});
 #ifdef CONFIG_ITRACE
   std::ofstream itrace_log;
   std::optional<tile_npu::trace::ItraceWriter> itrace_writer;
@@ -188,7 +147,7 @@ int run_images(const Options &options) {
     mtrace_writer->write_header();
   }
 #endif
-  tile_npu::Simulator sim(bus);
+  tile_npu::Simulator sim(platform.bus());
 #ifdef CONFIG_ITRACE
   if (itrace_writer) {
     sim.set_itrace_callback(
@@ -212,11 +171,11 @@ int run_images(const Options &options) {
 
 #ifdef CONFIG_SDB
   if (options.interactive) {
-    std::cout << "tile-npu monitor: entry " << hex64(MEMORY_BASE) << ", type 'help'\n";
+    std::cout << "tile-npu func frontend: entry " << hex64(MEMORY_BASE) << ", type 'help'\n";
     for (const auto &image : options.images) {
       std::cout << "  loaded " << image.path << " at " << hex64(image.address) << '\n';
     }
-    sdb_loop(sim, bus);
+    sdb_loop(sim, platform.bus());
     return 0;
   }
 #endif
@@ -233,7 +192,7 @@ int run_images(const Options &options) {
     mtrace_writer->flush();
   }
 #endif
-  if (options.dump_range && !write_dump(ram, *options.dump_range)) {
+  if (options.dump_range && !write_dump(platform.ram(), *options.dump_range)) {
     std::cerr << "cannot dump memory range to " << options.dump_range->path << '\n';
     return 1;
   }
@@ -254,4 +213,4 @@ int run_images(const Options &options) {
   }
 }
 
-} // namespace tile_npu::monitor
+} // namespace tile_npu::frontend::func
