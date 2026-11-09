@@ -115,6 +115,7 @@ def setting_text(value: Any) -> str:
 def run_one(
     simulator: Path,
     image: Path,
+    trace: Path | None,
     base: Path | None,
     overrides: list[str],
     stats_dir: Path | None,
@@ -122,22 +123,25 @@ def run_one(
 ) -> dict[str, Any]:
     with tempfile.TemporaryDirectory(prefix="tile-npu-sweep-") as tmp:
         stats_path = Path(tmp) / "stats.json"
-        cmd = [
-            str(simulator),
-            "--mode=uarch",
-            "--stats-json",
-            str(stats_path),
-        ]
+        if trace is not None:
+            cmd = [str(simulator), "--mode=replay", "--trace-in", str(trace)]
+        else:
+            cmd = [str(simulator), "--mode=uarch"]
         if base is not None:
             cmd += ["--uarch-config", str(base)]
         for override in overrides:
             cmd += ["--uarch-set", override]
-        cmd.append(str(image))
+        # CLI11's vector option consumes following positional args, so put a
+        # scalar option after the repeated --uarch-set values.
+        cmd += ["--stats-json", str(stats_path)]
+        if trace is None:
+            cmd.append(str(image))
 
         result = subprocess.run(cmd, cwd=ROOT, text=True, capture_output=True)
         if not stats_path.is_file():
+            source = trace.name if trace is not None else image.name
             raise RuntimeError(
-                f"sim_uarch produced no stats for {image.name}: {result.stderr.strip()}"
+                f"sim_uarch produced no stats for {source}: {result.stderr.strip()}"
             )
         stats = json.loads(stats_path.read_text())
         if stats_dir is not None:
@@ -215,6 +219,10 @@ def main() -> int:
     parser.add_argument("--json", dest="json_path", help="JSON output path")
     parser.add_argument("--stats-dir", help="keep every raw stats JSON in this directory")
     parser.add_argument(
+        "--trace-dir",
+        help="replay <image>.utr traces from this directory instead of running the functional simulator",
+    )
+    parser.add_argument(
         "--jobs",
         type=int,
         default=min(8, os.cpu_count() or 1),
@@ -253,15 +261,21 @@ def main() -> int:
     sweep = load_json_object(Path(args.sweep), "sweep file") if args.sweep else {}
     points = sweep_points(sweep)
     stats_dir = Path(args.stats_dir) if args.stats_dir else None
+    trace_dir = Path(args.trace_dir).expanduser().resolve() if args.trace_dir else None
+    if trace_dir is not None and not trace_dir.is_dir():
+        raise SystemExit(f"missing trace directory: {trace_dir}")
 
-    jobs: list[tuple[str, Path, list[str], str, dict[str, Any]]] = []
+    jobs: list[tuple[str, Path, Path | None, list[str], str, dict[str, Any]]] = []
     for index, point in enumerate(points):
         overrides = list(args.set)
         overrides += [f"{key}={setting_text(value)}" for key, value in point.items()]
         label = ",".join(f"{key}={setting_text(value)}" for key, value in point.items()) or "base"
         for image in images:
             tag = f"p{index:04d}-{image.stem}"
-            jobs.append((tag, image, overrides, label, point))
+            trace = trace_dir / f"{image.stem}.utr" if trace_dir is not None else None
+            if trace is not None and not trace.is_file():
+                raise SystemExit(f"missing trace: {trace}")
+            jobs.append((tag, image, trace, overrides, label, point))
 
     eprint(
         f"sweeping {len(points)} point(s) x {len(images)} image(s) = {len(jobs)} run(s) "
@@ -272,12 +286,12 @@ def main() -> int:
     failures = 0
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
         future_map = {
-            pool.submit(run_one, simulator, image, base, overrides, stats_dir, tag): (
+            pool.submit(run_one, simulator, image, trace, base, overrides, stats_dir, tag): (
                 tag,
                 point,
                 label,
             )
-            for tag, image, overrides, label, point in jobs
+            for tag, image, trace, overrides, label, point in jobs
         }
         for future in concurrent.futures.as_completed(future_map):
             tag, point, label = future_map[future]
