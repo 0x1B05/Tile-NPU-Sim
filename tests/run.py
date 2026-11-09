@@ -92,12 +92,22 @@ def uarch_image_names() -> list[str]:
 def suite_host(args: argparse.Namespace) -> int:
     build_dir, _, _ = build_dirs(args)
     if args.build:
-        xmake_build(["sim_tests"])
+        xmake_build(["sim_tests", "uarch_tests"])
     sim_tests = find_artifact("sim_tests", args.sim_tests, build_dir)
-    cmd = [str(sim_tests)]
-    if args.filter:
-        cmd += ["--filter", args.filter]
-    return run(cmd).returncode
+    uarch_tests = find_artifact("uarch_tests", None, build_dir)
+    failed = False
+    for binary in (sim_tests, uarch_tests):
+        cmd = [str(binary)]
+        if args.filter:
+            cmd += ["--filter", args.filter]
+        code = run(cmd).returncode
+        # A filter that only matches the other binary reports "no tests
+        # match"; keep the two host binaries independently filterable.
+        if code == 1:
+            failed = True
+        elif code not in (0, 2):
+            failed = True
+    return 1 if failed else 0
 
 
 def suite_guest(args: argparse.Namespace) -> int:
