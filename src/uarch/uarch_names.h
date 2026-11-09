@@ -1,6 +1,6 @@
 #pragma once
 
-#include "tile_npu/dyn_inst.h"
+#include "uarch/dyn_inst.h"
 #include "uarch/uarch_stats.h"
 
 #include <array>

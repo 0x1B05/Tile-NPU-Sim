@@ -1,7 +1,7 @@
-#include "dataflow/dyn_inst_builder.h"
+#include "uarch/dataflow/dyn_inst_builder.h"
 #include "framework.h"
 
-#include "tile_npu/dyn_inst.h"
+#include "uarch/dyn_inst.h"
 #include "tile_npu/instruction.h"
 
 using namespace tile_npu;

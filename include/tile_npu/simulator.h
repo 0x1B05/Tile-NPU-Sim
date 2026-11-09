@@ -1,7 +1,6 @@
 #pragma once
 
 #include "tile_npu/decode.h"
-#include "tile_npu/dyn_inst.h"
 #ifdef CONFIG_ITRACE
 #include "trace/window.h"
 #endif
@@ -56,6 +55,16 @@ struct StepResult {
   std::optional<std::uint64_t> fault_address = std::nullopt;
 };
 
+// Pull-based view of the instruction at the current PC. The decoded value is
+// cached by Simulator and is consumed by the following step(), so a timing
+// backend can snapshot state before execution without the functional core
+// depending on any timing types.
+struct StepPreview {
+  std::uint64_t id;
+  std::uint64_t pc;
+  const DecodeResult &decoded;
+};
+
 inline std::string_view status_name(StepStatus status) {
   // clang-format off
   using enum StepStatus;
@@ -95,12 +104,12 @@ public:
   // The entry pc must be 4-byte aligned; alignment then holds by construction
   // because redirect targets are validated during execution.
   void reset(std::uint64_t entry_pc);
-  StepResult step();
 
-  // Same execution path, but also fills the dynamic record for the uarch
-  // engine. Building happens before execute so the record sees the effective
-  // configuration and descriptor base of this instruction.
-  StepResult step_with_dyn_inst(DynInst *out);
+  // Decodes the instruction at the current PC and caches it for the next
+  // step(). Returns nullopt on a fetch fault; step() will report the fault.
+  std::optional<StepPreview> preview();
+
+  StepResult step();
 
 #ifdef CONFIG_ITRACE
   void set_itrace_callback(ItraceCallback callback) { itrace_callback_ = std::move(callback); }
@@ -125,11 +134,15 @@ public:
 #endif
 
 private:
-  StepResult step_impl(DynInst *out);
+  StepResult step_impl();
+  void clear_preview();
 
   AddressSpace &memory_;
   State state_{};
   std::uint64_t next_instr_id_ = 0;
+  std::optional<std::uint64_t> preview_pc_;
+  std::optional<std::uint32_t> preview_instr_;
+  std::optional<DecodeResult> preview_decoded_;
 #ifdef CONFIG_ITRACE
   ItraceCallback itrace_callback_;
   trace::TraceWindow itrace_window_;

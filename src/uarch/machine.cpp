@@ -1,5 +1,6 @@
 #include "uarch/machine.h"
 
+#include "uarch/dataflow/dyn_inst_builder.h"
 #include "uarch/event_engine.h"
 #include "uarch/uarch_trace.h"
 
@@ -22,15 +23,24 @@ void Machine::reset(std::uint64_t entry_pc) {
 StepResult Machine::step() {
   if (mode_ == ExecutionMode::functional) {
     if (trace_writer_ == nullptr) return functional_.step();
-    DynInst inst;
-    auto result = functional_.step_with_dyn_inst(&inst);
+    const auto preview = functional_.preview();
+    if (!preview) return functional_.step();
+    const auto inst =
+        make_dyn_inst(preview->id, preview->pc, preview->decoded, functional_.state());
+    const auto result = functional_.step();
     if (result.status == StepStatus::retired) trace_writer_->write(inst);
     return result;
   }
 
   if (!pending_) {
-    DynInst inst;
-    auto result = functional_.step_with_dyn_inst(&inst);
+    const auto preview = functional_.preview();
+    if (!preview) {
+      uarch_->finish();
+      return functional_.step();
+    }
+    const auto inst =
+        make_dyn_inst(preview->id, preview->pc, preview->decoded, functional_.state());
+    const auto result = functional_.step();
     if (result.status != StepStatus::retired) {
       // A stopping instruction is never dispatched; drain the work already in
       // flight so the final cycle count covers everything before the stop.

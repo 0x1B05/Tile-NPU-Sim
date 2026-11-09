@@ -41,7 +41,7 @@ local trace_flush_records = tonumber(get_config("trace_flush_records") or "4096"
 target("sim_core", function()
 	set_kind("static")
 	set_default(false)
-	add_files("src/*.cpp|main.cpp|uarch_main.cpp", "src/dataflow/*.cpp",
+	add_files("src/*.cpp|main.cpp|uarch_main.cpp",
 		"src/decode/*.cpp|disasm.cpp", "src/execute/*.cpp", "src/platform/*.cpp")
 	if trace_mode ~= "none" then
 		add_defines("CONFIG_TRACE", { public = true })
@@ -83,7 +83,7 @@ target("uarch_core", function()
 	set_kind("static")
 	set_default(false)
 	add_deps("sim_core")
-	add_files("src/uarch/*.cpp")
+	add_files("src/uarch/*.cpp", "src/uarch/dataflow/*.cpp")
 	add_includedirs("src", "include")
 end)
 
@@ -108,10 +108,20 @@ end)
 target("sim_tests", function()
 	set_kind("binary")
 	set_default(false)
-	add_deps("sim_core", "uarch_core")
-	add_files("tests/units/*.cpp")
+	add_deps("sim_core")
+	add_files("tests/units/*.cpp|dyn_inst_test.cpp|uarch_core_test.cpp|uarch_smoke_test.cpp")
 	add_includedirs("src", "tests/include")
 	add_tests("core")
+end)
+
+target("uarch_tests", function()
+	set_kind("binary")
+	set_default(false)
+	add_deps("sim_core", "uarch_core")
+	add_files("tests/units/main.cpp", "tests/units/dyn_inst_test.cpp",
+		"tests/units/uarch_core_test.cpp", "tests/units/uarch_smoke_test.cpp")
+	add_includedirs("src", "tests/include")
+	add_tests("uarch")
 end)
 
 target("sim_guest_tests", function()

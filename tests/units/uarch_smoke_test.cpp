@@ -1,5 +1,6 @@
 #include "framework.h"
 #include "tile_npu/platform/ram.h"
+#include "uarch/dataflow/dyn_inst_builder.h"
 #include "uarch/machine.h"
 #include "units/execute_helpers.h"
 #include "units/mma_helpers.h"
@@ -130,14 +131,17 @@ TEST_CASE(machine_uarch_fence_blocks_younger_work) {
   check_eq(machine.stats().retired, std::uint64_t{3}, "MMA, fence, and scalar retire");
 }
 
-TEST_CASE(step_with_dyn_inst_fills_scalar_record) {
+TEST_CASE(step_preview_fills_scalar_record) {
   tile_npu::Ram memory(CODE_BASE, 8);
   write_word(memory, CODE_BASE, 0x00700093u); // addi x1, x0, 7
   tile_npu::Simulator sim(memory);
   sim.reset(CODE_BASE);
 
-  tile_npu::DynInst inst;
-  const auto result = sim.step_with_dyn_inst(&inst);
+  const auto preview = sim.preview();
+  check(preview.has_value(), "preview decodes the current instruction");
+  const auto inst =
+      tile_npu::make_dyn_inst(preview->id, preview->pc, preview->decoded, sim.state());
+  const auto result = sim.step();
   check_eq(result.status, tile_npu::StepStatus::retired, "step status");
   check_eq(inst.id, std::uint64_t{0}, "first dynamic instruction id");
   check_eq(hex(inst.pc), hex(CODE_BASE), "dynamic instruction pc");

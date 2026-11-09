@@ -1,6 +1,6 @@
 #pragma once
 
-#include "tile_npu/dyn_inst.h"
+#include "uarch/dyn_inst.h"
 #include "uarch/resource_calendar.h"
 #include "uarch/sram_model.h"
 #include "uarch/uarch_config.h"

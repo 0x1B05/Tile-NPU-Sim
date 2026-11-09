@@ -1,6 +1,7 @@
-#include "dataflow/dyn_inst_builder.h"
+#include "uarch/dataflow/dyn_inst_builder.h"
 
 #include "domain.h"
+#include "utils/common.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -446,6 +447,18 @@ DynInst make_dyn_inst(std::uint64_t id, std::uint64_t pc, const DecodedNpuInstr 
       instr);
 
   return out;
+}
+
+DynInst make_dyn_inst(std::uint64_t id, std::uint64_t pc, const DecodeResult &decoded,
+                      const State &state) {
+  return std::visit(
+      Overloaded{
+          [&](const DecodedNpuInstr &npu) { return make_dyn_inst(id, pc, npu, state); },
+          [&](const DecodedScalarInstr &scalar) { return make_scalar_dyn_inst(id, pc, scalar); },
+          [&](DecodeError) {
+            return DynInst{.id = id, .pc = pc, .op = DynOp::other, .unit = Unit::scalar};
+          }},
+      decoded);
 }
 
 } // namespace tile_npu
