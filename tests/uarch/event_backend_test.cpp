@@ -3,6 +3,7 @@
 #include "uarch/executor.h"
 
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 using namespace tile_npu;
@@ -48,6 +49,18 @@ DynInst mma_accumulate(std::uint64_t id, RegisterIndex src, RegisterIndex dst) {
   inst.src_count = 1;
   inst.dst[0] = RegisterRef{.domain = NpuDomain::acc, .index = dst};
   inst.dst_count = 1;
+  return inst;
+}
+
+DynInst dma_load(std::uint64_t id, std::optional<RegisterIndex> src = std::nullopt) {
+  DynInst inst{};
+  inst.id = id;
+  inst.op = DynOp::load;
+  inst.unit = Unit::dma;
+  if (src) {
+    inst.src[0] = RegisterRef{.domain = NpuDomain::acc, .index = *src};
+    inst.src_count = 1;
+  }
   return inst;
 }
 
@@ -100,6 +113,31 @@ TEST_CASE(event_backend_waits_for_raw) {
 
   backend.advance();
   check_eq(backend.stats().retired, std::uint64_t{2}, "consumer retired later");
+}
+
+TEST_CASE(event_backend_memory_queue_stalls_behind_blocked_head) {
+  CountingExecutor executor;
+  EventUarchBackend backend;
+  backend.set_executor(&executor);
+
+  backend.dispatch(mma_write(1, 0));
+  backend.tick();
+  check_eq(executor.executed.size(), std::size_t{1}, "MMA issues");
+  check_eq(executor.executed[0].id, std::uint64_t{1}, "MMA executes first");
+
+  // The first memory operation waits for the MMA's acc0 result. The second is
+  // independent, but it is younger and must not pass the blocked queue head.
+  backend.dispatch(dma_load(2, RegisterIndex{0}));
+  backend.dispatch(dma_load(3));
+  backend.tick();
+  check_eq(executor.executed.size(), std::size_t{1},
+           "younger memory operation does not pass a blocked older one");
+
+  backend.advance();
+  check_eq(executor.executed.size(), std::size_t{2}, "blocked head issues after its producer");
+  check_eq(executor.executed.back().id, std::uint64_t{2}, "older memory operation issues first");
+
+  backend.finish();
 }
 
 TEST_CASE(event_backend_applies_queue_backpressure) {

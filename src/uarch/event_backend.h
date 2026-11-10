@@ -11,7 +11,9 @@
 
 namespace tile_npu {
 
-// Event-driven backend: per-unit issue queues plus a global scoreboard. Units
+// Event-driven backend: per-unit issue queues plus a global scoreboard. General
+// queues select the oldest ready entry; the shared DMA queue only considers its
+// oldest valid entry so memory operations issue in program order. Units
 // currently have fixed completion latencies; SRAM and shared-resource models
 // will replace those constants later.
 class EventUarchBackend final : public UarchBackend {

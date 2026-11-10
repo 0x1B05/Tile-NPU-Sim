@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 
 namespace tile_npu {
 namespace {
@@ -79,17 +80,33 @@ bool EventUarchBackend::issue_ready() {
   bool issued = false;
   for (std::size_t unit = 0; unit < queues_.size(); ++unit) {
     auto &queue = queues_[unit];
-    for (const auto id : queue.entries()) {
-      if (!scoreboard_.ready(id)) continue;
+    std::optional<std::uint64_t> candidate;
 
-      queue.remove(id);
-      scoreboard_.mark_issued(id);
-      if (executor_ != nullptr) executor_->execute(scoreboard_.inst(id));
-      events_.schedule(events_.now() + latency(static_cast<Unit>(unit)),
-                       [this, id] { complete(id); });
-      issued = true;
-      break;
+    if (static_cast<Unit>(unit) == Unit::dma) {
+      // All memory operations share one program-order queue. The oldest valid
+      // entry must issue before any younger entry, even when the younger one
+      // is already ready.
+      candidate = queue.front();
+      if (candidate && !scoreboard_.ready(*candidate)) candidate.reset();
+    } else {
+      // General queues pick the oldest ready entry; a younger ready entry may
+      // bypass an older one that is still waiting on dependencies.
+      for (const auto id : queue.entries()) {
+        if (!scoreboard_.ready(id)) continue;
+        candidate = id;
+        break;
+      }
     }
+
+    if (!candidate) continue;
+
+    const auto id = *candidate;
+    queue.remove(id);
+    scoreboard_.mark_issued(id);
+    if (executor_ != nullptr) executor_->execute(scoreboard_.inst(id));
+    events_.schedule(events_.now() + latency(static_cast<Unit>(unit)),
+                     [this, id] { complete(id); });
+    issued = true;
   }
   return issued;
 }
