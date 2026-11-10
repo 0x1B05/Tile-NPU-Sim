@@ -1,4 +1,4 @@
-#include "tile_npu/simulator.h"
+#include "func/core.h"
 
 #include <array>
 #include <cstddef>
@@ -34,7 +34,7 @@ TEST_CASE(memory_and_step) {
   check(!memory.write(0x1006, code), "reject crossing memory boundary");
   check(!memory.write(0x0fff, code), "reject address below memory base");
 
-  tile_npu::Simulator sim(memory);
+  tile_npu::FuncCore sim(memory);
   sim.reset(0x1000);
   sim.state().scalar.write_x(1, 9);
   const auto result = sim.step();
@@ -64,7 +64,7 @@ TEST_CASE(memory_and_step) {
 TEST_CASE(empty_vadd) {
   tile_npu::Ram memory(0x3800, 4);
   write_word(memory, 0x3800, 0x0C000000u); // vadd v0, v0, v0; zero default len
-  tile_npu::Simulator sim(memory);
+  tile_npu::FuncCore sim(memory);
   sim.reset(0x3800);
   sim.state().v[0][0] = 42;
   check_eq(sim.step().status, tile_npu::StepStatus::invalid_configuration,
@@ -78,7 +78,7 @@ TEST_CASE(failed_execution_is_non_mutating) {
   write_word(memory, 0x4000, 0x0C002080u); // vadd v0, v1, v2
   write_word(memory, 0x4004, 0x0C022080u); // reserved4 is nonzero
 
-  tile_npu::Simulator sim(memory);
+  tile_npu::FuncCore sim(memory);
   sim.reset(0x4000);
   auto &state = sim.state();
   state.vc[0].dtype = state.vc[1].dtype = state.vc[2].dtype = tile_npu::DType::i32;

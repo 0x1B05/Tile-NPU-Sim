@@ -1,6 +1,6 @@
 #ifdef CONFIG_ITRACE
 
-#include "tile_npu/simulator.h"
+#include "func/core.h"
 
 #include <cstdint>
 #include <vector>
@@ -15,7 +15,7 @@ TEST_CASE(itrace_pc_window_filters_callback) {
     write_word(memory, CODE_BASE + offset, 0x00000013u); // nop
   }
 
-  tile_npu::Simulator sim(memory);
+  tile_npu::FuncCore sim(memory);
   std::vector<std::uint64_t> pcs;
   sim.set_itrace_callback([&pcs](std::uint64_t pc, std::uint32_t, const tile_npu::DecodeResult &,
                                  tile_npu::StepStatus) { pcs.push_back(pc); });

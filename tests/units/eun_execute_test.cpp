@@ -1,4 +1,4 @@
-#include "tile_npu/simulator.h"
+#include "func/core.h"
 
 #include <cmath>
 #include <cstdint>
@@ -14,14 +14,14 @@ namespace {
 using tile_npu::DType;
 using tile_npu::NpuDomain;
 using tile_npu::Ram;
-using tile_npu::Simulator;
+using tile_npu::FuncCore;
 using tile_npu::StepStatus;
 
 } // namespace
 
 TEST_CASE(eun_acc_abs_neg_i32) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   auto &state = sim.state();
 
   load_one(sim, memory, make_eun(NpuDomain::acc, 1, 0, 1)); // aabs a0, a1
@@ -51,7 +51,7 @@ TEST_CASE(eun_acc_abs_neg_i32) {
 
 TEST_CASE(eun_vec_f32_abs_neg) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   auto &state = sim.state();
 
   load_one(sim, memory, make_eun(NpuDomain::vec32, 1, 0, 1)); // vabs v0, v1
@@ -71,7 +71,7 @@ TEST_CASE(eun_vec_f32_abs_neg) {
 
 TEST_CASE(eun_exp2_special_values) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, make_eun(NpuDomain::vec32, 3, 0, 1)); // vexp2 v0, v1
   auto &state = sim.state();
   for (auto index : {0, 1})
@@ -90,7 +90,7 @@ TEST_CASE(eun_exp2_special_values) {
 
 TEST_CASE(eun_rcp_rsqrt_special_values) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   auto &state = sim.state();
 
   load_one(sim, memory, make_eun(NpuDomain::vec32, 4, 0, 1)); // vrcp v0, v1
@@ -123,7 +123,7 @@ TEST_CASE(eun_rcp_rsqrt_special_values) {
 
 TEST_CASE(eun_rejects_invalid) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   auto &state = sim.state();
 
   load_one(sim, memory, make_eun(NpuDomain::acc, 1, 0, 1)); // aabs a0, a1

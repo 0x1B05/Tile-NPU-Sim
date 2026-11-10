@@ -14,7 +14,7 @@ xmake f --native=y       # optional host-specific -march=native code generation
 
 Project options are grouped in `xmake f --menu` under `Build`, `Debug`, and `Guests`.
 
-`sim` is the default binary target. Its internal static library, `sim_core`, is not a public build target; the host tests link it directly. SDB is off by default and only changes the `sim` build.
+`sim` is the default binary target. The shared ISA layer is the internal static library `isa_core`; the functional core `func_core` depends on it. Neither is a public build target, and the host tests link them directly. SDB is off by default and only changes the `sim` build.
 
 Integration suites are driven by `tests/run.py`:
 

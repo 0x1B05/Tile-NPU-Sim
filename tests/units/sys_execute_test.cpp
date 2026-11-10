@@ -1,4 +1,4 @@
-#include "tile_npu/simulator.h"
+#include "func/core.h"
 
 #include <cstdint>
 
@@ -8,14 +8,14 @@ using namespace tile_npu::test;
 
 namespace {
 using tile_npu::Ram;
-using tile_npu::Simulator;
+using tile_npu::FuncCore;
 using tile_npu::StepStatus;
 
 } // namespace
 
 TEST_CASE(sys_fence_retires) {
   Ram memory(CODE_BASE, 12);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // All three fences are no-ops in the single-hart in-order model.
   write_word(memory, CODE_BASE, 0x80000002u);     // fence.mem
   write_word(memory, CODE_BASE + 4, 0x82000002u); // fence.sa
@@ -33,7 +33,7 @@ TEST_CASE(sys_fence_retires) {
 
 TEST_CASE(sys_kernel_end_stops) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   write_word(memory, CODE_BASE, 0x86000002u); // kernel.end
   sim.reset(CODE_BASE);
 

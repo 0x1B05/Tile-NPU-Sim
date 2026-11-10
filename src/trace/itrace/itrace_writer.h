@@ -1,6 +1,7 @@
 #pragma once
 
-#include "tile_npu/simulator.h"
+#include "tile_npu/decode.h"
+#include "tile_npu/step.h"
 
 #include <cstdint>
 #include <fstream>

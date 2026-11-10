@@ -1,4 +1,4 @@
-#include "tile_npu/simulator.h"
+#include "func/core.h"
 
 #include <cmath>
 #include <cstddef>
@@ -13,7 +13,7 @@ using namespace tile_npu::test;
 namespace {
 using tile_npu::DType;
 using tile_npu::Ram;
-using tile_npu::Simulator;
+using tile_npu::FuncCore;
 using tile_npu::StepStatus;
 
 void acc_f32(tile_npu::State &state, std::size_t index, std::uint8_t rows, std::uint8_t cols) {
@@ -26,7 +26,7 @@ void acc_f32(tile_npu::State &state, std::size_t index, std::uint8_t rows, std::
 
 TEST_CASE(areduce_sum_max_min) {
   Ram memory(CODE_BASE, 12);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // Three row reductions over the same 2x3 f32 source:
   //   row0 {1.0, 2.0, 3.5}  -> sum 6.5,  max 3.5, min 1.0
   //   row1 {-1.0, -2.5, 4.0} -> sum 0.5, max 4.0, min -2.5
@@ -54,7 +54,7 @@ TEST_CASE(areduce_sum_max_min) {
 
 TEST_CASE(areduce_sumsq_absmax) {
   Ram memory(CODE_BASE, 8);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // 2x2 f32 source: row0 {3.0, 4.0} -> sumsq 25, absmax 4;
   //                 row1 {-5.0, 2.0} -> sumsq 29, absmax 5.
   write_word(memory, CODE_BASE, make_areduce(3, 0, 1));
@@ -78,7 +78,7 @@ TEST_CASE(areduce_sumsq_absmax) {
 
 TEST_CASE(areduce_argmax) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // Row ties take the smaller index; NaN candidates are ignored, and an
   // all-NaN row falls back to index 0 with a NaN value.
   load_one(sim, memory, make_areduce_argmax(0, 1, 1));
@@ -110,7 +110,7 @@ TEST_CASE(areduce_argmax) {
 
 TEST_CASE(vreduce_reductions) {
   Ram memory(CODE_BASE, 16);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // vS = {1.5, -2.0, 4.0}: sum 3.5, max 4.0, min -2.0, sumsq 22.25; each
   // result broadcasts the f32 bits into every effective lane of vD.
   write_word(memory, CODE_BASE, make_vreduce(0, 5, 1));
@@ -146,7 +146,7 @@ TEST_CASE(vreduce_reductions) {
 
 TEST_CASE(vreduce_sumsq_rounds_each_product) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // The manual rounds each product to f32 before the f32 add; a host build
   // that contracts the accumulation into an FMA would produce 0x3f701583 instead
   // (reproduced with -O2 -mfma).
@@ -164,7 +164,7 @@ TEST_CASE(vreduce_sumsq_rounds_each_product) {
 
 TEST_CASE(vreduce_argmax) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // v1 = {1.0, 7.0, NaN}: the NaN candidate is ignored; the u32 index and f32
   // value bits broadcast into every effective lane of vIdx/vVal.
   load_one(sim, memory, make_vreduce_argmax(5, 6, 1));
@@ -185,7 +185,7 @@ TEST_CASE(vreduce_argmax) {
 
 TEST_CASE(vreduce_argmax_all_nan) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // An all-NaN source falls back to index 0 and the lane-0 NaN value bits.
   load_one(sim, memory, make_vreduce_argmax(5, 6, 1));
   auto &state = sim.state();
@@ -205,7 +205,7 @@ TEST_CASE(vreduce_argmax_all_nan) {
 
 TEST_CASE(vreduce_sum_tree_order) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // Pairwise f32 addition: (1e8 + 1) + (-1e8 + 1) = 0, whereas a left-to-right
   // fold gives ((1e8 + 1) - 1e8) + 1 = 1.
   load_one(sim, memory, make_vreduce(0, 5, 1));
@@ -223,7 +223,7 @@ TEST_CASE(vreduce_sum_tree_order) {
 
 TEST_CASE(vreduce_sumsq_tree_order) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // Four f32 squares whose pairwise tree differs from the serial sum by one
   // ulp: serial 0x431a4185, tree 0x431a4186.
   load_one(sim, memory, make_vreduce(3, 5, 1));
@@ -241,7 +241,7 @@ TEST_CASE(vreduce_sumsq_tree_order) {
 
 TEST_CASE(areduce_sum_tree_order) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // The row form uses the same tree over the source columns.
   load_one(sim, memory, make_areduce(0, 0, 1));
   auto &state = sim.state();
@@ -258,7 +258,7 @@ TEST_CASE(areduce_sum_tree_order) {
 
 TEST_CASE(vreduce_max_min_nan_zero) {
   Ram memory(CODE_BASE, 8);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // max {NaN, -inf, +0, -0} -> +0; min {NaN, +inf, +0, -0} -> -0.
   write_word(memory, CODE_BASE, make_vreduce(1, 5, 1));
   write_word(memory, CODE_BASE + 4, make_vreduce(2, 6, 1));
@@ -291,7 +291,7 @@ TEST_CASE(vreduce_max_min_nan_zero) {
 
 TEST_CASE(areduce_sum_tree_five) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // Five elements exercise the odd-node pass-through: the tree gives
   // ((1e8 + 1) + (-1e8 + 1)) + 2 = 2, while a serial fold gives 3.
   load_one(sim, memory, make_areduce(0, 0, 1));
@@ -309,7 +309,7 @@ TEST_CASE(areduce_sum_tree_five) {
 
 TEST_CASE(areduce_absmax_single_and_all_nan) {
   Ram memory(CODE_BASE, 16);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   for (std::size_t offset = 0; offset < 16; offset += 4) {
     write_word(memory, CODE_BASE + offset, make_areduce(5, 0, 1));
   }
@@ -339,7 +339,7 @@ TEST_CASE(areduce_absmax_single_and_all_nan) {
 
 TEST_CASE(areduce_absmax_three) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // Three leaves exercise the odd carry: absmax_leaf maps the negative value
   // and NaN to +3, +0, +0, and the tree returns 3.
   load_one(sim, memory, make_areduce(5, 0, 1));
@@ -356,7 +356,7 @@ TEST_CASE(areduce_absmax_three) {
 
 TEST_CASE(reduce_rejects_invalid) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   auto &state = sim.state();
 
   // The source must be f32.

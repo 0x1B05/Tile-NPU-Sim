@@ -1,6 +1,6 @@
 #ifdef CONFIG_MTRACE
 
-#include "tile_npu/simulator.h"
+#include "func/core.h"
 
 #include <array>
 #include <cstddef>
@@ -19,7 +19,7 @@ namespace {
 using tile_npu::DType;
 using tile_npu::NpuDomain;
 using tile_npu::Ram;
-using tile_npu::Simulator;
+using tile_npu::FuncCore;
 using tile_npu::StepStatus;
 using tile_npu::TraceEndpointKind;
 using tile_npu::TraceEventType;
@@ -39,7 +39,7 @@ void poke(Ram &memory, std::uint64_t address, const std::uint8_t (&bytes)[N]) {
 
 TEST_CASE(mtrace_tload_block) {
   Ram memory(CODE_BASE, 0x800);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   std::vector<tile_npu::TraceEvent> events;
   sim.set_mtrace_callback([&](const tile_npu::TraceEvent &event) { events.push_back(event); });
 
@@ -79,7 +79,7 @@ TEST_CASE(mtrace_tload_block) {
 
 TEST_CASE(mtrace_mma_compute) {
   Ram memory(CODE_BASE, 0x800);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   std::vector<tile_npu::TraceEvent> events;
   sim.set_mtrace_callback([&](const tile_npu::TraceEvent &event) { events.push_back(event); });
 
@@ -109,7 +109,7 @@ TEST_CASE(mtrace_mma_compute) {
 
 TEST_CASE(mtrace_vfmadd_counts_active_lanes) {
   Ram memory(CODE_BASE, 0x800);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   std::vector<tile_npu::TraceEvent> events;
   sim.set_mtrace_callback([&](const tile_npu::TraceEvent &event) { events.push_back(event); });
 
@@ -126,7 +126,7 @@ TEST_CASE(mtrace_vfmadd_counts_active_lanes) {
 
 TEST_CASE(mtrace_afmadd_counts_active_elements) {
   Ram memory(CODE_BASE, 0x800);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   std::vector<tile_npu::TraceEvent> events;
   sim.set_mtrace_callback([&](const tile_npu::TraceEvent &event) { events.push_back(event); });
 
@@ -143,7 +143,7 @@ TEST_CASE(mtrace_afmadd_counts_active_elements) {
 
 TEST_CASE(mtrace_mma_accumulate_reads_destination) {
   Ram memory(CODE_BASE, 0x800);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   std::vector<tile_npu::TraceEvent> events;
   sim.set_mtrace_callback([&](const tile_npu::TraceEvent &event) { events.push_back(event); });
 

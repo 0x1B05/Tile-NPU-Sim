@@ -1,4 +1,4 @@
-#include "tile_npu/simulator.h"
+#include "func/core.h"
 
 #include <cstdint>
 #include <initializer_list>
@@ -12,14 +12,14 @@ namespace {
 using tile_npu::DType;
 using tile_npu::NpuDomain;
 using tile_npu::Ram;
-using tile_npu::Simulator;
+using tile_npu::FuncCore;
 using tile_npu::StepStatus;
 
 } // namespace
 
 TEST_CASE(er4_acc_select) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // aselect a0, a1, a2, a3 with a u32 mask over i32 data.
   load_one(sim, memory, make_er4(NpuDomain::acc, 0, 0, 1, 2, 3));
   auto &state = sim.state();
@@ -40,7 +40,7 @@ TEST_CASE(er4_acc_select) {
 
 TEST_CASE(er4_vec_select_f32) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // vselect v0, v1, v2, v3: bitwise select, dtype-agnostic (f32 data here).
   load_one(sim, memory, make_er4(NpuDomain::vec32, 0, 0, 1, 2, 3));
   auto &state = sim.state();
@@ -61,7 +61,7 @@ TEST_CASE(er4_vec_select_f32) {
 
 TEST_CASE(er4_fmadd) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   auto &state = sim.state();
 
   // vfmadd v0, v1, v2, v3: fma fuses with a single rounding.
@@ -91,7 +91,7 @@ TEST_CASE(er4_fmadd) {
 
 TEST_CASE(er4_rejects_invalid) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   auto &state = sim.state();
 
   // The select mask dtype is u32 on the 32-bit domains.

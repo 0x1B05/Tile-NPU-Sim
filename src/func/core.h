@@ -23,9 +23,12 @@ using ItraceCallback = std::function<void(std::uint64_t pc, std::uint32_t instr,
                                           const DecodeResult &decoded, StepStatus status)>;
 #endif
 
-class Simulator {
+// Functional core: one architectural instruction per step, with no timing
+// model. It shares the ISA layer (decode/execute) with UarchCore, which adds
+// instruction timing on top of the same semantics.
+class FuncCore {
 public:
-  explicit Simulator(AddressSpace &memory) : memory_(memory) {}
+  explicit FuncCore(AddressSpace &memory) : memory_(memory) {}
 
   State &state() { return state_; }
 

@@ -1,5 +1,5 @@
+#include "func/core.h"
 #include "tile_npu/platform/ram.h"
-#include "tile_npu/simulator.h"
 
 #include "framework.h"
 #include <array>
@@ -38,7 +38,7 @@ void load_image(tile_npu::Ram &memory, std::string_view name) {
 // Steps until the guest stops on its own (any non-retired status), so a
 // guest fault surfaces immediately. A hung guest fails with the budget,
 // the current PC and the instruction word at PC.
-tile_npu::StepResult run_until_stop(tile_npu::Simulator &sim, tile_npu::Ram &memory,
+tile_npu::StepResult run_until_stop(tile_npu::FuncCore &sim, tile_npu::Ram &memory,
                                     int max_steps = 512) {
   tile_npu::StepResult result{};
   for (int steps = 0; steps < max_steps; ++steps) {
@@ -64,7 +64,7 @@ tile_npu::StepResult run_until_stop(tile_npu::Simulator &sim, tile_npu::Ram &mem
 void check_guest_image(std::string_view name, std::uint64_t memory_size,
                        tile_npu::StepStatus stop = tile_npu::StepStatus::breakpoint) {
   tile_npu::Ram memory{IMAGE_BASE, memory_size};
-  tile_npu::Simulator sim(memory);
+  tile_npu::FuncCore sim(memory);
   load_image(memory, name);
   sim.reset(IMAGE_BASE);
   const auto result = run_until_stop(sim, memory);

@@ -1,4 +1,4 @@
-#include "tile_npu/simulator.h"
+#include "func/core.h"
 
 #include <cstdint>
 #include <initializer_list>
@@ -11,14 +11,14 @@ using namespace tile_npu::test;
 namespace {
 using tile_npu::DType;
 using tile_npu::Ram;
-using tile_npu::Simulator;
+using tile_npu::FuncCore;
 using tile_npu::StepStatus;
 
 } // namespace
 
 TEST_CASE(ebcast_acc_byrow) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // amulv.byrow a0, a1, v2 (i32).
   load_one(sim, memory, make_ebcast(false, 2, 0, 1, 2));
   auto &state = sim.state();
@@ -42,7 +42,7 @@ TEST_CASE(ebcast_acc_byrow) {
 
 TEST_CASE(ebcast_acc_bycol_f32_mul) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // amulv.bycol a0, a1, v2 (f32).
   load_one(sim, memory, make_ebcast(true, 2, 0, 1, 2));
   auto &state = sim.state();
@@ -62,7 +62,7 @@ TEST_CASE(ebcast_acc_bycol_f32_mul) {
 
 TEST_CASE(ebcast_acc_shift_by_vector) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // ashlv.byrow a0, a1, v2; shift amounts take the low 5 bits.
   load_one(sim, memory, make_ebcast(false, 11, 0, 1, 2));
   auto &state = sim.state();
@@ -82,7 +82,7 @@ TEST_CASE(ebcast_acc_shift_by_vector) {
 
 TEST_CASE(ebcast_rejects_invalid) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   auto &state = sim.state();
 
   // The vector length must equal rows (byrow) / cols (bycol).

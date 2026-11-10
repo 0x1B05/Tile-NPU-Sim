@@ -1,4 +1,4 @@
-#include "tile_npu/simulator.h"
+#include "func/core.h"
 
 #include <cstdint>
 #include <initializer_list>
@@ -13,7 +13,7 @@ namespace {
 using tile_npu::DType;
 using tile_npu::NpuDomain;
 using tile_npu::Ram;
-using tile_npu::Simulator;
+using tile_npu::FuncCore;
 using tile_npu::StepStatus;
 
 constexpr std::uint32_t MASK_TRUE = 0xffffffffu;
@@ -23,7 +23,7 @@ constexpr std::uint32_t MASK_FALSE = 0u;
 
 TEST_CASE(ecmp_vec_i32_lt) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, make_ecmp(NpuDomain::vec32, false, 2, 0, 1, 2)); // vcmp.lt v0, v1, v2
   auto &state = sim.state();
   vec_cfg(state, 0, DType::u32, 4); // the mask is always u32
@@ -49,7 +49,7 @@ TEST_CASE(ecmp_vec_i32_lt) {
 
 TEST_CASE(ecmp_vec_u32_lt_is_unsigned) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, make_ecmp(NpuDomain::vec32, false, 2, 0, 1, 2)); // vcmp.lt v0, v1, v2
   auto &state = sim.state();
   vec_cfg(state, 0, DType::u32, 2);
@@ -68,7 +68,7 @@ TEST_CASE(ecmp_vec_u32_lt_is_unsigned) {
 
 TEST_CASE(ecmp_vec_eq_ne_ge_i32) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   auto &state = sim.state();
 
   load_one(sim, memory, make_ecmp(NpuDomain::vec32, false, 0, 0, 1, 2)); // vcmp.eq v0, v1, v2
@@ -107,7 +107,7 @@ TEST_CASE(ecmp_vec_eq_ne_ge_i32) {
 
 TEST_CASE(ecmp_vec_f32) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   auto &state = sim.state();
   const auto set_operands = [&] {
     const auto nan = std::numeric_limits<float>::quiet_NaN();
@@ -159,7 +159,7 @@ TEST_CASE(ecmp_vec_f32) {
 
 TEST_CASE(ecmp_scalar_form) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, make_ecmp(NpuDomain::vec32, true, 0, 0, 1, 5)); // vcmpx.eq v0, v1, x5
   auto &state = sim.state();
   vec_cfg(state, 0, DType::u32, 2);
@@ -176,7 +176,7 @@ TEST_CASE(ecmp_scalar_form) {
 
 TEST_CASE(ecmp_mask_aliases_source) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, make_ecmp(NpuDomain::vec32, false, 0, 1, 1, 2)); // vcmp.eq v1, v1, v2
   auto &state = sim.state();
   // Mask and source can be the same register when its dtype is u32.
@@ -194,7 +194,7 @@ TEST_CASE(ecmp_mask_aliases_source) {
 
 TEST_CASE(ecmp_rejects_invalid) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   auto &state = sim.state();
 
   // The mask destination must be u32.

@@ -1,4 +1,4 @@
-#include "tile_npu/simulator.h"
+#include "func/core.h"
 
 #include "op_info.h"
 
@@ -18,14 +18,14 @@ using tile_npu::DType;
 using tile_npu::EbinOp;
 using tile_npu::NpuDomain;
 using tile_npu::Ram;
-using tile_npu::Simulator;
+using tile_npu::FuncCore;
 using tile_npu::StepStatus;
 
 } // namespace
 
 TEST_CASE(ebin_acc_mul_wrap32) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, make_ebin(EbinOp::mul, NpuDomain::acc, false, 0, 1,
                                   2)); // amul a0, a1, a2
   auto &state = sim.state();
@@ -43,7 +43,7 @@ TEST_CASE(ebin_acc_mul_wrap32) {
 
 TEST_CASE(ebin_acc_min_max_i32_u32) {
   Ram memory(CODE_BASE, 16);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   write_word(memory, CODE_BASE + 0, make_ebin(EbinOp::min, NpuDomain::acc, false, 0, 1, 2));
   write_word(memory, CODE_BASE + 4, make_ebin(EbinOp::max, NpuDomain::acc, false, 3, 4, 5));
   write_word(memory, CODE_BASE + 8, make_ebin(EbinOp::min, NpuDomain::acc, false, 6, 7, 8));
@@ -70,7 +70,7 @@ TEST_CASE(ebin_acc_min_max_i32_u32) {
 
 TEST_CASE(ebin_acc_sra_i32) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, make_ebin(EbinOp::sra, NpuDomain::acc, false, 0, 1,
                                   2)); // asra a0, a1, a2
   auto &state = sim.state();
@@ -85,7 +85,7 @@ TEST_CASE(ebin_acc_sra_i32) {
 
 TEST_CASE(ebin_vec_sra_top_bit_fill) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory,
            make_ebin(EbinOp::sra, NpuDomain::vec32, false, 0, 1,
                      2)); // vsra v0, v1, v2
@@ -102,7 +102,7 @@ TEST_CASE(ebin_vec_sra_top_bit_fill) {
 
 TEST_CASE(ebin_acc_scalar_source) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, make_ebin(EbinOp::sub, NpuDomain::acc, true, 0, 1,
                                   3)); // asubx a0, a1, x3
   auto &state = sim.state();
@@ -119,7 +119,7 @@ TEST_CASE(ebin_acc_scalar_source) {
 
 TEST_CASE(ebin_vec32_len_and_scalar_source) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory,
            make_ebin(EbinOp::add, NpuDomain::vec32, true, 0, 1,
                      3)); // vaddx v0, v1, x3
@@ -137,7 +137,7 @@ TEST_CASE(ebin_vec32_len_and_scalar_source) {
 
 TEST_CASE(ebin_f32_arithmetic) {
   Ram memory(CODE_BASE, 12);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   write_word(memory, CODE_BASE,
              make_ebin(EbinOp::add, NpuDomain::vec32, false, 0, 1,
                        2)); // vadd v0, v1, v2
@@ -169,7 +169,7 @@ TEST_CASE(ebin_f32_arithmetic) {
 
 TEST_CASE(ebin_f32_scalar_source) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // The scalar form reinterprets the low 32 bits of xS as f32 bits; the
   // register file stores raw bits, so this is the case that pins the
   // decode_scalar convention for floats.
@@ -189,7 +189,7 @@ TEST_CASE(ebin_f32_scalar_source) {
 
 TEST_CASE(ebin_f32_rejects_integer_only_ops) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory,
            make_ebin(EbinOp::bit_and, NpuDomain::vec32, false, 0, 1,
                      2)); // vand v0, v1, v2
@@ -221,7 +221,7 @@ TEST_CASE(ebin_rejects_mismatched_configs) {
   };
   for (const auto &test : cases) {
     Ram memory(CODE_BASE, 4);
-    Simulator sim(memory);
+    FuncCore sim(memory);
     load_one(sim, memory,
              make_ebin(EbinOp::add, NpuDomain::vec32, false, 0, 1,
                        2)); // vadd v0, v1, v2
@@ -242,7 +242,7 @@ TEST_CASE(ebin_rejects_empty_shape) {
   // A zero lane count matches across operands, so only the 1..extent bound
   // rejects it; the loops would otherwise run zero iterations and retire.
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory,
            make_ebin(EbinOp::add, NpuDomain::vec32, false, 0, 1,
                      2)); // vadd v0, v1, v2
@@ -279,7 +279,7 @@ TEST_CASE(ebin_legality_matrix) {
       const bool legal = dtype == DType::f32 ? f32_legal : true;
       for (const bool scalar_src2 : {false, true}) {
         Ram memory(CODE_BASE, 4);
-        Simulator sim(memory);
+        FuncCore sim(memory);
         load_one(sim, memory, make_ebin(op, domain, scalar_src2, 0, 1, 2));
         auto &state = sim.state();
         for (auto index : {0, 1, 2}) {

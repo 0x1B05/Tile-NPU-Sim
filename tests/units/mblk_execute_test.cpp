@@ -1,4 +1,4 @@
-#include "tile_npu/simulator.h"
+#include "func/core.h"
 
 #include <array>
 #include <cstddef>
@@ -14,7 +14,7 @@ namespace {
 using tile_npu::DType;
 using tile_npu::NpuDomain;
 using tile_npu::Ram;
-using tile_npu::Simulator;
+using tile_npu::FuncCore;
 using tile_npu::StepStatus;
 
 constexpr std::uint64_t MEM_SIZE = 0x800;
@@ -34,7 +34,7 @@ struct MblkRun {
   }
 
   Ram memory{CODE_BASE, MEM_SIZE};
-  Simulator sim;
+  FuncCore sim;
 };
 
 template <std::size_t N>

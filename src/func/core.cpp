@@ -1,4 +1,4 @@
-#include "tile_npu/simulator.h"
+#include "func/core.h"
 
 #include "execute/execute.h"
 #ifdef CONFIG_MTRACE
@@ -15,7 +15,7 @@
 
 namespace tile_npu {
 
-void Simulator::reset(std::uint64_t entry_pc) {
+void FuncCore::reset(std::uint64_t entry_pc) {
   state_ = State{};
   state_.scalar.pc = entry_pc;
 #ifdef CONFIG_MTRACE
@@ -23,14 +23,14 @@ void Simulator::reset(std::uint64_t entry_pc) {
 #endif
 }
 
-StepResult Simulator::step() {
+StepResult FuncCore::step() {
   // fetch instr
   const std::uint64_t pc = state_.scalar.pc;
 #ifdef CONFIG_MTRACE
   mtrace_recorder_.begin_instruction(pc);
   const bool mtrace_active = mtrace_recorder_.should_trace(pc);
 #endif
-  std::array<std::byte, 4> instr_bytes{};
+  std::array<std::byte, INSTR_BYTES> instr_bytes{};
   if (!memory_.read(pc, instr_bytes)) {
     return {.status = StepStatus::fetch_fault, .pc = pc};
   }

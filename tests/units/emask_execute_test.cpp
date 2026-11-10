@@ -1,4 +1,4 @@
-#include "tile_npu/simulator.h"
+#include "func/core.h"
 
 #include <cmath>
 #include <cstdint>
@@ -13,14 +13,14 @@ namespace {
 using tile_npu::DType;
 using tile_npu::NpuDomain;
 using tile_npu::Ram;
-using tile_npu::Simulator;
+using tile_npu::FuncCore;
 using tile_npu::StepStatus;
 
 } // namespace
 
 TEST_CASE(emask_acc_tril) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // amask.tril a0, a1, x2, +1 on a 3x3 i32 matrix with xDelta = 0: keeps the
   // main diagonal and everything below it.
   load_one(sim, memory, make_emask(NpuDomain::acc, 1, 0, 1, 2, 1));
@@ -45,7 +45,7 @@ TEST_CASE(emask_acc_tril) {
 
 TEST_CASE(emask_acc_triu_f32) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // amask.triu a0, a1, x2, +inf on a 2x2 f32 matrix with xDelta = 0: only
   // (1,0) falls below the diagonal and takes the fill.
   load_one(sim, memory, make_emask(NpuDomain::acc, 2, 0, 1, 2, 7));
@@ -67,7 +67,7 @@ TEST_CASE(emask_acc_triu_f32) {
 
 TEST_CASE(emask_vec_tail) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // vmask.tail v0, v1, x2, +1 on a len-4 i32 vector with xLen = 3.
   load_one(sim, memory, make_emask(NpuDomain::vec32, 0, 0, 1, 2, 1));
   auto &state = sim.state();
@@ -90,7 +90,7 @@ TEST_CASE(emask_vec_tail) {
 
 TEST_CASE(emask_rejects_invalid) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   auto &state = sim.state();
 
   // fill5 codes 5-8 (+-0.5, +-inf) require an f32 destination.

@@ -1,4 +1,4 @@
-#include "tile_npu/simulator.h"
+#include "func/core.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -14,14 +14,14 @@ namespace {
 using tile_npu::DType;
 using tile_npu::NpuDomain;
 using tile_npu::Ram;
-using tile_npu::Simulator;
+using tile_npu::FuncCore;
 using tile_npu::StepStatus;
 
 } // namespace
 
 TEST_CASE(move_fill_tile_truncates_imm) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // imm16 = 0xFF80 sign-extends to ...FF80; i8 keeps the low 8 bits (0x80).
   load_one(sim, memory, make_fill_imm(NpuDomain::tile, 0, 0xff80u)); // tfill t0, -128
   auto &state = sim.state();
@@ -36,7 +36,7 @@ TEST_CASE(move_fill_tile_truncates_imm) {
 
 TEST_CASE(move_fill_acc_f32_bf16_imm) {
   Ram memory(CODE_BASE, 12);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // An f32 fill reads imm16 as the bf16 pattern (the high half of the f32
   // bits): 0x3F80 is 1.0f, 0xC000 is -2.0f; the latter must not sign-extend.
   write_word(memory, CODE_BASE, make_fill_imm(NpuDomain::acc, 0, 0x3f80u));     // afill a0, 1.0f
@@ -59,7 +59,7 @@ TEST_CASE(move_fill_acc_f32_bf16_imm) {
 
 TEST_CASE(move_fill_i32_sign_extends_imm) {
   Ram memory(CODE_BASE, 8);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   write_word(memory, CODE_BASE, make_fill_imm(NpuDomain::vec32, 0, 0xffffu)); // vfill v0, -1
   write_word(memory, CODE_BASE + 4,
              make_fill_imm(NpuDomain::vec32, 1, 0x8000u)); // vfill v1, -32768
@@ -77,7 +77,7 @@ TEST_CASE(move_fill_i32_sign_extends_imm) {
 
 TEST_CASE(move_fillx_acc_keeps_low32) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, make_reg_move(NpuDomain::acc, 1, 3, 5)); // afillx a3, x5
   auto &state = sim.state();
   state.ac[3].dtype = DType::f32;
@@ -91,7 +91,7 @@ TEST_CASE(move_fillx_acc_keeps_low32) {
 
 TEST_CASE(move_copy_matrix_effective_region) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, make_reg_move(NpuDomain::tile, 2, 0, 1)); // tcopy t0, t1
   auto &state = sim.state();
   for (auto index : {0, 1})
@@ -113,7 +113,7 @@ TEST_CASE(move_copy_matrix_effective_region) {
 
 TEST_CASE(move_copy_rejects_mismatch) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   auto &state = sim.state();
 
   load_one(sim, memory, make_reg_move(NpuDomain::tile, 2, 0, 1)); // tcopy t0, t1
@@ -135,7 +135,7 @@ TEST_CASE(move_copy_rejects_mismatch) {
 
 TEST_CASE(move_fill_rejects_invalid_config) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, make_fill_imm(NpuDomain::tile, 0, 1)); // tfill t0, 1
   auto &state = sim.state();
   tile_cfg(state, 0, DType::i8, 0, 2); // rows = 0 is not a legal shape

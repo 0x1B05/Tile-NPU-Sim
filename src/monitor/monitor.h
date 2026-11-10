@@ -1,6 +1,6 @@
 #pragma once
 
-#include "tile_npu/simulator.h"
+#include "func/core.h"
 #include "utils/format.h"
 
 #include <cstddef>
@@ -55,9 +55,9 @@ struct Options {
 };
 
 // Step loop shared by the non-interactive run path and the sdb shell.
-// Simulator::step() is the single-step API; npu_exec() runs until a step
+// The functional core's step() is the single-step API; npu_exec() runs until a step
 // does not retire and returns it, or until the step budget is spent.
-std::optional<StepResult> npu_exec(Simulator &sim, std::uint64_t step_limit);
+std::optional<StepResult> npu_exec(FuncCore &sim, std::uint64_t step_limit);
 
 // Human-readable description of a stopped step.
 std::string halt_message(const StepResult &result);

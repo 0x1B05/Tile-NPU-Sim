@@ -1,4 +1,4 @@
-#include "tile_npu/simulator.h"
+#include "func/core.h"
 
 #include <array>
 #include <cstddef>
@@ -14,7 +14,7 @@ using namespace tile_npu::test;
 
 namespace {
 using tile_npu::Ram;
-using tile_npu::Simulator;
+using tile_npu::FuncCore;
 using tile_npu::StepResult;
 using tile_npu::StepStatus;
 
@@ -77,7 +77,7 @@ struct RegisterCase {
 void check_register_case(const RegisterCase &test) {
   Ram memory(CODE_BASE, 4);
   write_word(memory, CODE_BASE, test.word);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   sim.reset(CODE_BASE);
   sim.state().scalar.write_x(1, test.lhs);
   sim.state().scalar.write_x(2, test.rhs);
@@ -125,7 +125,7 @@ void test_integer_arithmetic() {
 
   Ram memory(CODE_BASE, 4);
   write_word(memory, CODE_BASE, 0x00208033u); // add x0, x1, x2
-  Simulator sim(memory);
+  FuncCore sim(memory);
   sim.reset(CODE_BASE);
   sim.state().scalar.write_x(1, 4);
   sim.state().scalar.write_x(2, 5);
@@ -136,7 +136,7 @@ void test_integer_arithmetic() {
 
 void test_control_flow() {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
 
   const auto run = [&](std::uint32_t word, std::uint64_t lhs, std::uint64_t rhs,
                        std::uint64_t expected_pc, std::uint64_t expected_rd = 0xface) {
@@ -218,7 +218,7 @@ void test_loads() {
     Ram memory(CODE_BASE, 0x50);
     write_word(memory, CODE_BASE, test.word);
     check(memory.write(DATA_BASE, data), "initialize load data");
-    Simulator sim(memory);
+    FuncCore sim(memory);
     sim.reset(CODE_BASE);
     sim.state().scalar.write_x(1, test.lhs);
     expect_step(sim.step(), StepStatus::retired, test.word);
@@ -230,7 +230,7 @@ void test_loads() {
   Ram memory(CODE_BASE, 0x50);
   const auto load_x0 = i(0x03, 2, 0, 0);
   write_word(memory, CODE_BASE, load_x0);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   sim.reset(CODE_BASE);
   sim.state().scalar.write_x(1, CODE_BASE + 0x50);
   expect_step(sim.step(), StepStatus::load_fault, load_x0, CODE_BASE + 0x50);
@@ -269,7 +269,7 @@ void test_stores() {
   for (const auto &test : cases) {
     Ram memory(CODE_BASE, 0x50);
     write_word(memory, CODE_BASE, test.word);
-    Simulator sim(memory);
+    FuncCore sim(memory);
     sim.reset(CODE_BASE);
     sim.state().scalar.write_x(1, test.lhs);
     sim.state().scalar.write_x(2, test.rhs);
@@ -289,7 +289,7 @@ void test_stores() {
   Ram memory(CODE_BASE, 0x44);
   const auto misaligned = s(2, 1);
   write_word(memory, CODE_BASE, misaligned);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   sim.reset(CODE_BASE);
   sim.state().scalar.write_x(1, DATA_BASE);
   sim.state().scalar.write_x(2, 0x12345678);
@@ -361,7 +361,7 @@ void test_m_extension() {
 
 void test_environment_boundary() {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   constexpr std::array cases{
       std::pair{0x00000073u, StepStatus::environment_call},
       std::pair{0x00100073u, StepStatus::breakpoint},

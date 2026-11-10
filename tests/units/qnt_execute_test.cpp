@@ -1,4 +1,4 @@
-#include "tile_npu/simulator.h"
+#include "func/core.h"
 
 #include <array>
 #include <cfenv>
@@ -14,7 +14,7 @@ namespace {
 using tile_npu::DType;
 using tile_npu::NpuDomain;
 using tile_npu::Ram;
-using tile_npu::Simulator;
+using tile_npu::FuncCore;
 using tile_npu::StepStatus;
 
 void tile_i8(tile_npu::State &state, std::size_t index, std::uint8_t rows, std::uint8_t cols) {
@@ -49,7 +49,7 @@ void vec32_i32(tile_npu::State &state, std::size_t index, std::uint8_t len) {
 
 TEST_CASE(qnt_aquant) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // 1x3 f32 source {64.0, -33.0, 10.0} with scale 0.5:
   //   64.0/0.5 = 128 saturates to 127, -33.0/0.5 = -66, 10.0/0.5 = 20;
   // vScale is read-only.
@@ -72,7 +72,7 @@ TEST_CASE(qnt_aquant) {
 
 TEST_CASE(qnt_tdequant) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // 1x2 i8 source {100, -2} with per-row scale 0.5 -> {50.0, -1.0}.
   load_one(sim, memory, make_tdequant(2, 1, 0));
   auto &state = sim.state();
@@ -90,7 +90,7 @@ TEST_CASE(qnt_tdequant) {
 
 TEST_CASE(qnt_rejects_invalid) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   auto &state = sim.state();
 
   // The Tile destination must be i8.
@@ -118,7 +118,7 @@ TEST_CASE(qnt_rounding_ignores_host_fp_mode) {
   // quantize to 0 whatever rounding mode the host program left active.
   const auto quantize_ties = [](int rounding_mode) {
     Ram memory(CODE_BASE, 4);
-    Simulator sim(memory);
+    FuncCore sim(memory);
     load_one(sim, memory, make_aquant(0, 1, 0));
     auto &state = sim.state();
     tile_i8(state, 0, 1, 2);
@@ -145,7 +145,7 @@ TEST_CASE(qnt_rounding_ignores_host_fp_mode) {
 
 TEST_CASE(adequant_basic) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, make_adequant(1, 0, 6, 7));
   auto &state = sim.state();
   acc_i32(state, 0, 2, 2);
@@ -174,7 +174,7 @@ TEST_CASE(adequant_basic) {
 
 TEST_CASE(vdequant_basic) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, make_vdequant(1, 0, 6, 7));
   auto &state = sim.state();
   vec32_i32(state, 0, 2);
@@ -197,7 +197,7 @@ TEST_CASE(vdequant_basic) {
 TEST_CASE(adequant_rejects_invalid) {
   {
     Ram memory(CODE_BASE, 4);
-    Simulator sim(memory);
+    FuncCore sim(memory);
     load_one(sim, memory, make_adequant(1, 0, 6, 7));
     auto &state = sim.state();
     acc_i32(state, 0, 2, 2);
@@ -209,7 +209,7 @@ TEST_CASE(adequant_rejects_invalid) {
   }
   {
     Ram memory(CODE_BASE, 4);
-    Simulator sim(memory);
+    FuncCore sim(memory);
     load_one(sim, memory, make_adequant(1, 0, 6, 7));
     auto &state = sim.state();
     acc_i32(state, 0, 2, 2);
@@ -226,7 +226,7 @@ TEST_CASE(adequant_rejects_invalid) {
 TEST_CASE(vdequant_rejects_invalid) {
   {
     Ram memory(CODE_BASE, 4);
-    Simulator sim(memory);
+    FuncCore sim(memory);
     load_one(sim, memory, make_vdequant(1, 0, 6, 7));
     auto &state = sim.state();
     vec32_i32(state, 0, 2);
@@ -238,7 +238,7 @@ TEST_CASE(vdequant_rejects_invalid) {
   }
   {
     Ram memory(CODE_BASE, 4);
-    Simulator sim(memory);
+    FuncCore sim(memory);
     load_one(sim, memory, make_vdequant(1, 0, 6, 7));
     auto &state = sim.state();
     vec32_i32(state, 0, 2);

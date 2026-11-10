@@ -1,4 +1,4 @@
-#include "tile_npu/simulator.h"
+#include "func/core.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -12,7 +12,7 @@ using namespace tile_npu::test;
 namespace {
 using tile_npu::DType;
 using tile_npu::Ram;
-using tile_npu::Simulator;
+using tile_npu::FuncCore;
 using tile_npu::StepStatus;
 
 constexpr std::size_t tindex(std::size_t row, std::size_t col) { return row * 32 + col; }
@@ -21,7 +21,7 @@ constexpr std::size_t tindex(std::size_t row, std::size_t col) { return row * 32
 
 TEST_CASE(row_insert_acc) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, make_row_move(true, 0, 5, 1, 2)); // ainsert.row a2[x5], v1
   auto &state = sim.state();
   state.ac[2].dtype = DType::i32;
@@ -39,7 +39,7 @@ TEST_CASE(row_insert_acc) {
 
 TEST_CASE(row_extract_acc) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, make_row_move(true, 1, 5, 2, 4)); // aextract.row v4, a2[x5]
   auto &state = sim.state();
   state.ac[2].dtype = DType::i32;
@@ -59,7 +59,7 @@ TEST_CASE(row_extract_acc) {
 
 TEST_CASE(row_move_rejects_invalid) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   auto &state = sim.state();
 
   load_one(sim, memory, make_row_move(false, 0, 0, 1, 2)); // ainsert.row a2[0], v1
@@ -79,7 +79,7 @@ TEST_CASE(row_move_rejects_invalid) {
 
 TEST_CASE(lane_extract_extension) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   auto &state = sim.state();
 
   load_one(sim, memory, make_lane_move(false, 0, 1, 2, 6)); // vextract x6, v2[1]
@@ -99,7 +99,7 @@ TEST_CASE(lane_extract_extension) {
 
 TEST_CASE(lane_insert_keeps_low_bits) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, make_lane_move(true, 1, 9, 7, 1)); // vinsert v1[x9], x7
   auto &state = sim.state();
   state.vc[1].dtype = DType::u32;
@@ -119,7 +119,7 @@ TEST_CASE(lane_insert_keeps_low_bits) {
 
 TEST_CASE(lane_broadcast) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, make_lane_move(false, 2, 1, 3, 4)); // vbroadcast v4, v3[1]
   auto &state = sim.state();
   state.vc[3].dtype = DType::f32;

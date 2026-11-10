@@ -5,8 +5,8 @@
 // tests/include/framework.h.
 #include "framework.h"
 
+#include "func/core.h"
 #include "tile_npu/platform/ram.h"
-#include "tile_npu/simulator.h"
 #include "tile_npu/state.h"
 
 #include "utils/bits.h"
@@ -28,7 +28,7 @@ inline void write_word(tile_npu::Ram &memory, std::uint64_t address, std::uint32
   check(memory.write(address, bytes), "write instruction word");
 }
 
-inline void load_one(tile_npu::Simulator &sim, tile_npu::Ram &memory, std::uint32_t word) {
+inline void load_one(tile_npu::FuncCore &sim, tile_npu::Ram &memory, std::uint32_t word) {
   write_word(memory, CODE_BASE, word);
   sim.reset(CODE_BASE);
 }

@@ -42,10 +42,10 @@ struct SdbCommand {
   std::string_view name;
   std::string_view summary;
   // Returning false exits the sdb loop.
-  bool (*run)(Simulator &sim, AddressSpace &memory, std::string_view args);
+  bool (*run)(FuncCore &sim, AddressSpace &memory, std::string_view args);
 };
 
-bool cmd_continue(Simulator &sim, AddressSpace &, std::string_view) {
+bool cmd_continue(FuncCore &sim, AddressSpace &, std::string_view) {
   const auto stop = npu_exec(sim, UNLIMITED_STEPS);
   if (!stop) return true; // the unlimited budget cannot run out in practice
   std::cout << halt_message(*stop) << '\n';
@@ -55,7 +55,7 @@ bool cmd_continue(Simulator &sim, AddressSpace &, std::string_view) {
   return true;
 }
 
-bool cmd_si(Simulator &sim, AddressSpace &, std::string_view arg) {
+bool cmd_si(FuncCore &sim, AddressSpace &, std::string_view arg) {
   std::uint64_t count = 1;
   if (!arg.empty()) {
     if (!parse_u64(arg, count) || count == 0) {
@@ -70,7 +70,7 @@ bool cmd_si(Simulator &sim, AddressSpace &, std::string_view arg) {
   return true;
 }
 
-bool cmd_info(Simulator &sim, AddressSpace &, std::string_view arg) {
+bool cmd_info(FuncCore &sim, AddressSpace &, std::string_view arg) {
   if (arg != "r") {
     std::cout << "usage: info r\n";
     return true;
@@ -83,7 +83,7 @@ bool cmd_info(Simulator &sim, AddressSpace &, std::string_view arg) {
   return true;
 }
 
-bool cmd_examine(Simulator &, AddressSpace &memory, std::string_view arg) {
+bool cmd_examine(FuncCore &, AddressSpace &memory, std::string_view arg) {
   const auto [count_text, address_text] = split_command(arg);
   std::uint64_t count = 0;
   std::uint64_t address = 0;
@@ -109,9 +109,9 @@ bool cmd_examine(Simulator &, AddressSpace &memory, std::string_view arg) {
   return true;
 }
 
-bool cmd_quit(Simulator &, AddressSpace &, std::string_view) { return false; }
+bool cmd_quit(FuncCore &, AddressSpace &, std::string_view) { return false; }
 
-bool cmd_help(Simulator &, AddressSpace &, std::string_view);
+bool cmd_help(FuncCore &, AddressSpace &, std::string_view);
 
 // clang-format off
 constexpr SdbCommand SDB_COMMANDS[] = {
@@ -124,7 +124,7 @@ constexpr SdbCommand SDB_COMMANDS[] = {
 };
 // clang-format on
 
-bool cmd_help(Simulator &, AddressSpace &, std::string_view) {
+bool cmd_help(FuncCore &, AddressSpace &, std::string_view) {
   for (const auto &cmd : SDB_COMMANDS) {
     std::cout << "  " << std::left << std::setw(6) << cmd.name << cmd.summary << '\n';
   }
@@ -134,7 +134,7 @@ bool cmd_help(Simulator &, AddressSpace &, std::string_view) {
 
 } // namespace
 
-void sdb_loop(Simulator &sim, AddressSpace &memory) {
+void sdb_loop(FuncCore &sim, AddressSpace &memory) {
   std::string last;
   std::string line;
   while (true) {

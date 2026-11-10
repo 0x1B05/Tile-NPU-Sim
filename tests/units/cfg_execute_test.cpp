@@ -1,4 +1,4 @@
-#include "tile_npu/simulator.h"
+#include "func/core.h"
 
 #include <cstdint>
 
@@ -9,7 +9,7 @@ using namespace tile_npu::test;
 namespace {
 using tile_npu::DType;
 using tile_npu::Ram;
-using tile_npu::Simulator;
+using tile_npu::FuncCore;
 using tile_npu::StepStatus;
 
 // Same format builders as cfg_decode_test.cpp, duplicated per test file.
@@ -37,7 +37,7 @@ constexpr std::uint32_t FIELD_ROW_STRIDE = 1;
 
 TEST_CASE(cfg_seti_writes_field) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, cfg_i(0x5, 0, FIELD_ROWS, 32, 0)); // tc0.rows = 32
   check_eq(sim.step().status, StepStatus::retired, "cfg.seti retires");
   check_eq(sim.state().tc[0].rows, std::uint8_t{32}, "tc0.rows written");
@@ -46,7 +46,7 @@ TEST_CASE(cfg_seti_writes_field) {
 
 TEST_CASE(cfg_seti_sign_extends_negative_imm) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // tm0.row_stride_bytes = -4: the signed field keeps the extended value.
   load_one(sim, memory, cfg_i(0x6, 0, FIELD_ROW_STRIDE, -4, 0));
   check_eq(sim.step().status, StepStatus::retired, "cfg.seti negative stride retires");
@@ -55,7 +55,7 @@ TEST_CASE(cfg_seti_sign_extends_negative_imm) {
 
 TEST_CASE(cfg_seti_base_addr) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, cfg_i(0x6, 0, FIELD_BASE_ADDR, 0x4000, 0));
   check_eq(sim.step().status, StepStatus::retired, "cfg.seti base_addr retires");
   check_eq(hex(sim.state().tm[0].base_addr), hex(0x4000u), "tm0.base_addr");
@@ -63,7 +63,7 @@ TEST_CASE(cfg_seti_base_addr) {
 
 TEST_CASE(cfg_seti_rejects_out_of_range_value) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // rows = 33 exceeds MATRIX_EXTENT = 32 -> CFG_ERROR, state untouched.
   load_one(sim, memory, cfg_i(0x5, 0, FIELD_ROWS, 33, 0));
   check_eq(sim.step().status, StepStatus::invalid_configuration, "rows = 33 fails");
@@ -73,7 +73,7 @@ TEST_CASE(cfg_seti_rejects_out_of_range_value) {
 
 TEST_CASE(cfg_seti_rejects_unsupported_dtype) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // AC supports i32/u32/f32; dtype code 0 (i8) is invalid there.
   load_one(sim, memory, cfg_i(0x5, 1, FIELD_DTYPE, 0, 0));
   check_eq(sim.step().status, StepStatus::invalid_configuration, "ac dtype i8 fails");
@@ -82,7 +82,7 @@ TEST_CASE(cfg_seti_rejects_unsupported_dtype) {
 
 TEST_CASE(cfg_seti_rejects_unsupported_field) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // VC has dtype/len only; field code 2 (cols in TC/AC) is absent.
   load_one(sim, memory, cfg_i(0x5, 2, FIELD_COLS, 8, 0));
   sim.state().vc[0].len = 7;
@@ -93,7 +93,7 @@ TEST_CASE(cfg_seti_rejects_unsupported_field) {
 
 TEST_CASE(cfg_setx_writes_u48_value) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, cfg_reg(0, 1, 0, FIELD_BASE_ADDR, 4, 0));
   sim.state().scalar.write_x(4, 0x400020003000ull);
   check_eq(sim.step().status, StepStatus::retired, "cfg.setx retires");
@@ -103,7 +103,7 @@ TEST_CASE(cfg_setx_writes_u48_value) {
 
 TEST_CASE(cfg_setx_truncates_top_of_u48_space) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, cfg_reg(0, 1, 0, FIELD_BASE_ADDR, 4, 0));
   sim.state().scalar.write_x(4, 0xffff800020003000ull);
   check_eq(sim.step().status, StepStatus::retired, "cfg.setx retires");
@@ -113,7 +113,7 @@ TEST_CASE(cfg_setx_truncates_top_of_u48_space) {
 
 TEST_CASE(cfg_setx_rejects_invalid_u48_extension) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, cfg_reg(0, 1, 0, FIELD_BASE_ADDR, 4, 0));
   sim.state().tm[0].base_addr = 0x1234;
   sim.state().scalar.write_x(4, 0x8000100020003000ull);
@@ -123,7 +123,7 @@ TEST_CASE(cfg_setx_rejects_invalid_u48_extension) {
 
 TEST_CASE(cfg_setx_from_x0_writes_zero) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, cfg_reg(0, 1, 0, FIELD_BASE_ADDR, 0, 0));
   sim.state().tm[0].base_addr = 0x1234;
   check_eq(sim.step().status, StepStatus::retired, "cfg.setx x0 retires");
@@ -132,7 +132,7 @@ TEST_CASE(cfg_setx_from_x0_writes_zero) {
 
 TEST_CASE(cfg_setx_rejects_out_of_range_value) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, cfg_reg(2, 0, 0, FIELD_LEN, 4, 0));
   sim.state().scalar.write_x(4, 33); // len = 33 exceeds VECTOR_LANES = 32
   check_eq(sim.step().status, StepStatus::invalid_configuration, "vc0 len = 33 fails");
@@ -141,7 +141,7 @@ TEST_CASE(cfg_setx_rejects_out_of_range_value) {
 
 TEST_CASE(cfg_setx_rejects_reserved_field) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, cfg_reg(0, 0, 0, 5, 4, 0));
   sim.state().tc[0].rows = 7;
   sim.state().scalar.write_x(4, 32);
@@ -153,7 +153,7 @@ TEST_CASE(cfg_setx_rejects_reserved_field) {
 
 TEST_CASE(cfg_copy_duplicates_whole_register) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, cfg_reg(0, 0, 1, 0, 3, 7));
   auto &tc3 = sim.state().tc[3];
   tc3.dtype = DType::u8;
@@ -168,7 +168,7 @@ TEST_CASE(cfg_copy_duplicates_whole_register) {
 
 TEST_CASE(cfg_get_reads_field_back) {
   Ram memory(CODE_BASE, 8);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   write_word(memory, CODE_BASE, cfg_i(0x5, 0, FIELD_ROWS, 32, 0));
   write_word(memory, CODE_BASE + 4, cfg_reg(0, 0, 2, FIELD_ROWS, 0, 5));
   sim.reset(CODE_BASE);
@@ -179,7 +179,7 @@ TEST_CASE(cfg_get_reads_field_back) {
 
 TEST_CASE(cfg_get_returns_enum_code) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, cfg_reg(0, 0, 2, FIELD_DTYPE, 0, 6));
   sim.state().tc[0].dtype = DType::u8;
   check_eq(sim.step().status, StepStatus::retired, "cfg.get dtype retires");
@@ -188,7 +188,7 @@ TEST_CASE(cfg_get_returns_enum_code) {
 
 TEST_CASE(cfg_get_sign_extends_signed_field) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, cfg_reg(0, 1, 2, FIELD_ROW_STRIDE, 0, 7));
   sim.state().tm[0].row_stride_bytes = -4;
   check_eq(sim.step().status, StepStatus::retired, "cfg.get stride retires");
@@ -198,7 +198,7 @@ TEST_CASE(cfg_get_sign_extends_signed_field) {
 
 TEST_CASE(cfg_get_to_x0_is_discarded) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, cfg_reg(0, 0, 2, FIELD_ROWS, 0, 0));
   sim.state().tc[0].rows = 9;
   check_eq(sim.step().status, StepStatus::retired, "cfg.get to x0 retires");
@@ -207,7 +207,7 @@ TEST_CASE(cfg_get_to_x0_is_discarded) {
 
 TEST_CASE(cfg_get_rejects_unsupported_field) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, cfg_reg(2, 0, 2, 2, 0, 5));
   sim.state().vc[0].len = 7;
   sim.state().scalar.write_x(5, 0x1234);
@@ -236,7 +236,7 @@ constexpr std::uint32_t cfg_getw(std::uint32_t sel2, std::uint32_t cm, std::uint
 
 TEST_CASE(cfg_setw_writes_config_span) {
   Ram memory(CODE_BASE, 8);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   write_word(memory, CODE_BASE, cfg_setw(0, 0, 2, 5, 2));      // tc2..tc4 = x5
   write_word(memory, CODE_BASE + 4, cfg_setw(2, 0, 0, 6, 31)); // vc0..vc31 = x6
   sim.reset(CODE_BASE);
@@ -260,7 +260,7 @@ TEST_CASE(cfg_setw_writes_config_span) {
 
 TEST_CASE(cfg_setw_writes_full_matrix_span) {
   Ram memory(CODE_BASE, 8);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   write_word(memory, CODE_BASE, cfg_setw(0, 0, 0, 5, 31));     // tc0..tc31 = x5
   write_word(memory, CODE_BASE + 4, cfg_setw(1, 0, 0, 6, 15)); // ac0..ac15 = x6
   sim.reset(CODE_BASE);
@@ -292,7 +292,7 @@ TEST_CASE(cfg_setw_rejects_invalid_word) {
   };
   for (const auto &test : cases) {
     Ram memory(CODE_BASE, 4);
-    Simulator sim(memory);
+    FuncCore sim(memory);
     load_one(sim, memory, cfg_setw(test.sel2, 0, 0, 5, 2));
     sim.state().scalar.write_x(5, test.word);
     check_eq(sim.step().status, StepStatus::invalid_configuration, test.name);
@@ -302,7 +302,7 @@ TEST_CASE(cfg_setw_rejects_invalid_word) {
   }
 
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   load_one(sim, memory, cfg_setw(2, 0, 0, 5, 0));
   sim.state().scalar.write_x(5, 0x1020); // VC len 32 with a reserved bit 12
   check_eq(sim.step().status, StepStatus::invalid_configuration, "vc reserved bit 12");
@@ -310,7 +310,7 @@ TEST_CASE(cfg_setw_rejects_invalid_word) {
 
 TEST_CASE(cfg_getw_round_trips_setw) {
   Ram memory(CODE_BASE, 16);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   write_word(memory, CODE_BASE, cfg_setw(1, 0, 3, 5, 0));       // ac3 = x5
   write_word(memory, CODE_BASE + 4, cfg_getw(1, 0, 6, 3));      // x6 = ac3
   write_word(memory, CODE_BASE + 8, cfg_getw(2, 0, 7, 9));      // x7 = vc9
@@ -331,7 +331,7 @@ TEST_CASE(cfg_getw_round_trips_setw) {
 
 TEST_CASE(cfg_setx_writes_config_span) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // cfg.setx vm1, stride_bytes, x5, 2
   load_one(sim, memory, cfg_reg(2, 1, 0, FIELD_ROW_STRIDE, 5, 1) | (2u << 12));
   sim.state().scalar.write_x(5, static_cast<std::uint64_t>(-8));
@@ -344,7 +344,7 @@ TEST_CASE(cfg_setx_writes_config_span) {
 
 TEST_CASE(cfg_setx_span_rejects_invalid_value) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // cfg.setx tc0, rows, x5, 3 with rows = 0: CFG_ERROR, nothing written.
   load_one(sim, memory, cfg_reg(0, 0, 0, FIELD_ROWS, 5, 0) | (3u << 12));
   for (int i = 0; i < 4; ++i)
@@ -357,7 +357,7 @@ TEST_CASE(cfg_setx_span_rejects_invalid_value) {
 
 TEST_CASE(cfg_copy_broadcasts_source) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // cfg.copy tm0, tm1, 2: the source tm1 lies inside the destination span
   // tm0..tm2 and every destination gets its original value.
   load_one(sim, memory, cfg_reg(0, 1, 1, 0, 1, 0) | (2u << 12));

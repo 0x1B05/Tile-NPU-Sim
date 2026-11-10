@@ -1,4 +1,4 @@
-#include "tile_npu/simulator.h"
+#include "func/core.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -11,7 +11,7 @@ using namespace tile_npu::test;
 namespace {
 using tile_npu::DType;
 using tile_npu::Ram;
-using tile_npu::Simulator;
+using tile_npu::FuncCore;
 using tile_npu::StepStatus;
 
 void tile_i8(tile_npu::State &state, std::size_t index, std::uint8_t rows, std::uint8_t cols) {
@@ -43,7 +43,7 @@ void poke_rhs_nt(tile_npu::State &state, std::size_t index) {
 
 TEST_CASE(mma_nt_zero) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // {{1,2,3},{4,-5,6}} x {{7,8,9},{10,11,12}}^T =
   //   {{50, 68}, {42, 57}}; i8 operands sign-extend before the i32 product.
   load_one(sim, memory, make_mma(0, 0, 1, 2));
@@ -63,7 +63,7 @@ TEST_CASE(mma_nt_zero) {
 
 TEST_CASE(mma_nt_acc) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // Same product as mma_nt_zero accumulated onto {INT32_MAX, 2, 3, 4}:
   // D[0,0] wraps to 0x80000031 (wrap32), the rest add normally.
   load_one(sim, memory, make_mma(1, 0, 1, 2));
@@ -87,7 +87,7 @@ TEST_CASE(mma_nt_acc) {
 
 TEST_CASE(vmma_nt) {
   Ram memory(CODE_BASE, 8);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   // A = {{1,2,3},{4,-5,6}}, B = {{7,8,9},{10,11,12}} in N x K order.
   // Row 1 dots to {42, 57}; the acc form then adds row 0's {50, 68}.
   write_word(memory, CODE_BASE, make_mma(2, 0, 1, 2, 1));
@@ -113,7 +113,7 @@ TEST_CASE(vmma_nt) {
 
 TEST_CASE(mma_rejects_invalid) {
   Ram memory(CODE_BASE, 4);
-  Simulator sim(memory);
+  FuncCore sim(memory);
   auto &state = sim.state();
 
   // The left Tile must be i8.

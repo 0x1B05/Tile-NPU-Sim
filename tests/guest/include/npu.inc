@@ -2,7 +2,7 @@
 # numbers, and instruction encoding macros. Shared by tests/guest and
 # apps/qwen3. Field layouts mirror src/decode/encoding.h; the CF_* numbers
 # follow the manual's field3 table. Correctness is pinned by the known-good
-# words in tests/simulator_test.cpp (0x0C002080 = vadd v0, v1, v2), which
+# words in tests/units/func_core_test.cpp (0x0C002080 = vadd v0, v1, v2), which
 # stay as raw constants on purpose.
 
 # Config field numbers (field3 / field5).

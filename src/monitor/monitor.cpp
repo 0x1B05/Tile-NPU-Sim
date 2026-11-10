@@ -135,7 +135,7 @@ bool parse_dump_range(std::string_view arg, DumpRange &range) {
   return !range.path.empty() && range.size != 0;
 }
 
-std::optional<StepResult> npu_exec(Simulator &sim, std::uint64_t step_limit) {
+std::optional<StepResult> npu_exec(FuncCore &sim, std::uint64_t step_limit) {
   for (std::uint64_t steps = 0; steps < step_limit; ++steps) {
     const auto result = sim.step();
     if (result.status != StepStatus::retired) return result;
@@ -188,7 +188,7 @@ int run_images(const Options &options) {
     mtrace_writer->write_header();
   }
 #endif
-  tile_npu::Simulator sim(bus);
+  tile_npu::FuncCore sim(bus);
 #ifdef CONFIG_ITRACE
   if (itrace_writer) {
     sim.set_itrace_callback(
