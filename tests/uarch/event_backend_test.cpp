@@ -13,7 +13,10 @@ class CountingExecutor final : public UarchExecutor {
 public:
   void execute(const DynInst &inst) override { executed.push_back(inst); }
 
+  void complete(const DynInst &inst) override { completed.push_back(inst); }
+
   std::vector<DynInst> executed;
+  std::vector<DynInst> completed;
 };
 
 DynInst vec_write(std::uint64_t id, RegisterIndex dst) {
@@ -67,6 +70,8 @@ TEST_CASE(event_backend_issues_and_completes) {
   check_eq(backend.stats().retired, std::uint64_t{0}, "not retired at issue");
 
   backend.advance();
+  check_eq(executor.completed.size(), std::size_t{1}, "completion callback runs");
+  check_eq(executor.completed[0].id, std::uint64_t{1}, "completed instruction id");
   check_eq(backend.stats().retired, std::uint64_t{1}, "retired after completion");
   check_eq(backend.stats().unit_count[static_cast<std::size_t>(Unit::vec32)], std::uint64_t{1},
            "vector unit count");

@@ -7,6 +7,7 @@
 #include "units/execute_helpers.h"
 #include "units/mma_helpers.h"
 #include "units/move_helpers.h"
+#include "units/row_lane_helpers.h"
 
 #include <cstdint>
 
@@ -130,6 +131,29 @@ TEST_CASE(uarch_core_snapshots_scalar_operands) {
   check_eq(core.state().a[0][0], std::uint32_t{5}, "fill uses the dispatch-time scalar value");
   check_eq(core.stats().retired, std::uint64_t{4}, "scalar, MMA, fill, and scalar retire");
   check_eq(core.stats().cycles, std::uint64_t{14}, "fill drains after the MMA");
+}
+
+TEST_CASE(uarch_core_vextract_writeback_blocks_scalar) {
+  tile_npu::Ram memory(CODE_BASE, 16);
+  write_word(memory, CODE_BASE, make_lane_move(0, 0, 0, 0, 1)); // vextract x1, v0, 0
+  write_word(memory, CODE_BASE + 4, 0x00108113u);               // addi x2, x1, 1
+  write_word(memory, CODE_BASE + 8, 0x00100073u);               // ebreak
+
+  tile_npu::EventUarchBackend backend;
+  tile_npu::UarchCore core(memory, backend);
+  core.reset(CODE_BASE);
+  core.state().vc[0] = tile_npu::Vec32Config{.dtype = tile_npu::DType::i32, .len = 4};
+  core.state().v[0][0] = 42;
+
+  const auto stop = core.run();
+  check_eq(stop.status, tile_npu::StepStatus::breakpoint, "vextract program stops");
+  check_eq(core.state().scalar.read_x(1), std::uint64_t{42}, "vextract writes the scalar register");
+  check_eq(core.state().scalar.read_x(2), std::uint64_t{43}, "scalar reads the writeback");
+  check_eq(core.stats().retired, std::uint64_t{2}, "vextract and addi retire");
+  check_eq(core.stats().scalar_retired, std::uint64_t{1}, "scalar retire count");
+  check_eq(core.stats().unit_count[static_cast<std::size_t>(tile_npu::Unit::vec32)],
+           std::uint64_t{1}, "vector unit count");
+  check_eq(core.stats().cycles, std::uint64_t{4}, "scalar waits for the writeback");
 }
 
 TEST_CASE(uarch_core_waits_for_mma_dependency) {

@@ -4,6 +4,7 @@
 #include "tile_npu/decode.h"
 #include "uarch/dataflow/dyn_inst_builder.h"
 #include "uarch/frontend.h"
+#include "utils/common.h"
 #include "utils/endian.h"
 
 #include <array>
@@ -13,6 +14,17 @@
 #include <variant>
 
 namespace tile_npu {
+namespace {
+
+// Scalar destinations written by NPU instructions. Configuration reads execute
+// in the front end and lane extract is currently the only NPU writer.
+std::optional<RegisterIndex> scalar_destination(const DecodedNpuInstr &instr) {
+  const auto *extract = std::get_if<LaneExtractInstr>(&instr);
+  if (extract == nullptr || extract->dest.index == 0) return std::nullopt;
+  return extract->dest.index;
+}
+
+} // namespace
 
 UarchCore::UarchCore(AddressSpace &memory, UarchBackend &backend)
     : memory_(memory), backend_(backend) {
@@ -23,7 +35,7 @@ void UarchCore::reset(std::uint64_t entry_pc) {
   state_ = State{};
   state_.scalar.pc = entry_pc;
   next_id_ = 0;
-  pending_npu_.clear();
+  in_flight_.clear();
   npu_failure_.reset();
   backend_.reset();
 }
@@ -72,6 +84,11 @@ StepResult UarchCore::frontend_step() {
   ExecContext ctx{state_, memory_};
 
   if (scalar != nullptr) {
+    // An older NPU instruction may still owe a scalar writeback. Scalar reads
+    // and writes must observe it before executing.
+    drain_scalar_writebacks();
+    if (npu_failure_) return *npu_failure_;
+
     const auto execution = exec_scalar_instr(*scalar, ctx);
     if (execution.status != StepStatus::retired) {
       return {.status = execution.status,
@@ -104,9 +121,18 @@ StepResult UarchCore::frontend_step() {
     return {.status = StepStatus::retired, .pc = pc, .instr = instr};
   }
 
+  // A younger NPU instruction that reads a scalar register must see older NPU
+  // writebacks before its dispatch-time snapshot is taken.
+  drain_scalar_writebacks();
+  if (npu_failure_) return *npu_failure_;
+
   const auto inst = make_npu_dyn_inst(next_id_, pc, *npu, state_);
-  pending_npu_.emplace(next_id_,
-                       PendingNpu{.decoded = *npu, .instr = instr, .scalar = state_.scalar});
+  auto [entry, inserted] = in_flight_.emplace(
+      next_id_, InFlightEntry{.decoded = *npu, .instr = instr, .scalar = state_.scalar});
+  if (!inserted) unreachable("duplicate in-flight instruction id");
+  if (const auto dest = scalar_destination(*npu)) {
+    entry->second.scalar_writes.push_back(ScalarWrite{.index = *dest});
+  }
   dispatch_timing(inst);
   state_.scalar.pc = pc + INSTR_BYTES;
   ++next_id_;
@@ -120,27 +146,56 @@ void UarchCore::dispatch_timing(const DynInst &inst) {
 }
 
 void UarchCore::execute(const DynInst &inst) {
-  const auto it = pending_npu_.find(inst.id);
-  if (it == pending_npu_.end()) return;
+  const auto it = in_flight_.find(inst.id);
+  if (it == in_flight_.end()) return;
 
-  const auto pending = it->second;
-  pending_npu_.erase(it);
+  auto &entry = it->second;
 
-  // Execute against the scalar values captured at dispatch. NPU writes to
-  // scalar registers are outside the current model, so restoring the live
-  // scalar state afterwards is correct for now.
+  // Execute against the scalar values captured at dispatch. Scalar writes are
+  // published at completion, not here, so the front end cannot observe them
+  // before the timing model says they are written back.
   const auto live_scalar = state_.scalar;
-  state_.scalar = pending.scalar;
+  state_.scalar = entry.scalar;
 
   ExecContext ctx{state_, memory_};
-  const auto execution = exec_npu_instr(pending.decoded, ctx);
+  const auto execution = exec_npu_instr(entry.decoded, ctx);
+  if (execution.status == StepStatus::retired) {
+    for (auto &write : entry.scalar_writes) {
+      write.value = state_.scalar.read_x(write.index);
+    }
+  }
   state_.scalar = live_scalar;
 
   if (execution.status != StepStatus::retired) {
     npu_failure_ = StepResult{.status = execution.status,
                               .pc = inst.pc,
-                              .instr = pending.instr,
+                              .instr = entry.instr,
                               .fault_address = execution.fault_address};
+  }
+}
+
+void UarchCore::complete(const DynInst &inst) {
+  const auto it = in_flight_.find(inst.id);
+  if (it == in_flight_.end()) return;
+
+  for (const auto &write : it->second.scalar_writes) {
+    if (write.value) state_.scalar.write_x(write.index, *write.value);
+  }
+  in_flight_.erase(it);
+}
+
+bool UarchCore::has_pending_scalar_writebacks() const {
+  for (const auto &pair : in_flight_) {
+    if (!pair.second.scalar_writes.empty()) return true;
+  }
+  return false;
+}
+
+void UarchCore::drain_scalar_writebacks() {
+  if (!has_pending_scalar_writebacks()) return;
+  backend_.finish();
+  if (has_pending_scalar_writebacks()) {
+    unreachable("pending scalar writebacks did not drain");
   }
 }
 

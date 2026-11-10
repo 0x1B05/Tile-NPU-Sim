@@ -99,10 +99,11 @@ void EventUarchBackend::complete(std::uint64_t id) {
   const auto it = entries.find(id);
   if (it == entries.end()) return;
 
-  const auto unit = it->second.inst.unit;
+  const auto inst = it->second.inst;
   if (!scoreboard_.complete(id)) return;
+  if (executor_ != nullptr) executor_->complete(inst);
   ++stats_.retired;
-  ++stats_.unit_count[static_cast<std::size_t>(unit)];
+  ++stats_.unit_count[static_cast<std::size_t>(inst.unit)];
 }
 
 std::size_t EventUarchBackend::queue_depth(Unit unit) {

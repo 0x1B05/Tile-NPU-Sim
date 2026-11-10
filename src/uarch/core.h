@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <optional>
 #include <unordered_map>
+#include <vector>
 
 namespace tile_npu {
 
@@ -35,24 +36,39 @@ public:
 
   void execute(const DynInst &inst) override;
 
+  void complete(const DynInst &inst) override;
+
 private:
-  struct PendingNpu {
+  // A scalar destination written by an NPU instruction. The value is filled at
+  // issue and published at completion.
+  struct ScalarWrite {
+    RegisterIndex index = 0;
+    std::optional<std::uint64_t> value;
+  };
+
+  // One NPU instruction from dispatch through completion. Keeping the decoded
+  // payload here lets execute() run at issue and complete() publish scalar
+  // writebacks without a second id-keyed map.
+  struct InFlightEntry {
     DecodedNpuInstr decoded;
     std::uint32_t instr = 0;
-    // Scalar operands are read when the NPU instruction is dispatched. Scalar
-    // instructions run in order in the front end, so this snapshot is the
-    // program-order value even if later scalar writes execute before issue.
+    // Scalar instructions run in program order in the front end, so this
+    // dispatch-time snapshot is the program-order value even if later scalar
+    // writes execute before this NPU instruction issues.
     ScalarState scalar;
+    std::vector<ScalarWrite> scalar_writes;
   };
 
   StepResult frontend_step();
   void dispatch_timing(const DynInst &inst);
+  bool has_pending_scalar_writebacks() const;
+  void drain_scalar_writebacks();
 
   AddressSpace &memory_;
   State state_{};
   UarchBackend &backend_;
   std::uint64_t next_id_ = 0;
-  std::unordered_map<std::uint64_t, PendingNpu> pending_npu_;
+  std::unordered_map<std::uint64_t, InFlightEntry> in_flight_;
   std::optional<StepResult> npu_failure_;
 };
 

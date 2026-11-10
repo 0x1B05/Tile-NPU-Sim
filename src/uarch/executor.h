@@ -12,6 +12,10 @@ public:
   virtual ~UarchExecutor() = default;
 
   virtual void execute(const DynInst &inst) = 0;
+
+  // Called when timing completes. State that must become visible at writeback,
+  // such as an NPU result destined for a scalar register, is committed here.
+  virtual void complete(const DynInst &) {}
 };
 
 } // namespace tile_npu
