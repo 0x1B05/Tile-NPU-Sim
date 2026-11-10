@@ -96,7 +96,7 @@ target("uarch_core", function()
 	set_kind("static")
 	set_default(false)
 	add_deps("isa_core")
-	add_files("src/uarch/dataflow/*.cpp", "src/uarch/timing/*.cpp")
+	add_files("src/uarch/*.cpp", "src/uarch/dataflow/*.cpp", "src/uarch/timing/*.cpp")
 	add_includedirs("src", "include")
 end)
 

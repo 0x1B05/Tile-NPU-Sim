@@ -1,0 +1,173 @@
+#include "framework.h"
+#include "uarch/event_backend.h"
+#include "uarch/executor.h"
+
+#include <cstdint>
+#include <vector>
+
+using namespace tile_npu;
+
+namespace {
+
+class CountingExecutor final : public UarchExecutor {
+public:
+  void execute(const DynInst &inst) override { executed.push_back(inst); }
+
+  std::vector<DynInst> executed;
+};
+
+DynInst vec_write(std::uint64_t id, RegisterIndex dst) {
+  DynInst inst{};
+  inst.id = id;
+  inst.op = DynOp::elementwise;
+  inst.unit = Unit::vec32;
+  inst.dst[0] = RegisterRef{.domain = NpuDomain::vec32, .index = dst};
+  inst.dst_count = 1;
+  return inst;
+}
+
+DynInst mma_write(std::uint64_t id, RegisterIndex dst) {
+  DynInst inst{};
+  inst.id = id;
+  inst.op = DynOp::mma;
+  inst.unit = Unit::mma;
+  inst.dst[0] = RegisterRef{.domain = NpuDomain::acc, .index = dst};
+  inst.dst_count = 1;
+  return inst;
+}
+
+DynInst mma_accumulate(std::uint64_t id, RegisterIndex src, RegisterIndex dst) {
+  DynInst inst{};
+  inst.id = id;
+  inst.op = DynOp::mma;
+  inst.unit = Unit::mma;
+  inst.src[0] = RegisterRef{.domain = NpuDomain::acc, .index = src};
+  inst.src_count = 1;
+  inst.dst[0] = RegisterRef{.domain = NpuDomain::acc, .index = dst};
+  inst.dst_count = 1;
+  return inst;
+}
+
+} // namespace
+
+TEST_CASE(event_backend_issues_and_completes) {
+  CountingExecutor executor;
+  EventUarchBackend backend;
+  backend.set_executor(&executor);
+
+  const auto write = vec_write(1, 1);
+  check(backend.can_dispatch(write), "vector write fits");
+  backend.dispatch(write);
+
+  check_eq(executor.executed.size(), std::size_t{0}, "dispatch does not issue");
+  check_eq(backend.stats().retired, std::uint64_t{0}, "not retired before completion");
+
+  backend.tick();
+  check_eq(executor.executed.size(), std::size_t{1}, "tick issues the vector write");
+  check_eq(backend.stats().retired, std::uint64_t{0}, "not retired at issue");
+
+  backend.advance();
+  check_eq(backend.stats().retired, std::uint64_t{1}, "retired after completion");
+  check_eq(backend.stats().unit_count[static_cast<std::size_t>(Unit::vec32)], std::uint64_t{1},
+           "vector unit count");
+  check_eq(backend.stats().cycles, std::uint64_t{3}, "issue and completion cycles");
+}
+
+TEST_CASE(event_backend_waits_for_raw) {
+  CountingExecutor executor;
+  EventUarchBackend backend;
+  backend.set_executor(&executor);
+
+  const auto write = mma_write(1, 0);
+  const auto read = mma_accumulate(2, 0, 0);
+
+  backend.dispatch(write);
+  backend.tick();
+  backend.dispatch(read);
+  check_eq(executor.executed.size(), std::size_t{1}, "consumer is not issued yet");
+
+  backend.tick();
+  check_eq(executor.executed.size(), std::size_t{1}, "consumer still waits");
+
+  backend.advance();
+  check_eq(executor.executed.size(), std::size_t{2}, "consumer issues after producer completion");
+  check_eq(backend.stats().retired, std::uint64_t{1}, "producer retired");
+
+  backend.advance();
+  check_eq(backend.stats().retired, std::uint64_t{2}, "consumer retired later");
+}
+
+TEST_CASE(event_backend_applies_queue_backpressure) {
+  CountingExecutor executor;
+  EventUarchBackend backend;
+  backend.set_executor(&executor);
+
+  const auto producer = mma_write(1, 0);
+  const auto dependent1 = mma_accumulate(2, 0, 0);
+  const auto dependent2 = mma_accumulate(3, 0, 0);
+  const auto extra = mma_accumulate(4, 0, 0);
+
+  backend.dispatch(producer);
+  backend.tick();
+  backend.dispatch(dependent1);
+  backend.tick();
+  backend.dispatch(dependent2);
+  backend.tick();
+  check(!backend.can_dispatch(extra), "MMA queue depth is two");
+
+  backend.finish();
+  check_eq(backend.stats().retired, std::uint64_t{3}, "finish drains dependent commands");
+}
+
+TEST_CASE(event_backend_finish_drains_pending_work) {
+  CountingExecutor executor;
+  EventUarchBackend backend;
+  backend.set_executor(&executor);
+
+  backend.dispatch(vec_write(1, 1));
+  check_eq(backend.stats().retired, std::uint64_t{0}, "completion is still pending");
+  backend.finish();
+  check_eq(backend.stats().retired, std::uint64_t{1}, "finish drains unissued work");
+}
+
+TEST_CASE(event_backend_retire_scalar_updates_stats) {
+  EventUarchBackend backend;
+
+  backend.retire_scalar();
+
+  check_eq(backend.stats().retired, std::uint64_t{1}, "scalar instruction retires");
+  check_eq(backend.stats().scalar_retired, std::uint64_t{1}, "scalar retire count");
+  check_eq(backend.stats().cycles, std::uint64_t{0}, "retire does not advance time");
+}
+
+TEST_CASE(event_backend_reset_clears_timing_state) {
+  CountingExecutor executor;
+  EventUarchBackend backend;
+  backend.set_executor(&executor);
+
+  backend.dispatch(vec_write(1, 1));
+  backend.tick();
+  backend.reset();
+
+  check_eq(backend.stats().cycles, std::uint64_t{0}, "reset clears cycles");
+  check_eq(backend.stats().retired, std::uint64_t{0}, "reset clears retired");
+  check(backend.can_dispatch(vec_write(2, 2)), "reset clears queues");
+}
+
+TEST_CASE(event_backend_allows_out_of_order_completion) {
+  CountingExecutor executor;
+  EventUarchBackend backend;
+  backend.set_executor(&executor);
+
+  backend.dispatch(vec_write(1, 1));
+  backend.tick();
+  backend.dispatch(mma_write(2, 0));
+  backend.tick();
+  backend.finish();
+
+  check_eq(backend.stats().retired, std::uint64_t{2}, "both units retire");
+  check_eq(backend.stats().unit_count[static_cast<std::size_t>(Unit::vec32)], std::uint64_t{1},
+           "vector unit count");
+  check_eq(backend.stats().unit_count[static_cast<std::size_t>(Unit::mma)], std::uint64_t{1},
+           "MMA unit count");
+}
