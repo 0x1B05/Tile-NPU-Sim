@@ -1,10 +1,10 @@
 #pragma once
 
-#include "tile_npu/decode.h"
 #include "tile_npu/platform/address_space.h"
 #include "tile_npu/state.h"
 #include "tile_npu/step.h"
 #include "uarch/backend/backend.h"
+#include "uarch/core/scalar_frontend.h"
 #include "uarch/dataflow/dyn_inst.h"
 
 #include <cstdint>
@@ -14,33 +14,26 @@
 
 namespace tile_npu {
 
-// One backend NPU instruction handed from the scalar front end to the NPU
-// timing domain. The scalar snapshot is taken at the dispatch boundary.
-struct NpuDispatchRequest {
-  std::uint64_t pc = 0;
-  std::uint32_t instr = 0;
-  DecodedNpuInstr decoded;
-  ScalarState scalar;
-};
-
 // Owns the NPU instruction window from dispatch through completion. Functional
 // execution happens at issue; scalar writebacks are published at completion.
-class NpuDispatcher final : public UarchExecutor {
+class NpuDispatcher final : public UarchExecutor,
+                            public NpuDispatchPort,
+                            public ScalarWritebackView {
 public:
   NpuDispatcher(UarchBackend &backend, State &state, AddressSpace &memory);
 
   void reset();
 
   // Returns false without modifying any state when the backend is full.
-  bool dispatch(const NpuDispatchRequest &request);
+  bool dispatch(const NpuDispatchRequest &request) override;
 
   void execute(const DynInst &inst) override;
 
   void complete(const DynInst &inst) override;
 
-  bool any_scalar_pending() const;
+  bool any_pending() const override;
 
-  bool scalar_pending(RegisterIndex index) const;
+  bool pending(RegisterIndex index) const override;
 
   const std::optional<StepResult> &failure() const { return failure_; }
 

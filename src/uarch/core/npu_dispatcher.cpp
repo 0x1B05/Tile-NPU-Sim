@@ -86,14 +86,14 @@ void NpuDispatcher::complete(const DynInst &inst) {
   in_flight_.erase(it);
 }
 
-bool NpuDispatcher::any_scalar_pending() const {
+bool NpuDispatcher::any_pending() const {
   for (const auto &pair : in_flight_) {
     if (!pair.second.scalar_writes.empty()) return true;
   }
   return false;
 }
 
-bool NpuDispatcher::scalar_pending(RegisterIndex index) const {
+bool NpuDispatcher::pending(RegisterIndex index) const {
   for (const auto &pair : in_flight_) {
     for (const auto &write : pair.second.scalar_writes) {
       if (write.index == index) return true;
