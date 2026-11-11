@@ -188,6 +188,28 @@ TEST_CASE(uarch_core_vextract_writeback_blocks_scalar) {
   check_eq(core.stats().cycles, std::uint64_t{4}, "scalar waits for the writeback");
 }
 
+TEST_CASE(uarch_core_scalar_overlaps_unrelated_writeback) {
+  tile_npu::Ram memory(CODE_BASE, 16);
+  write_word(memory, CODE_BASE, make_lane_move(0, 0, 0, 0, 2)); // vextract x2, v0, 0
+  write_word(memory, CODE_BASE + 4, 0x00700093u);               // addi x1, x0, 7
+  write_word(memory, CODE_BASE + 8, 0x00110113u);               // addi x2, x2, 1
+  write_word(memory, CODE_BASE + 12, 0x00100073u);              // ebreak
+
+  tile_npu::UarchClock clock;
+  tile_npu::EventUarchBackend backend(clock);
+  tile_npu::UarchCore core(memory, backend, clock);
+  core.reset(CODE_BASE);
+  core.state().vc[0] = tile_npu::Vec32Config{.dtype = tile_npu::DType::i32, .len = 4};
+  core.state().v[0][0] = 42;
+
+  const auto stop = core.run();
+  check_eq(stop.status, tile_npu::StepStatus::breakpoint, "overlap program stops");
+  check_eq(core.state().scalar.read_x(1), std::uint64_t{7}, "unrelated scalar executes early");
+  check_eq(core.state().scalar.read_x(2), std::uint64_t{43}, "dependent scalar sees writeback");
+  check_eq(core.stats().scalar_retired, std::uint64_t{2}, "two scalars retire");
+  check_eq(core.stats().cycles, std::uint64_t{4}, "unrelated scalar overlaps the writeback");
+}
+
 TEST_CASE(uarch_core_config_barrier_retries_frontend) {
   tile_npu::Ram memory(CODE_BASE, 8);
   write_word(memory, CODE_BASE, 0x50800202u);     // cfg.seti tc0, rows, 4

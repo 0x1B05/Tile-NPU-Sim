@@ -12,6 +12,17 @@
 #include <variant>
 
 namespace tile_npu {
+namespace {
+
+bool waits_for_scalar_writeback(const DecodedScalarInstr &instr,
+                                const ScalarWritebackView &writeback) {
+  const auto &regs = instr.regs;
+  return (regs.src1 != 0 && writeback.pending(regs.src1)) ||
+         (regs.src2 != 0 && writeback.pending(regs.src2)) ||
+         (regs.dest != 0 && writeback.pending(regs.dest));
+}
+
+} // namespace
 
 void SimpleScalarFrontend::reset(std::uint64_t entry_pc) {
   (void)entry_pc;
@@ -42,7 +53,7 @@ FrontendTick SimpleScalarFrontend::cycle(FrontendContext &context) {
   ExecContext exec{context.state, context.memory};
 
   if (const auto *scalar = std::get_if<DecodedScalarInstr>(&pending.decoded)) {
-    if (context.writeback.any_pending()) {
+    if (waits_for_scalar_writeback(*scalar, context.writeback)) {
       return {.stalled = true, .wait = FrontendWaitReason::scalar_writeback};
     }
 
