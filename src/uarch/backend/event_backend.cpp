@@ -26,6 +26,8 @@ void EventUarchBackend::reset() {
   scoreboard_.reset();
   for (auto &queue : queues_)
     queue.clear();
+  issue_after_.clear();
+  next_issue_cycle_.fill(0);
 }
 
 bool EventUarchBackend::dispatch(const DynInst &inst) {
@@ -34,6 +36,9 @@ bool EventUarchBackend::dispatch(const DynInst &inst) {
   if (scoreboard_.size() >= WINDOW_DEPTH || !queues_[unit].push(inst.id)) return false;
 
   scoreboard_.dispatch(inst);
+  // A newly dispatched instruction becomes eligible on the next cycle without
+  // delaying older entries in the same unit.
+  issue_after_[inst.id] = clock_.now() + 1;
   return true;
 }
 
@@ -45,51 +50,107 @@ void EventUarchBackend::cycle() {
 
 std::uint64_t EventUarchBackend::advance() {
   const auto before = clock_.now();
-  if (const auto next = events_.next_time()) events_.run_until(*next);
-  issue();
-  auto &stats = counters();
-  stats.cycles = clock_.now();
-  return stats.cycles - before;
+
+  while (true) {
+    const auto next = events_.next_time();
+    const bool at_event = next && *next <= clock_.now();
+
+    events_.run_until(clock_.now());
+    issue();
+
+    // Stop after processing this completion boundary. Remaining ready work
+    // issues on the next advance() call.
+    if (at_event) break;
+
+    // A unit that issued one instruction may have another ready entry for the
+    // next cycle. Do not jump over those issue opportunities.
+    if (any_ready_inst()) {
+      clock_.tick();
+      continue;
+    }
+
+    // issue() may have scheduled a completion earlier than the snapshot taken
+    // at the top of this iteration.
+    const auto next_after_issue = events_.next_time();
+
+    if (!next_after_issue) {
+      if (!scoreboard_.empty()) {
+        unreachable("uarch backend cannot make progress");
+      }
+      break;
+    }
+
+    // Jump to the completion boundary; the next iteration processes it.
+    clock_.advance_to(*next_after_issue);
+  }
+
+  counters().cycles = clock_.now();
+  return clock_.now() - before;
 }
 
 void EventUarchBackend::drain() {
   while (!scoreboard_.empty()) {
-    if (const auto next = events_.next_time()) events_.run_until(*next);
+    events_.run_until(clock_.now());
     issue();
     if (scoreboard_.empty()) break;
-    if (!events_.next_time()) {
-      unreachable("uarch backend cannot drain dispatched work");
+
+    if (any_ready_inst()) {
+      clock_.tick();
+      continue;
     }
+
+    if (const auto next = events_.next_time()) {
+      events_.run_until(*next);
+      continue;
+    }
+
+    unreachable("uarch backend cannot drain dispatched work");
   }
   counters().cycles = clock_.now();
 }
 
 void EventUarchBackend::issue() {
   for (std::size_t unit = 0; unit < queues_.size(); ++unit) {
-    auto &queue = queues_[unit];
-    std::optional<std::uint64_t> candidate;
+    if (next_issue_cycle_[unit] > clock_.now()) continue;
 
-    if (static_cast<Unit>(unit) == Unit::dma) {
-      // All memory operations share one program-order queue.
-      candidate = queue.front();
-      if (candidate && !scoreboard_.ready(*candidate)) candidate.reset();
-    } else {
-      // General queues pick the oldest ready entry.
-      for (const auto id : queue.entries()) {
-        if (!scoreboard_.ready(id)) continue;
-        candidate = id;
-        break;
-      }
-    }
-
+    const auto candidate = next_ready(unit);
     if (!candidate) continue;
 
     const auto id = *candidate;
-    queue.remove(id);
+    const auto after = issue_after_.find(id);
+    if (after != issue_after_.end() && after->second > clock_.now()) continue;
+
+    queues_[unit].remove(id);
+    issue_after_.erase(id);
     scoreboard_.mark_issued(id);
     if (executor_ != nullptr) executor_->execute(scoreboard_.inst(id));
     events_.schedule(clock_.now() + latency(static_cast<Unit>(unit)), [this, id] { complete(id); });
+    next_issue_cycle_[unit] = clock_.now() + 1;
   }
+}
+
+bool EventUarchBackend::any_ready_inst() const {
+  for (std::size_t unit = 0; unit < queues_.size(); ++unit) {
+    if (next_ready(unit)) return true;
+  }
+  return false;
+}
+
+std::optional<std::uint64_t> EventUarchBackend::next_ready(std::size_t unit) const {
+  const auto &queue = queues_[unit];
+
+  if (static_cast<Unit>(unit) == Unit::dma) {
+    // All memory operations share one program-order queue.
+    auto candidate = queue.front();
+    if (candidate && !scoreboard_.ready(*candidate)) candidate.reset();
+    return candidate;
+  }
+
+  // General queues pick the oldest ready entry.
+  for (const auto id : queue.entries()) {
+    if (scoreboard_.ready(id)) return id;
+  }
+  return std::nullopt;
 }
 
 void EventUarchBackend::complete(std::uint64_t id) {
@@ -99,6 +160,7 @@ void EventUarchBackend::complete(std::uint64_t id) {
 
   const auto inst = it->second.inst;
   if (!scoreboard_.complete(id)) return;
+  issue_after_.erase(id);
   if (executor_ != nullptr) executor_->complete(inst);
   auto &stats = counters();
   ++stats.retired;

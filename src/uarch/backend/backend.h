@@ -31,7 +31,8 @@ public:
   // clock; UarchCore owns the cycle edge.
   virtual void cycle() = 0;
 
-  // Advances timing to the next event. Returns elapsed cycles.
+  // Advances to the next completion boundary, issuing ready work on the way.
+  // Returns elapsed cycles.
   virtual std::uint64_t advance() = 0;
 
   // Drains all dispatched work, including instructions still waiting to issue.
