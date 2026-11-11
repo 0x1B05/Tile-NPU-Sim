@@ -19,9 +19,7 @@ EventUarchBackend::EventUarchBackend(UarchClock &clock) : clock_(clock) {
   }
 }
 
-void EventUarchBackend::reset() {
-  // UarchStats and UarchClock are owned by the machine and reset by
-  // UarchCore::reset().
+void EventUarchBackend::clear_timing_state() {
   events_.clear();
   scoreboard_.reset();
   for (auto &queue : queues_)
@@ -30,7 +28,16 @@ void EventUarchBackend::reset() {
   next_issue_cycle_.fill(0);
 }
 
+void EventUarchBackend::reset() {
+  // UarchStats and UarchClock are owned by the machine and reset by
+  // UarchCore::reset().
+  clear_timing_state();
+  failure_.reset();
+}
+
 bool EventUarchBackend::dispatch(const DynInst &inst) {
+  if (failed()) return false;
+
   const auto unit = static_cast<std::size_t>(inst.unit);
 
   if (scoreboard_.size() >= WINDOW_DEPTH || !queues_[unit].push(inst.id)) return false;
@@ -109,6 +116,11 @@ void EventUarchBackend::drain() {
   counters().cycles = clock_.now();
 }
 
+void EventUarchBackend::abort() {
+  clear_timing_state();
+  failure_.reset();
+}
+
 void EventUarchBackend::issue() {
   for (std::size_t unit = 0; unit < queues_.size(); ++unit) {
     if (next_issue_cycle_[unit] > clock_.now()) continue;
@@ -123,7 +135,16 @@ void EventUarchBackend::issue() {
     queues_[unit].remove(id);
     issue_after_.erase(id);
     scoreboard_.mark_issued(id);
-    if (executor_ != nullptr) executor_->execute(scoreboard_.inst(id));
+
+    const auto result = executor_ == nullptr ? StepResult{.status = StepStatus::retired,
+                                                          .pc = scoreboard_.inst(id).pc}
+                                             : executor_->execute(scoreboard_.inst(id));
+    if (result.status != StepStatus::retired) {
+      failure_ = result;
+      clear_timing_state();
+      return;
+    }
+
     events_.schedule(clock_.now() + latency(static_cast<Unit>(unit)), [this, id] { complete(id); });
     next_issue_cycle_[unit] = clock_.now() + 1;
   }

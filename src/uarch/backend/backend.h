@@ -1,10 +1,12 @@
 #pragma once
 
+#include "tile_npu/step.h"
 #include "uarch/backend/executor.h"
 #include "uarch/dataflow/dyn_inst.h"
 #include "uarch/uarch_stats.h"
 
 #include <cstdint>
+#include <optional>
 
 namespace tile_npu {
 
@@ -37,6 +39,16 @@ public:
 
   // Drains all dispatched work, including instructions still waiting to issue.
   virtual void drain() = 0;
+
+  // True after an executor failure stopped the backend.
+  virtual bool failed() const = 0;
+
+  // Takes the failure that stopped the backend, if any.
+  virtual std::optional<StepResult> take_failure() = 0;
+
+  // Discards all timing state after an execution failure. Must not run any
+  // further executor callbacks.
+  virtual void abort() = 0;
 };
 
 } // namespace tile_npu

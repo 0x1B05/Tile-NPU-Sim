@@ -27,7 +27,6 @@ NpuDispatcher::NpuDispatcher(UarchBackend &backend, State &state, AddressSpace &
 void NpuDispatcher::reset() {
   next_id_ = 0;
   in_flight_.clear();
-  failure_.reset();
 }
 
 bool NpuDispatcher::dispatch(const NpuDispatchRequest &request) {
@@ -48,9 +47,9 @@ bool NpuDispatcher::dispatch(const NpuDispatchRequest &request) {
   return true;
 }
 
-void NpuDispatcher::execute(const DynInst &inst) {
+StepResult NpuDispatcher::execute(const DynInst &inst) {
   const auto it = in_flight_.find(inst.id);
-  if (it == in_flight_.end()) return;
+  if (it == in_flight_.end()) unreachable("execute of unknown in-flight instruction");
 
   auto &entry = it->second;
 
@@ -68,12 +67,10 @@ void NpuDispatcher::execute(const DynInst &inst) {
   }
   state_.scalar = live_scalar;
 
-  if (execution.status != StepStatus::retired) {
-    failure_ = StepResult{.status = execution.status,
-                          .pc = inst.pc,
-                          .instr = entry.instr,
-                          .fault_address = execution.fault_address};
-  }
+  return StepResult{.status = execution.status,
+                    .pc = inst.pc,
+                    .instr = entry.instr,
+                    .fault_address = execution.fault_address};
 }
 
 void NpuDispatcher::complete(const DynInst &inst) {
@@ -100,12 +97,6 @@ bool NpuDispatcher::pending(RegisterIndex index) const {
     }
   }
   return false;
-}
-
-std::optional<StepResult> NpuDispatcher::take_failure() {
-  auto failure = failure_;
-  failure_.reset();
-  return failure;
 }
 
 } // namespace tile_npu

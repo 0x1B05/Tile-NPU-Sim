@@ -27,19 +27,13 @@ public:
   // Returns false without modifying any state when the backend is full.
   bool dispatch(const NpuDispatchRequest &request) override;
 
-  void execute(const DynInst &inst) override;
+  StepResult execute(const DynInst &inst) override;
 
   void complete(const DynInst &inst) override;
 
   bool any_pending() const override;
 
   bool pending(RegisterIndex index) const override;
-
-  const std::optional<StepResult> &failure() const { return failure_; }
-
-  std::optional<StepResult> take_failure();
-
-  void clear_failure() { failure_.reset(); }
 
 private:
   struct ScalarWrite {
@@ -59,7 +53,6 @@ private:
   AddressSpace &memory_;
   std::uint64_t next_id_ = 0;
   std::unordered_map<std::uint64_t, InFlightEntry> in_flight_;
-  std::optional<StepResult> failure_;
 };
 
 } // namespace tile_npu

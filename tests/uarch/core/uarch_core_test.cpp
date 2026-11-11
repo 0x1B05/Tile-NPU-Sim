@@ -94,6 +94,26 @@ TEST_CASE(uarch_core_illegal_instruction) {
   check_eq(core.stats().retired, std::uint64_t{0}, "illegal instruction does not retire");
 }
 
+TEST_CASE(uarch_core_npu_failure_does_not_retire) {
+  tile_npu::Ram memory(CODE_BASE, 8);
+  write_word(memory, CODE_BASE, 0x0C000000u);     // vadd v0, v0, v0 with zero length
+  write_word(memory, CODE_BASE + 4, 0x00100073u); // ebreak
+
+  tile_npu::UarchClock clock;
+  tile_npu::EventUarchBackend backend(clock);
+  tile_npu::UarchCore core(memory, backend, clock);
+  core.reset(CODE_BASE);
+  core.state().v[0][0] = 42;
+
+  const auto result = core.run();
+  check_eq(result.status, tile_npu::StepStatus::invalid_configuration, "NPU execution fault");
+  check_eq(hex(result.pc), hex(CODE_BASE), "fault reports the NPU instruction pc");
+  check_eq(core.stats().retired, std::uint64_t{0}, "failed NPU instruction does not retire");
+  check_eq(core.stats().unit_count[static_cast<std::size_t>(tile_npu::Unit::vec32)],
+           std::uint64_t{0}, "failed NPU instruction has no unit count");
+  check_eq(core.state().v[0][0], std::uint32_t{42}, "failed NPU instruction leaves data untouched");
+}
+
 TEST_CASE(uarch_core_overlaps_scalar_with_mma) {
   tile_npu::Ram memory(CODE_BASE, 16);
   write_word(memory, CODE_BASE, make_mma(0, 0, 0, 16)); // mma.nt.zero a0, t0, t16

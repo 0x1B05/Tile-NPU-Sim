@@ -12,12 +12,25 @@ namespace {
 
 class CountingExecutor final : public UarchExecutor {
 public:
-  void execute(const DynInst &inst) override { executed.push_back(inst); }
+  StepResult execute(const DynInst &inst) override {
+    executed.push_back(inst);
+    return StepResult{.status = StepStatus::retired, .pc = inst.pc};
+  }
 
   void complete(const DynInst &inst) override { completed.push_back(inst); }
 
   std::vector<DynInst> executed;
   std::vector<DynInst> completed;
+};
+
+class FailingExecutor final : public UarchExecutor {
+public:
+  StepResult execute(const DynInst &) override {
+    ++executions;
+    return StepResult{.status = StepStatus::invalid_configuration};
+  }
+
+  std::uint64_t executions = 0;
 };
 
 DynInst vec_write(std::uint64_t id, RegisterIndex dst) {
@@ -355,6 +368,39 @@ TEST_CASE(event_backend_drain_retires_pending_work) {
   check_eq(stats.retired, std::uint64_t{0}, "completion is still pending");
   backend.drain();
   check_eq(stats.retired, std::uint64_t{1}, "drain retires unissued work");
+}
+
+TEST_CASE(event_backend_stops_on_executor_failure) {
+  FailingExecutor executor;
+  UarchStats stats;
+  UarchClock clock;
+  EventUarchBackend backend(clock);
+  backend.set_executor(&executor);
+  backend.set_stats(&stats);
+
+  backend.dispatch(vec_write(1, 1));
+  backend.dispatch(mma_write(2, 0));
+  next_cycle(backend, clock);
+
+  check_eq(executor.executions, std::uint64_t{1}, "only the first unit issues");
+  check_eq(stats.retired, std::uint64_t{0}, "failed instruction does not retire");
+  check_eq(stats.unit_count[static_cast<std::size_t>(Unit::vec32)], std::uint64_t{0},
+           "failed instruction has no unit count");
+
+  check(backend.failed(), "executor failure stops the backend");
+  const auto failure = backend.take_failure();
+  check(failure.has_value(), "failure is retained until abort");
+  check_eq(failure->status, StepStatus::invalid_configuration, "failure status");
+
+  backend.advance();
+  check_eq(executor.executions, std::uint64_t{1}, "failed backend stops issuing");
+  check_eq(stats.retired, std::uint64_t{0}, "failed backend does not complete work");
+  check(!backend.dispatch(vec_write(3, 2)), "failed backend rejects new dispatch");
+
+  backend.abort();
+  check(!backend.failed(), "abort clears the failure state");
+  backend.reset();
+  check(backend.dispatch(vec_write(4, 3)), "reset clears the timing state");
 }
 
 TEST_CASE(event_backend_reset_clears_timing_state) {

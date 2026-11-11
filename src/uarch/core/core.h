@@ -42,6 +42,8 @@ private:
   UarchBackend &backend_;
   NpuDispatcher dispatcher_;
   std::unique_ptr<ScalarFrontend> frontend_;
+
+  StepResult take_failure();
 };
 
 } // namespace tile_npu

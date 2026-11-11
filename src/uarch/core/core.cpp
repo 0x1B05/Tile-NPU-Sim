@@ -1,6 +1,7 @@
 #include "uarch/core/core.h"
 
 #include "uarch/core/simple_scalar_frontend.h"
+#include "utils/common.h"
 
 #include <utility>
 
@@ -23,26 +24,27 @@ void UarchCore::reset(std::uint64_t entry_pc) {
   backend_.reset();
 }
 
-StepResult UarchCore::run() {
-  const auto take_failure = [this] {
-    const auto failure = *dispatcher_.take_failure();
-    backend_.drain();
-    dispatcher_.clear_failure();
-    return failure;
-  };
+StepResult UarchCore::take_failure() {
+  const auto failure = backend_.take_failure();
+  if (!failure) unreachable("backend failed without a failure record");
+  backend_.abort();
+  dispatcher_.reset();
+  return *failure;
+}
 
+StepResult UarchCore::run() {
   bool retry_frontend = false;
 
   while (true) {
     if (!retry_frontend) {
       backend_.cycle();
-      if (dispatcher_.failure()) return take_failure();
+      if (backend_.failed()) return take_failure();
     }
     retry_frontend = false;
 
     FrontendContext context{state_, memory_, dispatcher_, dispatcher_};
     const auto cycle = frontend_->cycle(context);
-    if (dispatcher_.failure()) return take_failure();
+    if (backend_.failed()) return take_failure();
 
     if (cycle.stalled) {
       switch (cycle.wait) {
@@ -61,13 +63,13 @@ StepResult UarchCore::run() {
         break;
       }
 
-      if (dispatcher_.failure()) return take_failure();
+      if (backend_.failed()) return take_failure();
       continue;
     }
 
     if (cycle.stop) {
       backend_.drain();
-      if (dispatcher_.failure()) return take_failure();
+      if (backend_.failed()) return take_failure();
       return *cycle.stop;
     }
 
@@ -79,7 +81,7 @@ StepResult UarchCore::run() {
 
     clock_.tick();
     stats_.cycles = clock_.now();
-    if (dispatcher_.failure()) return take_failure();
+    if (backend_.failed()) return take_failure();
   }
 }
 
