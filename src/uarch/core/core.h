@@ -5,19 +5,17 @@
 #include "tile_npu/state.h"
 #include "tile_npu/step.h"
 #include "uarch/backend/backend.h"
+#include "uarch/core/npu_dispatcher.h"
 #include "uarch/engine/clock.h"
 
 #include <cstdint>
-#include <optional>
-#include <unordered_map>
-#include <vector>
 
 namespace tile_npu {
 
 // Uarch machine. Scalar/control instructions execute in this front end in
-// program order; backend NPU instructions are dispatched to the timing backend,
-// which issues them and calls execute()/complete() at issue and completion.
-class UarchCore final : public UarchExecutor {
+// program order; backend NPU instructions are handed to NpuDispatcher, which
+// owns their lifecycle from dispatch through completion.
+class UarchCore final {
 public:
   UarchCore(AddressSpace &memory, UarchBackend &backend, UarchClock &clock);
 
@@ -35,34 +33,9 @@ public:
 
   const UarchStats &stats() const { return stats_; }
 
-  void execute(const DynInst &inst) override;
-
-  void complete(const DynInst &inst) override;
-
 private:
-  // A scalar destination written by an NPU instruction. The value is filled at
-  // issue and published at completion.
-  struct ScalarWrite {
-    RegisterIndex index = 0;
-    std::optional<std::uint64_t> value;
-  };
-
-  // One NPU instruction from dispatch through completion. Keeping the decoded
-  // payload here lets execute() run at issue and complete() publish scalar
-  // writebacks without a second id-keyed map.
-  struct InFlightEntry {
-    DecodedNpuInstr decoded;
-    std::uint32_t instr = 0;
-    // Scalar instructions run in program order in the front end, so this
-    // dispatch-time snapshot is the program-order value even if later scalar
-    // writes execute before this NPU instruction issues.
-    ScalarState scalar;
-    std::vector<ScalarWrite> scalar_writes;
-  };
-
   StepResult frontend_step();
-  void dispatch_timing(const DynInst &inst);
-  bool has_pending_scalar_writebacks() const;
+  void dispatch_timing(const NpuDispatchRequest &request);
   void drain_scalar_writebacks();
 
   AddressSpace &memory_;
@@ -70,9 +43,7 @@ private:
   UarchStats stats_{};
   UarchClock &clock_;
   UarchBackend &backend_;
-  std::uint64_t next_id_ = 0;
-  std::unordered_map<std::uint64_t, InFlightEntry> in_flight_;
-  std::optional<StepResult> npu_failure_;
+  NpuDispatcher dispatcher_;
 };
 
 } // namespace tile_npu
