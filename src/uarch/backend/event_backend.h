@@ -1,9 +1,9 @@
 #pragma once
 
-#include "uarch/backend.h"
-#include "uarch/timing/event_queue.h"
-#include "uarch/timing/issue_queue.h"
-#include "uarch/timing/scoreboard.h"
+#include "uarch/backend/backend.h"
+#include "uarch/engine/event_queue.h"
+#include "uarch/components/issue_queue.h"
+#include "uarch/components/scoreboard.h"
 
 #include <array>
 #include <cstddef>

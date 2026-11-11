@@ -1,6 +1,6 @@
 #include "framework.h"
-#include "uarch/event_backend.h"
-#include "uarch/executor.h"
+#include "uarch/backend/event_backend.h"
+#include "uarch/backend/executor.h"
 
 #include <cstdint>
 #include <optional>

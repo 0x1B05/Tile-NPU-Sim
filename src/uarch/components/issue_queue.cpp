@@ -1,4 +1,4 @@
-#include "uarch/timing/issue_queue.h"
+#include "uarch/components/issue_queue.h"
 
 #include <algorithm>
 

@@ -1,8 +1,8 @@
 #include "framework.h"
 #include "func/core.h"
 #include "tile_npu/platform/ram.h"
-#include "uarch/core.h"
-#include "uarch/event_backend.h"
+#include "uarch/core/core.h"
+#include "uarch/backend/event_backend.h"
 
 #include "units/execute_helpers.h"
 #include "units/mma_helpers.h"

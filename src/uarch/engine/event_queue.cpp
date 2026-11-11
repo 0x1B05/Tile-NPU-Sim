@@ -1,4 +1,4 @@
-#include "uarch/timing/event_queue.h"
+#include "uarch/engine/event_queue.h"
 
 #include <algorithm>
 #include <utility>

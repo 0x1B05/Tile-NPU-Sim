@@ -1,7 +1,7 @@
 #include "uarch/dataflow/dyn_inst_builder.h"
 
 #include "framework.h"
-#include "uarch/dyn_inst.h"
+#include "uarch/dataflow/dyn_inst.h"
 #include "uarch/frontend.h"
 
 #include <cstdint>

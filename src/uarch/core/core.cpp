@@ -1,4 +1,4 @@
-#include "uarch/core.h"
+#include "uarch/core/core.h"
 
 #include "execute/execute.h"
 #include "tile_npu/decode.h"

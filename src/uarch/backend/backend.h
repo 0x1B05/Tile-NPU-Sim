@@ -1,7 +1,7 @@
 #pragma once
 
-#include "uarch/dyn_inst.h"
-#include "uarch/executor.h"
+#include "uarch/dataflow/dyn_inst.h"
+#include "uarch/backend/executor.h"
 #include "uarch/uarch_stats.h"
 
 #include <cstdint>

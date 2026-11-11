@@ -4,7 +4,7 @@
 #include "tile_npu/platform/address_space.h"
 #include "tile_npu/state.h"
 #include "tile_npu/step.h"
-#include "uarch/backend.h"
+#include "uarch/backend/backend.h"
 
 #include <cstdint>
 #include <optional>

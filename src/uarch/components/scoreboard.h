@@ -1,6 +1,6 @@
 #pragma once
 
-#include "uarch/dyn_inst.h"
+#include "uarch/dataflow/dyn_inst.h"
 
 #include <algorithm>
 #include <array>
@@ -61,19 +61,16 @@ private:
     std::vector<std::uint64_t> readers;
   };
 
-  static constexpr std::size_t DOMAIN_COUNT = 3;
-  static constexpr std::array<std::size_t, DOMAIN_COUNT> DOMAIN_REGISTERS{
-      TILE_REGISTERS, ACC_REGISTERS, VECTOR_REGISTERS};
+  // NpuDomain values are tile=0, acc=1, reserved=2, vec32=3. The builder
+  // rejects reserved and out-of-range registers, so the reserved row is never
+  // touched.
+  static constexpr std::size_t DOMAIN_COUNT = static_cast<std::size_t>(NpuDomain::vec32) + 1;
   static constexpr std::size_t REG_COUNT =
       std::max({TILE_REGISTERS, ACC_REGISTERS, VECTOR_REGISTERS});
 
-  static std::size_t domain_index(NpuDomain domain);
-  static void validate(const RegisterRef &ref);
-
-  // Producer ids this instruction must wait for. Must run before
-  // register_operands(), so a read-modify-write operand does not self-block.
+  // Producer ids this instruction must wait for. Must run before update_reg_stats().
   std::vector<std::uint64_t> dependencies(const DynInst &inst) const;
-  void register_operands(const DynInst &inst);
+  void update_reg_stats(const DynInst &inst);
 
   std::array<std::array<RegisterStat, REG_COUNT>, DOMAIN_COUNT> regs_{};
   std::map<std::uint64_t, Entry> entries_;

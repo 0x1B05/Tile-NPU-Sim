@@ -1,5 +1,6 @@
 #include "uarch/dataflow/dyn_inst_builder.h"
 
+#include "domain.h"
 #include "uarch/frontend.h"
 #include "utils/common.h"
 
@@ -14,11 +15,13 @@ namespace {
 std::uint8_t dtype_bytes(DType dtype) { return dtype == DType::i8 || dtype == DType::u8 ? 1 : 4; }
 
 void add_src(DynInst &inst, NpuDomain domain, RegisterIndex index) {
+  if (!domain_register_valid(domain, index)) unreachable("invalid dynamic source register");
   if (inst.src_count >= inst.src.size()) unreachable("too many dynamic sources");
   inst.src[inst.src_count++] = RegisterRef{.domain = domain, .index = index};
 }
 
 void add_dst(DynInst &inst, NpuDomain domain, RegisterIndex index) {
+  if (!domain_register_valid(domain, index)) unreachable("invalid dynamic destination register");
   if (inst.dst_count >= inst.dst.size()) unreachable("too many dynamic destinations");
   inst.dst[inst.dst_count++] = RegisterRef{.domain = domain, .index = index};
 }

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "uarch/dyn_inst.h"
+#include "uarch/dataflow/dyn_inst.h"
 
 namespace tile_npu {
 

@@ -1,5 +1,5 @@
 #include "framework.h"
-#include "uarch/timing/scoreboard.h"
+#include "uarch/components/scoreboard.h"
 
 #include <cstdint>
 

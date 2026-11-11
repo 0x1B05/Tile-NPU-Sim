@@ -1,5 +1,5 @@
 #include "framework.h"
-#include "uarch/timing/reservation_table.h"
+#include "uarch/components/reservation_table.h"
 
 #include <cstddef>
 #include <cstdint>

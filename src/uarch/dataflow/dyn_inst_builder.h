@@ -2,7 +2,7 @@
 
 #include "tile_npu/decode.h"
 #include "tile_npu/state.h"
-#include "uarch/dyn_inst.h"
+#include "uarch/dataflow/dyn_inst.h"
 
 #include <cstdint>
 

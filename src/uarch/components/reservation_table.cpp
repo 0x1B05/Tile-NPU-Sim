@@ -1,4 +1,4 @@
-#include "uarch/timing/reservation_table.h"
+#include "uarch/components/reservation_table.h"
 
 #include <algorithm>
 #include <limits>

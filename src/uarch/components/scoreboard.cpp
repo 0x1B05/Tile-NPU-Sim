@@ -1,4 +1,4 @@
-#include "uarch/timing/scoreboard.h"
+#include "uarch/components/scoreboard.h"
 
 #include "utils/common.h"
 
@@ -14,36 +14,19 @@ void Scoreboard::reset() {
   entries_.clear();
 }
 
-std::size_t Scoreboard::domain_index(NpuDomain domain) {
-  switch (domain) {
-  case NpuDomain::tile: return 0;
-  case NpuDomain::acc: return 1;
-  case NpuDomain::vec32: return 2;
-  case NpuDomain::reserved: break;
-  }
-  unreachable("reserved NPU domain in the scoreboard");
-}
-
-void Scoreboard::validate(const RegisterRef &ref) {
-  const auto domain = domain_index(ref.domain);
-  if (ref.index >= DOMAIN_REGISTERS[domain]) {
-    unreachable("dynamic instruction references an invalid register");
-  }
-}
-
 std::vector<std::uint64_t> Scoreboard::dependencies(const DynInst &inst) const {
   std::vector<std::uint64_t> deps;
 
   for (std::uint8_t i = 0; i < inst.src_count; ++i) {
     const auto &src = inst.src[i];
-    const auto &reg = regs_[domain_index(src.domain)][src.index];
-    if (reg.busy) deps.push_back(reg.producer);
+    const auto &src_stat = regs_[static_cast<std::size_t>(src.domain)][src.index];
+    if (src_stat.busy) deps.push_back(src_stat.producer);
   }
   for (std::uint8_t i = 0; i < inst.dst_count; ++i) {
     const auto &dst = inst.dst[i];
-    const auto &reg = regs_[domain_index(dst.domain)][dst.index];
-    if (reg.busy) deps.push_back(reg.producer);                      // WAW
-    deps.insert(deps.end(), reg.readers.begin(), reg.readers.end()); // WAR
+    const auto &dst_stat = regs_[static_cast<std::size_t>(dst.domain)][dst.index];
+    if (dst_stat.busy) deps.push_back(dst_stat.producer);                      // WAW
+    deps.insert(deps.end(), dst_stat.readers.begin(), dst_stat.readers.end()); // WAR
   }
 
   std::sort(deps.begin(), deps.end());
@@ -51,16 +34,17 @@ std::vector<std::uint64_t> Scoreboard::dependencies(const DynInst &inst) const {
   return deps;
 }
 
-void Scoreboard::register_operands(const DynInst &inst) {
+void Scoreboard::update_reg_stats(const DynInst &inst) {
   for (std::uint8_t i = 0; i < inst.src_count; ++i) {
     const auto &src = inst.src[i];
-    regs_[domain_index(src.domain)][src.index].readers.push_back(inst.id);
+    auto &src_stat = regs_[static_cast<std::size_t>(src.domain)][src.index];
+    src_stat.readers.push_back(inst.id);
   }
   for (std::uint8_t i = 0; i < inst.dst_count; ++i) {
     const auto &dst = inst.dst[i];
-    auto &reg = regs_[domain_index(dst.domain)][dst.index];
-    reg.busy = true;
-    reg.producer = inst.id;
+    auto &dst_stat = regs_[static_cast<std::size_t>(dst.domain)][dst.index];
+    dst_stat.busy = true;
+    dst_stat.producer = inst.id;
   }
 }
 
@@ -68,13 +52,9 @@ void Scoreboard::dispatch(const DynInst &inst) {
   if (inst.src_count > inst.src.size() || inst.dst_count > inst.dst.size()) {
     unreachable("dynamic instruction operand count exceeds capacity");
   }
-  for (std::uint8_t i = 0; i < inst.src_count; ++i)
-    validate(inst.src[i]);
-  for (std::uint8_t i = 0; i < inst.dst_count; ++i)
-    validate(inst.dst[i]);
 
   auto deps = dependencies(inst);
-  register_operands(inst);
+  update_reg_stats(inst);
   const auto inserted = entries_.emplace(inst.id, Entry{.inst = inst, .deps = std::move(deps)});
   if (!inserted.second) unreachable("duplicate dynamic instruction id");
 }
@@ -103,12 +83,13 @@ bool Scoreboard::complete(std::uint64_t id) {
   const auto &inst = it->second.inst;
   for (std::uint8_t i = 0; i < inst.src_count; ++i) {
     const auto &src = inst.src[i];
-    std::erase(regs_[domain_index(src.domain)][src.index].readers, id);
+    auto &src_stat = regs_[static_cast<std::size_t>(src.domain)][src.index];
+    std::erase(src_stat.readers, id);
   }
   for (std::uint8_t i = 0; i < inst.dst_count; ++i) {
     const auto &dst = inst.dst[i];
-    auto &reg = regs_[domain_index(dst.domain)][dst.index];
-    if (reg.producer == id) reg.busy = false;
+    auto &dst_stat = regs_[static_cast<std::size_t>(dst.domain)][dst.index];
+    if (dst_stat.producer == id) dst_stat.busy = false;
   }
 
   for (auto &pair : entries_) {

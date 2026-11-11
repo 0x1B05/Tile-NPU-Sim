@@ -1,5 +1,5 @@
 #include "framework.h"
-#include "uarch/timing/event_queue.h"
+#include "uarch/engine/event_queue.h"
 
 #include <cstdint>
 #include <optional>
