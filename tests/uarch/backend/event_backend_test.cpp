@@ -64,6 +64,12 @@ DynInst dma_load(std::uint64_t id, std::optional<RegisterIndex> src = std::nullo
   return inst;
 }
 
+// Emulates the machine moving to the next cycle before evaluating the backend.
+void next_cycle(EventUarchBackend &backend, UarchClock &clock) {
+  clock.tick();
+  backend.cycle();
+}
+
 } // namespace
 
 TEST_CASE(event_backend_issues_and_completes) {
@@ -80,7 +86,7 @@ TEST_CASE(event_backend_issues_and_completes) {
   check_eq(executor.executed.size(), std::size_t{0}, "dispatch does not issue");
   check_eq(stats.retired, std::uint64_t{0}, "not retired before completion");
 
-  backend.cycle();
+  next_cycle(backend, clock);
   check_eq(executor.executed.size(), std::size_t{1}, "cycle issues the vector write");
   check_eq(stats.retired, std::uint64_t{0}, "not retired at issue");
 
@@ -105,11 +111,11 @@ TEST_CASE(event_backend_waits_for_raw) {
   const auto read = mma_accumulate(2, 0, 0);
 
   backend.dispatch(write);
-  backend.cycle();
+  next_cycle(backend, clock);
   backend.dispatch(read);
   check_eq(executor.executed.size(), std::size_t{1}, "consumer is not issued yet");
 
-  backend.cycle();
+  next_cycle(backend, clock);
   check_eq(executor.executed.size(), std::size_t{1}, "consumer still waits");
 
   backend.advance();
@@ -129,7 +135,7 @@ TEST_CASE(event_backend_memory_queue_stalls_behind_blocked_head) {
   backend.set_stats(&stats);
 
   backend.dispatch(mma_write(1, 0));
-  backend.cycle();
+  next_cycle(backend, clock);
   check_eq(executor.executed.size(), std::size_t{1}, "MMA issues");
   check_eq(executor.executed[0].id, std::uint64_t{1}, "MMA executes first");
 
@@ -137,7 +143,7 @@ TEST_CASE(event_backend_memory_queue_stalls_behind_blocked_head) {
   // independent, but it is younger and must not pass the blocked queue head.
   backend.dispatch(dma_load(2, RegisterIndex{0}));
   backend.dispatch(dma_load(3));
-  backend.cycle();
+  next_cycle(backend, clock);
   check_eq(executor.executed.size(), std::size_t{1},
            "younger memory operation does not pass a blocked older one");
 
@@ -162,11 +168,11 @@ TEST_CASE(event_backend_applies_queue_backpressure) {
   const auto extra = mma_accumulate(4, 0, 0);
 
   backend.dispatch(producer);
-  backend.cycle();
+  next_cycle(backend, clock);
   backend.dispatch(dependent1);
-  backend.cycle();
+  next_cycle(backend, clock);
   backend.dispatch(dependent2);
-  backend.cycle();
+  next_cycle(backend, clock);
   check(!backend.dispatch(extra), "MMA queue depth is two");
 
   backend.drain();
@@ -196,7 +202,7 @@ TEST_CASE(event_backend_reset_clears_timing_state) {
   backend.set_stats(&stats);
 
   backend.dispatch(vec_write(1, 1));
-  backend.cycle();
+  next_cycle(backend, clock);
   backend.reset();
 
   check(backend.dispatch(vec_write(2, 2)), "reset clears queues");
@@ -211,9 +217,9 @@ TEST_CASE(event_backend_allows_out_of_order_completion) {
   backend.set_stats(&stats);
 
   backend.dispatch(vec_write(1, 1));
-  backend.cycle();
+  next_cycle(backend, clock);
   backend.dispatch(mma_write(2, 0));
-  backend.cycle();
+  next_cycle(backend, clock);
   backend.drain();
 
   check_eq(stats.retired, std::uint64_t{2}, "both units retire");

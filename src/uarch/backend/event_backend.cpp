@@ -38,7 +38,7 @@ bool EventUarchBackend::dispatch(const DynInst &inst) {
 }
 
 void EventUarchBackend::cycle() {
-  events_.run_until(clock_.now() + 1);
+  events_.run_until(clock_.now());
   issue();
   counters().cycles = clock_.now();
 }

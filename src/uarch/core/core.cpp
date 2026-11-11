@@ -32,6 +32,9 @@ StepResult UarchCore::run() {
   };
 
   while (true) {
+    backend_.cycle();
+    if (dispatcher_.failure()) return take_failure();
+
     FrontendContext context{state_, memory_, dispatcher_, dispatcher_, *this};
     const auto cycle = frontend_->cycle(context);
     if (dispatcher_.failure()) return take_failure();
@@ -48,7 +51,8 @@ StepResult UarchCore::run() {
     }
     if (cycle.control_retired) ++stats_.retired;
 
-    backend_.cycle();
+    clock_.tick();
+    stats_.cycles = clock_.now();
     if (dispatcher_.failure()) return take_failure();
   }
 }

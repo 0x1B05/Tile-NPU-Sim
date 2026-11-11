@@ -27,8 +27,8 @@ public:
   // queue is full.
   virtual bool dispatch(const DynInst &inst) = 0;
 
-  // Performs this backend's work for one cycle. Until the machine loop owns
-  // the clock edge, this still advances the clock by one cycle.
+  // Performs this backend's work for the current cycle. Does not advance the
+  // clock; UarchCore owns the cycle edge.
   virtual void cycle() = 0;
 
   // Advances timing to the next event. Returns elapsed cycles.
