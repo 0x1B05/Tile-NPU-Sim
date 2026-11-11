@@ -10,14 +10,13 @@
 
 #include <cstdint>
 #include <memory>
-#include <optional>
 
 namespace tile_npu {
 
 // Uarch machine. The scalar frontend owns fetch/decode and program-order
 // scalar/config execution; NpuDispatcher owns backend NPU instructions from
 // dispatch through completion.
-class UarchCore final : private FrontendBarrierPort {
+class UarchCore final {
 public:
   UarchCore(AddressSpace &memory, UarchBackend &backend, UarchClock &clock);
 
@@ -36,9 +35,6 @@ public:
   const UarchStats &stats() const { return stats_; }
 
 private:
-  std::optional<StepResult> drain_backend() override;
-  std::optional<StepResult> advance_backend() override;
-
   AddressSpace &memory_;
   State state_{};
   UarchStats stats_{};

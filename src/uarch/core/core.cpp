@@ -31,13 +31,39 @@ StepResult UarchCore::run() {
     return failure;
   };
 
-  while (true) {
-    backend_.cycle();
-    if (dispatcher_.failure()) return take_failure();
+  bool retry_frontend = false;
 
-    FrontendContext context{state_, memory_, dispatcher_, dispatcher_, *this};
+  while (true) {
+    if (!retry_frontend) {
+      backend_.cycle();
+      if (dispatcher_.failure()) return take_failure();
+    }
+    retry_frontend = false;
+
+    FrontendContext context{state_, memory_, dispatcher_, dispatcher_};
     const auto cycle = frontend_->cycle(context);
     if (dispatcher_.failure()) return take_failure();
+
+    if (cycle.stalled) {
+      switch (cycle.wait) {
+      case FrontendWaitReason::scalar_writeback:
+      case FrontendWaitReason::backend_barrier:
+        backend_.drain();
+        retry_frontend = true;
+        break;
+      case FrontendWaitReason::npu_dispatch:
+        backend_.advance();
+        retry_frontend = true;
+        break;
+      case FrontendWaitReason::none:
+        clock_.tick();
+        stats_.cycles = clock_.now();
+        break;
+      }
+
+      if (dispatcher_.failure()) return take_failure();
+      continue;
+    }
 
     if (cycle.stop) {
       backend_.drain();
@@ -55,16 +81,6 @@ StepResult UarchCore::run() {
     stats_.cycles = clock_.now();
     if (dispatcher_.failure()) return take_failure();
   }
-}
-
-std::optional<StepResult> UarchCore::drain_backend() {
-  backend_.drain();
-  return dispatcher_.failure();
-}
-
-std::optional<StepResult> UarchCore::advance_backend() {
-  backend_.advance();
-  return dispatcher_.failure();
 }
 
 } // namespace tile_npu

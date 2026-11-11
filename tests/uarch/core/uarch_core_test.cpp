@@ -168,6 +168,45 @@ TEST_CASE(uarch_core_vextract_writeback_blocks_scalar) {
   check_eq(core.stats().cycles, std::uint64_t{4}, "scalar waits for the writeback");
 }
 
+TEST_CASE(uarch_core_config_barrier_retries_frontend) {
+  tile_npu::Ram memory(CODE_BASE, 8);
+  write_word(memory, CODE_BASE, 0x50800202u);     // cfg.seti tc0, rows, 4
+  write_word(memory, CODE_BASE + 4, 0x00100073u); // ebreak
+
+  tile_npu::UarchClock clock;
+  tile_npu::EventUarchBackend backend(clock);
+  tile_npu::UarchCore core(memory, backend, clock);
+  core.reset(CODE_BASE);
+
+  const auto stop = core.run();
+  check_eq(stop.status, tile_npu::StepStatus::breakpoint, "config program stops");
+  check_eq(core.state().tc[0].rows, std::uint32_t{4}, "config write commits");
+  check_eq(core.stats().retired, std::uint64_t{1}, "config retires after the retry");
+}
+
+TEST_CASE(uarch_core_stalls_npu_dispatch_when_queue_full) {
+  tile_npu::Ram memory(CODE_BASE, 32);
+  write_word(memory, CODE_BASE, make_mma(0, 0, 0, 16));      // mma.nt.zero a0
+  write_word(memory, CODE_BASE + 4, make_mma(1, 0, 0, 16));  // mma.nt.acc a0
+  write_word(memory, CODE_BASE + 8, make_mma(1, 0, 0, 16));  // mma.nt.acc a0
+  write_word(memory, CODE_BASE + 12, make_mma(1, 0, 0, 16)); // mma.nt.acc a0
+  write_word(memory, CODE_BASE + 16, 0x00100073u);           // ebreak
+
+  tile_npu::UarchClock clock;
+  tile_npu::EventUarchBackend backend(clock);
+  tile_npu::UarchCore core(memory, backend, clock);
+  core.reset(CODE_BASE);
+  tile_cfg(core.state(), 0, tile_npu::DType::i8, 4, 8);
+  tile_cfg(core.state(), 16, tile_npu::DType::i8, 5, 8);
+  acc_cfg(core.state(), 0, tile_npu::DType::i32, 4, 5);
+
+  const auto stop = core.run();
+  check_eq(stop.status, tile_npu::StepStatus::breakpoint, "dispatch-stall program stops");
+  check_eq(core.stats().retired, std::uint64_t{4}, "all four MMAs retire");
+  check_eq(core.stats().unit_count[static_cast<std::size_t>(tile_npu::Unit::mma)], std::uint64_t{4},
+           "MMA unit count");
+}
+
 TEST_CASE(uarch_core_waits_for_mma_dependency) {
   tile_npu::Ram memory(CODE_BASE, 16);
   write_word(memory, CODE_BASE, make_mma(0, 0, 0, 16));     // mma.nt.zero a0, t0, t16

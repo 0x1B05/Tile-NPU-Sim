@@ -8,37 +8,47 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <utility>
 #include <variant>
 
 namespace tile_npu {
 
-void SimpleScalarFrontend::reset(std::uint64_t entry_pc) { (void)entry_pc; }
+void SimpleScalarFrontend::reset(std::uint64_t entry_pc) {
+  (void)entry_pc;
+  pending_.reset();
+}
 
 FrontendTick SimpleScalarFrontend::cycle(FrontendContext &context) {
-  const std::uint64_t pc = context.state.scalar.pc;
-  std::array<std::byte, static_cast<std::size_t>(INSTR_BYTES)> instr_bytes{};
-  if (!context.memory.read(pc, instr_bytes)) {
-    return {.stop = StepResult{.status = StepStatus::fetch_fault, .pc = pc}};
+  if (!pending_) {
+    const std::uint64_t pc = context.state.scalar.pc;
+    std::array<std::byte, static_cast<std::size_t>(INSTR_BYTES)> instr_bytes{};
+    if (!context.memory.read(pc, instr_bytes)) {
+      return {.stop = StepResult{.status = StepStatus::fetch_fault, .pc = pc}};
+    }
+
+    const auto instr = load_le<std::uint32_t>(instr_bytes);
+    auto decoded = decode(instr);
+    if (std::holds_alternative<DecodeError>(decoded)) {
+      return {.stop =
+                  StepResult{.status = StepStatus::illegal_instruction, .pc = pc, .instr = instr}};
+    }
+
+    pending_.emplace(Pending{.pc = pc, .instr = instr, .decoded = std::move(decoded)});
   }
 
-  const auto instr = load_le<std::uint32_t>(instr_bytes);
-  auto decoded = decode(instr);
-  if (std::holds_alternative<DecodeError>(decoded)) {
-    return {.stop =
-                StepResult{.status = StepStatus::illegal_instruction, .pc = pc, .instr = instr}};
-  }
-
-  const auto *npu = std::get_if<DecodedNpuInstr>(&decoded);
-  const auto *scalar = std::get_if<DecodedScalarInstr>(&decoded);
+  auto &pending = *pending_;
+  const auto pc = pending.pc;
+  const auto instr = pending.instr;
   ExecContext exec{context.state, context.memory};
 
-  if (scalar != nullptr) {
+  if (const auto *scalar = std::get_if<DecodedScalarInstr>(&pending.decoded)) {
     if (context.writeback.any_pending()) {
-      if (auto failure = context.barrier.drain_backend()) return {.stop = failure};
+      return {.stalled = true, .wait = FrontendWaitReason::scalar_writeback};
     }
 
     const auto execution = exec_scalar_instr(*scalar, exec);
     if (execution.status != StepStatus::retired) {
+      pending_.reset();
       return {.stop = StepResult{.status = execution.status,
                                  .pc = pc,
                                  .instr = instr,
@@ -46,14 +56,20 @@ FrontendTick SimpleScalarFrontend::cycle(FrontendContext &context) {
     }
 
     context.state.scalar.pc = execution.redirect.value_or(pc + INSTR_BYTES);
+    pending_.reset();
     return {.scalar_retired = true};
   }
 
-  if (is_frontend_npu(*npu)) {
-    if (auto failure = context.barrier.drain_backend()) return {.stop = failure};
+  const auto &npu = std::get<DecodedNpuInstr>(pending.decoded);
+  if (is_frontend_npu(npu)) {
+    if (!pending.barrier_done) {
+      pending.barrier_done = true;
+      return {.stalled = true, .wait = FrontendWaitReason::backend_barrier};
+    }
 
-    const auto execution = exec_npu_instr(*npu, exec);
+    const auto execution = exec_npu_instr(npu, exec);
     if (execution.status != StepStatus::retired) {
+      pending_.reset();
       return {.stop = StepResult{.status = execution.status,
                                  .pc = pc,
                                  .instr = instr,
@@ -61,20 +77,25 @@ FrontendTick SimpleScalarFrontend::cycle(FrontendContext &context) {
     }
 
     context.state.scalar.pc = pc + INSTR_BYTES;
+    pending_.reset();
     return {.control_retired = true};
   }
 
-  if (context.writeback.any_pending()) {
-    if (auto failure = context.barrier.drain_backend()) return {.stop = failure};
+  if (!pending.request) {
+    if (context.writeback.any_pending()) {
+      return {.stalled = true, .wait = FrontendWaitReason::scalar_writeback};
+    }
+
+    pending.request.emplace(NpuDispatchRequest{
+        .pc = pc, .instr = instr, .decoded = npu, .scalar = context.state.scalar});
   }
 
-  const NpuDispatchRequest request{
-      .pc = pc, .instr = instr, .decoded = *npu, .scalar = context.state.scalar};
-  while (!context.npu.dispatch(request)) {
-    if (auto failure = context.barrier.advance_backend()) return {.stop = failure};
+  if (!context.npu.dispatch(*pending.request)) {
+    return {.stalled = true, .wait = FrontendWaitReason::npu_dispatch};
   }
 
   context.state.scalar.pc = pc + INSTR_BYTES;
+  pending_.reset();
   return {};
 }
 

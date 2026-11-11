@@ -38,23 +38,18 @@ public:
   virtual bool any_pending() const = 0;
 };
 
-// Temporary synchronous barrier used by the simple front end. A cycle-driven
-// pipeline front end will use ScalarWritebackView instead where possible.
-class FrontendBarrierPort {
-public:
-  virtual ~FrontendBarrierPort() = default;
-
-  // Returns the first backend failure, if any.
-  virtual std::optional<StepResult> drain_backend() = 0;
-  virtual std::optional<StepResult> advance_backend() = 0;
-};
-
 struct FrontendContext {
   State &state;
   AddressSpace &memory;
   NpuDispatchPort &npu;
   const ScalarWritebackView &writeback;
-  FrontendBarrierPort &barrier;
+};
+
+enum class FrontendWaitReason : std::uint8_t {
+  none,
+  scalar_writeback,
+  backend_barrier,
+  npu_dispatch,
 };
 
 struct FrontendTick {
@@ -63,6 +58,7 @@ struct FrontendTick {
   bool scalar_retired = false;
   bool control_retired = false;
   bool stalled = false;
+  FrontendWaitReason wait = FrontendWaitReason::none;
 };
 
 class ScalarFrontend {
