@@ -69,7 +69,8 @@ DynInst dma_load(std::uint64_t id, std::optional<RegisterIndex> src = std::nullo
 TEST_CASE(event_backend_issues_and_completes) {
   CountingExecutor executor;
   UarchStats stats;
-  EventUarchBackend backend;
+  UarchClock clock;
+  EventUarchBackend backend(clock);
   backend.set_executor(&executor);
   backend.set_stats(&stats);
 
@@ -95,7 +96,8 @@ TEST_CASE(event_backend_issues_and_completes) {
 TEST_CASE(event_backend_waits_for_raw) {
   CountingExecutor executor;
   UarchStats stats;
-  EventUarchBackend backend;
+  UarchClock clock;
+  EventUarchBackend backend(clock);
   backend.set_executor(&executor);
   backend.set_stats(&stats);
 
@@ -121,7 +123,8 @@ TEST_CASE(event_backend_waits_for_raw) {
 TEST_CASE(event_backend_memory_queue_stalls_behind_blocked_head) {
   CountingExecutor executor;
   UarchStats stats;
-  EventUarchBackend backend;
+  UarchClock clock;
+  EventUarchBackend backend(clock);
   backend.set_executor(&executor);
   backend.set_stats(&stats);
 
@@ -148,7 +151,8 @@ TEST_CASE(event_backend_memory_queue_stalls_behind_blocked_head) {
 TEST_CASE(event_backend_applies_queue_backpressure) {
   CountingExecutor executor;
   UarchStats stats;
-  EventUarchBackend backend;
+  UarchClock clock;
+  EventUarchBackend backend(clock);
   backend.set_executor(&executor);
   backend.set_stats(&stats);
 
@@ -172,7 +176,8 @@ TEST_CASE(event_backend_applies_queue_backpressure) {
 TEST_CASE(event_backend_drain_retires_pending_work) {
   CountingExecutor executor;
   UarchStats stats;
-  EventUarchBackend backend;
+  UarchClock clock;
+  EventUarchBackend backend(clock);
   backend.set_executor(&executor);
   backend.set_stats(&stats);
 
@@ -185,7 +190,8 @@ TEST_CASE(event_backend_drain_retires_pending_work) {
 TEST_CASE(event_backend_reset_clears_timing_state) {
   CountingExecutor executor;
   UarchStats stats;
-  EventUarchBackend backend;
+  UarchClock clock;
+  EventUarchBackend backend(clock);
   backend.set_executor(&executor);
   backend.set_stats(&stats);
 
@@ -199,7 +205,8 @@ TEST_CASE(event_backend_reset_clears_timing_state) {
 TEST_CASE(event_backend_allows_out_of_order_completion) {
   CountingExecutor executor;
   UarchStats stats;
-  EventUarchBackend backend;
+  UarchClock clock;
+  EventUarchBackend backend(clock);
   backend.set_executor(&executor);
   backend.set_stats(&stats);
 

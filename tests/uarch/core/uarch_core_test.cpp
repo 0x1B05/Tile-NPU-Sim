@@ -19,8 +19,9 @@ TEST_CASE(uarch_core_scalar_program) {
   write_word(memory, CODE_BASE + 4, 0x00108133u); // add x2, x1, x1
   write_word(memory, CODE_BASE + 8, 0x00100073u); // ebreak
 
-  tile_npu::EventUarchBackend backend;
-  tile_npu::UarchCore core(memory, backend);
+  tile_npu::UarchClock clock;
+  tile_npu::EventUarchBackend backend(clock);
+  tile_npu::UarchCore core(memory, backend, clock);
   core.reset(CODE_BASE);
 
   const auto stop = core.run();
@@ -52,8 +53,9 @@ TEST_CASE(uarch_core_applies_redirect) {
   write_word(memory, CODE_BASE + 8, 0x00200113u);  // addi x2, x0, 2
   write_word(memory, CODE_BASE + 12, 0x00100073u); // ebreak
 
-  tile_npu::EventUarchBackend backend;
-  tile_npu::UarchCore core(memory, backend);
+  tile_npu::UarchClock clock;
+  tile_npu::EventUarchBackend backend(clock);
+  tile_npu::UarchCore core(memory, backend, clock);
   core.reset(CODE_BASE);
 
   const auto stop = core.run();
@@ -66,8 +68,9 @@ TEST_CASE(uarch_core_applies_redirect) {
 
 TEST_CASE(uarch_core_fetch_fault) {
   tile_npu::Ram memory(CODE_BASE, 4);
-  tile_npu::EventUarchBackend backend;
-  tile_npu::UarchCore core(memory, backend);
+  tile_npu::UarchClock clock;
+  tile_npu::EventUarchBackend backend(clock);
+  tile_npu::UarchCore core(memory, backend, clock);
   core.reset(CODE_BASE + 8);
 
   const auto result = core.run();
@@ -80,8 +83,9 @@ TEST_CASE(uarch_core_fetch_fault) {
 TEST_CASE(uarch_core_illegal_instruction) {
   tile_npu::Ram memory(CODE_BASE, 4);
   write_word(memory, CODE_BASE, 0xf0000000u);
-  tile_npu::EventUarchBackend backend;
-  tile_npu::UarchCore core(memory, backend);
+  tile_npu::UarchClock clock;
+  tile_npu::EventUarchBackend backend(clock);
+  tile_npu::UarchCore core(memory, backend, clock);
   core.reset(CODE_BASE);
 
   const auto result = core.run();
@@ -96,8 +100,9 @@ TEST_CASE(uarch_core_overlaps_scalar_with_mma) {
   write_word(memory, CODE_BASE + 4, 0x00700093u);       // addi x1, x0, 7
   write_word(memory, CODE_BASE + 8, 0x00100073u);       // ebreak
 
-  tile_npu::EventUarchBackend backend;
-  tile_npu::UarchCore core(memory, backend);
+  tile_npu::UarchClock clock;
+  tile_npu::EventUarchBackend backend(clock);
+  tile_npu::UarchCore core(memory, backend, clock);
   core.reset(CODE_BASE);
   tile_cfg(core.state(), 0, tile_npu::DType::i8, 4, 8);
   tile_cfg(core.state(), 16, tile_npu::DType::i8, 5, 8);
@@ -123,8 +128,9 @@ TEST_CASE(uarch_core_snapshots_scalar_operands) {
   write_word(memory, CODE_BASE + 12, 0x00900093u);              // addi x1, x0, 9
   write_word(memory, CODE_BASE + 16, 0x00100073u);              // ebreak
 
-  tile_npu::EventUarchBackend backend;
-  tile_npu::UarchCore core(memory, backend);
+  tile_npu::UarchClock clock;
+  tile_npu::EventUarchBackend backend(clock);
+  tile_npu::UarchCore core(memory, backend, clock);
   core.reset(CODE_BASE);
   tile_cfg(core.state(), 0, tile_npu::DType::i8, 4, 8);
   tile_cfg(core.state(), 16, tile_npu::DType::i8, 5, 8);
@@ -144,8 +150,9 @@ TEST_CASE(uarch_core_vextract_writeback_blocks_scalar) {
   write_word(memory, CODE_BASE + 4, 0x00108113u);               // addi x2, x1, 1
   write_word(memory, CODE_BASE + 8, 0x00100073u);               // ebreak
 
-  tile_npu::EventUarchBackend backend;
-  tile_npu::UarchCore core(memory, backend);
+  tile_npu::UarchClock clock;
+  tile_npu::EventUarchBackend backend(clock);
+  tile_npu::UarchCore core(memory, backend, clock);
   core.reset(CODE_BASE);
   core.state().vc[0] = tile_npu::Vec32Config{.dtype = tile_npu::DType::i32, .len = 4};
   core.state().v[0][0] = 42;
@@ -167,8 +174,9 @@ TEST_CASE(uarch_core_waits_for_mma_dependency) {
   write_word(memory, CODE_BASE + 4, make_mma(1, 0, 0, 16)); // mma.nt.acc a0, t0, t16
   write_word(memory, CODE_BASE + 8, 0x00100073u);           // ebreak
 
-  tile_npu::EventUarchBackend backend;
-  tile_npu::UarchCore core(memory, backend);
+  tile_npu::UarchClock clock;
+  tile_npu::EventUarchBackend backend(clock);
+  tile_npu::UarchCore core(memory, backend, clock);
   core.reset(CODE_BASE);
   tile_cfg(core.state(), 0, tile_npu::DType::i8, 4, 8);
   tile_cfg(core.state(), 16, tile_npu::DType::i8, 5, 8);

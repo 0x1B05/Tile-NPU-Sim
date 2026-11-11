@@ -5,6 +5,7 @@
 #include "tile_npu/state.h"
 #include "tile_npu/step.h"
 #include "uarch/backend/backend.h"
+#include "uarch/engine/clock.h"
 
 #include <cstdint>
 #include <optional>
@@ -18,7 +19,7 @@ namespace tile_npu {
 // which issues them and calls execute()/complete() at issue and completion.
 class UarchCore final : public UarchExecutor {
 public:
-  UarchCore(AddressSpace &memory, UarchBackend &backend);
+  UarchCore(AddressSpace &memory, UarchBackend &backend, UarchClock &clock);
 
   void reset(std::uint64_t entry_pc);
 
@@ -67,6 +68,7 @@ private:
   AddressSpace &memory_;
   State state_{};
   UarchStats stats_{};
+  UarchClock &clock_;
   UarchBackend &backend_;
   std::uint64_t next_id_ = 0;
   std::unordered_map<std::uint64_t, InFlightEntry> in_flight_;

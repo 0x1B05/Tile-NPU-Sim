@@ -13,14 +13,15 @@ constexpr std::size_t WINDOW_DEPTH = 32;
 
 } // namespace
 
-EventUarchBackend::EventUarchBackend() {
+EventUarchBackend::EventUarchBackend(UarchClock &clock) : clock_(clock) {
   for (std::size_t unit = 0; unit < queues_.size(); ++unit) {
     queues_[unit] = IssueQueue(queue_depth(static_cast<Unit>(unit)));
   }
 }
 
 void EventUarchBackend::reset() {
-  // UarchStats is owned by the machine and reset by UarchCore::reset().
+  // UarchStats and UarchClock are owned by the machine and reset by
+  // UarchCore::reset().
   events_.clear();
   scoreboard_.reset();
   for (auto &queue : queues_)
@@ -37,17 +38,17 @@ bool EventUarchBackend::dispatch(const DynInst &inst) {
 }
 
 void EventUarchBackend::tick() {
-  events_.run_until(events_.now() + 1);
+  events_.run_until(clock_.now() + 1);
   issue();
-  counters().cycles = events_.now();
+  counters().cycles = clock_.now();
 }
 
 std::uint64_t EventUarchBackend::advance() {
-  const auto before = events_.now();
+  const auto before = clock_.now();
   if (const auto next = events_.next_time()) events_.run_until(*next);
   issue();
   auto &stats = counters();
-  stats.cycles = events_.now();
+  stats.cycles = clock_.now();
   return stats.cycles - before;
 }
 
@@ -60,7 +61,7 @@ void EventUarchBackend::drain() {
       unreachable("uarch backend cannot drain dispatched work");
     }
   }
-  counters().cycles = events_.now();
+  counters().cycles = clock_.now();
 }
 
 void EventUarchBackend::issue() {
@@ -87,8 +88,7 @@ void EventUarchBackend::issue() {
     queue.remove(id);
     scoreboard_.mark_issued(id);
     if (executor_ != nullptr) executor_->execute(scoreboard_.inst(id));
-    events_.schedule(events_.now() + latency(static_cast<Unit>(unit)),
-                     [this, id] { complete(id); });
+    events_.schedule(clock_.now() + latency(static_cast<Unit>(unit)), [this, id] { complete(id); });
   }
 }
 

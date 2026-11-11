@@ -26,8 +26,8 @@ std::optional<RegisterIndex> scalar_destination(const DecodedNpuInstr &instr) {
 
 } // namespace
 
-UarchCore::UarchCore(AddressSpace &memory, UarchBackend &backend)
-    : memory_(memory), backend_(backend) {
+UarchCore::UarchCore(AddressSpace &memory, UarchBackend &backend, UarchClock &clock)
+    : memory_(memory), clock_(clock), backend_(backend) {
   backend_.set_executor(this);
   backend_.set_stats(&stats_);
 }
@@ -36,6 +36,7 @@ void UarchCore::reset(std::uint64_t entry_pc) {
   state_ = State{};
   state_.scalar.pc = entry_pc;
   stats_ = {};
+  clock_.reset();
   next_id_ = 0;
   in_flight_.clear();
   npu_failure_.reset();

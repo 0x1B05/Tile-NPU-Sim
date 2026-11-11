@@ -18,7 +18,7 @@ namespace tile_npu {
 // will replace those constants later.
 class EventUarchBackend final : public UarchBackend {
 public:
-  EventUarchBackend();
+  explicit EventUarchBackend(UarchClock &clock);
 
   void reset() override;
 
@@ -47,7 +47,8 @@ private:
 
   UarchExecutor *executor_ = nullptr;
   UarchStats *stats_ = nullptr;
-  EventQueue events_;
+  UarchClock &clock_;
+  EventQueue events_{clock_};
   Scoreboard scoreboard_;
   std::array<IssueQueue, static_cast<std::size_t>(Unit::count)> queues_;
 };

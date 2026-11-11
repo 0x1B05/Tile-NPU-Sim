@@ -1,5 +1,7 @@
 #pragma once
 
+#include "uarch/engine/clock.h"
+
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -8,24 +10,26 @@
 
 namespace tile_npu {
 
-// Deterministic event queue. Events at the same time run in scheduling order.
+// Deterministic event queue driven by an external UarchClock. Events at the
+// same time run in scheduling order.
 class EventQueue {
 public:
-  using Time = std::uint64_t;
+  using Time = UarchClock::Time;
   using Callback = std::function<void()>;
 
-  // Schedules a callback at or after `when`; a time in the past is clamped to the current time.
+  explicit EventQueue(UarchClock &clock) : clock_(clock) {}
+
+  // Schedules a callback at or after `when`; a time in the past is clamped to
+  // the current clock time.
   void schedule(Time when, Callback callback);
 
-  // Runs every event up to and including `when`, then advances now() to it.
+  // Runs every event up to and including `when`, then advances the clock to it.
   void run_until(Time when);
 
-  // Runs every pending event; now() ends at the last event time.
+  // Runs every pending event; the clock ends at the last event time.
   void drain();
 
   void clear();
-
-  Time now() const { return now_; }
 
   bool empty() const { return events_.empty(); }
 
@@ -49,8 +53,8 @@ private:
     }
   };
 
+  UarchClock &clock_;
   std::priority_queue<Event, std::vector<Event>, Later> events_;
-  Time now_ = 0;
   std::uint64_t seq_ = 0;
 };
 
