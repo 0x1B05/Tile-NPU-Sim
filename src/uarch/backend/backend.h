@@ -1,7 +1,7 @@
 #pragma once
 
-#include "uarch/dataflow/dyn_inst.h"
 #include "uarch/backend/executor.h"
+#include "uarch/dataflow/dyn_inst.h"
 #include "uarch/uarch_stats.h"
 
 #include <cstdint>
@@ -20,18 +20,12 @@ public:
   // Functional executor used when an instruction issues.
   virtual void set_executor(UarchExecutor *executor) = 0;
 
-  // True when the backend has room for another DynInst.
-  virtual bool can_dispatch(const DynInst &inst) const = 0;
+  // The backend updates cycles and NPU completion counts.
+  virtual void set_stats(UarchStats *stats) = 0;
 
-  // Enqueues the DynInst into the backend.
-  virtual void dispatch(const DynInst &inst) = 0;
-
-  // Accounts for a scalar instruction that retires in the front end. Scalar is
-  // not an NPU unit, so it has its own counter.
-  virtual void retire_scalar() = 0;
-
-  // Accounts for a config or sync instruction that retires in the front end.
-  virtual void retire_frontend() = 0;
+  // Attempts to enqueue the DynInst. Returns false when the dispatch window or the target issue
+  // queue is full.
+  virtual bool dispatch(const DynInst &inst) = 0;
 
   // Advances the machine by one front-end cycle, processing completions and
   // issuing ready instructions.
@@ -42,8 +36,6 @@ public:
 
   // Drains all dispatched work, including instructions still waiting to issue.
   virtual void finish() = 0;
-
-  virtual const UarchStats &stats() const = 0;
 };
 
 } // namespace tile_npu

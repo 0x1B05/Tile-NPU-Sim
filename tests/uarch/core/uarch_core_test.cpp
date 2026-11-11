@@ -1,8 +1,8 @@
 #include "framework.h"
 #include "func/core.h"
 #include "tile_npu/platform/ram.h"
-#include "uarch/core/core.h"
 #include "uarch/backend/event_backend.h"
+#include "uarch/core/core.h"
 
 #include "units/execute_helpers.h"
 #include "units/mma_helpers.h"
@@ -38,6 +38,11 @@ TEST_CASE(uarch_core_scalar_program) {
   check_eq(sim.step().status, tile_npu::StepStatus::retired, "functional add");
   check_eq(sim.state().scalar.read_x(1), std::uint64_t{7}, "functional x1");
   check_eq(sim.state().scalar.read_x(2), std::uint64_t{14}, "functional x2");
+
+  core.reset(CODE_BASE);
+  check_eq(core.stats().retired, std::uint64_t{0}, "reset clears retired");
+  check_eq(core.stats().scalar_retired, std::uint64_t{0}, "reset clears scalar retire count");
+  check_eq(core.stats().cycles, std::uint64_t{0}, "reset clears cycles");
 }
 
 TEST_CASE(uarch_core_applies_redirect) {

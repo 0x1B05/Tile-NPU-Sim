@@ -1,9 +1,9 @@
 #pragma once
 
 #include "uarch/backend/backend.h"
-#include "uarch/engine/event_queue.h"
 #include "uarch/components/issue_queue.h"
 #include "uarch/components/scoreboard.h"
+#include "uarch/engine/event_queue.h"
 
 #include <array>
 #include <cstddef>
@@ -24,13 +24,9 @@ public:
 
   void set_executor(UarchExecutor *executor) override { executor_ = executor; }
 
-  bool can_dispatch(const DynInst &inst) const override;
+  void set_stats(UarchStats *stats) override { stats_ = stats; }
 
-  void dispatch(const DynInst &inst) override;
-
-  void retire_scalar() override;
-
-  void retire_frontend() override;
+  bool dispatch(const DynInst &inst) override;
 
   void tick() override;
 
@@ -38,22 +34,22 @@ public:
 
   void finish() override;
 
-  const UarchStats &stats() const override;
-
 private:
-  // Issues at most one ready DynInst per unit and returns whether any issued.
-  bool issue_ready();
+  // Issues at most one ready DynInst per unit.
+  void issue();
 
   void complete(std::uint64_t id);
+
+  UarchStats &counters();
 
   static std::size_t queue_depth(Unit unit);
   static std::uint64_t latency(Unit unit);
 
   UarchExecutor *executor_ = nullptr;
+  UarchStats *stats_ = nullptr;
   EventQueue events_;
   Scoreboard scoreboard_;
   std::array<IssueQueue, static_cast<std::size_t>(Unit::count)> queues_;
-  UarchStats stats_{};
 };
 
 } // namespace tile_npu

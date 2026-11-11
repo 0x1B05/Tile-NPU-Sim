@@ -20,77 +20,60 @@ EventUarchBackend::EventUarchBackend() {
 }
 
 void EventUarchBackend::reset() {
-  stats_ = {};
+  // UarchStats is owned by the machine and reset by UarchCore::reset().
   events_.clear();
   scoreboard_.reset();
   for (auto &queue : queues_)
     queue.clear();
 }
 
-bool EventUarchBackend::can_dispatch(const DynInst &inst) const {
+bool EventUarchBackend::dispatch(const DynInst &inst) {
   const auto unit = static_cast<std::size_t>(inst.unit);
-  if (unit >= queues_.size()) return false;
-  return scoreboard_.size() < WINDOW_DEPTH && !queues_[unit].full();
-}
 
-void EventUarchBackend::dispatch(const DynInst &inst) {
-  if (!can_dispatch(inst)) unreachable("dispatch into a full uarch backend");
+  if (scoreboard_.size() >= WINDOW_DEPTH || !queues_[unit].push(inst.id)) return false;
 
-  const auto unit = static_cast<std::size_t>(inst.unit);
-  if (!queues_[unit].push(inst.id)) unreachable("dispatch into a full issue queue");
   scoreboard_.dispatch(inst);
+  return true;
 }
-
-void EventUarchBackend::retire_scalar() {
-  ++stats_.retired;
-  ++stats_.scalar_retired;
-}
-
-void EventUarchBackend::retire_frontend() { ++stats_.retired; }
 
 void EventUarchBackend::tick() {
   events_.run_until(events_.now() + 1);
-  issue_ready();
-  stats_.cycles = events_.now();
+  issue();
+  counters().cycles = events_.now();
 }
 
 std::uint64_t EventUarchBackend::advance() {
   const auto before = events_.now();
   if (const auto next = events_.next_time()) events_.run_until(*next);
-  issue_ready();
-  stats_.cycles = events_.now();
-  return stats_.cycles - before;
+  issue();
+  auto &stats = counters();
+  stats.cycles = events_.now();
+  return stats.cycles - before;
 }
 
 void EventUarchBackend::finish() {
   while (!scoreboard_.empty()) {
     if (const auto next = events_.next_time()) events_.run_until(*next);
-    const bool issued = issue_ready();
+    issue();
     if (scoreboard_.empty()) break;
-    if (!issued && !events_.next_time()) {
+    if (!events_.next_time()) {
       unreachable("uarch backend cannot drain dispatched work");
     }
   }
-  stats_.cycles = events_.now();
+  counters().cycles = events_.now();
 }
 
-const UarchStats &EventUarchBackend::stats() const { return stats_; }
-
-bool EventUarchBackend::issue_ready() {
-  bool issued = false;
+void EventUarchBackend::issue() {
   for (std::size_t unit = 0; unit < queues_.size(); ++unit) {
     auto &queue = queues_[unit];
     std::optional<std::uint64_t> candidate;
 
     if (static_cast<Unit>(unit) == Unit::dma) {
-      // All memory operations share one program-order queue. The oldest valid
-      // entry must issue before any younger entry, even when the younger one
-      // is already ready.
+      // All memory operations share one program-order queue.
       candidate = queue.front();
       if (candidate && !scoreboard_.ready(*candidate)) candidate.reset();
     } else {
-      // General queues pick the oldest ready entry; a younger ready entry may
-      // bypass an older one that is still waiting on dependencies.
+      // General queues pick the oldest ready entry.
       for (const auto id : queue.entries()) {
         if (!scoreboard_.ready(id)) continue;
         candidate = id;
@@ -106,9 +89,7 @@ bool EventUarchBackend::issue_ready() {
     if (executor_ != nullptr) executor_->execute(scoreboard_.inst(id));
     events_.schedule(events_.now() + latency(static_cast<Unit>(unit)),
                      [this, id] { complete(id); });
-    issued = true;
   }
-  return issued;
 }
 
 void EventUarchBackend::complete(std::uint64_t id) {
@@ -119,8 +100,14 @@ void EventUarchBackend::complete(std::uint64_t id) {
   const auto inst = it->second.inst;
   if (!scoreboard_.complete(id)) return;
   if (executor_ != nullptr) executor_->complete(inst);
-  ++stats_.retired;
-  ++stats_.unit_count[static_cast<std::size_t>(inst.unit)];
+  auto &stats = counters();
+  ++stats.retired;
+  ++stats.unit_count[static_cast<std::size_t>(inst.unit)];
+}
+
+UarchStats &EventUarchBackend::counters() {
+  if (stats_ == nullptr) unreachable("backend stats are not attached");
+  return *stats_;
 }
 
 std::size_t EventUarchBackend::queue_depth(Unit unit) {

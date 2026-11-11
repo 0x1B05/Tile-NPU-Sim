@@ -32,7 +32,7 @@ public:
 
   const State &state() const { return state_; }
 
-  const UarchStats &stats() const { return backend_.stats(); }
+  const UarchStats &stats() const { return stats_; }
 
   void execute(const DynInst &inst) override;
 
@@ -66,6 +66,7 @@ private:
 
   AddressSpace &memory_;
   State state_{};
+  UarchStats stats_{};
   UarchBackend &backend_;
   std::uint64_t next_id_ = 0;
   std::unordered_map<std::uint64_t, InFlightEntry> in_flight_;

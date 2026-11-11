@@ -68,33 +68,36 @@ DynInst dma_load(std::uint64_t id, std::optional<RegisterIndex> src = std::nullo
 
 TEST_CASE(event_backend_issues_and_completes) {
   CountingExecutor executor;
+  UarchStats stats;
   EventUarchBackend backend;
   backend.set_executor(&executor);
+  backend.set_stats(&stats);
 
   const auto write = vec_write(1, 1);
-  check(backend.can_dispatch(write), "vector write fits");
-  backend.dispatch(write);
+  check(backend.dispatch(write), "vector write fits");
 
   check_eq(executor.executed.size(), std::size_t{0}, "dispatch does not issue");
-  check_eq(backend.stats().retired, std::uint64_t{0}, "not retired before completion");
+  check_eq(stats.retired, std::uint64_t{0}, "not retired before completion");
 
   backend.tick();
   check_eq(executor.executed.size(), std::size_t{1}, "tick issues the vector write");
-  check_eq(backend.stats().retired, std::uint64_t{0}, "not retired at issue");
+  check_eq(stats.retired, std::uint64_t{0}, "not retired at issue");
 
   backend.advance();
   check_eq(executor.completed.size(), std::size_t{1}, "completion callback runs");
   check_eq(executor.completed[0].id, std::uint64_t{1}, "completed instruction id");
-  check_eq(backend.stats().retired, std::uint64_t{1}, "retired after completion");
-  check_eq(backend.stats().unit_count[static_cast<std::size_t>(Unit::vec32)], std::uint64_t{1},
+  check_eq(stats.retired, std::uint64_t{1}, "retired after completion");
+  check_eq(stats.unit_count[static_cast<std::size_t>(Unit::vec32)], std::uint64_t{1},
            "vector unit count");
-  check_eq(backend.stats().cycles, std::uint64_t{3}, "issue and completion cycles");
+  check_eq(stats.cycles, std::uint64_t{3}, "issue and completion cycles");
 }
 
 TEST_CASE(event_backend_waits_for_raw) {
   CountingExecutor executor;
+  UarchStats stats;
   EventUarchBackend backend;
   backend.set_executor(&executor);
+  backend.set_stats(&stats);
 
   const auto write = mma_write(1, 0);
   const auto read = mma_accumulate(2, 0, 0);
@@ -109,16 +112,18 @@ TEST_CASE(event_backend_waits_for_raw) {
 
   backend.advance();
   check_eq(executor.executed.size(), std::size_t{2}, "consumer issues after producer completion");
-  check_eq(backend.stats().retired, std::uint64_t{1}, "producer retired");
+  check_eq(stats.retired, std::uint64_t{1}, "producer retired");
 
   backend.advance();
-  check_eq(backend.stats().retired, std::uint64_t{2}, "consumer retired later");
+  check_eq(stats.retired, std::uint64_t{2}, "consumer retired later");
 }
 
 TEST_CASE(event_backend_memory_queue_stalls_behind_blocked_head) {
   CountingExecutor executor;
+  UarchStats stats;
   EventUarchBackend backend;
   backend.set_executor(&executor);
+  backend.set_stats(&stats);
 
   backend.dispatch(mma_write(1, 0));
   backend.tick();
@@ -142,8 +147,10 @@ TEST_CASE(event_backend_memory_queue_stalls_behind_blocked_head) {
 
 TEST_CASE(event_backend_applies_queue_backpressure) {
   CountingExecutor executor;
+  UarchStats stats;
   EventUarchBackend backend;
   backend.set_executor(&executor);
+  backend.set_stats(&stats);
 
   const auto producer = mma_write(1, 0);
   const auto dependent1 = mma_accumulate(2, 0, 0);
@@ -156,51 +163,45 @@ TEST_CASE(event_backend_applies_queue_backpressure) {
   backend.tick();
   backend.dispatch(dependent2);
   backend.tick();
-  check(!backend.can_dispatch(extra), "MMA queue depth is two");
+  check(!backend.dispatch(extra), "MMA queue depth is two");
 
   backend.finish();
-  check_eq(backend.stats().retired, std::uint64_t{3}, "finish drains dependent commands");
+  check_eq(stats.retired, std::uint64_t{3}, "finish drains dependent commands");
 }
 
 TEST_CASE(event_backend_finish_drains_pending_work) {
   CountingExecutor executor;
+  UarchStats stats;
   EventUarchBackend backend;
   backend.set_executor(&executor);
+  backend.set_stats(&stats);
 
   backend.dispatch(vec_write(1, 1));
-  check_eq(backend.stats().retired, std::uint64_t{0}, "completion is still pending");
+  check_eq(stats.retired, std::uint64_t{0}, "completion is still pending");
   backend.finish();
-  check_eq(backend.stats().retired, std::uint64_t{1}, "finish drains unissued work");
-}
-
-TEST_CASE(event_backend_retire_scalar_updates_stats) {
-  EventUarchBackend backend;
-
-  backend.retire_scalar();
-
-  check_eq(backend.stats().retired, std::uint64_t{1}, "scalar instruction retires");
-  check_eq(backend.stats().scalar_retired, std::uint64_t{1}, "scalar retire count");
-  check_eq(backend.stats().cycles, std::uint64_t{0}, "retire does not advance time");
+  check_eq(stats.retired, std::uint64_t{1}, "finish drains unissued work");
 }
 
 TEST_CASE(event_backend_reset_clears_timing_state) {
   CountingExecutor executor;
+  UarchStats stats;
   EventUarchBackend backend;
   backend.set_executor(&executor);
+  backend.set_stats(&stats);
 
   backend.dispatch(vec_write(1, 1));
   backend.tick();
   backend.reset();
 
-  check_eq(backend.stats().cycles, std::uint64_t{0}, "reset clears cycles");
-  check_eq(backend.stats().retired, std::uint64_t{0}, "reset clears retired");
-  check(backend.can_dispatch(vec_write(2, 2)), "reset clears queues");
+  check(backend.dispatch(vec_write(2, 2)), "reset clears queues");
 }
 
 TEST_CASE(event_backend_allows_out_of_order_completion) {
   CountingExecutor executor;
+  UarchStats stats;
   EventUarchBackend backend;
   backend.set_executor(&executor);
+  backend.set_stats(&stats);
 
   backend.dispatch(vec_write(1, 1));
   backend.tick();
@@ -208,9 +209,9 @@ TEST_CASE(event_backend_allows_out_of_order_completion) {
   backend.tick();
   backend.finish();
 
-  check_eq(backend.stats().retired, std::uint64_t{2}, "both units retire");
-  check_eq(backend.stats().unit_count[static_cast<std::size_t>(Unit::vec32)], std::uint64_t{1},
+  check_eq(stats.retired, std::uint64_t{2}, "both units retire");
+  check_eq(stats.unit_count[static_cast<std::size_t>(Unit::vec32)], std::uint64_t{1},
            "vector unit count");
-  check_eq(backend.stats().unit_count[static_cast<std::size_t>(Unit::mma)], std::uint64_t{1},
+  check_eq(stats.unit_count[static_cast<std::size_t>(Unit::mma)], std::uint64_t{1},
            "MMA unit count");
 }

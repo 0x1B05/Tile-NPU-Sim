@@ -29,11 +29,13 @@ std::optional<RegisterIndex> scalar_destination(const DecodedNpuInstr &instr) {
 UarchCore::UarchCore(AddressSpace &memory, UarchBackend &backend)
     : memory_(memory), backend_(backend) {
   backend_.set_executor(this);
+  backend_.set_stats(&stats_);
 }
 
 void UarchCore::reset(std::uint64_t entry_pc) {
   state_ = State{};
   state_.scalar.pc = entry_pc;
+  stats_ = {};
   next_id_ = 0;
   in_flight_.clear();
   npu_failure_.reset();
@@ -98,7 +100,8 @@ StepResult UarchCore::frontend_step() {
     }
 
     state_.scalar.pc = execution.redirect.value_or(pc + INSTR_BYTES);
-    backend_.retire_scalar();
+    ++stats_.retired;
+    ++stats_.scalar_retired;
     return {.status = StepStatus::retired, .pc = pc, .instr = instr};
   }
 
@@ -117,7 +120,7 @@ StepResult UarchCore::frontend_step() {
     }
 
     state_.scalar.pc = pc + INSTR_BYTES;
-    backend_.retire_frontend();
+    ++stats_.retired;
     return {.status = StepStatus::retired, .pc = pc, .instr = instr};
   }
 
@@ -140,9 +143,8 @@ StepResult UarchCore::frontend_step() {
 }
 
 void UarchCore::dispatch_timing(const DynInst &inst) {
-  while (!backend_.can_dispatch(inst))
+  while (!backend_.dispatch(inst))
     backend_.advance();
-  backend_.dispatch(inst);
 }
 
 void UarchCore::execute(const DynInst &inst) {
