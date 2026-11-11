@@ -142,7 +142,7 @@ TEST_CASE(event_backend_memory_queue_stalls_behind_blocked_head) {
   check_eq(executor.executed.size(), std::size_t{2}, "blocked head issues after its producer");
   check_eq(executor.executed.back().id, std::uint64_t{2}, "older memory operation issues first");
 
-  backend.finish();
+  backend.drain();
 }
 
 TEST_CASE(event_backend_applies_queue_backpressure) {
@@ -165,11 +165,11 @@ TEST_CASE(event_backend_applies_queue_backpressure) {
   backend.tick();
   check(!backend.dispatch(extra), "MMA queue depth is two");
 
-  backend.finish();
-  check_eq(stats.retired, std::uint64_t{3}, "finish drains dependent commands");
+  backend.drain();
+  check_eq(stats.retired, std::uint64_t{3}, "drain retires dependent commands");
 }
 
-TEST_CASE(event_backend_finish_drains_pending_work) {
+TEST_CASE(event_backend_drain_retires_pending_work) {
   CountingExecutor executor;
   UarchStats stats;
   EventUarchBackend backend;
@@ -178,8 +178,8 @@ TEST_CASE(event_backend_finish_drains_pending_work) {
 
   backend.dispatch(vec_write(1, 1));
   check_eq(stats.retired, std::uint64_t{0}, "completion is still pending");
-  backend.finish();
-  check_eq(stats.retired, std::uint64_t{1}, "finish drains unissued work");
+  backend.drain();
+  check_eq(stats.retired, std::uint64_t{1}, "drain retires unissued work");
 }
 
 TEST_CASE(event_backend_reset_clears_timing_state) {
@@ -207,7 +207,7 @@ TEST_CASE(event_backend_allows_out_of_order_completion) {
   backend.tick();
   backend.dispatch(mma_write(2, 0));
   backend.tick();
-  backend.finish();
+  backend.drain();
 
   check_eq(stats.retired, std::uint64_t{2}, "both units retire");
   check_eq(stats.unit_count[static_cast<std::size_t>(Unit::vec32)], std::uint64_t{1},

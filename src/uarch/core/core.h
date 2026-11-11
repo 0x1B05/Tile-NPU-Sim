@@ -26,7 +26,7 @@ public:
   StepResult run();
 
   // Drains all dispatched work without fetching another instruction.
-  void drain() { backend_.finish(); }
+  void drain() { backend_.drain(); }
 
   State &state() { return state_; }
 

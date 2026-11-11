@@ -35,7 +35,7 @@ public:
   virtual std::uint64_t advance() = 0;
 
   // Drains all dispatched work, including instructions still waiting to issue.
-  virtual void finish() = 0;
+  virtual void drain() = 0;
 };
 
 } // namespace tile_npu

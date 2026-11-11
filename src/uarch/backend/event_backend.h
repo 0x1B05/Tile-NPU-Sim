@@ -32,7 +32,7 @@ public:
 
   std::uint64_t advance() override;
 
-  void finish() override;
+  void drain() override;
 
 private:
   // Issues at most one ready DynInst per unit.

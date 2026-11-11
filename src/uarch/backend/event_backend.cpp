@@ -51,7 +51,7 @@ std::uint64_t EventUarchBackend::advance() {
   return stats.cycles - before;
 }
 
-void EventUarchBackend::finish() {
+void EventUarchBackend::drain() {
   while (!scoreboard_.empty()) {
     if (const auto next = events_.next_time()) events_.run_until(*next);
     issue();

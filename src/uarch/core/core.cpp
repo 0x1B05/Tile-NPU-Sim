@@ -46,7 +46,7 @@ StepResult UarchCore::run() {
   const auto take_failure = [this] {
     const auto failure = *npu_failure_;
     npu_failure_.reset();
-    backend_.finish();
+    backend_.drain();
     npu_failure_.reset();
     return failure;
   };
@@ -56,7 +56,7 @@ StepResult UarchCore::run() {
     if (npu_failure_) return take_failure();
 
     if (result.status != StepStatus::retired) {
-      backend_.finish();
+      backend_.drain();
       if (npu_failure_) return take_failure();
       return result;
     }
@@ -108,7 +108,7 @@ StepResult UarchCore::frontend_step() {
   if (is_frontend_npu(*npu)) {
     // Configuration and system instructions update the architectural state
     // that later DynInsts snapshot, so drain older NPU work first.
-    backend_.finish();
+    backend_.drain();
     if (npu_failure_) return *npu_failure_;
 
     const auto execution = exec_npu_instr(*npu, ctx);
@@ -195,7 +195,7 @@ bool UarchCore::has_pending_scalar_writebacks() const {
 
 void UarchCore::drain_scalar_writebacks() {
   if (!has_pending_scalar_writebacks()) return;
-  backend_.finish();
+  backend_.drain();
   if (has_pending_scalar_writebacks()) {
     unreachable("pending scalar writebacks did not drain");
   }
