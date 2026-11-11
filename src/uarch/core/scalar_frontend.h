@@ -71,7 +71,7 @@ public:
 
   virtual void reset(std::uint64_t entry_pc) = 0;
 
-  virtual FrontendTick tick(FrontendContext &context) = 0;
+  virtual FrontendTick cycle(FrontendContext &context) = 0;
 };
 
 } // namespace tile_npu

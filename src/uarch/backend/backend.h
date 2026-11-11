@@ -27,9 +27,9 @@ public:
   // queue is full.
   virtual bool dispatch(const DynInst &inst) = 0;
 
-  // Advances the machine by one front-end cycle, processing completions and
-  // issuing ready instructions.
-  virtual void tick() = 0;
+  // Performs this backend's work for one cycle. Until the machine loop owns
+  // the clock edge, this still advances the clock by one cycle.
+  virtual void cycle() = 0;
 
   // Advances timing to the next event. Returns elapsed cycles.
   virtual std::uint64_t advance() = 0;

@@ -37,7 +37,7 @@ bool EventUarchBackend::dispatch(const DynInst &inst) {
   return true;
 }
 
-void EventUarchBackend::tick() {
+void EventUarchBackend::cycle() {
   events_.run_until(clock_.now() + 1);
   issue();
   counters().cycles = clock_.now();

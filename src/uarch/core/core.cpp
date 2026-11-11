@@ -33,22 +33,22 @@ StepResult UarchCore::run() {
 
   while (true) {
     FrontendContext context{state_, memory_, dispatcher_, dispatcher_, *this};
-    const auto tick = frontend_->tick(context);
+    const auto cycle = frontend_->cycle(context);
     if (dispatcher_.failure()) return take_failure();
 
-    if (tick.stop) {
+    if (cycle.stop) {
       backend_.drain();
       if (dispatcher_.failure()) return take_failure();
-      return *tick.stop;
+      return *cycle.stop;
     }
 
-    if (tick.scalar_retired) {
+    if (cycle.scalar_retired) {
       ++stats_.retired;
       ++stats_.scalar_retired;
     }
-    if (tick.control_retired) ++stats_.retired;
+    if (cycle.control_retired) ++stats_.retired;
 
-    backend_.tick();
+    backend_.cycle();
     if (dispatcher_.failure()) return take_failure();
   }
 }

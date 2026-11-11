@@ -14,7 +14,7 @@ namespace tile_npu {
 
 void SimpleScalarFrontend::reset(std::uint64_t entry_pc) { (void)entry_pc; }
 
-FrontendTick SimpleScalarFrontend::tick(FrontendContext &context) {
+FrontendTick SimpleScalarFrontend::cycle(FrontendContext &context) {
   const std::uint64_t pc = context.state.scalar.pc;
   std::array<std::byte, static_cast<std::size_t>(INSTR_BYTES)> instr_bytes{};
   if (!context.memory.read(pc, instr_bytes)) {

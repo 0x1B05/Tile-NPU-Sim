@@ -28,7 +28,7 @@ public:
 
   bool dispatch(const DynInst &inst) override;
 
-  void tick() override;
+  void cycle() override;
 
   std::uint64_t advance() override;
 
