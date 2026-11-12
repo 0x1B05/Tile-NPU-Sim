@@ -101,8 +101,8 @@ FrontendTick SimpleScalarFrontend::cycle(FrontendContext &context) {
         .pc = pc, .instr = instr, .decoded = npu, .scalar = context.state.scalar});
   }
 
-  if (!context.npu.dispatch(*pending.request)) {
-    return {.stalled = true, .wait = FrontendWaitReason::npu_dispatch};
+  if (!context.npu.enqueue(*pending.request)) {
+    return {.stalled = true, .wait = FrontendWaitReason::npu_enqueue};
   }
 
   context.state.scalar.pc = pc + INSTR_BYTES;

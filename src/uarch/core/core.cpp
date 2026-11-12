@@ -6,10 +6,31 @@
 #include <utility>
 
 namespace tile_npu {
+namespace {
+
+// NPU scalar writebacks may be in the instruction buffer or already dispatched
+// to the backend. The scalar front end must observe both.
+class NpuWritebackView final : public ScalarWritebackView {
+public:
+  NpuWritebackView(const NpuInstBuffer &buffer, const NpuExecutor &executor)
+      : buffer_(buffer), executor_(executor) {}
+
+  bool pending(RegisterIndex index) const override {
+    return buffer_.pending(index) || executor_.pending(index);
+  }
+
+  bool any_pending() const override { return buffer_.any_pending() || executor_.any_pending(); }
+
+private:
+  const NpuInstBuffer &buffer_;
+  const NpuExecutor &executor_;
+};
+
+} // namespace
 
 UarchCore::UarchCore(AddressSpace &memory, UarchBackend &backend, UarchClock &clock)
-    : memory_(memory), clock_(clock), backend_(backend), npu_executor_(backend, state_, memory_),
-      frontend_(std::make_unique<SimpleScalarFrontend>()) {
+    : memory_(memory), clock_(clock), backend_(backend), inst_buffer_(INST_BUFFER_DEPTH),
+      npu_executor_(backend, state_, memory_), frontend_(std::make_unique<SimpleScalarFrontend>()) {
   backend_.set_executor(&npu_executor_);
   backend_.set_stats(&stats_);
 }
@@ -19,6 +40,7 @@ void UarchCore::reset(std::uint64_t entry_pc) {
   state_.scalar.pc = entry_pc;
   stats_ = {};
   clock_.reset();
+  inst_buffer_.clear();
   npu_executor_.reset();
   frontend_->reset(entry_pc);
   backend_.reset();
@@ -28,6 +50,7 @@ StepResult UarchCore::take_failure() {
   const auto failure = backend_.take_failure();
   if (!failure) unreachable("backend failed without a failure record");
   backend_.abort();
+  inst_buffer_.clear();
   npu_executor_.reset();
   return *failure;
 }
@@ -39,10 +62,14 @@ StepResult UarchCore::run() {
     if (!retry_frontend) {
       backend_.cycle();
       if (backend_.failed()) return take_failure();
+
+      pump_inst_buffer();
+      if (backend_.failed()) return take_failure();
     }
     retry_frontend = false;
 
-    FrontendContext context{state_, memory_, npu_executor_, npu_executor_};
+    NpuWritebackView writeback{inst_buffer_, npu_executor_};
+    FrontendContext context{state_, memory_, inst_buffer_, writeback};
     const auto cycle = frontend_->cycle(context);
     if (backend_.failed()) return take_failure();
 
@@ -50,11 +77,12 @@ StepResult UarchCore::run() {
       switch (cycle.wait) {
       case FrontendWaitReason::scalar_writeback:
       case FrontendWaitReason::backend_barrier:
-        backend_.drain();
+        drain_npu();
         retry_frontend = true;
         break;
-      case FrontendWaitReason::npu_dispatch:
+      case FrontendWaitReason::npu_enqueue:
         backend_.advance();
+        pump_inst_buffer();
         retry_frontend = true;
         break;
       case FrontendWaitReason::none:
@@ -68,7 +96,7 @@ StepResult UarchCore::run() {
     }
 
     if (cycle.stop) {
-      backend_.drain();
+      drain_npu();
       if (backend_.failed()) return take_failure();
       return *cycle.stop;
     }
@@ -83,6 +111,22 @@ StepResult UarchCore::run() {
     stats_.cycles = clock_.now();
     if (backend_.failed()) return take_failure();
   }
+}
+
+void UarchCore::drain() { drain_npu(); }
+
+void UarchCore::pump_inst_buffer() {
+  if (inst_buffer_.empty()) return;
+  if (npu_executor_.dispatch(inst_buffer_.front())) inst_buffer_.pop();
+}
+
+void UarchCore::drain_npu() {
+  while (!inst_buffer_.empty() && !backend_.failed()) {
+    pump_inst_buffer();
+    if (inst_buffer_.empty()) break;
+    backend_.drain();
+  }
+  backend_.drain();
 }
 
 } // namespace tile_npu

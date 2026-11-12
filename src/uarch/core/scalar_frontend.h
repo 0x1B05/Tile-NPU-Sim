@@ -1,32 +1,14 @@
 #pragma once
 
-#include "tile_npu/decode.h"
 #include "tile_npu/platform/address_space.h"
 #include "tile_npu/state.h"
 #include "tile_npu/step.h"
+#include "uarch/dataflow/npu_dispatch.h"
 
 #include <cstdint>
 #include <optional>
 
 namespace tile_npu {
-
-// One backend NPU instruction handed from the scalar front end to the NPU
-// timing domain. The scalar snapshot is taken at the dispatch boundary.
-struct NpuDispatchRequest {
-  std::uint64_t pc = 0;
-  std::uint32_t instr = 0;
-  DecodedNpuInstr decoded;
-  ScalarState scalar;
-};
-
-// Narrow port for handing an NPU instruction to the NPU executor. Returns
-// false without modifying any state when the backend is full.
-class NpuDispatchPort {
-public:
-  virtual ~NpuDispatchPort() = default;
-
-  virtual bool dispatch(const NpuDispatchRequest &request) = 0;
-};
 
 // Scalar-side view of NPU writebacks that are still pending. This is not the
 // NPU scoreboard; it only answers whether a scalar register will be written.
@@ -41,7 +23,7 @@ public:
 struct FrontendContext {
   State &state;
   AddressSpace &memory;
-  NpuDispatchPort &npu;
+  NpuEnqueuePort &npu;
   const ScalarWritebackView &writeback;
 };
 
@@ -49,7 +31,7 @@ enum class FrontendWaitReason : std::uint8_t {
   none,
   scalar_writeback,
   backend_barrier,
-  npu_dispatch,
+  npu_enqueue,
 };
 
 struct FrontendTick {

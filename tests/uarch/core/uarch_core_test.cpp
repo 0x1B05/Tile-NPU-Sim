@@ -5,6 +5,7 @@
 #include "uarch/core/core.h"
 
 #include "units/execute_helpers.h"
+#include "units/mblk_helpers.h"
 #include "units/mma_helpers.h"
 #include "units/move_helpers.h"
 #include "units/row_lane_helpers.h"
@@ -136,7 +137,7 @@ TEST_CASE(uarch_core_overlaps_scalar_with_mma) {
   check_eq(core.stats().scalar_retired, std::uint64_t{1}, "scalar retire count");
   check_eq(core.stats().unit_count[static_cast<std::size_t>(tile_npu::Unit::mma)], std::uint64_t{1},
            "MMA unit count");
-  check_eq(core.stats().cycles, std::uint64_t{11}, "drain waits for the MMA");
+  check_eq(core.stats().cycles, std::uint64_t{12}, "drain waits for the MMA");
 }
 
 TEST_CASE(uarch_core_snapshots_scalar_operands) {
@@ -161,7 +162,7 @@ TEST_CASE(uarch_core_snapshots_scalar_operands) {
   check_eq(core.state().scalar.read_x(1), std::uint64_t{9}, "younger scalar overwrites x1");
   check_eq(core.state().a[0][0], std::uint32_t{5}, "fill uses the dispatch-time scalar value");
   check_eq(core.stats().retired, std::uint64_t{4}, "scalar, MMA, fill, and scalar retire");
-  check_eq(core.stats().cycles, std::uint64_t{14}, "fill drains after the MMA");
+  check_eq(core.stats().cycles, std::uint64_t{15}, "fill drains after the MMA");
 }
 
 TEST_CASE(uarch_core_vextract_writeback_blocks_scalar) {
@@ -185,7 +186,7 @@ TEST_CASE(uarch_core_vextract_writeback_blocks_scalar) {
   check_eq(core.stats().scalar_retired, std::uint64_t{1}, "scalar retire count");
   check_eq(core.stats().unit_count[static_cast<std::size_t>(tile_npu::Unit::vec32)],
            std::uint64_t{1}, "vector unit count");
-  check_eq(core.stats().cycles, std::uint64_t{4}, "scalar waits for the writeback");
+  check_eq(core.stats().cycles, std::uint64_t{5}, "scalar waits for the writeback");
 }
 
 TEST_CASE(uarch_core_scalar_overlaps_unrelated_writeback) {
@@ -207,7 +208,7 @@ TEST_CASE(uarch_core_scalar_overlaps_unrelated_writeback) {
   check_eq(core.state().scalar.read_x(1), std::uint64_t{7}, "unrelated scalar executes early");
   check_eq(core.state().scalar.read_x(2), std::uint64_t{43}, "dependent scalar sees writeback");
   check_eq(core.stats().scalar_retired, std::uint64_t{2}, "two scalars retire");
-  check_eq(core.stats().cycles, std::uint64_t{4}, "unrelated scalar overlaps the writeback");
+  check_eq(core.stats().cycles, std::uint64_t{5}, "unrelated scalar overlaps the writeback");
 }
 
 TEST_CASE(uarch_core_config_barrier_retries_frontend) {
@@ -226,7 +227,7 @@ TEST_CASE(uarch_core_config_barrier_retries_frontend) {
   check_eq(core.stats().retired, std::uint64_t{1}, "config retires after the retry");
 }
 
-TEST_CASE(uarch_core_stalls_npu_dispatch_when_queue_full) {
+TEST_CASE(uarch_core_buffers_npu_dispatch_under_backpressure) {
   tile_npu::Ram memory(CODE_BASE, 32);
   write_word(memory, CODE_BASE, make_mma(0, 0, 0, 16));      // mma.nt.zero a0
   write_word(memory, CODE_BASE + 4, make_mma(1, 0, 0, 16));  // mma.nt.acc a0
@@ -249,6 +250,61 @@ TEST_CASE(uarch_core_stalls_npu_dispatch_when_queue_full) {
            "MMA unit count");
 }
 
+TEST_CASE(uarch_core_inst_buffer_drains_all_npus) {
+  constexpr std::size_t COUNT = 16;
+  tile_npu::Ram memory(CODE_BASE, 4 * (COUNT + 1));
+  for (std::size_t i = 0; i < COUNT; ++i) {
+    write_word(memory, CODE_BASE + 4 * i, make_mma(0, 0, 0, 16));
+  }
+  write_word(memory, CODE_BASE + 4 * COUNT, 0x00100073u); // ebreak
+
+  tile_npu::UarchClock clock;
+  tile_npu::EventUarchBackend backend(clock);
+  tile_npu::UarchCore core(memory, backend, clock);
+  core.reset(CODE_BASE);
+  tile_cfg(core.state(), 0, tile_npu::DType::i8, 4, 8);
+  tile_cfg(core.state(), 16, tile_npu::DType::i8, 5, 8);
+  acc_cfg(core.state(), 0, tile_npu::DType::i32, 4, 5);
+
+  const auto stop = core.run();
+  check_eq(stop.status, tile_npu::StepStatus::breakpoint, "buffered program stops");
+  check_eq(core.stats().retired, std::uint64_t{COUNT}, "all buffered MMAs retire");
+  check_eq(core.stats().unit_count[static_cast<std::size_t>(tile_npu::Unit::mma)],
+           std::uint64_t{COUNT}, "all buffered MMAs complete");
+}
+
+TEST_CASE(uarch_core_config_barrier_flushes_inst_buffer) {
+  tile_npu::Ram memory(CODE_BASE, 0x2010);
+  for (std::size_t i = 0; i < 4; ++i) {
+    write_word(memory, CODE_BASE + 4 * i, make_mma(0, 0, 0, 16));
+  }
+  write_word(memory, CODE_BASE + 16, make_mblk(tile_npu::NpuDomain::tile, 0, 0));
+  write_word(memory, CODE_BASE + 20, 0x603FFF82u); // cfg.seti tm0, base_addr, 32767
+  write_word(memory, CODE_BASE + 24, 0x00100073u); // ebreak
+  write_word(memory, 0x2000, 0x04030201u);
+
+  tile_npu::UarchClock clock;
+  tile_npu::EventUarchBackend backend(clock);
+  tile_npu::UarchCore core(memory, backend, clock);
+  core.reset(CODE_BASE);
+  tile_cfg(core.state(), 0, tile_npu::DType::i8, 1, 4);
+  tile_cfg(core.state(), 16, tile_npu::DType::i8, 5, 4);
+  acc_cfg(core.state(), 0, tile_npu::DType::i32, 1, 5);
+  core.state().tm[0] = tile_npu::MatrixDescriptor{
+      .base_addr = 0x2000,
+      .row_stride_bytes = 4,
+      .col_stride_bytes = 1,
+      .flags = 0,
+  };
+
+  const auto stop = core.run();
+  check_eq(stop.status, tile_npu::StepStatus::breakpoint, "barrier program stops");
+  check_eq(core.state().t[0][0], std::uint8_t{1},
+           "buffered load completes before the descriptor write");
+  check_eq(core.state().tm[0].base_addr, std::uint64_t{32767},
+           "descriptor write retires after the buffered load");
+}
+
 TEST_CASE(uarch_core_waits_for_mma_dependency) {
   tile_npu::Ram memory(CODE_BASE, 16);
   write_word(memory, CODE_BASE, make_mma(0, 0, 0, 16));     // mma.nt.zero a0, t0, t16
@@ -269,5 +325,5 @@ TEST_CASE(uarch_core_waits_for_mma_dependency) {
   check_eq(core.stats().retired, std::uint64_t{2}, "both MMAs complete");
   check_eq(core.stats().unit_count[static_cast<std::size_t>(tile_npu::Unit::mma)], std::uint64_t{2},
            "MMA unit count");
-  check_eq(core.stats().cycles, std::uint64_t{21}, "second MMA completes after the first");
+  check_eq(core.stats().cycles, std::uint64_t{22}, "second MMA completes after the first");
 }

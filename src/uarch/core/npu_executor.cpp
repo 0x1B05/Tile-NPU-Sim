@@ -9,17 +9,6 @@
 #include <utility>
 
 namespace tile_npu {
-namespace {
-
-// Scalar destinations written by NPU instructions. Configuration reads execute
-// in the front end and lane extract is currently the only NPU writer.
-std::optional<RegisterIndex> scalar_destination(const DecodedNpuInstr &instr) {
-  const auto *extract = std::get_if<LaneExtractInstr>(&instr);
-  if (extract == nullptr || extract->dest.index == 0) return std::nullopt;
-  return extract->dest.index;
-}
-
-} // namespace
 
 NpuExecutor::NpuExecutor(UarchBackend &backend, State &state, AddressSpace &memory)
     : backend_(backend), state_(state), memory_(memory) {}

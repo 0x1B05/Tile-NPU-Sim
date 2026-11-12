@@ -14,16 +14,17 @@
 
 namespace tile_npu {
 
-// Owns the NPU instruction window from dispatch through completion. Functional
-// execution happens at issue; scalar writebacks are published at completion.
-class NpuExecutor final : public UarchExecutor, public NpuDispatchPort, public ScalarWritebackView {
+// Owns dispatched NPU instructions from backend accept through completion.
+// Functional execution happens at issue; scalar writebacks are published at
+// completion.
+class NpuExecutor final : public UarchExecutor, public ScalarWritebackView {
 public:
   NpuExecutor(UarchBackend &backend, State &state, AddressSpace &memory);
 
   void reset();
 
   // Returns false without modifying any state when the backend is full.
-  bool dispatch(const NpuDispatchRequest &request) override;
+  bool dispatch(const NpuDispatchRequest &request);
 
   StepResult execute(const DynInst &inst) override;
 
