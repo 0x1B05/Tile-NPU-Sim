@@ -404,3 +404,33 @@ TEST_CASE(uarch_backend_allows_out_of_order_completion) {
   check_eq(stats.unit_count[static_cast<std::size_t>(Unit::mma)], std::uint64_t{1},
            "MMA unit count");
 }
+
+TEST_CASE(uarch_backend_reports_per_unit_outstanding_work) {
+  CountingExecutor executor;
+  UarchStats stats;
+  UarchClock clock;
+  UarchBackend backend(clock, stats, executor);
+
+  check(backend.empty(), "new backend has no work");
+  check(!backend.outstanding(Unit::vec32), "no vec32 work");
+  check(!backend.outstanding(Unit::mma), "no mma work");
+
+  backend.dispatch(vec_write(1, 1));
+  backend.dispatch(mma_write(2, 0));
+
+  check(!backend.empty(), "queued work makes the backend non-empty");
+  check(backend.outstanding(Unit::vec32), "queued vec32 work is outstanding");
+  check(backend.outstanding(Unit::mma), "queued mma work is outstanding");
+
+  next_cycle(backend, clock);
+  backend.advance();
+
+  check(!backend.outstanding(Unit::vec32), "completed vec32 work is no longer outstanding");
+  check(backend.outstanding(Unit::mma), "mma work is still in flight");
+  check(!backend.empty(), "outstanding mma work keeps the backend non-empty");
+
+  backend.drain();
+
+  check(!backend.outstanding(Unit::mma), "drained mma work is no longer outstanding");
+  check(backend.empty(), "drained backend is empty");
+}

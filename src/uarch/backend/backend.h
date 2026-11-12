@@ -32,6 +32,13 @@ public:
   // or the target issue queue is full.
   bool dispatch(const DynInst &inst);
 
+  // True when no dispatched work remains.
+  bool empty() const { return scoreboard_.empty(); }
+
+  // True when the given unit still has dispatched work, including work waiting
+  // in its issue queue.
+  bool outstanding(Unit unit) const;
+
   // Performs this backend's work for the current cycle.
   void cycle();
 

@@ -56,6 +56,13 @@ void UarchBackend::cycle() {
   stats_.cycles = clock_.now();
 }
 
+bool UarchBackend::outstanding(Unit unit) const {
+  for (const auto &pair : scoreboard_.entries()) {
+    if (pair.second.inst.unit == unit) return true;
+  }
+  return false;
+}
+
 std::uint64_t UarchBackend::advance() {
   const auto before = clock_.now();
 
