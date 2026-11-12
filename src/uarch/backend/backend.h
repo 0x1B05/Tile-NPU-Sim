@@ -26,11 +26,8 @@ public:
   // Clears all timing state and any failure, returning to the initial state.
   void reset();
 
-  const UarchStats &stats() const { return stats_; }
-
-  // Attempts to enqueue the DynInst. Returns false when the in-flight capacity
-  // or the target issue queue is full.
-  bool dispatch(const DynInst &inst);
+  // Takes the failure that stopped the backend and resets its timing state.
+  std::optional<StepResult> take_failure();
 
   // True when no dispatched work remains.
   bool empty() const { return scoreboard_.empty(); }
@@ -38,6 +35,12 @@ public:
   // True when the given unit still has dispatched work, including work waiting
   // in its issue queue.
   bool outstanding(Unit unit) const;
+
+  const UarchStats &stats() const { return stats_; }
+
+  // Attempts to enqueue the DynInst. Returns false when the in-flight capacity
+  // or the target issue queue is full.
+  bool dispatch(const DynInst &inst);
 
   // Performs this backend's work for the current cycle.
   void cycle();
@@ -49,18 +52,15 @@ public:
   // Drains all dispatched work, including instructions still waiting to issue.
   void drain();
 
-  // Takes the failure that stopped the backend and resets its timing state.
-  std::optional<StepResult> take_failure();
-
 private:
   // Issues at most one ready DynInst per unit.
   void issue();
 
-  // True when at least one unit has a candidate that can issue this cycle.
-  bool any_issuable() const;
-
   // Oldest issue candidate for a unit, using the unit's issue policy.
   std::optional<std::uint64_t> next_issuable(std::size_t unit) const;
+
+  // True when at least one unit has a candidate that can issue this cycle.
+  bool any_issuable() const;
 
   void complete(std::uint64_t id);
 

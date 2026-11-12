@@ -38,6 +38,13 @@ std::optional<StepResult> UarchBackend::take_failure() {
   return failure;
 }
 
+bool UarchBackend::outstanding(Unit unit) const {
+  for (const auto &pair : scoreboard_.entries()) {
+    if (pair.second.inst.unit == unit) return true;
+  }
+  return false;
+}
+
 bool UarchBackend::dispatch(const DynInst &inst) {
   if (failure_) return false;
 
@@ -54,13 +61,6 @@ void UarchBackend::cycle() {
   events_.run_until(clock_.now());
   issue();
   stats_.cycles = clock_.now();
-}
-
-bool UarchBackend::outstanding(Unit unit) const {
-  for (const auto &pair : scoreboard_.entries()) {
-    if (pair.second.inst.unit == unit) return true;
-  }
-  return false;
 }
 
 std::uint64_t UarchBackend::advance() {
@@ -151,13 +151,6 @@ void UarchBackend::issue() {
   }
 }
 
-bool UarchBackend::any_issuable() const {
-  for (std::size_t unit = 0; unit < queues_.size(); ++unit) {
-    if (next_issuable(unit)) return true;
-  }
-  return false;
-}
-
 std::optional<std::uint64_t> UarchBackend::next_issuable(std::size_t unit) const {
   const auto &queue = queues_[unit];
 
@@ -173,6 +166,13 @@ std::optional<std::uint64_t> UarchBackend::next_issuable(std::size_t unit) const
     if (scoreboard_.ready(id)) return id;
   }
   return std::nullopt;
+}
+
+bool UarchBackend::any_issuable() const {
+  for (std::size_t unit = 0; unit < queues_.size(); ++unit) {
+    if (next_issuable(unit)) return true;
+  }
+  return false;
 }
 
 void UarchBackend::complete(std::uint64_t id) {
