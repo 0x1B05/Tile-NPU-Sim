@@ -9,7 +9,7 @@
 namespace tile_npu {
 namespace {
 
-constexpr std::size_t WINDOW_DEPTH = 32;
+constexpr std::size_t INFLIGHT_CAPACITY = 32;
 
 } // namespace
 
@@ -24,8 +24,8 @@ void UarchBackend::clear_timing_state() {
   scoreboard_.reset();
   for (auto &queue : queues_)
     queue.clear();
-  issue_after_.clear();
-  next_issue_cycle_.fill(0);
+  inst_issue_not_before_.clear();
+  unit_issue_not_before_.fill(0);
 }
 
 void UarchBackend::reset() {
@@ -40,12 +40,10 @@ bool UarchBackend::dispatch(const DynInst &inst) {
 
   const auto unit = static_cast<std::size_t>(inst.unit);
 
-  if (scoreboard_.size() >= WINDOW_DEPTH || !queues_[unit].push(inst.id)) return false;
+  if (scoreboard_.size() >= INFLIGHT_CAPACITY || !queues_[unit].push(inst.id)) return false;
 
   scoreboard_.dispatch(inst);
-  // A newly dispatched instruction becomes eligible on the next cycle without
-  // delaying older entries in the same unit.
-  issue_after_[inst.id] = clock_.now() + 1;
+  inst_issue_not_before_[inst.id] = clock_.now() + 1;
   return true;
 }
 
@@ -123,17 +121,17 @@ void UarchBackend::abort() {
 
 void UarchBackend::issue() {
   for (std::size_t unit = 0; unit < queues_.size(); ++unit) {
-    if (next_issue_cycle_[unit] > clock_.now()) continue;
+    if (unit_issue_not_before_[unit] > clock_.now()) continue;
 
     const auto candidate = next_ready(unit);
     if (!candidate) continue;
 
     const auto id = *candidate;
-    const auto after = issue_after_.find(id);
-    if (after != issue_after_.end() && after->second > clock_.now()) continue;
+    const auto after = inst_issue_not_before_.find(id);
+    if (after != inst_issue_not_before_.end() && after->second > clock_.now()) continue;
 
     queues_[unit].remove(id);
-    issue_after_.erase(id);
+    inst_issue_not_before_.erase(id);
     scoreboard_.mark_issued(id);
 
     const auto result = executor_ == nullptr ? StepResult{.status = StepStatus::retired,
@@ -146,7 +144,7 @@ void UarchBackend::issue() {
     }
 
     events_.schedule(clock_.now() + latency(static_cast<Unit>(unit)), [this, id] { complete(id); });
-    next_issue_cycle_[unit] = clock_.now() + 1;
+    unit_issue_not_before_[unit] = clock_.now() + 1;
   }
 }
 
@@ -181,7 +179,7 @@ void UarchBackend::complete(std::uint64_t id) {
 
   const auto inst = it->second.inst;
   if (!scoreboard_.complete(id)) return;
-  issue_after_.erase(id);
+  inst_issue_not_before_.erase(id);
   if (executor_ != nullptr) executor_->complete(inst);
   auto &stats = counters();
   ++stats.retired;

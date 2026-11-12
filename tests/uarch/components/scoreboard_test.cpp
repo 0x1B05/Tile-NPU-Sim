@@ -136,5 +136,5 @@ TEST_CASE(scoreboard_allows_out_of_order_completion) {
 
   check(scoreboard.complete(2), "complete younger instruction first");
   check(scoreboard.complete(1), "complete older instruction second");
-  check(scoreboard.empty(), "out-of-order completion leaves an empty window");
+  check(scoreboard.empty(), "out-of-order completion leaves an empty scoreboard");
 }

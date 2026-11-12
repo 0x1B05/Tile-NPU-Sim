@@ -11,7 +11,7 @@
 
 namespace tile_npu {
 
-// Register scoreboard and dispatch window for the NPU data domains. The front
+// Register scoreboard and in-flight capacity for the NPU data domains. The front
 // end runs ahead of timing, so hazards are resolved from dispatch-time DynInst
 // snapshots rather than from the live State:
 //   * RAW: a source with a live producer waits for that producer;
@@ -48,7 +48,7 @@ public:
   void mark_issued(std::uint64_t id);
 
   // Releases register references and erases the entry. Returns false when the
-  // id is not in the window (for example a stale event after reset).
+  // id is not in the scoreboard (for example a stale event after reset).
   bool complete(std::uint64_t id);
 
   // Entries in dispatch order.

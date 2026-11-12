@@ -17,30 +17,25 @@
 namespace tile_npu {
 
 // Event-driven NPU timing backend: per-unit issue queues plus a global
-// scoreboard. Dispatch records dependencies; issue selects ready work; a
+// scoreboard. Scoreboard records dependencies; issue selects ready work; a
 // completion event releases dependencies and publishes architectural effects.
-// General queues select the oldest ready entry; the shared DMA queue only
-// considers its oldest valid entry so memory operations issue in program order.
-// Units currently have fixed completion latencies; SRAM and shared-resource
-// models will replace those constants later.
 class UarchBackend {
 public:
   explicit UarchBackend(UarchClock &clock);
 
   void reset();
 
-  // Functional executor used when an instruction issues.
+  // Functional executor used when an instruction issues.(temporarily)
   void set_executor(UarchExecutor *executor) { executor_ = executor; }
 
   // The backend updates cycles and NPU completion counts.
   void set_stats(UarchStats *stats) { stats_ = stats; }
 
-  // Attempts to enqueue the DynInst. Returns false when the in-flight window or
-  // the target issue queue is full.
+  // Attempts to enqueue the DynInst. Returns false when the in-flight capacity
+  // or the target issue queue is full.
   bool dispatch(const DynInst &inst);
 
-  // Performs this backend's work for the current cycle. Does not advance the
-  // clock; the machine model owns the cycle edge.
+  // Performs this backend's work for the current cycle.
   void cycle();
 
   // Advances to the next completion boundary, issuing ready work on the way.
@@ -87,9 +82,9 @@ private:
   std::array<IssueQueue, static_cast<std::size_t>(Unit::count)> queues_;
   // Earliest cycle each dispatched instruction may issue. Dispatch pushes this
   // to now+1 without delaying older entries in the same unit.
-  std::unordered_map<std::uint64_t, UarchClock::Time> issue_after_;
+  std::unordered_map<std::uint64_t, UarchClock::Time> inst_issue_not_before_;
   // Earliest cycle each unit may issue again after an actual issue.
-  std::array<UarchClock::Time, static_cast<std::size_t>(Unit::count)> next_issue_cycle_{};
+  std::array<UarchClock::Time, static_cast<std::size_t>(Unit::count)> unit_issue_not_before_{};
   std::optional<StepResult> failure_;
 };
 
