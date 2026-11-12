@@ -1,5 +1,5 @@
 #include "framework.h"
-#include "uarch/backend/event_backend.h"
+#include "uarch/backend/backend.h"
 #include "uarch/backend/executor.h"
 
 #include <cstdint>
@@ -78,18 +78,18 @@ DynInst dma_load(std::uint64_t id, std::optional<RegisterIndex> src = std::nullo
 }
 
 // Emulates the machine moving to the next cycle before evaluating the backend.
-void next_cycle(EventUarchBackend &backend, UarchClock &clock) {
+void next_cycle(UarchBackend &backend, UarchClock &clock) {
   clock.tick();
   backend.cycle();
 }
 
 } // namespace
 
-TEST_CASE(event_backend_issues_and_completes) {
+TEST_CASE(uarch_backend_issues_and_completes) {
   CountingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  EventUarchBackend backend(clock);
+  UarchBackend backend(clock);
   backend.set_executor(&executor);
   backend.set_stats(&stats);
 
@@ -112,11 +112,11 @@ TEST_CASE(event_backend_issues_and_completes) {
   check_eq(stats.cycles, std::uint64_t{3}, "issue and completion cycles");
 }
 
-TEST_CASE(event_backend_waits_for_raw) {
+TEST_CASE(uarch_backend_waits_for_raw) {
   CountingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  EventUarchBackend backend(clock);
+  UarchBackend backend(clock);
   backend.set_executor(&executor);
   backend.set_stats(&stats);
 
@@ -139,11 +139,11 @@ TEST_CASE(event_backend_waits_for_raw) {
   check_eq(stats.retired, std::uint64_t{2}, "consumer retired later");
 }
 
-TEST_CASE(event_backend_memory_queue_stalls_behind_blocked_head) {
+TEST_CASE(uarch_backend_memory_queue_stalls_behind_blocked_head) {
   CountingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  EventUarchBackend backend(clock);
+  UarchBackend backend(clock);
   backend.set_executor(&executor);
   backend.set_stats(&stats);
 
@@ -172,11 +172,11 @@ TEST_CASE(event_backend_memory_queue_stalls_behind_blocked_head) {
   backend.drain();
 }
 
-TEST_CASE(event_backend_advance_keeps_ready_issue_opportunities) {
+TEST_CASE(uarch_backend_advance_keeps_ready_issue_opportunities) {
   CountingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  EventUarchBackend backend(clock);
+  UarchBackend backend(clock);
   backend.set_executor(&executor);
   backend.set_stats(&stats);
 
@@ -196,11 +196,11 @@ TEST_CASE(event_backend_advance_keeps_ready_issue_opportunities) {
   check_eq(stats.cycles, std::uint64_t{12}, "completion of the second MMA");
 }
 
-TEST_CASE(event_backend_does_not_issue_twice_in_one_cycle) {
+TEST_CASE(uarch_backend_does_not_issue_twice_in_one_cycle) {
   CountingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  EventUarchBackend backend(clock);
+  UarchBackend backend(clock);
   backend.set_executor(&executor);
   backend.set_stats(&stats);
 
@@ -217,11 +217,11 @@ TEST_CASE(event_backend_does_not_issue_twice_in_one_cycle) {
   check_eq(stats.cycles, std::uint64_t{11}, "first MMA completion");
 }
 
-TEST_CASE(event_backend_cycle_then_drain_respects_issue_cycle) {
+TEST_CASE(uarch_backend_cycle_then_drain_respects_issue_cycle) {
   CountingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  EventUarchBackend backend(clock);
+  UarchBackend backend(clock);
   backend.set_executor(&executor);
   backend.set_stats(&stats);
 
@@ -237,11 +237,11 @@ TEST_CASE(event_backend_cycle_then_drain_respects_issue_cycle) {
   check_eq(stats.cycles, std::uint64_t{12}, "second MMA issues on the next cycle");
 }
 
-TEST_CASE(event_backend_advance_stops_at_completion_boundary) {
+TEST_CASE(uarch_backend_advance_stops_at_completion_boundary) {
   CountingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  EventUarchBackend backend(clock);
+  UarchBackend backend(clock);
   backend.set_executor(&executor);
   backend.set_stats(&stats);
 
@@ -263,11 +263,11 @@ TEST_CASE(event_backend_advance_stops_at_completion_boundary) {
   check_eq(stats.cycles, std::uint64_t{6}, "last vector completion");
 }
 
-TEST_CASE(event_backend_advance_single_dispatch) {
+TEST_CASE(uarch_backend_advance_single_dispatch) {
   CountingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  EventUarchBackend backend(clock);
+  UarchBackend backend(clock);
   backend.set_executor(&executor);
   backend.set_stats(&stats);
 
@@ -279,11 +279,11 @@ TEST_CASE(event_backend_advance_single_dispatch) {
   check_eq(stats.cycles, std::uint64_t{3}, "returns at the only completion");
 }
 
-TEST_CASE(event_backend_advance_stops_at_new_earlier_completion) {
+TEST_CASE(uarch_backend_advance_stops_at_new_earlier_completion) {
   CountingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  EventUarchBackend backend(clock);
+  UarchBackend backend(clock);
   backend.set_executor(&executor);
   backend.set_stats(&stats);
 
@@ -305,11 +305,11 @@ TEST_CASE(event_backend_advance_stops_at_new_earlier_completion) {
   check_eq(executor.completed[1].id, std::uint64_t{1}, "MMA completed second");
 }
 
-TEST_CASE(event_backend_new_dispatch_does_not_delay_older_entry) {
+TEST_CASE(uarch_backend_new_dispatch_does_not_delay_older_entry) {
   CountingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  EventUarchBackend backend(clock);
+  UarchBackend backend(clock);
   backend.set_executor(&executor);
   backend.set_stats(&stats);
 
@@ -331,11 +331,11 @@ TEST_CASE(event_backend_new_dispatch_does_not_delay_older_entry) {
   check_eq(stats.cycles, std::uint64_t{12}, "second MMA completion");
 }
 
-TEST_CASE(event_backend_applies_queue_backpressure) {
+TEST_CASE(uarch_backend_applies_queue_backpressure) {
   CountingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  EventUarchBackend backend(clock);
+  UarchBackend backend(clock);
   backend.set_executor(&executor);
   backend.set_stats(&stats);
 
@@ -356,11 +356,11 @@ TEST_CASE(event_backend_applies_queue_backpressure) {
   check_eq(stats.retired, std::uint64_t{3}, "drain retires dependent commands");
 }
 
-TEST_CASE(event_backend_drain_retires_pending_work) {
+TEST_CASE(uarch_backend_drain_retires_pending_work) {
   CountingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  EventUarchBackend backend(clock);
+  UarchBackend backend(clock);
   backend.set_executor(&executor);
   backend.set_stats(&stats);
 
@@ -370,11 +370,11 @@ TEST_CASE(event_backend_drain_retires_pending_work) {
   check_eq(stats.retired, std::uint64_t{1}, "drain retires unissued work");
 }
 
-TEST_CASE(event_backend_stops_on_executor_failure) {
+TEST_CASE(uarch_backend_stops_on_executor_failure) {
   FailingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  EventUarchBackend backend(clock);
+  UarchBackend backend(clock);
   backend.set_executor(&executor);
   backend.set_stats(&stats);
 
@@ -403,11 +403,11 @@ TEST_CASE(event_backend_stops_on_executor_failure) {
   check(backend.dispatch(vec_write(4, 3)), "reset clears the timing state");
 }
 
-TEST_CASE(event_backend_reset_clears_timing_state) {
+TEST_CASE(uarch_backend_reset_clears_timing_state) {
   CountingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  EventUarchBackend backend(clock);
+  UarchBackend backend(clock);
   backend.set_executor(&executor);
   backend.set_stats(&stats);
 
@@ -418,11 +418,11 @@ TEST_CASE(event_backend_reset_clears_timing_state) {
   check(backend.dispatch(vec_write(2, 2)), "reset clears queues");
 }
 
-TEST_CASE(event_backend_allows_out_of_order_completion) {
+TEST_CASE(uarch_backend_allows_out_of_order_completion) {
   CountingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  EventUarchBackend backend(clock);
+  UarchBackend backend(clock);
   backend.set_executor(&executor);
   backend.set_stats(&stats);
 

@@ -1,4 +1,4 @@
-#include "uarch/backend/event_backend.h"
+#include "uarch/backend/backend.h"
 
 #include "utils/common.h"
 
@@ -13,13 +13,13 @@ constexpr std::size_t WINDOW_DEPTH = 32;
 
 } // namespace
 
-EventUarchBackend::EventUarchBackend(UarchClock &clock) : clock_(clock) {
+UarchBackend::UarchBackend(UarchClock &clock) : clock_(clock) {
   for (std::size_t unit = 0; unit < queues_.size(); ++unit) {
     queues_[unit] = IssueQueue(queue_depth(static_cast<Unit>(unit)));
   }
 }
 
-void EventUarchBackend::clear_timing_state() {
+void UarchBackend::clear_timing_state() {
   events_.clear();
   scoreboard_.reset();
   for (auto &queue : queues_)
@@ -28,14 +28,14 @@ void EventUarchBackend::clear_timing_state() {
   next_issue_cycle_.fill(0);
 }
 
-void EventUarchBackend::reset() {
+void UarchBackend::reset() {
   // UarchStats and UarchClock are owned by the machine and reset by its reset
   // path.
   clear_timing_state();
   failure_.reset();
 }
 
-bool EventUarchBackend::dispatch(const DynInst &inst) {
+bool UarchBackend::dispatch(const DynInst &inst) {
   if (failed()) return false;
 
   const auto unit = static_cast<std::size_t>(inst.unit);
@@ -49,13 +49,13 @@ bool EventUarchBackend::dispatch(const DynInst &inst) {
   return true;
 }
 
-void EventUarchBackend::cycle() {
+void UarchBackend::cycle() {
   events_.run_until(clock_.now());
   issue();
   counters().cycles = clock_.now();
 }
 
-std::uint64_t EventUarchBackend::advance() {
+std::uint64_t UarchBackend::advance() {
   const auto before = clock_.now();
 
   while (true) {
@@ -95,7 +95,7 @@ std::uint64_t EventUarchBackend::advance() {
   return clock_.now() - before;
 }
 
-void EventUarchBackend::drain() {
+void UarchBackend::drain() {
   while (!scoreboard_.empty()) {
     events_.run_until(clock_.now());
     issue();
@@ -116,12 +116,12 @@ void EventUarchBackend::drain() {
   counters().cycles = clock_.now();
 }
 
-void EventUarchBackend::abort() {
+void UarchBackend::abort() {
   clear_timing_state();
   failure_.reset();
 }
 
-void EventUarchBackend::issue() {
+void UarchBackend::issue() {
   for (std::size_t unit = 0; unit < queues_.size(); ++unit) {
     if (next_issue_cycle_[unit] > clock_.now()) continue;
 
@@ -150,14 +150,14 @@ void EventUarchBackend::issue() {
   }
 }
 
-bool EventUarchBackend::any_ready_inst() const {
+bool UarchBackend::any_ready_inst() const {
   for (std::size_t unit = 0; unit < queues_.size(); ++unit) {
     if (next_ready(unit)) return true;
   }
   return false;
 }
 
-std::optional<std::uint64_t> EventUarchBackend::next_ready(std::size_t unit) const {
+std::optional<std::uint64_t> UarchBackend::next_ready(std::size_t unit) const {
   const auto &queue = queues_[unit];
 
   if (static_cast<Unit>(unit) == Unit::dma) {
@@ -174,7 +174,7 @@ std::optional<std::uint64_t> EventUarchBackend::next_ready(std::size_t unit) con
   return std::nullopt;
 }
 
-void EventUarchBackend::complete(std::uint64_t id) {
+void UarchBackend::complete(std::uint64_t id) {
   const auto &entries = scoreboard_.entries();
   const auto it = entries.find(id);
   if (it == entries.end()) return;
@@ -188,12 +188,12 @@ void EventUarchBackend::complete(std::uint64_t id) {
   ++stats.unit_count[static_cast<std::size_t>(inst.unit)];
 }
 
-UarchStats &EventUarchBackend::counters() {
+UarchStats &UarchBackend::counters() {
   if (stats_ == nullptr) unreachable("backend stats are not attached");
   return *stats_;
 }
 
-std::size_t EventUarchBackend::queue_depth(Unit unit) {
+std::size_t UarchBackend::queue_depth(Unit unit) {
   switch (unit) {
   case Unit::mma: return 2;
   case Unit::dma: return 16;
@@ -201,7 +201,7 @@ std::size_t EventUarchBackend::queue_depth(Unit unit) {
   }
 }
 
-std::uint64_t EventUarchBackend::latency(Unit unit) {
+std::uint64_t UarchBackend::latency(Unit unit) {
   switch (unit) {
   case Unit::mma: return 10;
   case Unit::dma: return 5;
