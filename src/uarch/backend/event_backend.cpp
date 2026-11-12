@@ -29,8 +29,8 @@ void EventUarchBackend::clear_timing_state() {
 }
 
 void EventUarchBackend::reset() {
-  // UarchStats and UarchClock are owned by the machine and reset by
-  // UarchCore::reset().
+  // UarchStats and UarchClock are owned by the machine and reset by its reset
+  // path.
   clear_timing_state();
   failure_.reset();
 }

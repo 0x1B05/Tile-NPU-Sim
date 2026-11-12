@@ -24,8 +24,8 @@ using ItraceCallback = std::function<void(std::uint64_t pc, std::uint32_t instr,
 #endif
 
 // Functional core: one architectural instruction per step, with no timing
-// model. It shares the ISA layer (decode/execute) with UarchCore, which adds
-// instruction timing on top of the same semantics.
+// model. It shares the ISA layer (decode/execute) with the uarch timing model,
+// which adds instruction timing on top of the same semantics.
 class FuncCore {
 public:
   explicit FuncCore(AddressSpace &memory) : memory_(memory) {}

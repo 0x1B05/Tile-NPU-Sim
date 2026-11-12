@@ -10,9 +10,9 @@
 
 namespace tile_npu {
 
-// Timing backend interface consumed by UarchCore. The core dispatches DynInsts;
-// the backend chooses when they issue and calls the executor at issue and
-// completion.
+// Timing backend interface consumed by the machine model. The machine
+// dispatches DynInsts; the backend chooses when they issue and calls the
+// executor at issue and completion.
 class UarchBackend {
 public:
   virtual ~UarchBackend() = default;
@@ -30,7 +30,7 @@ public:
   virtual bool dispatch(const DynInst &inst) = 0;
 
   // Performs this backend's work for the current cycle. Does not advance the
-  // clock; UarchCore owns the cycle edge.
+  // clock; the machine model owns the cycle edge.
   virtual void cycle() = 0;
 
   // Advances to the next completion boundary, issuing ready work on the way.
