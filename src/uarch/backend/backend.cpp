@@ -79,7 +79,7 @@ std::uint64_t UarchBackend::advance() {
 
     // A unit that issued one instruction may have another ready entry for the
     // next cycle. Do not jump over those issue opportunities.
-    if (any_ready_inst()) {
+    if (any_issuable()) {
       clock_.tick();
       continue;
     }
@@ -109,7 +109,7 @@ void UarchBackend::drain() {
     issue();
     if (scoreboard_.empty()) break;
 
-    if (any_ready_inst()) {
+    if (any_issuable()) {
       clock_.tick();
       continue;
     }
@@ -128,7 +128,7 @@ void UarchBackend::issue() {
   for (std::size_t unit = 0; unit < queues_.size(); ++unit) {
     if (unit_issue_not_before_[unit] > clock_.now()) continue;
 
-    const auto candidate = next_ready(unit);
+    const auto candidate = next_issuable(unit);
     if (!candidate) continue;
 
     const auto id = *candidate;
@@ -151,14 +151,14 @@ void UarchBackend::issue() {
   }
 }
 
-bool UarchBackend::any_ready_inst() const {
+bool UarchBackend::any_issuable() const {
   for (std::size_t unit = 0; unit < queues_.size(); ++unit) {
-    if (next_ready(unit)) return true;
+    if (next_issuable(unit)) return true;
   }
   return false;
 }
 
-std::optional<std::uint64_t> UarchBackend::next_ready(std::size_t unit) const {
+std::optional<std::uint64_t> UarchBackend::next_issuable(std::size_t unit) const {
   const auto &queue = queues_[unit];
 
   if (static_cast<Unit>(unit) == Unit::dma) {

@@ -57,10 +57,10 @@ private:
   void issue();
 
   // True when at least one unit has a candidate that can issue this cycle.
-  bool any_ready_inst() const;
+  bool any_issuable() const;
 
   // Oldest issue candidate for a unit, using the unit's issue policy.
-  std::optional<std::uint64_t> next_ready(std::size_t unit) const;
+  std::optional<std::uint64_t> next_issuable(std::size_t unit) const;
 
   void complete(std::uint64_t id);
 
