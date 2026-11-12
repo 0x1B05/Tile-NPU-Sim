@@ -32,14 +32,12 @@ public:
   // True when no dispatched work remains.
   bool empty() const { return scoreboard_.empty(); }
 
-  // True when the given unit still has dispatched work, including work waiting
-  // in its issue queue.
+  // True when the given unit still has dispatched work.
   bool outstanding(Unit unit) const;
 
   const UarchStats &stats() const { return stats_; }
 
-  // Attempts to enqueue the DynInst. Returns false when the in-flight capacity
-  // or the target issue queue is full.
+  // Returns false when the in-flight capacity or the target issue queue is full.
   bool dispatch(const DynInst &inst);
 
   // Performs this backend's work for the current cycle.
@@ -73,8 +71,7 @@ private:
   EventQueue events_{clock_};
   Scoreboard scoreboard_;
   std::array<IssueQueue, static_cast<std::size_t>(Unit::count)> queues_;
-  // Earliest cycle each dispatched instruction may issue. Dispatch pushes this
-  // to now+1 without delaying older entries in the same unit.
+  // Earliest cycle each dispatched instruction may issue.
   std::unordered_map<std::uint64_t, UarchClock::Time> inst_issue_not_before_;
   // Earliest cycle each unit may issue again after an actual issue.
   std::array<UarchClock::Time, static_cast<std::size_t>(Unit::count)> unit_issue_not_before_{};

@@ -64,12 +64,14 @@ void UarchBackend::cycle() {
 }
 
 std::uint64_t UarchBackend::advance() {
-  const auto before = clock_.now();
+  const auto start = clock_.now();
 
   while (true) {
-    const auto next = events_.next_time();
-    const bool at_event = next && *next <= clock_.now();
+    const auto next_event_time = events_.next_time();
+    // True when this cycle starts with a completion to process.
+    const bool at_event = next_event_time && *next_event_time <= clock_.now();
 
+    // Run every event with when <= now.
     events_.run_until(clock_.now());
     issue();
 
@@ -86,9 +88,9 @@ std::uint64_t UarchBackend::advance() {
 
     // issue() may have scheduled a completion earlier than the snapshot taken
     // at the top of this iteration.
-    const auto next_after_issue = events_.next_time();
+    const auto next_completion_time = events_.next_time();
 
-    if (!next_after_issue) {
+    if (!next_completion_time) {
       if (!scoreboard_.empty()) {
         unreachable("uarch backend cannot make progress");
       }
@@ -96,11 +98,11 @@ std::uint64_t UarchBackend::advance() {
     }
 
     // Jump to the completion boundary; the next iteration processes it.
-    clock_.advance_to(*next_after_issue);
+    clock_.advance_to(*next_completion_time);
   }
 
   stats_.cycles = clock_.now();
-  return clock_.now() - before;
+  return clock_.now() - start;
 }
 
 void UarchBackend::drain() {
@@ -114,8 +116,8 @@ void UarchBackend::drain() {
       continue;
     }
 
-    if (const auto next = events_.next_time()) {
-      events_.run_until(*next);
+    if (const auto next_event_time = events_.next_time()) {
+      events_.run_until(*next_event_time);
       continue;
     }
 
