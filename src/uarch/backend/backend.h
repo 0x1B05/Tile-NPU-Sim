@@ -21,16 +21,12 @@ namespace tile_npu {
 // completion event releases dependencies and publishes architectural effects.
 class UarchBackend {
 public:
-  explicit UarchBackend(UarchClock &clock);
+  UarchBackend(UarchClock &clock, UarchStats &stats, UarchExecutor &executor);
 
   // Clears all timing state and any failure, returning to the initial state.
   void reset();
 
-  // Functional executor used when an instruction issues.(temporarily)
-  void set_executor(UarchExecutor *executor) { executor_ = executor; }
-
-  // The backend updates cycles and NPU completion counts.
-  void set_stats(UarchStats *stats) { stats_ = stats; }
+  const UarchStats &stats() const { return stats_; }
 
   // Attempts to enqueue the DynInst. Returns false when the in-flight capacity
   // or the target issue queue is full.
@@ -61,14 +57,12 @@ private:
 
   void complete(std::uint64_t id);
 
-  UarchStats &counters();
-
   static std::size_t queue_depth(Unit unit);
   static std::uint64_t latency(Unit unit);
 
-  UarchExecutor *executor_ = nullptr;
-  UarchStats *stats_ = nullptr;
   UarchClock &clock_;
+  UarchStats &stats_;
+  UarchExecutor &executor_;
   EventQueue events_{clock_};
   Scoreboard scoreboard_;
   std::array<IssueQueue, static_cast<std::size_t>(Unit::count)> queues_;

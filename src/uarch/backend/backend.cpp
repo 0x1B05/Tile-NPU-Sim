@@ -13,7 +13,8 @@ constexpr std::size_t INFLIGHT_CAPACITY = 32;
 
 } // namespace
 
-UarchBackend::UarchBackend(UarchClock &clock) : clock_(clock) {
+UarchBackend::UarchBackend(UarchClock &clock, UarchStats &stats, UarchExecutor &executor)
+    : clock_(clock), stats_(stats), executor_(executor) {
   for (std::size_t unit = 0; unit < queues_.size(); ++unit) {
     queues_[unit] = IssueQueue(queue_depth(static_cast<Unit>(unit)));
   }
@@ -52,7 +53,7 @@ bool UarchBackend::dispatch(const DynInst &inst) {
 void UarchBackend::cycle() {
   events_.run_until(clock_.now());
   issue();
-  counters().cycles = clock_.now();
+  stats_.cycles = clock_.now();
 }
 
 std::uint64_t UarchBackend::advance() {
@@ -91,7 +92,7 @@ std::uint64_t UarchBackend::advance() {
     clock_.advance_to(*next_after_issue);
   }
 
-  counters().cycles = clock_.now();
+  stats_.cycles = clock_.now();
   return clock_.now() - before;
 }
 
@@ -113,7 +114,7 @@ void UarchBackend::drain() {
 
     unreachable("uarch backend cannot drain dispatched work");
   }
-  counters().cycles = clock_.now();
+  stats_.cycles = clock_.now();
 }
 
 void UarchBackend::issue() {
@@ -131,9 +132,7 @@ void UarchBackend::issue() {
     inst_issue_not_before_.erase(id);
     scoreboard_.mark_issued(id);
 
-    const auto result = executor_ == nullptr ? StepResult{.status = StepStatus::retired,
-                                                          .pc = scoreboard_.inst(id).pc}
-                                             : executor_->execute(scoreboard_.inst(id));
+    const auto result = executor_.execute(scoreboard_.inst(id));
     if (result.status != StepStatus::retired) {
       reset();
       failure_ = result;
@@ -177,15 +176,9 @@ void UarchBackend::complete(std::uint64_t id) {
   const auto inst = it->second.inst;
   if (!scoreboard_.complete(id)) return;
   inst_issue_not_before_.erase(id);
-  if (executor_ != nullptr) executor_->complete(inst);
-  auto &stats = counters();
-  ++stats.retired;
-  ++stats.unit_count[static_cast<std::size_t>(inst.unit)];
-}
-
-UarchStats &UarchBackend::counters() {
-  if (stats_ == nullptr) unreachable("backend stats are not attached");
-  return *stats_;
+  executor_.complete(inst);
+  ++stats_.retired;
+  ++stats_.unit_count[static_cast<std::size_t>(inst.unit)];
 }
 
 std::size_t UarchBackend::queue_depth(Unit unit) {

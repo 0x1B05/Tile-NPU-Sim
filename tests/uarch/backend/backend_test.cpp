@@ -89,9 +89,7 @@ TEST_CASE(uarch_backend_issues_and_completes) {
   CountingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  UarchBackend backend(clock);
-  backend.set_executor(&executor);
-  backend.set_stats(&stats);
+  UarchBackend backend(clock, stats, executor);
 
   const auto write = vec_write(1, 1);
   check(backend.dispatch(write), "vector write fits");
@@ -116,9 +114,7 @@ TEST_CASE(uarch_backend_waits_for_raw) {
   CountingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  UarchBackend backend(clock);
-  backend.set_executor(&executor);
-  backend.set_stats(&stats);
+  UarchBackend backend(clock, stats, executor);
 
   const auto write = mma_write(1, 0);
   const auto read = mma_accumulate(2, 0, 0);
@@ -143,9 +139,7 @@ TEST_CASE(uarch_backend_memory_queue_stalls_behind_blocked_head) {
   CountingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  UarchBackend backend(clock);
-  backend.set_executor(&executor);
-  backend.set_stats(&stats);
+  UarchBackend backend(clock, stats, executor);
 
   backend.dispatch(mma_write(1, 0));
   next_cycle(backend, clock);
@@ -176,9 +170,7 @@ TEST_CASE(uarch_backend_advance_keeps_ready_issue_opportunities) {
   CountingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  UarchBackend backend(clock);
-  backend.set_executor(&executor);
-  backend.set_stats(&stats);
+  UarchBackend backend(clock, stats, executor);
 
   backend.dispatch(mma_write(1, 0));
   backend.dispatch(mma_write(2, 1));
@@ -200,9 +192,7 @@ TEST_CASE(uarch_backend_does_not_issue_twice_in_one_cycle) {
   CountingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  UarchBackend backend(clock);
-  backend.set_executor(&executor);
-  backend.set_stats(&stats);
+  UarchBackend backend(clock, stats, executor);
 
   backend.dispatch(mma_write(1, 0));
   backend.dispatch(mma_write(2, 1));
@@ -221,9 +211,7 @@ TEST_CASE(uarch_backend_cycle_then_drain_respects_issue_cycle) {
   CountingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  UarchBackend backend(clock);
-  backend.set_executor(&executor);
-  backend.set_stats(&stats);
+  UarchBackend backend(clock, stats, executor);
 
   backend.dispatch(mma_write(1, 0));
   backend.dispatch(mma_write(2, 1));
@@ -241,9 +229,7 @@ TEST_CASE(uarch_backend_advance_stops_at_completion_boundary) {
   CountingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  UarchBackend backend(clock);
-  backend.set_executor(&executor);
-  backend.set_stats(&stats);
+  UarchBackend backend(clock, stats, executor);
 
   for (std::uint64_t id = 1; id <= 4; ++id)
     backend.dispatch(vec_write(id, static_cast<RegisterIndex>(id)));
@@ -267,9 +253,7 @@ TEST_CASE(uarch_backend_advance_single_dispatch) {
   CountingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  UarchBackend backend(clock);
-  backend.set_executor(&executor);
-  backend.set_stats(&stats);
+  UarchBackend backend(clock, stats, executor);
 
   backend.dispatch(vec_write(1, 1));
   backend.advance();
@@ -283,9 +267,7 @@ TEST_CASE(uarch_backend_advance_stops_at_new_earlier_completion) {
   CountingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  UarchBackend backend(clock);
-  backend.set_executor(&executor);
-  backend.set_stats(&stats);
+  UarchBackend backend(clock, stats, executor);
 
   backend.dispatch(mma_write(1, 0));
   next_cycle(backend, clock);
@@ -309,9 +291,7 @@ TEST_CASE(uarch_backend_new_dispatch_does_not_delay_older_entry) {
   CountingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  UarchBackend backend(clock);
-  backend.set_executor(&executor);
-  backend.set_stats(&stats);
+  UarchBackend backend(clock, stats, executor);
 
   backend.dispatch(mma_write(1, 0));
   clock.tick();
@@ -335,9 +315,7 @@ TEST_CASE(uarch_backend_applies_queue_backpressure) {
   CountingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  UarchBackend backend(clock);
-  backend.set_executor(&executor);
-  backend.set_stats(&stats);
+  UarchBackend backend(clock, stats, executor);
 
   const auto producer = mma_write(1, 0);
   const auto dependent1 = mma_accumulate(2, 0, 0);
@@ -360,9 +338,7 @@ TEST_CASE(uarch_backend_drain_retires_pending_work) {
   CountingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  UarchBackend backend(clock);
-  backend.set_executor(&executor);
-  backend.set_stats(&stats);
+  UarchBackend backend(clock, stats, executor);
 
   backend.dispatch(vec_write(1, 1));
   check_eq(stats.retired, std::uint64_t{0}, "completion is still pending");
@@ -374,9 +350,7 @@ TEST_CASE(uarch_backend_stops_on_executor_failure) {
   FailingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  UarchBackend backend(clock);
-  backend.set_executor(&executor);
-  backend.set_stats(&stats);
+  UarchBackend backend(clock, stats, executor);
 
   backend.dispatch(vec_write(1, 1));
   backend.dispatch(mma_write(2, 0));
@@ -403,9 +377,7 @@ TEST_CASE(uarch_backend_reset_clears_timing_state) {
   CountingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  UarchBackend backend(clock);
-  backend.set_executor(&executor);
-  backend.set_stats(&stats);
+  UarchBackend backend(clock, stats, executor);
 
   backend.dispatch(vec_write(1, 1));
   next_cycle(backend, clock);
@@ -418,9 +390,7 @@ TEST_CASE(uarch_backend_allows_out_of_order_completion) {
   CountingExecutor executor;
   UarchStats stats;
   UarchClock clock;
-  UarchBackend backend(clock);
-  backend.set_executor(&executor);
-  backend.set_stats(&stats);
+  UarchBackend backend(clock, stats, executor);
 
   backend.dispatch(vec_write(1, 1));
   next_cycle(backend, clock);
