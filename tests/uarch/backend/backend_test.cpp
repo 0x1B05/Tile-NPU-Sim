@@ -387,20 +387,16 @@ TEST_CASE(uarch_backend_stops_on_executor_failure) {
   check_eq(stats.unit_count[static_cast<std::size_t>(Unit::vec32)], std::uint64_t{0},
            "failed instruction has no unit count");
 
-  check(backend.failed(), "executor failure stops the backend");
+  check(!backend.dispatch(vec_write(3, 2)), "failed backend rejects new dispatch");
+
   const auto failure = backend.take_failure();
-  check(failure.has_value(), "failure is retained until abort");
+  check(failure.has_value(), "take_failure reports the failure");
   check_eq(failure->status, StepStatus::invalid_configuration, "failure status");
 
   backend.advance();
   check_eq(executor.executions, std::uint64_t{1}, "failed backend stops issuing");
   check_eq(stats.retired, std::uint64_t{0}, "failed backend does not complete work");
-  check(!backend.dispatch(vec_write(3, 2)), "failed backend rejects new dispatch");
-
-  backend.abort();
-  check(!backend.failed(), "abort clears the failure state");
-  backend.reset();
-  check(backend.dispatch(vec_write(4, 3)), "reset clears the timing state");
+  check(backend.dispatch(vec_write(4, 3)), "take_failure resets the backend");
 }
 
 TEST_CASE(uarch_backend_reset_clears_timing_state) {

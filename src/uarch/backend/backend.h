@@ -23,6 +23,7 @@ class UarchBackend {
 public:
   explicit UarchBackend(UarchClock &clock);
 
+  // Clears all timing state and any failure, returning to the initial state.
   void reset();
 
   // Functional executor used when an instruction issues.(temporarily)
@@ -45,21 +46,12 @@ public:
   // Drains all dispatched work, including instructions still waiting to issue.
   void drain();
 
-  // True after an executor failure stopped the backend.
-  bool failed() const { return failure_.has_value(); }
-
-  // Takes the failure that stopped the backend, if any.
-  std::optional<StepResult> take_failure() { return failure_; }
-
-  // Discards all timing state after an execution failure. Must not run any
-  // further executor callbacks.
-  void abort();
+  // Takes the failure that stopped the backend and resets its timing state.
+  std::optional<StepResult> take_failure();
 
 private:
   // Issues at most one ready DynInst per unit.
   void issue();
-
-  void clear_timing_state();
 
   // True when at least one unit has a candidate that can issue this cycle.
   bool any_ready_inst() const;

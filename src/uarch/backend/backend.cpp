@@ -19,24 +19,26 @@ UarchBackend::UarchBackend(UarchClock &clock) : clock_(clock) {
   }
 }
 
-void UarchBackend::clear_timing_state() {
+void UarchBackend::reset() {
   events_.clear();
   scoreboard_.reset();
   for (auto &queue : queues_)
     queue.clear();
   inst_issue_not_before_.clear();
   unit_issue_not_before_.fill(0);
-}
-
-void UarchBackend::reset() {
-  // UarchStats and UarchClock are owned by the machine and reset by its reset
-  // path.
-  clear_timing_state();
   failure_.reset();
 }
 
+std::optional<StepResult> UarchBackend::take_failure() {
+  if (!failure_) return std::nullopt;
+
+  auto failure = failure_;
+  reset();
+  return failure;
+}
+
 bool UarchBackend::dispatch(const DynInst &inst) {
-  if (failed()) return false;
+  if (failure_) return false;
 
   const auto unit = static_cast<std::size_t>(inst.unit);
 
@@ -114,11 +116,6 @@ void UarchBackend::drain() {
   counters().cycles = clock_.now();
 }
 
-void UarchBackend::abort() {
-  clear_timing_state();
-  failure_.reset();
-}
-
 void UarchBackend::issue() {
   for (std::size_t unit = 0; unit < queues_.size(); ++unit) {
     if (unit_issue_not_before_[unit] > clock_.now()) continue;
@@ -138,8 +135,8 @@ void UarchBackend::issue() {
                                                           .pc = scoreboard_.inst(id).pc}
                                              : executor_->execute(scoreboard_.inst(id));
     if (result.status != StepStatus::retired) {
+      reset();
       failure_ = result;
-      clear_timing_state();
       return;
     }
 
