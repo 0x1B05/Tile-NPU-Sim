@@ -16,11 +16,9 @@ namespace tile_npu {
 
 // Owns the NPU instruction window from dispatch through completion. Functional
 // execution happens at issue; scalar writebacks are published at completion.
-class NpuDispatcher final : public UarchExecutor,
-                            public NpuDispatchPort,
-                            public ScalarWritebackView {
+class NpuExecutor final : public UarchExecutor, public NpuDispatchPort, public ScalarWritebackView {
 public:
-  NpuDispatcher(UarchBackend &backend, State &state, AddressSpace &memory);
+  NpuExecutor(UarchBackend &backend, State &state, AddressSpace &memory);
 
   void reset();
 

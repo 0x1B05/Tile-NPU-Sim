@@ -1,4 +1,4 @@
-#include "uarch/core/npu_dispatcher.h"
+#include "uarch/core/npu_executor.h"
 
 #include "execute/execute.h"
 #include "uarch/dataflow/dyn_inst_builder.h"
@@ -21,15 +21,15 @@ std::optional<RegisterIndex> scalar_destination(const DecodedNpuInstr &instr) {
 
 } // namespace
 
-NpuDispatcher::NpuDispatcher(UarchBackend &backend, State &state, AddressSpace &memory)
+NpuExecutor::NpuExecutor(UarchBackend &backend, State &state, AddressSpace &memory)
     : backend_(backend), state_(state), memory_(memory) {}
 
-void NpuDispatcher::reset() {
+void NpuExecutor::reset() {
   next_id_ = 0;
   in_flight_.clear();
 }
 
-bool NpuDispatcher::dispatch(const NpuDispatchRequest &request) {
+bool NpuExecutor::dispatch(const NpuDispatchRequest &request) {
   const auto id = next_id_;
   const auto inst = make_npu_dyn_inst(id, request.pc, request.decoded, state_);
   if (!backend_.dispatch(inst)) return false;
@@ -47,7 +47,7 @@ bool NpuDispatcher::dispatch(const NpuDispatchRequest &request) {
   return true;
 }
 
-StepResult NpuDispatcher::execute(const DynInst &inst) {
+StepResult NpuExecutor::execute(const DynInst &inst) {
   const auto it = in_flight_.find(inst.id);
   if (it == in_flight_.end()) unreachable("execute of unknown in-flight instruction");
 
@@ -73,7 +73,7 @@ StepResult NpuDispatcher::execute(const DynInst &inst) {
                     .fault_address = execution.fault_address};
 }
 
-void NpuDispatcher::complete(const DynInst &inst) {
+void NpuExecutor::complete(const DynInst &inst) {
   const auto it = in_flight_.find(inst.id);
   if (it == in_flight_.end()) return;
 
@@ -83,14 +83,14 @@ void NpuDispatcher::complete(const DynInst &inst) {
   in_flight_.erase(it);
 }
 
-bool NpuDispatcher::any_pending() const {
+bool NpuExecutor::any_pending() const {
   for (const auto &pair : in_flight_) {
     if (!pair.second.scalar_writes.empty()) return true;
   }
   return false;
 }
 
-bool NpuDispatcher::pending(RegisterIndex index) const {
+bool NpuExecutor::pending(RegisterIndex index) const {
   for (const auto &pair : in_flight_) {
     for (const auto &write : pair.second.scalar_writes) {
       if (write.index == index) return true;

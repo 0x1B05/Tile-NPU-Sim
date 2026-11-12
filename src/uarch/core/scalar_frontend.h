@@ -19,8 +19,8 @@ struct NpuDispatchRequest {
   ScalarState scalar;
 };
 
-// Narrow port for handing an NPU instruction to the dispatcher. Returns false
-// without modifying any state when the backend is full.
+// Narrow port for handing an NPU instruction to the NPU executor. Returns
+// false without modifying any state when the backend is full.
 class NpuDispatchPort {
 public:
   virtual ~NpuDispatchPort() = default;

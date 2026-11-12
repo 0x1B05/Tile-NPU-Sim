@@ -4,7 +4,7 @@
 #include "tile_npu/state.h"
 #include "tile_npu/step.h"
 #include "uarch/backend/backend.h"
-#include "uarch/core/npu_dispatcher.h"
+#include "uarch/core/npu_executor.h"
 #include "uarch/core/scalar_frontend.h"
 #include "uarch/engine/clock.h"
 
@@ -14,7 +14,7 @@
 namespace tile_npu {
 
 // Uarch machine. The scalar frontend owns fetch/decode and program-order
-// scalar/config execution; NpuDispatcher owns backend NPU instructions from
+// scalar/config execution; NpuExecutor owns backend NPU instructions from
 // dispatch through completion.
 class UarchCore final {
 public:
@@ -40,7 +40,7 @@ private:
   UarchStats stats_{};
   UarchClock &clock_;
   UarchBackend &backend_;
-  NpuDispatcher dispatcher_;
+  NpuExecutor npu_executor_;
   std::unique_ptr<ScalarFrontend> frontend_;
 
   StepResult take_failure();

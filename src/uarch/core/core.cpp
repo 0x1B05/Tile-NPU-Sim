@@ -8,9 +8,9 @@
 namespace tile_npu {
 
 UarchCore::UarchCore(AddressSpace &memory, UarchBackend &backend, UarchClock &clock)
-    : memory_(memory), clock_(clock), backend_(backend), dispatcher_(backend, state_, memory_),
+    : memory_(memory), clock_(clock), backend_(backend), npu_executor_(backend, state_, memory_),
       frontend_(std::make_unique<SimpleScalarFrontend>()) {
-  backend_.set_executor(&dispatcher_);
+  backend_.set_executor(&npu_executor_);
   backend_.set_stats(&stats_);
 }
 
@@ -19,7 +19,7 @@ void UarchCore::reset(std::uint64_t entry_pc) {
   state_.scalar.pc = entry_pc;
   stats_ = {};
   clock_.reset();
-  dispatcher_.reset();
+  npu_executor_.reset();
   frontend_->reset(entry_pc);
   backend_.reset();
 }
@@ -28,7 +28,7 @@ StepResult UarchCore::take_failure() {
   const auto failure = backend_.take_failure();
   if (!failure) unreachable("backend failed without a failure record");
   backend_.abort();
-  dispatcher_.reset();
+  npu_executor_.reset();
   return *failure;
 }
 
@@ -42,7 +42,7 @@ StepResult UarchCore::run() {
     }
     retry_frontend = false;
 
-    FrontendContext context{state_, memory_, dispatcher_, dispatcher_};
+    FrontendContext context{state_, memory_, npu_executor_, npu_executor_};
     const auto cycle = frontend_->cycle(context);
     if (backend_.failed()) return take_failure();
 
