@@ -2,14 +2,21 @@
 
 #include "uarch/backend/npu_executor.h"
 #include "uarch/dataflow/dyn_inst_builder.h"
+#include "uarch/dataflow/npu_operands.h"
 
 namespace tile_npu {
 
 UarchFrontend::UarchFrontend(const UarchClock &clock, UarchBackend &backend, State &state,
-                             NpuExecutor &executor)
-    : clock_(clock), backend_(backend), state_(state), executor_(executor) {}
+                             NpuExecutor &executor, ScalarWritebackPort &writeback)
+    : clock_(clock), backend_(backend), state_(state), executor_(executor), writeback_(writeback) {}
 
-bool UarchFrontend::enqueue(InstBuffer::Entry entry) { return inst_buffer_.enqueue(entry); }
+bool UarchFrontend::enqueue(InstBuffer::Entry entry) {
+  if (!inst_buffer_.enqueue(entry)) return false;
+  if (const auto dest = scalar_dest(entry.decoded)) {
+    writeback_.mark_busy(*dest);
+  }
+  return true;
+}
 
 std::size_t UarchFrontend::process_cur_cycle() {
   if (inst_buffer_.empty()) return 0;
@@ -33,6 +40,7 @@ bool UarchFrontend::empty() const { return inst_buffer_.empty(); }
 
 void UarchFrontend::reset() {
   inst_buffer_.clear();
+  writeback_.reset();
   next_id_ = 0;
 }
 

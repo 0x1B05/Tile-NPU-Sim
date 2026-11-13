@@ -3,7 +3,7 @@
 #include "tile_npu/platform/address_space.h"
 #include "tile_npu/state.h"
 #include "uarch/components/inst_buffer.h"
-#include "uarch/components/scalar_scoreboard.h"
+#include "uarch/components/scalar_writeback.h"
 #include "uarch/dataflow/dyn_inst.h"
 #include "uarch/engine/executor.h"
 
@@ -18,7 +18,7 @@ namespace tile_npu {
 // successful backend dispatch through track().
 class NpuExecutor final : public UarchExecutor {
 public:
-  NpuExecutor(State &state, AddressSpace &memory, ScalarScoreboard &scalar_scoreboard);
+  NpuExecutor(State &state, AddressSpace &memory, ScalarWritebackPort &writeback);
 
   void reset();
 
@@ -44,7 +44,7 @@ private:
 
   State &state_;
   AddressSpace &memory_;
-  ScalarScoreboard &scalar_scoreboard_;
+  ScalarWritebackPort &writeback_;
   std::unordered_map<std::uint64_t, InFlightEntry> in_flight_;
 };
 

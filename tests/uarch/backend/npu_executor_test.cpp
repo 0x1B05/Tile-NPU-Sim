@@ -3,6 +3,7 @@
 #include "uarch/backend/backend.h"
 #include "uarch/backend/npu_executor.h"
 #include "uarch/components/scalar_scoreboard.h"
+#include "uarch/components/scalar_writeback.h"
 #include "uarch/dataflow/dyn_inst_builder.h"
 #include "uarch/engine/uarch_driver.h"
 
@@ -38,15 +39,17 @@ TEST_CASE(npu_executor_writes_back_scalar_at_completion) {
 
   Ram memory(0x1000, 0x100);
   ScalarScoreboard scalar_scoreboard;
-  NpuExecutor executor(state, memory, scalar_scoreboard);
+  ScalarWritebackPort writeback(state, scalar_scoreboard);
+  NpuExecutor executor(state, memory, writeback);
   UarchStats stats;
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
-  UarchFrontend frontend(clock, backend, state, executor);
+  UarchFrontend frontend(clock, backend, state, executor, writeback);
   UarchDriver driver(clock, backend, stats, frontend);
 
   const auto entry = lane_extract_entry(state);
   const auto inst = make_npu_dyn_inst(1, entry.pc, entry.decoded, state);
+  scalar_scoreboard.mark_busy(1);
   check(backend.dispatch(inst), "backend accepts the vextract");
   executor.track(inst, entry);
   check(scalar_scoreboard.busy(1), "vextract destination is marked busy");
@@ -62,24 +65,27 @@ TEST_CASE(npu_executor_writes_back_scalar_at_completion) {
   check_eq(stats.retired, std::uint64_t{1}, "vextract retires");
 }
 
-TEST_CASE(npu_executor_reset_releases_tracked_scalar_writebacks) {
+TEST_CASE(npu_executor_reset_clears_in_flight) {
   State state;
   state.vc[0] = Vec32Config{.dtype = DType::i32, .len = 4};
   state.v[0][0] = 42;
 
   Ram memory(0x1000, 0x100);
   ScalarScoreboard scalar_scoreboard;
-  NpuExecutor executor(state, memory, scalar_scoreboard);
+  ScalarWritebackPort writeback(state, scalar_scoreboard);
+  NpuExecutor executor(state, memory, writeback);
   UarchStats stats;
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
 
   const auto entry = lane_extract_entry(state);
   const auto inst = make_npu_dyn_inst(1, entry.pc, entry.decoded, state);
+  scalar_scoreboard.mark_busy(1);
   check(backend.dispatch(inst), "backend accepts the vextract");
   executor.track(inst, entry);
-  check(scalar_scoreboard.busy(1), "destination is busy before reset");
 
   executor.reset();
-  check(!scalar_scoreboard.busy(1), "reset releases tracked scalar writes");
+  // Re-tracking the same id succeeds only if reset cleared the in-flight entry.
+  executor.track(inst, entry);
+  check(scalar_scoreboard.busy(1), "executor reset leaves scoreboard ownership to the frontend");
 }

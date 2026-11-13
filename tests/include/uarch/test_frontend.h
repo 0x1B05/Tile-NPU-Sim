@@ -4,6 +4,7 @@
 #include "uarch/backend/backend.h"
 #include "uarch/backend/npu_executor.h"
 #include "uarch/components/scalar_scoreboard.h"
+#include "uarch/components/scalar_writeback.h"
 #include "uarch/frontend/frontend.h"
 
 namespace tile_npu::test {
@@ -13,8 +14,9 @@ namespace tile_npu::test {
 class TestFrontend {
 public:
   TestFrontend(UarchClock &clock, UarchBackend &backend)
-      : memory_(0x1000, 0x100), executor_(state_, memory_, scalar_scoreboard_),
-        frontend_(clock, backend, state_, executor_) {}
+      : memory_(0x1000, 0x100), writeback_(state_, scalar_scoreboard_),
+        executor_(state_, memory_, writeback_),
+        frontend_(clock, backend, state_, executor_, writeback_) {}
 
   UarchFrontend &frontend() { return frontend_; }
 
@@ -26,6 +28,7 @@ private:
   State state_{};
   Ram memory_;
   ScalarScoreboard scalar_scoreboard_;
+  ScalarWritebackPort writeback_;
   NpuExecutor executor_;
   UarchFrontend frontend_;
 };

@@ -1,32 +1,18 @@
 #include "uarch/backend/npu_executor.h"
 
 #include "execute/execute.h"
+#include "uarch/dataflow/npu_operands.h"
 #include "utils/common.h"
 
 #include <optional>
 #include <utility>
 
 namespace tile_npu {
-namespace {
 
-// Lane extract is currently the only NPU instruction with a scalar destination.
-std::optional<RegisterIndex> scalar_dest(const DecodedNpuInstr &instr) {
-  const auto *extract = std::get_if<LaneExtractInstr>(&instr);
-  if (extract == nullptr || extract->dest.index == 0) return std::nullopt;
-  return extract->dest.index;
-}
+NpuExecutor::NpuExecutor(State &state, AddressSpace &memory, ScalarWritebackPort &writeback)
+    : state_(state), memory_(memory), writeback_(writeback) {}
 
-} // namespace
-
-NpuExecutor::NpuExecutor(State &state, AddressSpace &memory, ScalarScoreboard &scalar_scoreboard)
-    : state_(state), memory_(memory), scalar_scoreboard_(scalar_scoreboard) {}
-
-void NpuExecutor::reset() {
-  for (const auto &pair : in_flight_) {
-    if (pair.second.scalar_write) scalar_scoreboard_.mark_ready(pair.second.scalar_write->index);
-  }
-  in_flight_.clear();
-}
+void NpuExecutor::reset() { in_flight_.clear(); }
 
 void NpuExecutor::track(const DynInst &inst, const InstBuffer::Entry &entry) {
   auto [it, inserted] = in_flight_.emplace(
@@ -35,9 +21,6 @@ void NpuExecutor::track(const DynInst &inst, const InstBuffer::Entry &entry) {
   if (!inserted) unreachable("duplicate in-flight NPU instruction id");
 
   if (const auto dest = scalar_dest(entry.decoded)) {
-    // Temporary owner of the scalar busy bit until the scalar front end marks
-    // it at decode time.
-    scalar_scoreboard_.mark_busy(*dest);
     it->second.scalar_write.emplace(ScalarWrite{.index = *dest});
   }
 }
@@ -72,8 +55,7 @@ void NpuExecutor::complete(const DynInst &inst) {
   if (it == in_flight_.end()) return;
 
   if (const auto &write = it->second.scalar_write; write && write->value) {
-    state_.scalar.write_x(write->index, *write->value);
-    scalar_scoreboard_.mark_ready(write->index);
+    writeback_.write(write->index, *write->value);
   }
   in_flight_.erase(it);
 }

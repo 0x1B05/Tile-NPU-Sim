@@ -3,6 +3,7 @@
 #include "uarch/backend/backend.h"
 #include "uarch/backend/npu_executor.h"
 #include "uarch/components/scalar_scoreboard.h"
+#include "uarch/components/scalar_writeback.h"
 #include "uarch/engine/uarch_driver.h"
 #include "uarch/frontend/frontend.h"
 
@@ -37,14 +38,16 @@ TEST_CASE(uarch_frontend_dispatches_buffer_to_backend) {
 
   Ram memory(0x1000, 0x100);
   ScalarScoreboard scalar_scoreboard;
-  NpuExecutor executor(state, memory, scalar_scoreboard);
+  ScalarWritebackPort writeback(state, scalar_scoreboard);
+  NpuExecutor executor(state, memory, writeback);
   UarchStats stats;
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
-  UarchFrontend frontend(clock, backend, state, executor);
+  UarchFrontend frontend(clock, backend, state, executor, writeback);
   UarchDriver driver(clock, backend, stats, frontend);
 
   check(frontend.enqueue(lane_extract_entry(state)), "frontend accepts the entry");
+  check(scalar_scoreboard.busy(1), "frontend marks the scalar destination busy");
   check(!frontend.empty(), "frontend has buffered work");
 
   driver.advance();
@@ -65,15 +68,18 @@ TEST_CASE(uarch_frontend_dispatches_one_entry_per_cycle) {
 
   Ram memory(0x1000, 0x100);
   ScalarScoreboard scalar_scoreboard;
-  NpuExecutor executor(state, memory, scalar_scoreboard);
+  ScalarWritebackPort writeback(state, scalar_scoreboard);
+  NpuExecutor executor(state, memory, writeback);
   UarchStats stats;
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
-  UarchFrontend frontend(clock, backend, state, executor);
+  UarchFrontend frontend(clock, backend, state, executor, writeback);
   UarchDriver driver(clock, backend, stats, frontend);
 
   check(frontend.enqueue(lane_extract_entry(state, 1)), "first entry is buffered");
   check(frontend.enqueue(lane_extract_entry(state, 2)), "second entry is buffered");
+  check(scalar_scoreboard.busy(1) && scalar_scoreboard.busy(2),
+        "both scalar destinations are marked busy");
 
   driver.single_cycle();
   check(!frontend.empty(), "only one entry leaves the buffer per cycle");
