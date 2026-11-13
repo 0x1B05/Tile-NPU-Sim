@@ -16,12 +16,17 @@
 
 namespace tile_npu {
 
+struct CycleResult {
+  std::size_t issued = 0;
+  std::size_t completed = 0;
+};
+
 // Event-driven NPU timing backend: per-unit issue queues plus a global
 // scoreboard. Scoreboard records dependencies; issue selects ready work; a
 // completion event releases dependencies and publishes architectural effects.
 class UarchBackend {
 public:
-  UarchBackend(UarchClock &clock, UarchStats &stats, UarchExecutor &executor);
+  UarchBackend(const UarchClock &clock, UarchStats &stats, UarchExecutor &executor);
 
   // Clears all timing state and any failure, returning to the initial state.
   void reset();
@@ -40,32 +45,26 @@ public:
   // Returns false when the in-flight capacity or the target issue queue is full.
   bool dispatch(const DynInst &inst);
 
-  // Performs this backend's work for the current cycle.
-  void cycle();
+  // Processes issue first, then completions due in the current cycle.
+  CycleResult process_cur_cycle();
 
-  // Advances to the next completion boundary, issuing ready work on the way.
-  // Returns elapsed cycles.
-  std::uint64_t advance();
-
-  // Drains all dispatched work, including instructions still waiting to issue.
-  void drain();
+  // Earliest time at which the backend may need another cycle of work. Must be
+  // called after process_cur_cycle() for the current time.
+  std::optional<UarchClock::Time> next_activity_time() const;
 
 private:
-  // Issues at most one ready DynInst per unit.
-  void issue();
+  // Issues at most one ready DynInst per unit and returns the issue count.
+  std::size_t issue();
 
   // Oldest issue candidate for a unit, using the unit's issue policy.
   std::optional<std::uint64_t> next_issuable(std::size_t unit) const;
-
-  // True when at least one unit has a candidate that can issue this cycle.
-  bool any_issuable() const;
 
   void complete(std::uint64_t id);
 
   static std::size_t queue_depth(Unit unit);
   static std::uint64_t latency(Unit unit);
 
-  UarchClock &clock_;
+  const UarchClock &clock_;
   UarchStats &stats_;
   UarchExecutor &executor_;
   EventQueue events_;
@@ -75,6 +74,7 @@ private:
   std::unordered_map<std::uint64_t, UarchClock::Time> inst_issue_not_before_;
   // Earliest cycle each unit may issue again after an actual issue.
   std::array<UarchClock::Time, static_cast<std::size_t>(Unit::count)> unit_issue_not_before_{};
+  std::optional<UarchClock::Time> last_processed_cycle_;
   std::optional<StepResult> failure_;
 };
 
