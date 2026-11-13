@@ -2,6 +2,7 @@
 
 #include "utils/common.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -13,7 +14,7 @@ constexpr std::size_t INFLIGHT_CAPACITY = 32;
 
 } // namespace
 
-UarchBackend::UarchBackend(UarchClock &clock, UarchStats &stats, UarchExecutor &executor)
+UarchBackend::UarchBackend(const UarchClock &clock, UarchStats &stats, UarchExecutor &executor)
     : clock_(clock), stats_(stats), executor_(executor) {
   for (std::size_t unit = 0; unit < queues_.size(); ++unit) {
     queues_[unit] = IssueQueue(queue_depth(static_cast<Unit>(unit)));
@@ -27,6 +28,7 @@ void UarchBackend::reset() {
     queue.clear();
   inst_issue_not_before_.clear();
   unit_issue_not_before_.fill(0);
+  last_processed_cycle_.reset();
   failure_.reset();
 }
 
@@ -57,76 +59,44 @@ bool UarchBackend::dispatch(const DynInst &inst) {
   return true;
 }
 
-void UarchBackend::cycle() {
-  events_.run_until(clock_.now());
-  issue();
-  stats_.cycles = clock_.now();
+CycleResult UarchBackend::process_cur_cycle() {
+  CycleResult result;
+  if (failure_) return result;
+
+  result.issued = issue();
+  if (failure_) return result;
+
+  result.completed = events_.run_due(clock_.now());
+  last_processed_cycle_ = clock_.now();
+  return result;
 }
 
-std::uint64_t UarchBackend::advance() {
-  const auto start = clock_.now();
+std::optional<UarchClock::Time> UarchBackend::next_activity_time() const {
+  auto next = events_.next_time();
 
-  while (true) {
-    const auto next_event_time = events_.next_time();
-    // True when this cycle starts with a completion to process.
-    const bool at_event = next_event_time && *next_event_time <= clock_.now();
+  const bool now_processed = last_processed_cycle_ && *last_processed_cycle_ == clock_.now();
+  const auto issue_floor = now_processed ? clock_.now() + 1 : clock_.now();
 
-    // Run every event with when <= now.
-    events_.run_until(clock_.now());
-    issue();
+  for (std::size_t unit = 0; unit < queues_.size(); ++unit) {
+    const auto candidate = next_issuable(unit);
+    if (!candidate) continue;
 
-    // Stop after processing this completion boundary. Remaining ready work
-    // issues on the next advance() call.
-    if (at_event) break;
+    const auto after = inst_issue_not_before_.find(*candidate);
+    if (after == inst_issue_not_before_.end())
+      unreachable("queued instruction has no earliest issue time");
 
-    // A unit that issued one instruction may have another ready entry for the
-    // next cycle. Do not jump over those issue opportunities.
-    if (any_issuable()) {
-      clock_.tick();
-      continue;
-    }
-
-    // issue() may have scheduled a completion earlier than the snapshot taken
-    // at the top of this iteration.
-    const auto next_completion_time = events_.next_time();
-
-    if (!next_completion_time) {
-      if (!scoreboard_.empty()) {
-        unreachable("uarch backend cannot make progress");
-      }
-      break;
-    }
-
-    // Jump to the completion boundary; the next iteration processes it.
-    clock_.advance_to(*next_completion_time);
+    const auto issue_time = std::max({after->second, unit_issue_not_before_[unit], issue_floor});
+    next = next ? std::min(*next, issue_time) : issue_time;
   }
 
-  stats_.cycles = clock_.now();
-  return clock_.now() - start;
+  if (next) return next;
+  if (!scoreboard_.empty()) unreachable("uarch backend cannot make progress");
+  return std::nullopt;
 }
 
-void UarchBackend::drain() {
-  while (!scoreboard_.empty()) {
-    events_.run_until(clock_.now());
-    issue();
-    if (scoreboard_.empty()) break;
+std::size_t UarchBackend::issue() {
+  std::size_t issued = 0;
 
-    if (any_issuable()) {
-      clock_.tick();
-      continue;
-    }
-
-    if (const auto next_event_time = events_.next_time()) {
-      events_.run_until(*next_event_time);
-      continue;
-    }
-
-    unreachable("uarch backend cannot drain dispatched work");
-  }
-  stats_.cycles = clock_.now();
-}
-
-void UarchBackend::issue() {
   for (std::size_t unit = 0; unit < queues_.size(); ++unit) {
     if (unit_issue_not_before_[unit] > clock_.now()) continue;
 
@@ -145,12 +115,15 @@ void UarchBackend::issue() {
     if (result.status != StepStatus::retired) {
       reset();
       failure_ = result;
-      return;
+      return issued;
     }
 
     events_.schedule(clock_.now() + latency(static_cast<Unit>(unit)), [this, id] { complete(id); });
     unit_issue_not_before_[unit] = clock_.now() + 1;
+    ++issued;
   }
+
+  return issued;
 }
 
 std::optional<std::uint64_t> UarchBackend::next_issuable(std::size_t unit) const {
@@ -168,13 +141,6 @@ std::optional<std::uint64_t> UarchBackend::next_issuable(std::size_t unit) const
     if (scoreboard_.ready(id)) return id;
   }
   return std::nullopt;
-}
-
-bool UarchBackend::any_issuable() const {
-  for (std::size_t unit = 0; unit < queues_.size(); ++unit) {
-    if (next_issuable(unit)) return true;
-  }
-  return false;
 }
 
 void UarchBackend::complete(std::uint64_t id) {
