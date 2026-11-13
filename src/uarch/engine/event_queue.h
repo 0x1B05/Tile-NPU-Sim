@@ -2,6 +2,7 @@
 
 #include "uarch/engine/clock.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -10,24 +11,16 @@
 
 namespace tile_npu {
 
-// Deterministic event queue driven by an external UarchClock. Events at the
-// same time run in scheduling order.
 class EventQueue {
 public:
   using Time = UarchClock::Time;
   using Callback = std::function<void()>;
 
-  explicit EventQueue(UarchClock &clock) : clock_(clock) {}
-
-  // Schedules a callback at or after `when`; a time in the past is clamped to
-  // the current clock time.
+  // Schedules a callback at an absolute time.
   void schedule(Time when, Callback callback);
 
-  // Runs every event up to and including `when`, then advances the clock to it.
-  void run_until(Time when);
-
-  // Runs every pending event; the clock ends at the last event time.
-  void drain();
+  // Runs every event due at or before `now` and returns how many ran.
+  std::size_t run_due(Time now);
 
   void clear();
 
@@ -53,7 +46,6 @@ private:
     }
   };
 
-  UarchClock &clock_;
   std::priority_queue<Event, std::vector<Event>, Later> events_;
   std::uint64_t seq_ = 0;
 };

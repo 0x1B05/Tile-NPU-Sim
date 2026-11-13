@@ -58,7 +58,7 @@ bool UarchBackend::dispatch(const DynInst &inst) {
 }
 
 void UarchBackend::cycle() {
-  events_.run_until(clock_.now());
+  events_.run_due(clock_.now());
   issue();
   stats_.cycles = clock_.now();
 }
@@ -71,8 +71,8 @@ std::uint64_t UarchBackend::advance() {
     // True when this cycle starts with a completion to process.
     const bool at_event = next_event_time && *next_event_time <= clock_.now();
 
-    // Run every event with when <= now.
-    events_.run_until(clock_.now());
+    // Fire every event scheduled exactly at the current clock time.
+    events_.run_due(clock_.now());
     issue();
 
     // Stop after processing this completion boundary. Remaining ready work
@@ -107,7 +107,7 @@ std::uint64_t UarchBackend::advance() {
 
 void UarchBackend::drain() {
   while (!scoreboard_.empty()) {
-    events_.run_until(clock_.now());
+    events_.run_due(clock_.now());
     issue();
     if (scoreboard_.empty()) break;
 
@@ -117,7 +117,7 @@ void UarchBackend::drain() {
     }
 
     if (const auto next_event_time = events_.next_time()) {
-      events_.run_until(*next_event_time);
+      clock_.advance_to(*next_event_time);
       continue;
     }
 

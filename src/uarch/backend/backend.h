@@ -68,7 +68,7 @@ private:
   UarchClock &clock_;
   UarchStats &stats_;
   UarchExecutor &executor_;
-  EventQueue events_{clock_};
+  EventQueue events_;
   Scoreboard scoreboard_;
   std::array<IssueQueue, static_cast<std::size_t>(Unit::count)> queues_;
   // Earliest cycle each dispatched instruction may issue.
