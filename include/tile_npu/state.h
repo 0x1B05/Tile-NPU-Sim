@@ -80,11 +80,7 @@ public:
 
   std::uint64_t read_x(std::size_t index) const { return index == 0 ? 0 : x_.at(index); }
 
-  void write_x(std::size_t index, std::uint64_t value) {
-    if (index != 0) {
-      x_.at(index) = value;
-    }
-  }
+  void write_x(std::size_t index, std::uint64_t value) { x_.at(index) = index == 0 ? 0 : value; }
 
 private:
   std::array<std::uint64_t, SCALAR_REGISTERS> x_{};

@@ -1,11 +1,11 @@
 #pragma once
 
 #include "tile_npu/step.h"
-#include "uarch/backend/executor.h"
 #include "uarch/components/issue_queue.h"
 #include "uarch/components/scoreboard.h"
 #include "uarch/dataflow/dyn_inst.h"
 #include "uarch/engine/event_queue.h"
+#include "uarch/engine/executor.h"
 #include "uarch/uarch_stats.h"
 
 #include <array>
