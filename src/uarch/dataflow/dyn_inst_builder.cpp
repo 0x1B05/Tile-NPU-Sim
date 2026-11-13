@@ -1,7 +1,7 @@
 #include "uarch/dataflow/dyn_inst_builder.h"
 
 #include "domain.h"
-#include "uarch/frontend.h"
+#include "uarch/frontend/frontend.h"
 #include "utils/common.h"
 
 #include <algorithm>

@@ -2,6 +2,7 @@
 
 #include "uarch/backend/backend.h"
 #include "uarch/engine/clock.h"
+#include "uarch/frontend/frontend.h"
 #include "uarch/uarch_stats.h"
 
 namespace tile_npu {
@@ -10,7 +11,7 @@ namespace tile_npu {
 // process the current cycle and report their next activity time.
 class UarchDriver {
 public:
-  UarchDriver(UarchClock &clock, UarchBackend &backend, UarchStats &stats);
+  UarchDriver(UarchClock &clock, UarchBackend &backend, UarchStats &stats, UarchFrontend &frontend);
 
   // Processes the current cycle and advances one clock edge.
   void single_cycle();
@@ -27,9 +28,13 @@ private:
   // Processes the current cycle at most once.
   CycleResult ensure_cycle_processed();
 
+  // Earliest time at which any attached component may need work.
+  std::optional<UarchClock::Time> next_activity_time() const;
+
   UarchClock &clock_;
   UarchBackend &backend_;
   UarchStats &stats_;
+  UarchFrontend &frontend_;
   bool processed_ = false;
 };
 

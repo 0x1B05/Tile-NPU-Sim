@@ -2,7 +2,7 @@
 
 #include "framework.h"
 #include "uarch/dataflow/dyn_inst.h"
-#include "uarch/frontend.h"
+#include "uarch/frontend/frontend.h"
 
 #include <cstdint>
 

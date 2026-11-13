@@ -39,6 +39,40 @@ private:
   const UarchClock &clock_;
 };
 
+class NoopFrontend final : public UarchFrontend {
+public:
+  std::size_t process_cur_cycle() override { return 0; }
+
+  std::optional<UarchClock::Time> next_activity_time() const override { return std::nullopt; }
+
+  bool empty() const override { return true; }
+};
+
+class FakeFrontend final : public UarchFrontend {
+public:
+  FakeFrontend(const UarchClock &clock, std::size_t cycles) : clock_(clock), cycles_(cycles) {}
+
+  std::size_t process_cur_cycle() override {
+    ++processed;
+    if (processed >= cycles_) empty_ = true;
+    return 0;
+  }
+
+  std::optional<UarchClock::Time> next_activity_time() const override {
+    if (empty_) return std::nullopt;
+    return clock_.now() + 1;
+  }
+
+  bool empty() const override { return empty_; }
+
+  std::size_t processed = 0;
+
+private:
+  const UarchClock &clock_;
+  std::size_t cycles_;
+  bool empty_ = false;
+};
+
 struct RunResult {
   Timeline issued;
   Timeline completed;
@@ -91,7 +125,8 @@ RunResult run_sequence(RunMode mode) {
   UarchStats stats;
   TimedExecutor executor(clock);
   UarchBackend backend(clock, stats, executor);
-  UarchDriver driver(clock, backend, stats);
+  NoopFrontend frontend;
+  UarchDriver driver(clock, backend, stats, frontend);
 
   backend.dispatch(mma_write(1, 0));
   backend.dispatch(mma_accumulate(2, 0, 0));
@@ -118,7 +153,8 @@ TEST_CASE(uarch_driver_single_cycle_steps_time) {
   UarchStats stats;
   TimedExecutor executor(clock);
   UarchBackend backend(clock, stats, executor);
-  UarchDriver driver(clock, backend, stats);
+  NoopFrontend frontend;
+  UarchDriver driver(clock, backend, stats, frontend);
 
   backend.dispatch(vec_write(1, 1));
 
@@ -143,7 +179,8 @@ TEST_CASE(uarch_driver_advance_stops_at_completion) {
   UarchStats stats;
   TimedExecutor executor(clock);
   UarchBackend backend(clock, stats, executor);
-  UarchDriver driver(clock, backend, stats);
+  NoopFrontend frontend;
+  UarchDriver driver(clock, backend, stats, frontend);
 
   backend.dispatch(mma_write(1, 0));
   backend.dispatch(mma_write(2, 1));
@@ -163,7 +200,8 @@ TEST_CASE(uarch_driver_drain_empties_backend) {
   UarchStats stats;
   TimedExecutor executor(clock);
   UarchBackend backend(clock, stats, executor);
-  UarchDriver driver(clock, backend, stats);
+  NoopFrontend frontend;
+  UarchDriver driver(clock, backend, stats, frontend);
 
   backend.dispatch(vec_write(1, 1));
   driver.drain();
@@ -171,6 +209,20 @@ TEST_CASE(uarch_driver_drain_empties_backend) {
   check_eq(clock.now(), UarchClock::Time{3}, "drain reaches the completion");
   check_eq(stats.retired, std::uint64_t{1}, "drain retires the instruction");
   check(backend.empty(), "backend is empty after drain");
+}
+
+TEST_CASE(uarch_driver_advances_frontend_activity) {
+  UarchClock clock;
+  UarchStats stats;
+  TimedExecutor executor(clock);
+  UarchBackend backend(clock, stats, executor);
+  FakeFrontend frontend(clock, 2);
+  UarchDriver driver(clock, backend, stats, frontend);
+
+  driver.advance();
+
+  check_eq(frontend.processed, std::size_t{2}, "frontend processes both activity points");
+  check_eq(clock.now(), UarchClock::Time{1}, "driver stops after frontend work");
 }
 
 TEST_CASE(uarch_driver_run_modes_match_timeline) {
