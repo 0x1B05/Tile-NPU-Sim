@@ -13,15 +13,6 @@ using namespace tile_npu::test;
 
 namespace {
 
-class NoopFrontend final : public UarchFrontend {
-public:
-  std::size_t process_cur_cycle() override { return 0; }
-
-  std::optional<UarchClock::Time> next_activity_time() const override { return std::nullopt; }
-
-  bool empty() const override { return true; }
-};
-
 InstBuffer::Entry lane_extract_entry(const State &state) {
   LaneExtractInstr extract;
   extract.dest.index = 1;
@@ -51,7 +42,7 @@ TEST_CASE(npu_executor_writes_back_scalar_at_completion) {
   UarchStats stats;
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
-  NoopFrontend frontend;
+  UarchFrontend frontend(clock, backend, state, executor);
   UarchDriver driver(clock, backend, stats, frontend);
 
   const auto entry = lane_extract_entry(state);

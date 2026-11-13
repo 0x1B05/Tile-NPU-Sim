@@ -1,16 +1,23 @@
 #pragma once
 
 #include "tile_npu/decode.h"
+#include "tile_npu/state.h"
+#include "uarch/backend/backend.h"
+#include "uarch/components/inst_buffer.h"
 #include "uarch/engine/clock.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <type_traits>
 #include <variant>
 
 namespace tile_npu {
 
-// NPU-space instructions that execute in the scalar front end.
+class NpuExecutor;
+
+// NPU-space instructions that execute in the scalar front end. They update
+// architectural state directly and never produce a DynInst for the backend.
 template <typename T>
 inline constexpr bool is_frontend_npu_v =
     std::is_same_v<T, CfgSetiInstr> || std::is_same_v<T, CfgSetxInstr> ||
@@ -24,15 +31,28 @@ inline bool is_frontend_npu(const DecodedNpuInstr &instr) {
       instr);
 }
 
-class UarchFrontend {
+// Concrete NPU front end: buffers admitted instructions and dispatches at most
+// one into the backend each cycle. The driver owns time; this class only
+// processes the current cycle and reports its next activity.
+class UarchFrontend final {
 public:
-  virtual ~UarchFrontend() = default;
+  UarchFrontend(const UarchClock &clock, UarchBackend &backend, State &state,
+                NpuExecutor &executor);
 
-  // process_cur_cycle() runs at clock.now() and returns the number of completed instructions;
-  virtual std::size_t process_cur_cycle() = 0;
-  // next_activity_time() reports the next time the front end may need another cycle.
-  virtual std::optional<UarchClock::Time> next_activity_time() const = 0;
-  virtual bool empty() const = 0;
+  bool enqueue(InstBuffer::Entry entry);
+
+  std::size_t process_cur_cycle();
+  std::optional<UarchClock::Time> next_activity_time() const;
+  bool empty() const;
+  void reset();
+
+private:
+  const UarchClock &clock_;
+  UarchBackend &backend_;
+  State &state_;
+  NpuExecutor &executor_;
+  InstBuffer inst_buffer_;
+  std::uint64_t next_id_ = 0;
 };
 
 } // namespace tile_npu

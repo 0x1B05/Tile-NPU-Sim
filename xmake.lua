@@ -96,7 +96,7 @@ target("uarch_core", function()
 	set_kind("static")
 	set_default(false)
 	add_deps("isa_core")
-	add_files("src/uarch/backend/*.cpp", "src/uarch/dataflow/*.cpp",
+	add_files("src/uarch/backend/*.cpp", "src/uarch/frontend/*.cpp", "src/uarch/dataflow/*.cpp",
 		"src/uarch/components/*.cpp", "src/uarch/engine/*.cpp")
 	add_includedirs("src", "include")
 end)
@@ -115,7 +115,8 @@ target("uarch_tests", function()
 	set_default(false)
 	add_deps("func_core", "uarch_core")
 	add_files("tests/units/main.cpp", "tests/uarch/dataflow/*.cpp",
-		"tests/uarch/backend/*.cpp", "tests/uarch/components/*.cpp", "tests/uarch/engine/*.cpp")
+		"tests/uarch/backend/*.cpp", "tests/uarch/frontend/*.cpp", "tests/uarch/components/*.cpp",
+		"tests/uarch/engine/*.cpp")
 	add_includedirs("src", "tests/include")
 	add_tests("uarch")
 end)

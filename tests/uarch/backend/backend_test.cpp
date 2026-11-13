@@ -2,12 +2,14 @@
 #include "uarch/backend/backend.h"
 #include "uarch/engine/executor.h"
 #include "uarch/engine/uarch_driver.h"
+#include "uarch/test_frontend.h"
 
 #include <cstdint>
 #include <optional>
 #include <vector>
 
 using namespace tile_npu;
+using namespace tile_npu::test;
 
 namespace {
 
@@ -33,15 +35,6 @@ public:
   }
 
   std::uint64_t executions = 0;
-};
-
-class NoopFrontend final : public UarchFrontend {
-public:
-  std::size_t process_cur_cycle() override { return 0; }
-
-  std::optional<UarchClock::Time> next_activity_time() const override { return std::nullopt; }
-
-  bool empty() const override { return true; }
 };
 
 DynInst vec_write(std::uint64_t id, RegisterIndex dst) {
@@ -95,8 +88,8 @@ TEST_CASE(uarch_backend_issues_and_completes) {
   UarchStats stats;
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
-  NoopFrontend frontend;
-  UarchDriver driver(clock, backend, stats, frontend);
+  TestFrontend frontend(clock, backend);
+  UarchDriver driver(clock, backend, stats, frontend.frontend());
 
   backend.dispatch(vec_write(1, 1));
   check_eq(executor.executed.size(), std::size_t{0}, "dispatch does not issue");
@@ -117,8 +110,8 @@ TEST_CASE(uarch_backend_waits_for_raw) {
   UarchStats stats;
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
-  NoopFrontend frontend;
-  UarchDriver driver(clock, backend, stats, frontend);
+  TestFrontend frontend(clock, backend);
+  UarchDriver driver(clock, backend, stats, frontend.frontend());
 
   backend.dispatch(mma_write(1, 0));
   driver.single_cycle(); // process cycle 0
@@ -143,8 +136,8 @@ TEST_CASE(uarch_backend_memory_queue_stalls_behind_blocked_head) {
   UarchStats stats;
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
-  NoopFrontend frontend;
-  UarchDriver driver(clock, backend, stats, frontend);
+  TestFrontend frontend(clock, backend);
+  UarchDriver driver(clock, backend, stats, frontend.frontend());
 
   backend.dispatch(mma_write(1, 0));
   driver.single_cycle();
@@ -172,8 +165,8 @@ TEST_CASE(uarch_backend_advance_keeps_ready_issue_opportunities) {
   UarchStats stats;
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
-  NoopFrontend frontend;
-  UarchDriver driver(clock, backend, stats, frontend);
+  TestFrontend frontend(clock, backend);
+  UarchDriver driver(clock, backend, stats, frontend.frontend());
 
   backend.dispatch(mma_write(1, 0));
   backend.dispatch(mma_write(2, 1));
@@ -206,8 +199,8 @@ TEST_CASE(uarch_backend_does_not_issue_twice_in_one_cycle) {
   backend.process_cur_cycle();
   check_eq(executor.executed.size(), std::size_t{1}, "reprocessing the same cycle issues none");
 
-  NoopFrontend frontend;
-  UarchDriver driver(clock, backend, stats, frontend);
+  TestFrontend frontend(clock, backend);
+  UarchDriver driver(clock, backend, stats, frontend.frontend());
   driver.advance();
   check_eq(executor.executed.size(), std::size_t{2}, "second MMA issues on the next cycle");
   check_eq(stats.retired, std::uint64_t{1}, "only the first MMA completes at cycle 11");
@@ -219,8 +212,8 @@ TEST_CASE(uarch_backend_cycle_then_drain_respects_issue_cycle) {
   UarchStats stats;
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
-  NoopFrontend frontend;
-  UarchDriver driver(clock, backend, stats, frontend);
+  TestFrontend frontend(clock, backend);
+  UarchDriver driver(clock, backend, stats, frontend.frontend());
 
   backend.dispatch(mma_write(1, 0));
   backend.dispatch(mma_write(2, 1));
@@ -239,8 +232,8 @@ TEST_CASE(uarch_backend_advance_stops_at_completion_boundary) {
   UarchStats stats;
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
-  NoopFrontend frontend;
-  UarchDriver driver(clock, backend, stats, frontend);
+  TestFrontend frontend(clock, backend);
+  UarchDriver driver(clock, backend, stats, frontend.frontend());
 
   for (std::uint64_t id = 1; id <= 4; ++id)
     backend.dispatch(vec_write(id, static_cast<RegisterIndex>(id)));
@@ -265,8 +258,8 @@ TEST_CASE(uarch_backend_advance_single_dispatch) {
   UarchStats stats;
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
-  NoopFrontend frontend;
-  UarchDriver driver(clock, backend, stats, frontend);
+  TestFrontend frontend(clock, backend);
+  UarchDriver driver(clock, backend, stats, frontend.frontend());
 
   backend.dispatch(vec_write(1, 1));
   driver.advance();
@@ -281,8 +274,8 @@ TEST_CASE(uarch_backend_advance_stops_at_new_earlier_completion) {
   UarchStats stats;
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
-  NoopFrontend frontend;
-  UarchDriver driver(clock, backend, stats, frontend);
+  TestFrontend frontend(clock, backend);
+  UarchDriver driver(clock, backend, stats, frontend.frontend());
 
   backend.dispatch(mma_write(1, 0));
   driver.single_cycle();
@@ -306,8 +299,8 @@ TEST_CASE(uarch_backend_new_dispatch_does_not_delay_older_entry) {
   UarchStats stats;
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
-  NoopFrontend frontend;
-  UarchDriver driver(clock, backend, stats, frontend);
+  TestFrontend frontend(clock, backend);
+  UarchDriver driver(clock, backend, stats, frontend.frontend());
 
   backend.dispatch(mma_write(1, 0));
   driver.single_cycle(); // now = 1
@@ -331,8 +324,8 @@ TEST_CASE(uarch_backend_applies_queue_backpressure) {
   UarchStats stats;
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
-  NoopFrontend frontend;
-  UarchDriver driver(clock, backend, stats, frontend);
+  TestFrontend frontend(clock, backend);
+  UarchDriver driver(clock, backend, stats, frontend.frontend());
 
   backend.dispatch(mma_write(1, 0));
   driver.single_cycle();
@@ -353,8 +346,8 @@ TEST_CASE(uarch_backend_drain_retires_pending_work) {
   UarchStats stats;
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
-  NoopFrontend frontend;
-  UarchDriver driver(clock, backend, stats, frontend);
+  TestFrontend frontend(clock, backend);
+  UarchDriver driver(clock, backend, stats, frontend.frontend());
 
   backend.dispatch(vec_write(1, 1));
   check_eq(stats.retired, std::uint64_t{0}, "completion is still pending");
@@ -367,8 +360,8 @@ TEST_CASE(uarch_backend_stops_on_executor_failure) {
   UarchStats stats;
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
-  NoopFrontend frontend;
-  UarchDriver driver(clock, backend, stats, frontend);
+  TestFrontend frontend(clock, backend);
+  UarchDriver driver(clock, backend, stats, frontend.frontend());
 
   backend.dispatch(vec_write(1, 1));
   backend.dispatch(mma_write(2, 0));
@@ -387,7 +380,7 @@ TEST_CASE(uarch_backend_stops_on_executor_failure) {
   check_eq(failure->status, StepStatus::invalid_configuration, "failure status");
 
   check(backend.dispatch(vec_write(4, 3)), "take_failure resets the backend");
-  UarchDriver recovered(clock, backend, stats, frontend);
+  UarchDriver recovered(clock, backend, stats, frontend.frontend());
   recovered.drain();
   check_eq(stats.retired, std::uint64_t{1}, "recovered backend retires new work");
 }
@@ -397,8 +390,8 @@ TEST_CASE(uarch_backend_reset_clears_timing_state) {
   UarchStats stats;
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
-  NoopFrontend frontend;
-  UarchDriver driver(clock, backend, stats, frontend);
+  TestFrontend frontend(clock, backend);
+  UarchDriver driver(clock, backend, stats, frontend.frontend());
 
   backend.dispatch(vec_write(1, 1));
   driver.single_cycle();
@@ -412,8 +405,8 @@ TEST_CASE(uarch_backend_allows_out_of_order_completion) {
   UarchStats stats;
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
-  NoopFrontend frontend;
-  UarchDriver driver(clock, backend, stats, frontend);
+  TestFrontend frontend(clock, backend);
+  UarchDriver driver(clock, backend, stats, frontend.frontend());
 
   backend.dispatch(vec_write(1, 1));
   driver.single_cycle();
@@ -433,8 +426,8 @@ TEST_CASE(uarch_backend_reports_per_unit_outstanding_work) {
   UarchStats stats;
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
-  NoopFrontend frontend;
-  UarchDriver driver(clock, backend, stats, frontend);
+  TestFrontend frontend(clock, backend);
+  UarchDriver driver(clock, backend, stats, frontend.frontend());
 
   check(backend.empty(), "new backend has no work");
   check(!backend.outstanding(Unit::vec32), "no vec32 work");
