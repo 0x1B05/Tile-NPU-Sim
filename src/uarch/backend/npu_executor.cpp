@@ -31,11 +31,11 @@ StepResult NpuExecutor::execute(const DynInst &inst) {
 
   auto &entry = it->second;
 
-  // Execute against the scalar values captured when the instruction entered
-  // the NPU. Configuration and descriptors remain live until the scalar core
-  // starts carrying configuration snapshots.
+  // Override the scalar inputs with the values captured at admission, then
+  // restore the live register file after execution. Configuration and
+  // descriptors remain live until the scalar core carries snapshots.
   const auto live_scalar = state_.scalar;
-  state_.scalar = entry.scalar;
+  apply_scalar_operands(state_.scalar, entry.scalar);
 
   ExecContext ctx{state_, memory_};
   const auto execution = exec_npu_instr(entry.decoded, ctx);

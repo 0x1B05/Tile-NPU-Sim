@@ -4,6 +4,7 @@
 #include "uarch/backend/npu_executor.h"
 #include "uarch/components/scalar_scoreboard.h"
 #include "uarch/components/scalar_writeback.h"
+#include "uarch/dataflow/npu_operands.h"
 #include "uarch/engine/uarch_driver.h"
 #include "uarch/frontend/frontend.h"
 
@@ -24,7 +25,7 @@ InstBuffer::Entry lane_extract_entry(const State &state, RegisterIndex dest = 1)
       .pc = 0x1000,
       .instr = 0,
       .decoded = extract,
-      .scalar = state.scalar,
+      .scalar = capture_scalar_operands(extract, state.scalar),
   };
 }
 

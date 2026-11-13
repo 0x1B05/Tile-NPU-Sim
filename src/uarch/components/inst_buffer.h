@@ -1,7 +1,7 @@
 #pragma once
 
 #include "tile_npu/decode.h"
-#include "tile_npu/state.h"
+#include "uarch/dataflow/npu_operands.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -15,12 +15,13 @@ inline constexpr std::size_t INST_BUFFER_DEPTH = 8;
 // FIFO between the scalar front end and the NPU dispatcher.
 class InstBuffer final {
 public:
-  // One decoded NPU instruction handed from the scalar front end.
+  // One decoded NPU instruction handed from the scalar front end. Scalar
+  // operands are captured when the instruction is admitted.
   struct Entry {
     std::uint64_t pc = 0;
     std::uint32_t instr = 0;
     DecodedNpuInstr decoded;
-    ScalarState scalar;
+    ScalarOperands scalar;
   };
 
   explicit InstBuffer(std::size_t depth = INST_BUFFER_DEPTH);

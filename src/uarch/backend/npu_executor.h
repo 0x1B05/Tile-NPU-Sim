@@ -38,7 +38,7 @@ private:
   struct InFlightEntry {
     DecodedNpuInstr decoded;
     std::uint32_t instr = 0;
-    ScalarState scalar;
+    ScalarOperands scalar;
     std::optional<ScalarWrite> scalar_write;
   };
 
