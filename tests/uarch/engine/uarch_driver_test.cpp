@@ -1,7 +1,7 @@
 #include "framework.h"
 #include "uarch/backend/backend.h"
 #include "uarch/engine/uarch_driver.h"
-#include "uarch/test_frontend.h"
+#include "uarch/test_dispatcher.h"
 
 #include <cstdint>
 #include <string_view>
@@ -92,8 +92,8 @@ RunResult run_sequence(RunMode mode) {
   UarchStats stats;
   TimedExecutor executor(clock);
   UarchBackend backend(clock, stats, executor);
-  TestFrontend frontend(clock, backend);
-  UarchDriver driver(clock, backend, stats, frontend.frontend());
+  TestDispatcher dispatcher_fixture(clock, backend);
+  UarchDriver driver(clock, backend, stats, dispatcher_fixture.dispatcher());
 
   backend.dispatch(mma_write(1, 0));
   backend.dispatch(mma_accumulate(2, 0, 0));
@@ -120,8 +120,8 @@ TEST_CASE(uarch_driver_single_cycle_steps_time) {
   UarchStats stats;
   TimedExecutor executor(clock);
   UarchBackend backend(clock, stats, executor);
-  TestFrontend frontend(clock, backend);
-  UarchDriver driver(clock, backend, stats, frontend.frontend());
+  TestDispatcher dispatcher_fixture(clock, backend);
+  UarchDriver driver(clock, backend, stats, dispatcher_fixture.dispatcher());
 
   backend.dispatch(vec_write(1, 1));
 
@@ -146,8 +146,8 @@ TEST_CASE(uarch_driver_advance_stops_at_completion) {
   UarchStats stats;
   TimedExecutor executor(clock);
   UarchBackend backend(clock, stats, executor);
-  TestFrontend frontend(clock, backend);
-  UarchDriver driver(clock, backend, stats, frontend.frontend());
+  TestDispatcher dispatcher_fixture(clock, backend);
+  UarchDriver driver(clock, backend, stats, dispatcher_fixture.dispatcher());
 
   backend.dispatch(mma_write(1, 0));
   backend.dispatch(mma_write(2, 1));
@@ -167,8 +167,8 @@ TEST_CASE(uarch_driver_drain_empties_backend) {
   UarchStats stats;
   TimedExecutor executor(clock);
   UarchBackend backend(clock, stats, executor);
-  TestFrontend frontend(clock, backend);
-  UarchDriver driver(clock, backend, stats, frontend.frontend());
+  TestDispatcher dispatcher_fixture(clock, backend);
+  UarchDriver driver(clock, backend, stats, dispatcher_fixture.dispatcher());
 
   backend.dispatch(vec_write(1, 1));
   driver.drain();

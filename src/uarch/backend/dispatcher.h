@@ -10,30 +10,18 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
-#include <type_traits>
-#include <variant>
 
 namespace tile_npu {
 
 class NpuExecutor;
 
-template <typename T>
-inline constexpr bool is_frontend_npu_v =
-    std::is_same_v<T, CfgSetiInstr> || std::is_same_v<T, CfgSetxInstr> ||
-    std::is_same_v<T, CfgCopyInstr> || std::is_same_v<T, CfgGetInstr> ||
-    std::is_same_v<T, CfgSetwInstr> || std::is_same_v<T, CfgGetwInstr> ||
-    std::is_same_v<T, SysInstr>;
-
-inline bool is_frontend_npu(const DecodedNpuInstr &instr) {
-  return std::visit(
-      [](const auto &decoded) { return is_frontend_npu_v<std::remove_cvref_t<decltype(decoded)>>; },
-      instr);
-}
-
-class UarchFrontend final {
+// NPU dispatcher: buffers admitted instructions and dispatches at most one into
+// the backend each cycle. The driver owns time; this class only processes the
+// current cycle and reports its next activity.
+class UarchDispatcher final {
 public:
-  UarchFrontend(const UarchClock &clock, UarchBackend &backend, State &state, NpuExecutor &executor,
-                ScalarWritebackPort &writeback);
+  UarchDispatcher(const UarchClock &clock, UarchBackend &backend, State &state,
+                  NpuExecutor &executor, ScalarWritebackPort &writeback);
 
   bool enqueue(InstBuffer::Entry entry);
 

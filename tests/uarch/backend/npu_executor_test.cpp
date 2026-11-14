@@ -45,8 +45,8 @@ TEST_CASE(npu_executor_writes_back_scalar_at_completion) {
   UarchStats stats;
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
-  UarchFrontend frontend(clock, backend, state, executor, writeback);
-  UarchDriver driver(clock, backend, stats, frontend);
+  UarchDispatcher dispatcher(clock, backend, state, executor, writeback);
+  UarchDriver driver(clock, backend, stats, dispatcher);
 
   const auto entry = lane_extract_entry(state);
   const auto inst = make_npu_dyn_inst(1, entry.pc, entry.decoded, state);
@@ -118,5 +118,5 @@ TEST_CASE(npu_executor_reset_clears_in_flight) {
   executor.reset();
   // Re-tracking the same id succeeds only if reset cleared the in-flight entry.
   executor.track(inst, entry);
-  check(scalar_scoreboard.busy(1), "executor reset leaves scoreboard ownership to the frontend");
+  check(scalar_scoreboard.busy(1), "executor reset leaves scoreboard ownership to the dispatcher");
 }

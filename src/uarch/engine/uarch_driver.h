@@ -1,17 +1,18 @@
 #pragma once
 
 #include "uarch/backend/backend.h"
+#include "uarch/backend/dispatcher.h"
 #include "uarch/engine/clock.h"
-#include "uarch/frontend/frontend.h"
 #include "uarch/uarch_stats.h"
 
 namespace tile_npu {
 
-// Owns time advancement for the machine model. Backends and front ends only
+// Owns time advancement for the machine model. Backends and dispatchers only
 // process the current cycle and report their next activity time.
 class UarchDriver {
 public:
-  UarchDriver(UarchClock &clock, UarchBackend &backend, UarchStats &stats, UarchFrontend &frontend);
+  UarchDriver(UarchClock &clock, UarchBackend &backend, UarchStats &stats,
+              UarchDispatcher &dispatcher);
 
   // Processes the current cycle and advances one clock edge.
   void single_cycle();
@@ -34,7 +35,7 @@ private:
   UarchClock &clock_;
   UarchBackend &backend_;
   UarchStats &stats_;
-  UarchFrontend &frontend_;
+  UarchDispatcher &dispatcher_;
   bool processed_ = false;
 };
 

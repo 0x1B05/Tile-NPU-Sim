@@ -7,13 +7,13 @@
 namespace tile_npu {
 
 UarchDriver::UarchDriver(UarchClock &clock, UarchBackend &backend, UarchStats &stats,
-                         UarchFrontend &frontend)
-    : clock_(clock), backend_(backend), stats_(stats), frontend_(frontend) {}
+                         UarchDispatcher &dispatcher)
+    : clock_(clock), backend_(backend), stats_(stats), dispatcher_(dispatcher) {}
 
 CycleResult UarchDriver::ensure_cycle_processed() {
   CycleResult result;
   if (!processed_) {
-    result.completed += frontend_.process_cur_cycle();
+    result.completed += dispatcher_.process_cur_cycle();
     const auto backend_result = backend_.process_cur_cycle();
     result.issued = backend_result.issued;
     result.completed += backend_result.completed;
@@ -25,8 +25,10 @@ CycleResult UarchDriver::ensure_cycle_processed() {
 
 std::optional<UarchClock::Time> UarchDriver::next_activity_time() const {
   auto backend_next = backend_.next_activity_time();
-  const auto frontend_next = frontend_.next_activity_time();
-  if (frontend_next) backend_next = backend_next ? std::min(*backend_next, *frontend_next) : *frontend_next;
+  const auto dispatcher_next = dispatcher_.next_activity_time();
+  if (dispatcher_next) {
+    backend_next = backend_next ? std::min(*backend_next, *dispatcher_next) : *dispatcher_next;
+  }
   return backend_next;
 }
 
@@ -54,9 +56,9 @@ void UarchDriver::advance() {
 }
 
 void UarchDriver::drain() {
-  while (!backend_.empty() || !frontend_.empty()) {
+  while (!backend_.empty() || !dispatcher_.empty()) {
     ensure_cycle_processed();
-    if (backend_.empty() && frontend_.empty()) break;
+    if (backend_.empty() && dispatcher_.empty()) break;
 
     const auto next = next_activity_time();
     if (!next) unreachable("uarch driver cannot drain attached components");

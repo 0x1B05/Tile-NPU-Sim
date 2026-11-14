@@ -2,7 +2,7 @@
 
 #include "framework.h"
 #include "uarch/dataflow/dyn_inst.h"
-#include "uarch/frontend/frontend.h"
+#include "uarch/dataflow/npu_instruction.h"
 
 #include <cstdint>
 
@@ -184,12 +184,12 @@ TEST_CASE(dyn_inst_builder_gather_clips_to_index_length) {
   check(has_dst(short_vec_inst, NpuDomain::vec32, 3), "vector gather destination");
 }
 
-TEST_CASE(frontend_npu_classification) {
-  check(is_frontend_npu(DecodedNpuInstr{CfgSetiInstr{}}), "cfg.seti is frontend");
-  check(is_frontend_npu(DecodedNpuInstr{CfgGetInstr{}}), "cfg.get is frontend");
-  check(is_frontend_npu(DecodedNpuInstr{SysInstr{.op = SysOp::fence_sa}}), "fence is frontend");
-  check(!is_frontend_npu(DecodedNpuInstr{EbinInstr{}}), "elementwise is backend");
-  check(!is_frontend_npu(DecodedNpuInstr{MblkInstr{}}), "memory is backend");
+TEST_CASE(scalar_npu_classification) {
+  check(is_scalar_npu(DecodedNpuInstr{CfgSetiInstr{}}), "cfg.seti is scalar-side");
+  check(is_scalar_npu(DecodedNpuInstr{CfgGetInstr{}}), "cfg.get is scalar-side");
+  check(is_scalar_npu(DecodedNpuInstr{SysInstr{.op = SysOp::fence_sa}}), "fence is scalar-side");
+  check(!is_scalar_npu(DecodedNpuInstr{EbinInstr{}}), "elementwise is backend");
+  check(!is_scalar_npu(DecodedNpuInstr{MblkInstr{}}), "memory is backend");
 }
 
 TEST_CASE(dyn_inst_builder_move_fill_and_lane) {

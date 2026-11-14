@@ -1,7 +1,7 @@
 #include "uarch/dataflow/dyn_inst_builder.h"
 
 #include "domain.h"
-#include "uarch/frontend/frontend.h"
+#include "uarch/dataflow/npu_instruction.h"
 #include "utils/common.h"
 
 #include <algorithm>
@@ -394,7 +394,7 @@ DynInst make_npu_dyn_inst(std::uint64_t id, std::uint64_t pc, const DecodedNpuIn
   std::visit(
       [&](const auto &decoded) {
         using T = std::remove_cvref_t<decltype(decoded)>;
-        if constexpr (is_frontend_npu_v<T>) {
+        if constexpr (is_scalar_npu_v<T>) {
           unreachable("frontend NPU instruction has no DynInst");
         } else {
           fill(out, decoded, state);

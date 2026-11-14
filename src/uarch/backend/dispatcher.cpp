@@ -1,4 +1,4 @@
-#include "uarch/frontend/frontend.h"
+#include "uarch/backend/dispatcher.h"
 
 #include "uarch/backend/npu_executor.h"
 #include "uarch/dataflow/dyn_inst_builder.h"
@@ -6,11 +6,11 @@
 
 namespace tile_npu {
 
-UarchFrontend::UarchFrontend(const UarchClock &clock, UarchBackend &backend, State &state,
-                             NpuExecutor &executor, ScalarWritebackPort &writeback)
+UarchDispatcher::UarchDispatcher(const UarchClock &clock, UarchBackend &backend, State &state,
+                                 NpuExecutor &executor, ScalarWritebackPort &writeback)
     : clock_(clock), backend_(backend), state_(state), executor_(executor), writeback_(writeback) {}
 
-bool UarchFrontend::enqueue(InstBuffer::Entry entry) {
+bool UarchDispatcher::enqueue(InstBuffer::Entry entry) {
   if (!inst_buffer_.enqueue(entry)) return false;
   if (const auto dest = scalar_dest(entry.decoded)) {
     writeback_.mark_busy(*dest);
@@ -18,7 +18,7 @@ bool UarchFrontend::enqueue(InstBuffer::Entry entry) {
   return true;
 }
 
-std::size_t UarchFrontend::process_cur_cycle() {
+std::size_t UarchDispatcher::process_cur_cycle() {
   if (inst_buffer_.empty()) return 0;
 
   const auto &entry = inst_buffer_.front();
@@ -31,14 +31,14 @@ std::size_t UarchFrontend::process_cur_cycle() {
   return 0;
 }
 
-std::optional<UarchClock::Time> UarchFrontend::next_activity_time() const {
+std::optional<UarchClock::Time> UarchDispatcher::next_activity_time() const {
   if (inst_buffer_.empty()) return std::nullopt;
   return clock_.now() + 1;
 }
 
-bool UarchFrontend::empty() const { return inst_buffer_.empty(); }
+bool UarchDispatcher::empty() const { return inst_buffer_.empty(); }
 
-void UarchFrontend::reset() {
+void UarchDispatcher::reset() {
   inst_buffer_.clear();
   writeback_.reset();
   next_id_ = 0;
