@@ -1,6 +1,7 @@
 #include "uarch/frontend/scalar_frontend.h"
 
 #include "execute/execute.h"
+#include "uarch/dataflow/npu_config.h"
 #include "uarch/dataflow/npu_instruction.h"
 #include "uarch/frontend/execute/scalar_memory.h"
 #include "utils/endian.h"
@@ -62,7 +63,10 @@ bool ScalarFrontend::prepare_id(PipelineEntry &entry) {
   const auto *scalar = std::get_if<DecodedScalarInstr>(&*entry.decoded);
   if (scalar == nullptr) {
     const auto *npu = std::get_if<DecodedNpuInstr>(&*entry.decoded);
-    return npu != nullptr && reads_config(*npu) && has_config_stall();
+    if (npu == nullptr) return false;
+    if (reads_config(*npu) && has_config_stall()) return true;
+    if (!is_scalar_npu(*npu)) entry.config = capture_config_operands(*npu, state_);
+    return false;
   }
   if (has_stall_hazard(*scalar)) return true;
 
