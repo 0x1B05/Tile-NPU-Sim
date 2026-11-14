@@ -1,6 +1,7 @@
 #include "uarch/frontend/scalar_frontend.h"
 
 #include "execute/execute.h"
+#include "uarch/dataflow/npu_instruction.h"
 #include "uarch/frontend/execute/scalar_memory.h"
 #include "utils/endian.h"
 
@@ -59,12 +60,25 @@ bool ScalarFrontend::prepare_id(PipelineEntry &entry) {
   }
 
   const auto *scalar = std::get_if<DecodedScalarInstr>(&*entry.decoded);
-  if (scalar == nullptr) return false;
+  if (scalar == nullptr) {
+    const auto *npu = std::get_if<DecodedNpuInstr>(&*entry.decoded);
+    return npu != nullptr && reads_config(*npu) && has_config_stall();
+  }
   if (has_stall_hazard(*scalar)) return true;
 
   entry.lhs = read_scalar(scalar->regs.src1);
   entry.rhs = read_scalar(scalar->regs.src2);
   return false;
+}
+
+bool ScalarFrontend::has_config_stall() const {
+  const auto writes_config = [](const std::optional<PipelineEntry> &entry) {
+    if (!entry || !entry->decoded) return false;
+    const auto *npu = std::get_if<DecodedNpuInstr>(&*entry->decoded);
+    return npu != nullptr && writes_config_at_wb(*npu);
+  };
+
+  return writes_config(id_ex_) || writes_config(ex_mem_) || writes_config(mem_wb_);
 }
 
 bool ScalarFrontend::has_stall_hazard(const DecodedScalarInstr &instr) const {
@@ -152,10 +166,25 @@ ScalarFrontend::WbOutcome ScalarFrontend::execute_wb(const PipelineEntry &entry)
                 .status = StepStatus::illegal_instruction, .pc = entry.pc, .instr = entry.instr}};
   }
 
-  if (std::holds_alternative<DecodedNpuInstr>(*entry.decoded)) {
-    return {.stop = StepResult{.status = StepStatus::execution_not_implemented,
-                               .pc = entry.pc,
-                               .instr = entry.instr}};
+  if (const auto *npu = std::get_if<DecodedNpuInstr>(&*entry.decoded)) {
+    if (!is_config_npu(*npu)) {
+      return {.stop = StepResult{.status = StepStatus::execution_not_implemented,
+                                 .pc = entry.pc,
+                                 .instr = entry.instr}};
+    }
+
+    state_.scalar.pc = entry.pc;
+    ExecContext ctx{state_, memory_};
+    const auto execution = exec_npu_instr(*npu, ctx);
+    if (execution.status != StepStatus::retired) {
+      return {.stop = StepResult{.status = execution.status,
+                                 .pc = entry.pc,
+                                 .instr = entry.instr,
+                                 .fault_address = execution.fault_address}};
+    }
+
+    state_.scalar.pc = entry.pc + INSTR_BYTES;
+    return {.retired = true};
   }
 
   const auto &scalar = std::get<DecodedScalarInstr>(*entry.decoded);

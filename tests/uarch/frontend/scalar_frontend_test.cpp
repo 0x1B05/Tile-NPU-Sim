@@ -22,7 +22,81 @@ std::optional<StepResult> run_until_stop(ScalarFrontend &frontend, UarchClock &c
   return std::nullopt;
 }
 
+constexpr std::uint32_t cfg_i(std::uint32_t major4, std::uint32_t sel2, std::uint32_t field3,
+                              std::int32_t imm, std::uint32_t c5) {
+  return (major4 << 28) | (sel2 << 26) | (field3 << 23) |
+         ((static_cast<std::uint32_t>(imm) & 0xffffu) << 7) | (c5 << 2) | 0x2u;
+}
+
+constexpr std::uint32_t cfg_reg(std::uint32_t sel2, std::uint32_t cm, std::uint32_t funct3,
+                                std::uint32_t field5, std::uint32_t s5, std::uint32_t d5) {
+  return (0x7u << 28) | (sel2 << 26) | (cm << 25) | (funct3 << 22) | (field5 << 17) | (s5 << 7) |
+         (d5 << 2) | 0x2u;
+}
+
 } // namespace
+
+TEST_CASE(scalar_frontend_cfg_seti_then_get) {
+  Ram memory(CODE_BASE, 12);
+  write_word(memory, CODE_BASE, cfg_i(0x5, 0, 1, 4, 0));        // cfg.seti tc0, rows, 4
+  write_word(memory, CODE_BASE + 4, cfg_reg(0, 0, 2, 1, 0, 1)); // cfg.get x1, tc0, rows
+  write_word(memory, CODE_BASE + 8, 0x00100073u);               // ebreak
+
+  State state;
+  UarchClock clock;
+  ScalarFrontend frontend(clock, state, memory);
+  frontend.reset(CODE_BASE);
+
+  std::size_t retired = 0;
+  const auto result = run_until_stop(frontend, clock, retired);
+
+  check(result.has_value(), "config program stops");
+  check_eq(result->status, StepStatus::breakpoint, "config program reaches ebreak");
+  check_eq(state.tc[0].rows, std::uint8_t{4}, "cfg.seti writes the config");
+  check_eq(state.scalar.read_x(1), std::uint64_t{4}, "cfg.get reads the updated config");
+  check_eq(retired, std::size_t{2}, "cfg.seti and cfg.get retire");
+}
+
+TEST_CASE(scalar_frontend_cfg_copy_then_get) {
+  Ram memory(CODE_BASE, 16);
+  write_word(memory, CODE_BASE, cfg_i(0x5, 0, 1, 4, 0));        // cfg.seti tc0, rows, 4
+  write_word(memory, CODE_BASE + 4, cfg_reg(0, 0, 1, 0, 0, 1)); // cfg.copy tc1, tc0
+  write_word(memory, CODE_BASE + 8, cfg_reg(0, 0, 2, 1, 1, 1)); // cfg.get x1, tc1, rows
+  write_word(memory, CODE_BASE + 12, 0x00100073u);              // ebreak
+
+  State state;
+  UarchClock clock;
+  ScalarFrontend frontend(clock, state, memory);
+  frontend.reset(CODE_BASE);
+
+  std::size_t retired = 0;
+  const auto result = run_until_stop(frontend, clock, retired);
+
+  check(result.has_value(), "config copy program stops");
+  check_eq(result->status, StepStatus::breakpoint, "config copy reaches ebreak");
+  check_eq(state.tc[1].rows, std::uint8_t{4}, "cfg.copy copies the config");
+  check_eq(state.scalar.read_x(1), std::uint64_t{4}, "cfg.get reads the copied config");
+  check_eq(retired, std::size_t{3}, "seti, copy and get retire");
+}
+
+TEST_CASE(scalar_frontend_cfg_invalid_value_stops) {
+  Ram memory(CODE_BASE, 4);
+  write_word(memory, CODE_BASE, cfg_i(0x5, 0, 1, 33, 0)); // cfg.seti tc0, rows, 33
+
+  State state;
+  UarchClock clock;
+  ScalarFrontend frontend(clock, state, memory);
+  frontend.reset(CODE_BASE);
+
+  std::size_t retired = 0;
+  const auto result = run_until_stop(frontend, clock, retired);
+
+  check(result.has_value(), "invalid config stops the pipeline");
+  check_eq(result->status, StepStatus::invalid_configuration, "invalid config status");
+  check_eq(hex(result->pc), hex(CODE_BASE), "invalid config reports its pc");
+  check_eq(state.tc[0].rows, std::uint8_t{0}, "invalid config leaves state untouched");
+  check_eq(retired, std::size_t{0}, "invalid config does not retire");
+}
 
 TEST_CASE(scalar_frontend_retires_straight_line_program) {
   Ram memory(CODE_BASE, 16);

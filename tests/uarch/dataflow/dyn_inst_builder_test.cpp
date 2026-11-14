@@ -192,6 +192,28 @@ TEST_CASE(scalar_npu_classification) {
   check(!is_scalar_npu(DecodedNpuInstr{MblkInstr{}}), "memory is backend");
 }
 
+TEST_CASE(config_access_classification) {
+  check(is_config_npu(DecodedNpuInstr{CfgSetiInstr{}}), "cfg.seti is a config instruction");
+  check(is_config_npu(DecodedNpuInstr{CfgGetInstr{}}), "cfg.get is a config instruction");
+  check(!is_config_npu(DecodedNpuInstr{SysInstr{}}), "sys is not a config instruction");
+
+  check(!reads_config(DecodedNpuInstr{CfgSetiInstr{}}), "cfg.seti does not read config");
+  check(!reads_config(DecodedNpuInstr{CfgSetxInstr{}}), "cfg.setx does not read config");
+  check(!reads_config(DecodedNpuInstr{CfgSetwInstr{}}), "cfg.setw does not read config");
+  check(reads_config(DecodedNpuInstr{CfgCopyInstr{}}), "cfg.copy reads config");
+  check(reads_config(DecodedNpuInstr{CfgGetInstr{}}), "cfg.get reads config");
+  check(reads_config(DecodedNpuInstr{CfgGetwInstr{}}), "cfg.getw reads config");
+  check(reads_config(DecodedNpuInstr{EbinInstr{}}), "backend NPU reads config");
+  check(!reads_config(DecodedNpuInstr{SysInstr{}}), "sys does not read config");
+
+  check(writes_config_at_wb(DecodedNpuInstr{CfgSetiInstr{}}), "cfg.seti writes config");
+  check(writes_config_at_wb(DecodedNpuInstr{CfgSetxInstr{}}), "cfg.setx writes config");
+  check(writes_config_at_wb(DecodedNpuInstr{CfgSetwInstr{}}), "cfg.setw writes config");
+  check(writes_config_at_wb(DecodedNpuInstr{CfgCopyInstr{}}), "cfg.copy writes config");
+  check(!writes_config_at_wb(DecodedNpuInstr{CfgGetInstr{}}), "cfg.get does not write config");
+  check(!writes_config_at_wb(DecodedNpuInstr{EbinInstr{}}), "backend NPU does not write config");
+}
+
 TEST_CASE(dyn_inst_builder_move_fill_and_lane) {
   State state{};
   state.ac[1] = AccConfig{.dtype = DType::i32, .rows = 2, .cols = 3};
