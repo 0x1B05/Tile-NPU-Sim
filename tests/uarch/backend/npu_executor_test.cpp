@@ -5,6 +5,7 @@
 #include "uarch/components/scalar_scoreboard.h"
 #include "uarch/components/scalar_writeback.h"
 #include "uarch/dataflow/dyn_inst_builder.h"
+#include "uarch/dataflow/npu_config.h"
 #include "uarch/dataflow/npu_operands.h"
 #include "uarch/engine/uarch_driver.h"
 
@@ -95,6 +96,39 @@ TEST_CASE(npu_executor_uses_captured_scalar_operands) {
 
   check_eq(result.status, StepStatus::retired, "fillx executes");
   check_eq(state.t[0][0], std::uint8_t{42}, "executor uses the captured scalar value");
+}
+
+TEST_CASE(npu_executor_uses_captured_config_operands) {
+  State state;
+  state.tc[0] = TileConfig{.dtype = DType::i8, .rows = 1, .cols = 1};
+
+  Ram memory(0x1000, 0x100);
+  ScalarScoreboard scalar_scoreboard;
+  ScalarWritebackPort writeback(state, scalar_scoreboard);
+  NpuExecutor executor(state, memory, writeback);
+
+  FillInstr fill;
+  fill.dest = {.domain = NpuDomain::tile, .index = 0};
+  fill.value = FillImm16{.bits = 7};
+
+  const InstBuffer::Entry entry{
+      .pc = 0x1000,
+      .instr = 0,
+      .decoded = fill,
+      .scalar = capture_scalar_operands(fill, state.scalar),
+      .config = capture_config_operands(fill, state),
+  };
+  const auto inst = make_npu_dyn_inst(1, entry.pc, entry.decoded, state);
+  executor.track(inst, entry);
+
+  state.tc[0].rows = 2;
+  state.tc[0].cols = 2;
+  const auto result = executor.execute(inst);
+
+  check_eq(result.status, StepStatus::retired, "fill executes");
+  check_eq(state.t[0][0], std::uint8_t{7}, "fill uses the captured config");
+  check_eq(state.t[0][1], std::uint8_t{0}, "captured config writes only one element");
+  check_eq(state.tc[0].rows, std::uint8_t{2}, "live config is restored after execution");
 }
 
 TEST_CASE(npu_executor_reset_clears_in_flight) {

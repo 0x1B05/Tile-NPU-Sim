@@ -5,15 +5,27 @@
 #include "uarch/backend/npu_executor.h"
 #include "uarch/components/scalar_scoreboard.h"
 #include "uarch/components/scalar_writeback.h"
+#include "uarch/dataflow/npu_config.h"
 #include "uarch/dataflow/npu_operands.h"
 #include "uarch/engine/uarch_driver.h"
 
 #include <cstdint>
+#include <vector>
 
 using namespace tile_npu;
 using namespace tile_npu::test;
 
 namespace {
+
+class RecordingExecutor final : public UarchExecutor {
+public:
+  StepResult execute(const DynInst &inst) override {
+    executed.push_back(inst);
+    return StepResult{.status = StepStatus::retired, .pc = inst.pc};
+  }
+
+  std::vector<DynInst> executed;
+};
 
 InstBuffer::Entry lane_extract_entry(const State &state, RegisterIndex dest = 1) {
   LaneExtractInstr extract;
@@ -60,6 +72,45 @@ TEST_CASE(uarch_dispatcher_dispatches_buffer_to_backend) {
   check_eq(state.scalar.read_x(1), std::uint64_t{42}, "scalar writeback");
   check(!scalar_scoreboard.busy(1), "scalar busy bit cleared");
   check_eq(stats.retired, std::uint64_t{1}, "vextract retires");
+}
+
+TEST_CASE(uarch_dispatcher_uses_captured_config_for_timing) {
+  State state;
+  state.tc[0] = TileConfig{.dtype = DType::i8, .rows = 1, .cols = 1};
+
+  Ram memory(0x1000, 0x100);
+  ScalarScoreboard scalar_scoreboard;
+  ScalarWritebackPort writeback(state, scalar_scoreboard);
+  NpuExecutor npu_executor(state, memory, writeback);
+  RecordingExecutor timing_executor;
+  UarchStats stats;
+  UarchClock clock;
+  UarchBackend backend(clock, stats, timing_executor);
+  InstBuffer inst_buffer;
+  UarchDispatcher dispatcher(clock, backend, state, npu_executor, inst_buffer);
+  UarchDriver driver(clock, backend, stats, dispatcher);
+
+  FillInstr fill;
+  fill.dest = {.domain = NpuDomain::tile, .index = 0};
+  fill.value = FillImm16{.bits = 7};
+
+  const InstBuffer::Entry entry{
+      .pc = 0x1000,
+      .instr = 0,
+      .decoded = fill,
+      .scalar = capture_scalar_operands(fill, state.scalar),
+      .config = capture_config_operands(fill, state),
+  };
+  check(inst_buffer.enqueue(entry), "command is buffered");
+
+  state.tc[0].rows = 2;
+  state.tc[0].cols = 2;
+  driver.drain();
+
+  check_eq(timing_executor.executed.size(), std::size_t{1}, "command reaches the backend");
+  check_eq(timing_executor.executed[0].rows, std::uint32_t{1}, "timing uses captured rows");
+  check_eq(timing_executor.executed[0].cols, std::uint32_t{1}, "timing uses captured cols");
+  check_eq(state.tc[0].rows, std::uint8_t{2}, "live config is restored after dispatch");
 }
 
 TEST_CASE(uarch_dispatcher_dispatches_one_entry_per_cycle) {

@@ -2,6 +2,7 @@
 
 #include "uarch/backend/npu_executor.h"
 #include "uarch/dataflow/dyn_inst_builder.h"
+#include "uarch/dataflow/npu_config.h"
 
 namespace tile_npu {
 
@@ -14,7 +15,12 @@ std::size_t UarchDispatcher::process_cur_cycle() {
   if (inst_buffer_.empty()) return 0;
 
   const auto &entry = inst_buffer_.front();
+
+  const auto live_config = capture_config_operands(entry.decoded, state_);
+  apply_config_operands(state_, entry.config);
   const auto inst = make_npu_dyn_inst(next_id_, entry.pc, entry.decoded, state_);
+  apply_config_operands(state_, live_config);
+
   if (!backend_.dispatch(inst)) return 0;
 
   executor_.track(inst, entry);
