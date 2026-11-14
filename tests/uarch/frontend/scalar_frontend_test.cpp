@@ -48,6 +48,53 @@ TEST_CASE(scalar_frontend_retires_straight_line_program) {
   check(frontend.halted(), "frontend halts at ebreak");
 }
 
+TEST_CASE(scalar_frontend_load_use_stalls_then_forwards) {
+  Ram memory(0, 0x2000);
+  write_word(memory, CODE_BASE, 0x02000093u);      // addi x1, x0, 0x20
+  write_word(memory, CODE_BASE + 4, 0x0000A103u);  // lw x2, 0(x1)
+  write_word(memory, CODE_BASE + 8, 0x002101B3u);  // add x3, x2, x2
+  write_word(memory, CODE_BASE + 12, 0x00100073u); // ebreak
+  write_word(memory, 0x20, 42u);
+
+  State state;
+  UarchClock clock;
+  ScalarFrontend frontend(clock, state, memory);
+  frontend.reset(CODE_BASE);
+
+  std::size_t retired = 0;
+  const auto result = run_until_stop(frontend, clock, retired);
+
+  check(result.has_value(), "load-use program stops");
+  check_eq(result->status, StepStatus::breakpoint, "load-use program reaches ebreak");
+  check_eq(state.scalar.read_x(2), std::uint64_t{42}, "load result");
+  check_eq(state.scalar.read_x(3), std::uint64_t{84}, "dependent add sees the load result");
+  check_eq(retired, std::size_t{3}, "addi, load and add retire");
+}
+
+TEST_CASE(scalar_frontend_store_then_load) {
+  Ram memory(0, 0x2000);
+  write_word(memory, CODE_BASE, 0x02000093u);      // addi x1, x0, 0x20
+  write_word(memory, CODE_BASE + 4, 0x00700113u);  // addi x2, x0, 7
+  write_word(memory, CODE_BASE + 8, 0x0020A023u);  // sw x2, 0(x1)
+  write_word(memory, CODE_BASE + 12, 0x0000A183u); // lw x3, 0(x1)
+  write_word(memory, CODE_BASE + 16, 0x00318233u); // add x4, x3, x3
+  write_word(memory, CODE_BASE + 20, 0x00100073u); // ebreak
+
+  State state;
+  UarchClock clock;
+  ScalarFrontend frontend(clock, state, memory);
+  frontend.reset(CODE_BASE);
+
+  std::size_t retired = 0;
+  const auto result = run_until_stop(frontend, clock, retired);
+
+  check(result.has_value(), "store/load program stops");
+  check_eq(result->status, StepStatus::breakpoint, "store/load program reaches ebreak");
+  check_eq(state.scalar.read_x(3), std::uint64_t{7}, "load reads the stored value");
+  check_eq(state.scalar.read_x(4), std::uint64_t{14}, "dependent add uses the loaded value");
+  check_eq(retired, std::size_t{5}, "all non-stop instructions retire");
+}
+
 TEST_CASE(scalar_frontend_branch_flushes_younger_instructions) {
   Ram memory(CODE_BASE, 16);
   write_word(memory, CODE_BASE, 0x00000463u);      // beq x0, x0, +8

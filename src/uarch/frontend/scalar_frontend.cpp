@@ -1,7 +1,7 @@
 #include "uarch/frontend/scalar_frontend.h"
 
 #include "execute/execute.h"
-#include "uarch/frontend/execute/scalar_compute.h"
+#include "uarch/frontend/execute/scalar_memory.h"
 #include "utils/endian.h"
 
 #include <array>
@@ -45,20 +45,42 @@ std::optional<PipelineEntry> ScalarFrontend::fetch() {
   return entry;
 }
 
-void ScalarFrontend::prepare_id(PipelineEntry &entry) {
-  if (entry.fault || entry.decoded) return;
+bool ScalarFrontend::prepare_id(PipelineEntry &entry) {
+  if (entry.fault) return false;
 
-  auto decoded = decode(entry.instr);
-  if (std::holds_alternative<DecodeError>(decoded)) {
-    entry.fault = StepStatus::illegal_instruction;
-    fetch_stopped_ = true;
-    return;
+  if (!entry.decoded) {
+    auto decoded = decode(entry.instr);
+    if (std::holds_alternative<DecodeError>(decoded)) {
+      entry.fault = StepStatus::illegal_instruction;
+      fetch_stopped_ = true;
+      return false;
+    }
+    entry.decoded = std::move(decoded);
   }
-  entry.decoded = std::move(decoded);
-  if (const auto *scalar = std::get_if<DecodedScalarInstr>(&*entry.decoded)) {
-    entry.lhs = read_scalar(scalar->regs.src1);
-    entry.rhs = read_scalar(scalar->regs.src2);
-  }
+
+  const auto *scalar = std::get_if<DecodedScalarInstr>(&*entry.decoded);
+  if (scalar == nullptr) return false;
+  if (has_stall_hazard(*scalar)) return true;
+
+  entry.lhs = read_scalar(scalar->regs.src1);
+  entry.rhs = read_scalar(scalar->regs.src2);
+  return false;
+}
+
+bool ScalarFrontend::has_stall_hazard(const DecodedScalarInstr &instr) const {
+  const auto conflict = [&](const std::optional<PipelineEntry> &producer) {
+    if (!producer || !producer->decoded) return false;
+
+    const auto *scalar = std::get_if<DecodedScalarInstr>(&*producer->decoded);
+    if (scalar == nullptr || scalar->regs.dest == 0) return false;
+    if (scalar->regs.dest != instr.regs.src1 && scalar->regs.dest != instr.regs.src2) return false;
+
+    // ALU results are forwarded from EX/MEM. Loads and other late writebacks
+    // must wait until WB has updated the architectural scalar state.
+    return !producer->compute || producer->compute->status != StepStatus::retired;
+  };
+
+  return conflict(id_ex_) || conflict(ex_mem_);
 }
 
 void ScalarFrontend::execute_ex(PipelineEntry &entry) {
@@ -79,6 +101,22 @@ void ScalarFrontend::execute_ex(PipelineEntry &entry) {
   if (entry.compute->redirect) {
     fetch_pc_ = *entry.compute->redirect;
     fetch_stopped_ = false;
+    if_id_.reset();
+  }
+}
+
+void ScalarFrontend::execute_mem(PipelineEntry &entry) {
+  if (entry.fault || !entry.decoded) return;
+
+  const auto *scalar = std::get_if<DecodedScalarInstr>(&*entry.decoded);
+  if (scalar == nullptr || !is_scalar_memory_op(scalar->op)) return;
+
+  entry.memory = execute_scalar_memory(*scalar, entry.lhs, entry.rhs, memory_);
+  if (entry.memory->status != StepStatus::retired) {
+    entry.fault = entry.memory->status;
+    entry.fault_address = entry.memory->fault_address;
+    fetch_stopped_ = true;
+    id_ex_.reset();
     if_id_.reset();
   }
 }
@@ -121,6 +159,21 @@ ScalarFrontend::WbOutcome ScalarFrontend::execute_wb(const PipelineEntry &entry)
   }
 
   const auto &scalar = std::get<DecodedScalarInstr>(*entry.decoded);
+
+  if (entry.memory) {
+    if (entry.memory->status != StepStatus::retired) {
+      return {.stop = StepResult{.status = entry.memory->status,
+                                 .pc = entry.pc,
+                                 .instr = entry.instr,
+                                 .fault_address = entry.memory->fault_address}};
+    }
+
+    state_.scalar.pc = entry.pc + INSTR_BYTES;
+    if (entry.memory->writes_dest) {
+      state_.scalar.write_x(scalar.regs.dest, entry.memory->value);
+    }
+    return {.retired = true};
+  }
 
   if (entry.compute) {
     if (entry.compute->status != StepStatus::retired) {
@@ -185,12 +238,19 @@ std::size_t ScalarFrontend::process_cur_cycle() {
 
   if (id_ex_) execute_ex(*id_ex_);
 
-  if (if_id_) prepare_id(*if_id_);
+  if (ex_mem_) execute_mem(*ex_mem_);
+
+  const bool id_stalled = if_id_ && prepare_id(*if_id_);
 
   mem_wb_ = std::move(ex_mem_);
   ex_mem_ = std::move(id_ex_);
-  id_ex_ = std::move(if_id_);
-  if_id_ = fetch();
+  if (id_stalled) {
+    // Freeze IF/ID and insert a bubble into EX.
+    id_ex_.reset();
+  } else {
+    id_ex_ = std::move(if_id_);
+    if_id_ = fetch();
+  }
 
   return retired;
 }

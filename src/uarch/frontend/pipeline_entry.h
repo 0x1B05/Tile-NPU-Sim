@@ -3,6 +3,7 @@
 #include "tile_npu/decode.h"
 #include "tile_npu/step.h"
 #include "uarch/frontend/execute/scalar_compute.h"
+#include "uarch/frontend/execute/scalar_memory.h"
 
 #include <cstdint>
 #include <optional>
@@ -19,6 +20,7 @@ struct PipelineEntry {
   std::uint64_t lhs = 0;
   std::uint64_t rhs = 0;
   std::optional<ScalarComputeResult> compute;
+  std::optional<ScalarMemResult> memory;
 
   std::optional<StepStatus> fault;
   std::optional<std::uint64_t> fault_address;

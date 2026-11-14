@@ -37,8 +37,10 @@ private:
   };
 
   std::optional<PipelineEntry> fetch();
-  void prepare_id(PipelineEntry &entry);
+  bool prepare_id(PipelineEntry &entry);
   void execute_ex(PipelineEntry &entry);
+  void execute_mem(PipelineEntry &entry);
+  bool has_stall_hazard(const DecodedScalarInstr &instr) const;
   std::uint64_t read_scalar(RegisterIndex index) const;
   WbOutcome execute_wb(const PipelineEntry &entry);
   void clear_pipeline();
