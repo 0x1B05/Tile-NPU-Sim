@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tile_npu/state.h"
+#include "uarch/dataflow/npu_operands.h"
 #include "uarch/frontend/pipeline_entry.h"
 
 #include <cstdint>
@@ -10,6 +11,9 @@ namespace tile_npu {
 
 // RAW stall detection for scalar operands. ALU results are forwarded from
 // EX/MEM; loads and late writebacks must wait for WB.
+bool has_stall_hazard(const std::optional<PipelineEntry> &id_ex,
+                      const std::optional<PipelineEntry> &ex_mem, const ScalarReads &reads);
+
 bool has_stall_hazard(const std::optional<PipelineEntry> &id_ex,
                       const std::optional<PipelineEntry> &ex_mem, const DecodedScalarInstr &instr);
 

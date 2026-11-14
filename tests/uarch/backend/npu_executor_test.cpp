@@ -45,7 +45,8 @@ TEST_CASE(npu_executor_writes_back_scalar_at_completion) {
   UarchStats stats;
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
-  UarchDispatcher dispatcher(clock, backend, state, executor, writeback);
+  InstBuffer inst_buffer;
+  UarchDispatcher dispatcher(clock, backend, state, executor, inst_buffer);
   UarchDriver driver(clock, backend, stats, dispatcher);
 
   const auto entry = lane_extract_entry(state);

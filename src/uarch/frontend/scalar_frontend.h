@@ -3,6 +3,8 @@
 #include "tile_npu/platform/address_space.h"
 #include "tile_npu/state.h"
 #include "tile_npu/step.h"
+#include "uarch/components/inst_buffer.h"
+#include "uarch/components/scalar_writeback.h"
 #include "uarch/engine/clock.h"
 #include "uarch/frontend/pipeline_entry.h"
 
@@ -15,7 +17,8 @@ namespace tile_npu {
 // In-order five-stage scalar pipeline: IF, ID, EX, MEM, WB.
 class ScalarFrontend final {
 public:
-  ScalarFrontend(const UarchClock &clock, State &state, AddressSpace &memory);
+  ScalarFrontend(const UarchClock &clock, State &state, AddressSpace &memory,
+                 InstBuffer &inst_buffer, ScalarWritebackPort &writeback);
 
   void reset(std::uint64_t entry_pc);
 
@@ -34,6 +37,7 @@ private:
     std::optional<StepResult> stop;
     std::optional<std::uint64_t> redirect;
     bool retired = false;
+    bool stalled = false;
   };
 
   std::optional<PipelineEntry> fetch();
@@ -46,6 +50,8 @@ private:
   const UarchClock &clock_;
   State &state_;
   AddressSpace &memory_;
+  InstBuffer &inst_buffer_;
+  ScalarWritebackPort &writeback_;
 
   std::optional<PipelineEntry> if_id_;
   std::optional<PipelineEntry> id_ex_;

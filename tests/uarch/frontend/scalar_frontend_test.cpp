@@ -1,11 +1,15 @@
 #include "framework.h"
 #include "tile_npu/platform/ram.h"
+#include "uarch/components/scalar_scoreboard.h"
 #include "uarch/frontend/scalar_frontend.h"
 
 #include "units/execute_helpers.h"
+#include "units/mma_helpers.h"
+#include "units/row_lane_helpers.h"
 
 #include <cstddef>
 #include <cstdint>
+#include <variant>
 
 using namespace tile_npu;
 using namespace tile_npu::test;
@@ -34,6 +38,18 @@ constexpr std::uint32_t cfg_reg(std::uint32_t sel2, std::uint32_t cm, std::uint3
          (d5 << 2) | 0x2u;
 }
 
+struct ScalarFixture {
+  State state;
+  ScalarScoreboard scoreboard;
+  ScalarWritebackPort writeback;
+  InstBuffer inst_buffer;
+  ScalarFrontend frontend;
+
+  ScalarFixture(UarchClock &clock, AddressSpace &memory, std::size_t depth = INST_BUFFER_DEPTH)
+      : writeback(state, scoreboard), inst_buffer(depth),
+        frontend(clock, state, memory, inst_buffer, writeback) {}
+};
+
 } // namespace
 
 TEST_CASE(scalar_frontend_cfg_seti_then_get) {
@@ -42,9 +58,10 @@ TEST_CASE(scalar_frontend_cfg_seti_then_get) {
   write_word(memory, CODE_BASE + 4, cfg_reg(0, 0, 2, 1, 0, 1)); // cfg.get x1, tc0, rows
   write_word(memory, CODE_BASE + 8, 0x00100073u);               // ebreak
 
-  State state;
   UarchClock clock;
-  ScalarFrontend frontend(clock, state, memory);
+  ScalarFixture fixture(clock, memory);
+  [[maybe_unused]] auto &state = fixture.state;
+  auto &frontend = fixture.frontend;
   frontend.reset(CODE_BASE);
 
   std::size_t retired = 0;
@@ -64,9 +81,10 @@ TEST_CASE(scalar_frontend_cfg_copy_then_get) {
   write_word(memory, CODE_BASE + 8, cfg_reg(0, 0, 2, 1, 1, 1)); // cfg.get x1, tc1, rows
   write_word(memory, CODE_BASE + 12, 0x00100073u);              // ebreak
 
-  State state;
   UarchClock clock;
-  ScalarFrontend frontend(clock, state, memory);
+  ScalarFixture fixture(clock, memory);
+  [[maybe_unused]] auto &state = fixture.state;
+  auto &frontend = fixture.frontend;
   frontend.reset(CODE_BASE);
 
   std::size_t retired = 0;
@@ -83,9 +101,10 @@ TEST_CASE(scalar_frontend_cfg_invalid_value_stops) {
   Ram memory(CODE_BASE, 4);
   write_word(memory, CODE_BASE, cfg_i(0x5, 0, 1, 33, 0)); // cfg.seti tc0, rows, 33
 
-  State state;
   UarchClock clock;
-  ScalarFrontend frontend(clock, state, memory);
+  ScalarFixture fixture(clock, memory);
+  [[maybe_unused]] auto &state = fixture.state;
+  auto &frontend = fixture.frontend;
   frontend.reset(CODE_BASE);
 
   std::size_t retired = 0;
@@ -104,9 +123,10 @@ TEST_CASE(scalar_frontend_retires_straight_line_program) {
   write_word(memory, CODE_BASE + 4, 0x00108133u); // add x2, x1, x1
   write_word(memory, CODE_BASE + 8, 0x00100073u); // ebreak
 
-  State state;
   UarchClock clock;
-  ScalarFrontend frontend(clock, state, memory);
+  ScalarFixture fixture(clock, memory);
+  [[maybe_unused]] auto &state = fixture.state;
+  auto &frontend = fixture.frontend;
   frontend.reset(CODE_BASE);
 
   std::size_t retired = 0;
@@ -130,9 +150,10 @@ TEST_CASE(scalar_frontend_load_use_stalls_then_forwards) {
   write_word(memory, CODE_BASE + 12, 0x00100073u); // ebreak
   write_word(memory, 0x20, 42u);
 
-  State state;
   UarchClock clock;
-  ScalarFrontend frontend(clock, state, memory);
+  ScalarFixture fixture(clock, memory);
+  [[maybe_unused]] auto &state = fixture.state;
+  auto &frontend = fixture.frontend;
   frontend.reset(CODE_BASE);
 
   std::size_t retired = 0;
@@ -154,9 +175,10 @@ TEST_CASE(scalar_frontend_store_then_load) {
   write_word(memory, CODE_BASE + 16, 0x00318233u); // add x4, x3, x3
   write_word(memory, CODE_BASE + 20, 0x00100073u); // ebreak
 
-  State state;
   UarchClock clock;
-  ScalarFrontend frontend(clock, state, memory);
+  ScalarFixture fixture(clock, memory);
+  [[maybe_unused]] auto &state = fixture.state;
+  auto &frontend = fixture.frontend;
   frontend.reset(CODE_BASE);
 
   std::size_t retired = 0;
@@ -176,9 +198,10 @@ TEST_CASE(scalar_frontend_branch_flushes_younger_instructions) {
   write_word(memory, CODE_BASE + 8, 0x00200113u);  // addi x2, x0, 2
   write_word(memory, CODE_BASE + 12, 0x00100073u); // ebreak
 
-  State state;
   UarchClock clock;
-  ScalarFrontend frontend(clock, state, memory);
+  ScalarFixture fixture(clock, memory);
+  [[maybe_unused]] auto &state = fixture.state;
+  auto &frontend = fixture.frontend;
   frontend.reset(CODE_BASE);
 
   std::size_t retired = 0;
@@ -192,11 +215,83 @@ TEST_CASE(scalar_frontend_branch_flushes_younger_instructions) {
   check_eq(retired, std::size_t{2}, "branch and target addi retire");
 }
 
+TEST_CASE(scalar_frontend_enqueues_npu_command) {
+  Ram memory(CODE_BASE, 8);
+  write_word(memory, CODE_BASE, make_mma(0, 0, 0, 16));
+  write_word(memory, CODE_BASE + 4, 0x00100073u); // ebreak
+
+  UarchClock clock;
+  ScalarFixture fixture(clock, memory);
+  [[maybe_unused]] auto &state = fixture.state;
+  auto &frontend = fixture.frontend;
+  frontend.reset(CODE_BASE);
+
+  std::size_t retired = 0;
+  const auto result = run_until_stop(frontend, clock, retired);
+
+  check(result.has_value(), "npu command program stops");
+  check_eq(result->status, StepStatus::breakpoint, "npu command reaches ebreak");
+  check_eq(fixture.inst_buffer.size(), std::size_t{1}, "npu command is buffered");
+  const auto &command = fixture.inst_buffer.front();
+  check_eq(hex(command.pc), hex(CODE_BASE), "command pc");
+  check(std::holds_alternative<MmaInstr>(command.decoded), "command keeps the decoded MMA");
+  check_eq(command.scalar.count, std::uint8_t{0}, "mma has no scalar operands");
+  check_eq(command.config.count, std::uint8_t{3}, "mma captures tc/tc/ac config");
+  check_eq(retired, std::size_t{1}, "npu command commits once");
+}
+
+TEST_CASE(scalar_frontend_marks_vextract_destination_busy) {
+  Ram memory(CODE_BASE, 8);
+  write_word(memory, CODE_BASE, make_lane_move(0, 0, 0, 0, 1)); // vextract x1, v0, 0
+  write_word(memory, CODE_BASE + 4, 0x00100073u);               // ebreak
+
+  UarchClock clock;
+  ScalarFixture fixture(clock, memory);
+  [[maybe_unused]] auto &state = fixture.state;
+  auto &frontend = fixture.frontend;
+  frontend.reset(CODE_BASE);
+
+  std::size_t retired = 0;
+  const auto result = run_until_stop(frontend, clock, retired);
+
+  check(result.has_value(), "vextract program stops");
+  check_eq(result->status, StepStatus::breakpoint, "vextract program reaches ebreak");
+  check_eq(fixture.inst_buffer.size(), std::size_t{1}, "vextract is buffered");
+  check(fixture.scoreboard.busy(1), "frontend marks the vextract destination busy");
+  check_eq(retired, std::size_t{1}, "vextract commits once");
+}
+
+TEST_CASE(scalar_frontend_stalls_when_ibuffer_full) {
+  Ram memory(CODE_BASE, 12);
+  write_word(memory, CODE_BASE, make_mma(0, 0, 0, 16));
+  write_word(memory, CODE_BASE + 4, make_mma(1, 0, 0, 16));
+  write_word(memory, CODE_BASE + 8, 0x00100073u); // ebreak
+
+  UarchClock clock;
+  ScalarFixture fixture(clock, memory, 1);
+  auto &state = fixture.state;
+  auto &frontend = fixture.frontend;
+  frontend.reset(CODE_BASE);
+
+  std::size_t retired = 0;
+  for (std::size_t cycle = 0; cycle < 32; ++cycle) {
+    retired += frontend.process_cur_cycle();
+    clock.tick();
+  }
+
+  check_eq(fixture.inst_buffer.size(), std::size_t{1}, "first npu command fills the buffer");
+  check_eq(retired, std::size_t{1}, "only the first command commits");
+  check(!frontend.halted(), "frontend is stalled, not halted");
+  check(!frontend.take_stop().has_value(), "no stop is reported");
+  check_eq(hex(state.scalar.pc), hex(CODE_BASE + 4), "stalled command does not advance pc");
+}
+
 TEST_CASE(scalar_frontend_fetch_fault) {
   Ram memory(CODE_BASE, 4);
-  State state;
   UarchClock clock;
-  ScalarFrontend frontend(clock, state, memory);
+  ScalarFixture fixture(clock, memory);
+  [[maybe_unused]] auto &state = fixture.state;
+  auto &frontend = fixture.frontend;
   frontend.reset(CODE_BASE + 8);
 
   std::size_t retired = 0;
@@ -213,9 +308,10 @@ TEST_CASE(scalar_frontend_illegal_instruction) {
   Ram memory(CODE_BASE, 4);
   write_word(memory, CODE_BASE, 0xf0000000u);
 
-  State state;
   UarchClock clock;
-  ScalarFrontend frontend(clock, state, memory);
+  ScalarFixture fixture(clock, memory);
+  [[maybe_unused]] auto &state = fixture.state;
+  auto &frontend = fixture.frontend;
   frontend.reset(CODE_BASE);
 
   std::size_t retired = 0;

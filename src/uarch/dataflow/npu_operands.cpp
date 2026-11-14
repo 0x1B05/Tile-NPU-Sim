@@ -7,22 +7,18 @@
 namespace tile_npu {
 namespace {
 
-void add_scalar(ScalarOperands &operands, RegisterIndex index, const ScalarState &scalar) {
+void add_read(ScalarReads &reads, RegisterIndex index) {
   if (index == 0) return;
-  if (operands.count >= operands.values.size()) unreachable("too many scalar operands");
-  operands.values[operands.count++] = ScalarOperand{.index = index, .value = scalar.read_x(index)};
+  if (reads.count >= reads.values.size()) unreachable("too many scalar reads");
+  reads.values[reads.count++] = index;
 }
 
-void add_index(ScalarOperands &operands, const IndexOperand &index, const ScalarState &scalar) {
-  if (const auto *reg = std::get_if<ScalarRegister>(&index)) {
-    add_scalar(operands, reg->index, scalar);
-  }
+void add_index_read(ScalarReads &reads, const IndexOperand &index) {
+  if (const auto *reg = std::get_if<ScalarRegister>(&index)) add_read(reads, reg->index);
 }
 
-void add_operand(ScalarOperands &operands, const NpuOperand &operand, const ScalarState &scalar) {
-  if (const auto *reg = std::get_if<ScalarRegister>(&operand)) {
-    add_scalar(operands, reg->index, scalar);
-  }
+void add_operand_read(ScalarReads &reads, const NpuOperand &operand) {
+  if (const auto *reg = std::get_if<ScalarRegister>(&operand)) add_read(reads, reg->index);
 }
 
 } // namespace
@@ -33,39 +29,48 @@ std::optional<RegisterIndex> scalar_dest(const DecodedNpuInstr &instr) {
   return extract->dest.index;
 }
 
-ScalarOperands capture_scalar_operands(const DecodedNpuInstr &instr, const ScalarState &scalar) {
-  ScalarOperands operands;
+ScalarReads scalar_reads(const DecodedNpuInstr &instr) {
+  ScalarReads reads;
 
   std::visit(
       Overloaded{
           [&](const FillInstr &fill) {
             if (const auto *reg = std::get_if<ScalarRegister>(&fill.value)) {
-              add_scalar(operands, reg->index, scalar);
+              add_read(reads, reg->index);
             }
           },
-          [&](const RowInstr &row) { add_index(operands, row.index, scalar); },
-          [&](const LaneExtractInstr &extract) { add_index(operands, extract.index, scalar); },
+          [&](const RowInstr &row) { add_index_read(reads, row.index); },
+          [&](const LaneExtractInstr &extract) { add_index_read(reads, extract.index); },
           [&](const LaneInsertInstr &insert) {
-            add_scalar(operands, insert.src.index, scalar);
-            add_index(operands, insert.index, scalar);
+            add_read(reads, insert.src.index);
+            add_index_read(reads, insert.index);
           },
-          [&](const LaneBroadcastInstr &broadcast) {
-            add_index(operands, broadcast.index, scalar);
-          },
-          [&](const EbinInstr &ebin) { add_operand(operands, ebin.src2, scalar); },
-          [&](const CmpInstr &cmp) { add_operand(operands, cmp.src2, scalar); },
+          [&](const LaneBroadcastInstr &broadcast) { add_index_read(reads, broadcast.index); },
+          [&](const EbinInstr &ebin) { add_operand_read(reads, ebin.src2); },
+          [&](const CmpInstr &cmp) { add_operand_read(reads, cmp.src2); },
           [&](const MaskInstr &mask) {
-            add_scalar(operands, mask.bound, scalar);
+            add_read(reads, mask.bound);
             if (const auto *reg = std::get_if<ScalarRegister>(&mask.fill)) {
-              add_scalar(operands, reg->index, scalar);
+              add_read(reads, reg->index);
             }
           },
-          [&](const CfgSetxInstr &setx) { add_scalar(operands, setx.src, scalar); },
-          [&](const CfgSetwInstr &setw) { add_scalar(operands, setw.src, scalar); },
+          [&](const CfgSetxInstr &setx) { add_read(reads, setx.src); },
+          [&](const CfgSetwInstr &setw) { add_read(reads, setw.src); },
           [&](const auto &) {},
       },
       instr);
 
+  return reads;
+}
+
+ScalarOperands capture_scalar_operands(const DecodedNpuInstr &instr, const ScalarState &scalar) {
+  const auto reads = scalar_reads(instr);
+  ScalarOperands operands;
+  operands.count = reads.count;
+  for (std::size_t i = 0; i < reads.count; ++i) {
+    operands.values[i] =
+        ScalarOperand{.index = reads.values[i], .value = scalar.read_x(reads.values[i])};
+  }
   return operands;
 }
 

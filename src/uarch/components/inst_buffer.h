@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tile_npu/decode.h"
+#include "uarch/dataflow/npu_config.h"
 #include "uarch/dataflow/npu_operands.h"
 
 #include <cstddef>
@@ -22,6 +23,7 @@ public:
     std::uint32_t instr = 0;
     DecodedNpuInstr decoded;
     ScalarOperands scalar;
+    ConfigOperands config;
   };
 
   explicit InstBuffer(std::size_t depth = INST_BUFFER_DEPTH);

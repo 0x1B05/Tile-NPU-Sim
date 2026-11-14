@@ -44,11 +44,12 @@ TEST_CASE(uarch_dispatcher_dispatches_buffer_to_backend) {
   UarchStats stats;
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
-  UarchDispatcher dispatcher(clock, backend, state, executor, writeback);
+  InstBuffer inst_buffer;
+  UarchDispatcher dispatcher(clock, backend, state, executor, inst_buffer);
   UarchDriver driver(clock, backend, stats, dispatcher);
 
-  check(dispatcher.enqueue(lane_extract_entry(state)), "dispatcher accepts the entry");
-  check(scalar_scoreboard.busy(1), "dispatcher marks the scalar destination busy");
+  scalar_scoreboard.mark_busy(1);
+  check(inst_buffer.enqueue(lane_extract_entry(state)), "dispatcher accepts the entry");
   check(!dispatcher.empty(), "dispatcher has buffered work");
 
   driver.advance();
@@ -74,13 +75,14 @@ TEST_CASE(uarch_dispatcher_dispatches_one_entry_per_cycle) {
   UarchStats stats;
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
-  UarchDispatcher dispatcher(clock, backend, state, executor, writeback);
+  InstBuffer inst_buffer;
+  UarchDispatcher dispatcher(clock, backend, state, executor, inst_buffer);
   UarchDriver driver(clock, backend, stats, dispatcher);
 
-  check(dispatcher.enqueue(lane_extract_entry(state, 1)), "first entry is buffered");
-  check(dispatcher.enqueue(lane_extract_entry(state, 2)), "second entry is buffered");
-  check(scalar_scoreboard.busy(1) && scalar_scoreboard.busy(2),
-        "both scalar destinations are marked busy");
+  scalar_scoreboard.mark_busy(1);
+  scalar_scoreboard.mark_busy(2);
+  check(inst_buffer.enqueue(lane_extract_entry(state, 1)), "first entry is buffered");
+  check(inst_buffer.enqueue(lane_extract_entry(state, 2)), "second entry is buffered");
 
   driver.single_cycle();
   check(!dispatcher.empty(), "only one entry leaves the buffer per cycle");

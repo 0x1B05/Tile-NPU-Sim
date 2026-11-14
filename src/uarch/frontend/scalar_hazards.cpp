@@ -7,18 +7,31 @@
 namespace tile_npu {
 
 bool has_stall_hazard(const std::optional<PipelineEntry> &id_ex,
-                      const std::optional<PipelineEntry> &ex_mem, const DecodedScalarInstr &instr) {
+                      const std::optional<PipelineEntry> &ex_mem, const ScalarReads &reads) {
   const auto conflict = [&](const std::optional<PipelineEntry> &producer) {
     if (!producer || !producer->decoded) return false;
 
     const auto *scalar = std::get_if<DecodedScalarInstr>(&*producer->decoded);
     if (scalar == nullptr || scalar->regs.dest == 0) return false;
-    if (scalar->regs.dest != instr.regs.src1 && scalar->regs.dest != instr.regs.src2) return false;
+
+    bool reads_dest = false;
+    for (std::size_t i = 0; i < reads.count; ++i) {
+      if (scalar->regs.dest == reads.values[i]) reads_dest = true;
+    }
+    if (!reads_dest) return false;
 
     return !producer->compute || producer->compute->status != StepStatus::retired;
   };
 
   return conflict(id_ex) || conflict(ex_mem);
+}
+
+bool has_stall_hazard(const std::optional<PipelineEntry> &id_ex,
+                      const std::optional<PipelineEntry> &ex_mem, const DecodedScalarInstr &instr) {
+  ScalarReads reads;
+  if (instr.regs.src1 != 0) reads.values[reads.count++] = instr.regs.src1;
+  if (instr.regs.src2 != 0) reads.values[reads.count++] = instr.regs.src2;
+  return has_stall_hazard(id_ex, ex_mem, reads);
 }
 
 bool has_config_stall(const std::optional<PipelineEntry> &id_ex,

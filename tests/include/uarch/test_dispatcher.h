@@ -16,9 +16,11 @@ public:
   TestDispatcher(UarchClock &clock, UarchBackend &backend)
       : memory_(0x1000, 0x100), writeback_(state_, scalar_scoreboard_),
         executor_(state_, memory_, writeback_),
-        dispatcher_(clock, backend, state_, executor_, writeback_) {}
+        dispatcher_(clock, backend, state_, executor_, inst_buffer_) {}
 
   UarchDispatcher &dispatcher() { return dispatcher_; }
+
+  InstBuffer &inst_buffer() { return inst_buffer_; }
 
   State &state() { return state_; }
 
@@ -30,6 +32,7 @@ private:
   ScalarScoreboard scalar_scoreboard_;
   ScalarWritebackPort writeback_;
   NpuExecutor executor_;
+  InstBuffer inst_buffer_;
   UarchDispatcher dispatcher_;
 };
 

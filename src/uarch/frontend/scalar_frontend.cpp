@@ -3,6 +3,7 @@
 #include "execute/execute.h"
 #include "uarch/dataflow/npu_config.h"
 #include "uarch/dataflow/npu_instruction.h"
+#include "uarch/dataflow/npu_operands.h"
 #include "uarch/frontend/execute/scalar_memory.h"
 #include "uarch/frontend/scalar_hazards.h"
 #include "utils/endian.h"
@@ -15,8 +16,10 @@
 
 namespace tile_npu {
 
-ScalarFrontend::ScalarFrontend(const UarchClock &clock, State &state, AddressSpace &memory)
-    : clock_(clock), state_(state), memory_(memory) {}
+ScalarFrontend::ScalarFrontend(const UarchClock &clock, State &state, AddressSpace &memory,
+                               InstBuffer &inst_buffer, ScalarWritebackPort &writeback)
+    : clock_(clock), state_(state), memory_(memory), inst_buffer_(inst_buffer),
+      writeback_(writeback) {}
 
 void ScalarFrontend::reset(std::uint64_t entry_pc) {
   if_id_.reset();
@@ -66,7 +69,20 @@ bool ScalarFrontend::prepare_id(PipelineEntry &entry) {
     const auto *npu = std::get_if<DecodedNpuInstr>(&*entry.decoded);
     if (npu == nullptr) return false;
     if (reads_config(*npu) && has_config_stall(id_ex_, ex_mem_, mem_wb_)) return true;
-    if (!is_scalar_npu(*npu)) entry.config = capture_config_operands(*npu, state_);
+    if (is_scalar_npu(*npu)) return false;
+
+    const auto reads = scalar_reads(*npu);
+    if (has_stall_hazard(id_ex_, ex_mem_, reads)) return true;
+
+    entry.scalar = {};
+    for (std::size_t i = 0; i < reads.count; ++i) {
+      entry.scalar.values[i] = ScalarOperand{
+          .index = reads.values[i],
+          .value = read_scalar_value(reads.values[i], id_ex_, ex_mem_, state_),
+      };
+    }
+    entry.scalar.count = reads.count;
+    entry.config = capture_config_operands(*npu, state_);
     return false;
   }
   if (has_stall_hazard(id_ex_, ex_mem_, *scalar)) return true;
@@ -127,22 +143,37 @@ ScalarFrontend::WbOutcome ScalarFrontend::execute_wb(const PipelineEntry &entry)
   }
 
   if (const auto *npu = std::get_if<DecodedNpuInstr>(&*entry.decoded)) {
-    if (!is_config_npu(*npu)) {
-      return {.stop = StepResult{.status = StepStatus::execution_not_implemented,
-                                 .pc = entry.pc,
-                                 .instr = entry.instr}};
+    if (is_scalar_npu(*npu)) {
+      if (!is_config_npu(*npu)) {
+        return {.stop = StepResult{.status = StepStatus::execution_not_implemented,
+                                   .pc = entry.pc,
+                                   .instr = entry.instr}};
+      }
+
+      state_.scalar.pc = entry.pc;
+      ExecContext ctx{state_, memory_};
+      const auto execution = exec_npu_instr(*npu, ctx);
+      if (execution.status != StepStatus::retired) {
+        return {.stop = StepResult{.status = execution.status,
+                                   .pc = entry.pc,
+                                   .instr = entry.instr,
+                                   .fault_address = execution.fault_address}};
+      }
+
+      state_.scalar.pc = entry.pc + INSTR_BYTES;
+      return {.retired = true};
     }
 
-    state_.scalar.pc = entry.pc;
-    ExecContext ctx{state_, memory_};
-    const auto execution = exec_npu_instr(*npu, ctx);
-    if (execution.status != StepStatus::retired) {
-      return {.stop = StepResult{.status = execution.status,
-                                 .pc = entry.pc,
-                                 .instr = entry.instr,
-                                 .fault_address = execution.fault_address}};
-    }
+    const InstBuffer::Entry command{
+        .pc = entry.pc,
+        .instr = entry.instr,
+        .decoded = *npu,
+        .scalar = entry.scalar,
+        .config = entry.config,
+    };
+    if (!inst_buffer_.enqueue(command)) return {.stalled = true};
 
+    if (const auto dest = scalar_dest(*npu)) writeback_.mark_busy(*dest);
     state_.scalar.pc = entry.pc + INSTR_BYTES;
     return {.retired = true};
   }
@@ -214,6 +245,8 @@ std::size_t ScalarFrontend::process_cur_cycle() {
       clear_pipeline();
       return retired;
     }
+
+    if (outcome.stalled) return retired;
 
     if (outcome.retired) ++retired;
 
