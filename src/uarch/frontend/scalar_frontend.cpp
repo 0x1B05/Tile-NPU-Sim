@@ -4,6 +4,7 @@
 #include "uarch/dataflow/npu_config.h"
 #include "uarch/dataflow/npu_instruction.h"
 #include "uarch/frontend/execute/scalar_memory.h"
+#include "uarch/frontend/scalar_hazards.h"
 #include "utils/endian.h"
 
 #include <array>
@@ -64,41 +65,15 @@ bool ScalarFrontend::prepare_id(PipelineEntry &entry) {
   if (scalar == nullptr) {
     const auto *npu = std::get_if<DecodedNpuInstr>(&*entry.decoded);
     if (npu == nullptr) return false;
-    if (reads_config(*npu) && has_config_stall()) return true;
+    if (reads_config(*npu) && has_config_stall(id_ex_, ex_mem_, mem_wb_)) return true;
     if (!is_scalar_npu(*npu)) entry.config = capture_config_operands(*npu, state_);
     return false;
   }
-  if (has_stall_hazard(*scalar)) return true;
+  if (has_stall_hazard(id_ex_, ex_mem_, *scalar)) return true;
 
-  entry.lhs = read_scalar(scalar->regs.src1);
-  entry.rhs = read_scalar(scalar->regs.src2);
+  entry.lhs = read_scalar_value(scalar->regs.src1, id_ex_, ex_mem_, state_);
+  entry.rhs = read_scalar_value(scalar->regs.src2, id_ex_, ex_mem_, state_);
   return false;
-}
-
-bool ScalarFrontend::has_config_stall() const {
-  const auto writes_config = [](const std::optional<PipelineEntry> &entry) {
-    if (!entry || !entry->decoded) return false;
-    const auto *npu = std::get_if<DecodedNpuInstr>(&*entry->decoded);
-    return npu != nullptr && writes_config_at_wb(*npu);
-  };
-
-  return writes_config(id_ex_) || writes_config(ex_mem_) || writes_config(mem_wb_);
-}
-
-bool ScalarFrontend::has_stall_hazard(const DecodedScalarInstr &instr) const {
-  const auto conflict = [&](const std::optional<PipelineEntry> &producer) {
-    if (!producer || !producer->decoded) return false;
-
-    const auto *scalar = std::get_if<DecodedScalarInstr>(&*producer->decoded);
-    if (scalar == nullptr || scalar->regs.dest == 0) return false;
-    if (scalar->regs.dest != instr.regs.src1 && scalar->regs.dest != instr.regs.src2) return false;
-
-    // ALU results are forwarded from EX/MEM. Loads and other late writebacks
-    // must wait until WB has updated the architectural scalar state.
-    return !producer->compute || producer->compute->status != StepStatus::retired;
-  };
-
-  return conflict(id_ex_) || conflict(ex_mem_);
 }
 
 void ScalarFrontend::execute_ex(PipelineEntry &entry) {
@@ -137,25 +112,6 @@ void ScalarFrontend::execute_mem(PipelineEntry &entry) {
     id_ex_.reset();
     if_id_.reset();
   }
-}
-
-std::uint64_t ScalarFrontend::read_scalar(RegisterIndex index) const {
-  if (index == 0) return 0;
-
-  const auto forward =
-      [index](const std::optional<PipelineEntry> &entry) -> std::optional<std::uint64_t> {
-    if (!entry || !entry->decoded || !entry->compute ||
-        entry->compute->status != StepStatus::retired || !entry->compute->writes_dest) {
-      return std::nullopt;
-    }
-    const auto *scalar = std::get_if<DecodedScalarInstr>(&*entry->decoded);
-    if (scalar == nullptr || scalar->regs.dest != index) return std::nullopt;
-    return entry->compute->value;
-  };
-
-  if (const auto value = forward(id_ex_)) return *value;
-  if (const auto value = forward(ex_mem_)) return *value;
-  return state_.scalar.read_x(index);
 }
 
 ScalarFrontend::WbOutcome ScalarFrontend::execute_wb(const PipelineEntry &entry) {
