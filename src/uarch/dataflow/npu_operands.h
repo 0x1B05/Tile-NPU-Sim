@@ -27,8 +27,24 @@ struct ScalarOperands {
   std::uint8_t count = 0;
 };
 
-// Lane extract is currently the only NPU instruction with a scalar destination.
+// Scalar register numbers read by an NPU instruction, in operand order.
+struct ScalarReads {
+  static constexpr std::size_t MAX = 2;
+
+  std::array<RegisterIndex, MAX> values{};
+  std::uint8_t count = 0;
+};
+
+// Lane extract is currently the only NPU instruction with a scalar destination
+// on the decoupled bus.
 std::optional<RegisterIndex> scalar_dest(const DecodedNpuInstr &instr);
+
+// Any scalar register written by an NPU-space instruction, including cfg.get
+// and cfg.getw in the scalar front end.
+std::optional<RegisterIndex> scalar_write_dest(const DecodedNpuInstr &instr);
+
+// Returns the scalar registers read by an NPU instruction.
+ScalarReads scalar_reads(const DecodedNpuInstr &instr);
 
 // Captures the scalar values read by an NPU instruction from the live scalar
 // register file.

@@ -5,8 +5,10 @@
 #include "uarch/components/scalar_scoreboard.h"
 #include "uarch/components/scalar_writeback.h"
 #include "uarch/dataflow/dyn_inst_builder.h"
+#include "uarch/dataflow/npu_config.h"
 #include "uarch/dataflow/npu_operands.h"
 #include "uarch/engine/uarch_driver.h"
+#include "uarch/frontend/scalar_frontend.h"
 
 #include <cstdint>
 
@@ -39,30 +41,30 @@ TEST_CASE(npu_executor_writes_back_scalar_at_completion) {
   state.v[0][0] = 42;
 
   Ram memory(0x1000, 0x100);
-  ScalarScoreboard scalar_scoreboard;
-  ScalarWritebackPort writeback(state, scalar_scoreboard);
-  NpuExecutor executor(state, memory, writeback);
   UarchStats stats;
   UarchClock clock;
+  InstBuffer inst_buffer;
+  ScalarFrontend frontend(clock, state, memory, inst_buffer);
+  NpuExecutor executor(state, memory, frontend.writeback());
   UarchBackend backend(clock, stats, executor);
-  UarchDispatcher dispatcher(clock, backend, state, executor, writeback);
-  UarchDriver driver(clock, backend, stats, dispatcher);
+  UarchDispatcher dispatcher(clock, backend, state, executor, inst_buffer);
+  UarchDriver driver(clock, backend, stats, frontend, dispatcher);
 
   const auto entry = lane_extract_entry(state);
   const auto inst = make_npu_dyn_inst(1, entry.pc, entry.decoded, state);
-  scalar_scoreboard.mark_busy(1);
+  frontend.writeback().mark_busy(1);
   check(backend.dispatch(inst), "backend accepts the vextract");
   executor.track(inst, entry);
-  check(scalar_scoreboard.busy(1), "vextract destination is marked busy");
+  check(frontend.writeback().busy(1), "vextract destination is marked busy");
 
   driver.single_cycle();
   driver.single_cycle();
   check_eq(state.scalar.read_x(1), std::uint64_t{7}, "writeback is not visible at issue");
-  check(scalar_scoreboard.busy(1), "destination remains busy until completion");
+  check(frontend.writeback().busy(1), "destination remains busy until completion");
 
   driver.advance();
   check_eq(state.scalar.read_x(1), std::uint64_t{42}, "writeback is visible at completion");
-  check(!scalar_scoreboard.busy(1), "destination is released at completion");
+  check(!frontend.writeback().busy(1), "destination is released at completion");
   check_eq(stats.retired, std::uint64_t{1}, "vextract retires");
 }
 
@@ -96,6 +98,39 @@ TEST_CASE(npu_executor_uses_captured_scalar_operands) {
   check_eq(state.t[0][0], std::uint8_t{42}, "executor uses the captured scalar value");
 }
 
+TEST_CASE(npu_executor_uses_captured_config_operands) {
+  State state;
+  state.tc[0] = TileConfig{.dtype = DType::i8, .rows = 1, .cols = 1};
+
+  Ram memory(0x1000, 0x100);
+  ScalarScoreboard scalar_scoreboard;
+  ScalarWritebackPort writeback(state, scalar_scoreboard);
+  NpuExecutor executor(state, memory, writeback);
+
+  FillInstr fill;
+  fill.dest = {.domain = NpuDomain::tile, .index = 0};
+  fill.value = FillImm16{.bits = 7};
+
+  const InstBuffer::Entry entry{
+      .pc = 0x1000,
+      .instr = 0,
+      .decoded = fill,
+      .scalar = capture_scalar_operands(fill, state.scalar),
+      .config = capture_config_operands(fill, state),
+  };
+  const auto inst = make_npu_dyn_inst(1, entry.pc, entry.decoded, state);
+  executor.track(inst, entry);
+
+  state.tc[0].rows = 2;
+  state.tc[0].cols = 2;
+  const auto result = executor.execute(inst);
+
+  check_eq(result.status, StepStatus::retired, "fill executes");
+  check_eq(state.t[0][0], std::uint8_t{7}, "fill uses the captured config");
+  check_eq(state.t[0][1], std::uint8_t{0}, "captured config writes only one element");
+  check_eq(state.tc[0].rows, std::uint8_t{2}, "live config is restored after execution");
+}
+
 TEST_CASE(npu_executor_reset_clears_in_flight) {
   State state;
   state.vc[0] = Vec32Config{.dtype = DType::i32, .len = 4};
@@ -118,5 +153,5 @@ TEST_CASE(npu_executor_reset_clears_in_flight) {
   executor.reset();
   // Re-tracking the same id succeeds only if reset cleared the in-flight entry.
   executor.track(inst, entry);
-  check(scalar_scoreboard.busy(1), "executor reset leaves scoreboard ownership to the dispatcher");
+  check(scalar_scoreboard.busy(1), "executor reset leaves the frontend scoreboard alone");
 }

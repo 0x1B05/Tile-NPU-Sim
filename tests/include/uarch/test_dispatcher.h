@@ -4,8 +4,8 @@
 #include "uarch/backend/backend.h"
 #include "uarch/backend/dispatcher.h"
 #include "uarch/backend/npu_executor.h"
-#include "uarch/components/scalar_scoreboard.h"
-#include "uarch/components/scalar_writeback.h"
+#include "uarch/components/inst_buffer.h"
+#include "uarch/frontend/scalar_frontend.h"
 
 namespace tile_npu::test {
 
@@ -14,11 +14,15 @@ namespace tile_npu::test {
 class TestDispatcher {
 public:
   TestDispatcher(UarchClock &clock, UarchBackend &backend)
-      : memory_(0x1000, 0x100), writeback_(state_, scalar_scoreboard_),
-        executor_(state_, memory_, writeback_),
-        dispatcher_(clock, backend, state_, executor_, writeback_) {}
+      : memory_(0x1000, 0x100), frontend_(clock, state_, memory_, inst_buffer_),
+        executor_(state_, memory_, frontend_.writeback()),
+        dispatcher_(clock, backend, state_, executor_, inst_buffer_) {}
 
   UarchDispatcher &dispatcher() { return dispatcher_; }
+
+  ScalarFrontend &frontend() { return frontend_; }
+
+  InstBuffer &inst_buffer() { return inst_buffer_; }
 
   State &state() { return state_; }
 
@@ -27,8 +31,8 @@ public:
 private:
   State state_{};
   Ram memory_;
-  ScalarScoreboard scalar_scoreboard_;
-  ScalarWritebackPort writeback_;
+  InstBuffer inst_buffer_;
+  ScalarFrontend frontend_;
   NpuExecutor executor_;
   UarchDispatcher dispatcher_;
 };

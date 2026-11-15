@@ -13,6 +13,8 @@ void ScalarWritebackPort::write(RegisterIndex index, std::uint64_t value) {
   scoreboard_.mark_ready(index);
 }
 
+void ScalarWritebackPort::cancel(RegisterIndex index) { scoreboard_.mark_ready(index); }
+
 bool ScalarWritebackPort::busy(RegisterIndex index) const { return scoreboard_.busy(index); }
 
 void ScalarWritebackPort::mark_busy(RegisterIndex index) { scoreboard_.mark_busy(index); }

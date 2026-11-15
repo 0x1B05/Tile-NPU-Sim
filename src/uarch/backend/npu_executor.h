@@ -5,6 +5,7 @@
 #include "uarch/components/inst_buffer.h"
 #include "uarch/components/scalar_writeback.h"
 #include "uarch/dataflow/dyn_inst.h"
+#include "uarch/dataflow/npu_config.h"
 #include "uarch/engine/executor.h"
 
 #include <cstdint>
@@ -39,6 +40,7 @@ private:
     DecodedNpuInstr decoded;
     std::uint32_t instr = 0;
     ScalarOperands scalar;
+    ConfigOperands config;
     std::optional<ScalarWrite> scalar_write;
   };
 
