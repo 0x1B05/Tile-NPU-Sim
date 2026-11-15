@@ -363,6 +363,39 @@ TEST_CASE(scalar_frontend_cancels_busy_on_flush) {
   check_eq(state.scalar.read_x(1), std::uint64_t{0}, "flushed vextract does not write x1");
 }
 
+TEST_CASE(scalar_frontend_reset_clears_pending_writeback) {
+  Ram memory(CODE_BASE, 0x100);
+  write_word(memory, CODE_BASE, make_lane_move(0, 0, 0, 0, 1)); // vextract x1, v0, 0
+  write_word(memory, CODE_BASE + 4, 0x00100073u);               // ebreak
+  write_word(memory, CODE_BASE + 0x40, 0x00500113u);            // addi x2, x0, 5
+  write_word(memory, CODE_BASE + 0x44, 0x00100073u);            // ebreak
+
+  UarchClock clock;
+  ScalarFixture fixture(clock, memory);
+  auto &state = fixture.state;
+  auto &frontend = fixture.frontend;
+  frontend.reset(CODE_BASE);
+
+  for (std::size_t cycle = 0; cycle < 8; ++cycle) {
+    frontend.process_cur_cycle();
+    clock.tick();
+  }
+  check(frontend.writeback().busy(1), "vextract leaves a pending writeback");
+
+  frontend.reset(CODE_BASE + 0x40);
+  check(!frontend.writeback().busy(1), "reset clears the pending writeback");
+  check(!frontend.halted(), "reset restarts the pipeline");
+
+  std::size_t retired = 0;
+  const auto result = run_until_stop(frontend, clock, retired);
+
+  check(result.has_value(), "post-reset program stops");
+  check_eq(result->status, StepStatus::breakpoint, "post-reset program reaches ebreak");
+  check_eq(hex(result->pc), hex(CODE_BASE + 0x44), "post-reset stop pc");
+  check_eq(state.scalar.read_x(2), std::uint64_t{5}, "post-reset instruction executes");
+  check_eq(retired, std::size_t{1}, "only the post-reset addi retires");
+}
+
 TEST_CASE(scalar_frontend_stalls_when_ibuffer_full) {
   Ram memory(CODE_BASE, 12);
   write_word(memory, CODE_BASE, make_mma(0, 0, 0, 16));

@@ -29,6 +29,8 @@ public:
   // Processes existing work until the backend is empty.
   void drain();
 
+  void reset();
+
   // Takes the stop that halted the scalar frontend, if any.
   std::optional<StepResult> take_stop();
 

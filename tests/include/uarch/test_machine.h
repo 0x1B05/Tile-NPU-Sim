@@ -31,6 +31,7 @@ public:
     frontend_.reset(entry_pc);
     dispatcher_.reset();
     backend_.reset();
+    driver_.reset();
   }
 
   // Runs cycles until the scalar frontend reports a stop.

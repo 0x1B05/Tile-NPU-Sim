@@ -48,6 +48,8 @@ std::optional<StepResult> UarchDriver::take_stop() { return scalar_frontend_.tak
 
 bool UarchDriver::halted() const { return scalar_frontend_.halted(); }
 
+void UarchDriver::reset() { processed_ = false; }
+
 void UarchDriver::single_cycle() {
   ensure_cycle_processed();
   clock_.tick();

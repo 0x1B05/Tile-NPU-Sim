@@ -293,3 +293,38 @@ TEST_CASE(uarch_driver_waits_for_decoupled_scalar_writeback) {
   check_eq(machine.stats_.unit_count[static_cast<std::size_t>(Unit::vec32)], std::uint64_t{1},
            "vec32 unit counter");
 }
+
+TEST_CASE(uarch_driver_reset_clears_shared_state) {
+  TestMachine machine;
+  tile_cfg(machine.state_, 1, DType::i8, 1, 1);
+  tile_cfg(machine.state_, 2, DType::i8, 1, 1);
+  acc_cfg(machine.state_, 0, DType::i32, 1, 1);
+  machine.state_.t[1][0] = 2;
+  machine.state_.t[2][0] = 3;
+
+  write_word(machine.memory_, CODE_BASE, make_mma(0, 0, 1, 2)); // mma.nt.zero a0, t1, t2
+  write_word(machine.memory_, CODE_BASE + 4, 0x00100073u);      // ebreak
+  machine.reset(CODE_BASE);
+
+  for (std::size_t cycle = 0; cycle < 10; ++cycle)
+    machine.driver_.single_cycle();
+  check(!machine.backend_.empty(), "MMA is in flight before reset");
+
+  machine.reset(CODE_BASE + 0x80);
+  check(machine.inst_buffer_.empty(), "reset clears the shared instruction buffer");
+  check(machine.dispatcher_.empty(), "reset clears the dispatcher view");
+  check(machine.backend_.empty(), "reset clears the backend");
+  check(!machine.driver_.halted(), "reset restarts the scalar frontend");
+
+  write_word(machine.memory_, CODE_BASE + 0x80, 0x00700093u); // addi x1, x0, 7
+  write_word(machine.memory_, CODE_BASE + 0x84, 0x00108133u); // add x2, x1, x1
+  write_word(machine.memory_, CODE_BASE + 0x88, 0x00100073u); // ebreak
+
+  const auto stop = machine.run();
+
+  check(stop.has_value(), "post-reset program stops");
+  check_eq(stop->status, StepStatus::breakpoint, "post-reset program reaches ebreak");
+  check_eq(hex(stop->pc), hex(CODE_BASE + 0x88), "post-reset stop pc");
+  check_eq(machine.state_.scalar.read_x(1), std::uint64_t{7}, "post-reset first addi");
+  check_eq(machine.state_.scalar.read_x(2), std::uint64_t{14}, "post-reset dependent add");
+}
