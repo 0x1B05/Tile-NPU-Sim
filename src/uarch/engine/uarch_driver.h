@@ -1,18 +1,24 @@
 #pragma once
 
+#include "tile_npu/step.h"
 #include "uarch/backend/backend.h"
 #include "uarch/backend/dispatcher.h"
 #include "uarch/engine/clock.h"
 #include "uarch/uarch_stats.h"
 
+#include <optional>
+
 namespace tile_npu {
 
-// Owns time advancement for the machine model. Backends and dispatchers only
-// process the current cycle and report their next activity time.
+class ScalarFrontend;
+
+// Owns time advancement for the machine model. Backends, dispatchers and the
+// scalar frontend only process the current cycle and report their next
+// activity time.
 class UarchDriver {
 public:
   UarchDriver(UarchClock &clock, UarchBackend &backend, UarchStats &stats,
-              UarchDispatcher &dispatcher);
+              ScalarFrontend &scalar_frontend, UarchDispatcher &dispatcher);
 
   // Processes the current cycle and advances one clock edge.
   void single_cycle();
@@ -22,6 +28,11 @@ public:
 
   // Processes existing work until the backend is empty.
   void drain();
+
+  // Takes the stop that halted the scalar frontend, if any.
+  std::optional<StepResult> take_stop();
+
+  bool halted() const;
 
   UarchClock &clock() { return clock_; }
 
@@ -35,6 +46,7 @@ private:
   UarchClock &clock_;
   UarchBackend &backend_;
   UarchStats &stats_;
+  ScalarFrontend &scalar_frontend_;
   UarchDispatcher &dispatcher_;
   bool processed_ = false;
 };

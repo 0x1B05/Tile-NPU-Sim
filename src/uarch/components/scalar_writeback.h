@@ -16,6 +16,11 @@ public:
 
   void write(RegisterIndex index, std::uint64_t value);
 
+  // Discards a pending write without touching architectural state, for example
+  // when the producing instruction is flushed. The caller must guarantee the
+  // write can no longer complete.
+  void cancel(RegisterIndex index);
+
   bool busy(RegisterIndex index) const;
 
   void mark_busy(RegisterIndex index);

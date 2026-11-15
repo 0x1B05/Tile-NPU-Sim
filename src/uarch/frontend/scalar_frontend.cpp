@@ -17,11 +17,13 @@
 namespace tile_npu {
 
 ScalarFrontend::ScalarFrontend(const UarchClock &clock, State &state, AddressSpace &memory,
-                               InstBuffer &inst_buffer, ScalarWritebackPort &writeback)
-    : clock_(clock), state_(state), memory_(memory), inst_buffer_(inst_buffer),
-      writeback_(writeback) {}
+                               InstBuffer &inst_buffer)
+    : clock_(clock), state_(state), memory_(memory), writeback_(state_, scoreboard_),
+      inst_buffer_(inst_buffer) {}
 
 void ScalarFrontend::reset(std::uint64_t entry_pc) {
+  // The owner must reset the NPU executor first so no in-flight writeback can
+  // arrive after the scoreboard is cleared.
   if_id_.reset();
   id_ex_.reset();
   ex_mem_.reset();
@@ -30,6 +32,7 @@ void ScalarFrontend::reset(std::uint64_t entry_pc) {
   fetch_stopped_ = false;
   halted_ = false;
   stop_.reset();
+  writeback_.reset();
   state_.scalar.pc = entry_pc;
 }
 
@@ -64,14 +67,27 @@ bool ScalarFrontend::prepare_id(PipelineEntry &entry) {
     entry.decoded = std::move(decoded);
   }
 
+  const auto busy = [this](RegisterIndex index) { return index != 0 && writeback_.busy(index); };
+
   const auto *scalar = std::get_if<DecodedScalarInstr>(&*entry.decoded);
   if (scalar == nullptr) {
     const auto *npu = std::get_if<DecodedNpuInstr>(&*entry.decoded);
     if (npu == nullptr) return false;
     if (reads_config(*npu) && has_config_stall(id_ex_, ex_mem_, mem_wb_)) return true;
-    if (is_scalar_npu(*npu)) return false;
 
     const auto reads = scalar_reads(*npu);
+    for (std::size_t i = 0; i < reads.count; ++i) {
+      if (busy(reads.values[i])) return true;
+    }
+
+    const auto dest = scalar_write_dest(*npu);
+    if (dest && busy(*dest)) return true;
+    if (dest) {
+      writeback_.mark_busy(*dest);
+      entry.busy_dest = dest;
+    }
+    if (is_scalar_npu(*npu)) return false;
+
     if (has_stall_hazard(id_ex_, ex_mem_, reads)) return true;
 
     entry.scalar = {};
@@ -85,6 +101,7 @@ bool ScalarFrontend::prepare_id(PipelineEntry &entry) {
     entry.config = capture_config_operands(*npu, state_);
     return false;
   }
+  if (busy(scalar->regs.src1) || busy(scalar->regs.src2) || busy(scalar->regs.dest)) return true;
   if (has_stall_hazard(id_ex_, ex_mem_, *scalar)) return true;
 
   entry.lhs = read_scalar_value(scalar->regs.src1, id_ex_, ex_mem_, state_);
@@ -103,14 +120,14 @@ void ScalarFrontend::execute_ex(PipelineEntry &entry) {
     entry.fault = entry.compute->status;
     entry.fault_address = entry.compute->fault_address;
     fetch_stopped_ = true;
-    if_id_.reset();
+    discard(if_id_);
     return;
   }
 
   if (entry.compute->redirect) {
     fetch_pc_ = *entry.compute->redirect;
     fetch_stopped_ = false;
-    if_id_.reset();
+    discard(if_id_);
   }
 }
 
@@ -125,8 +142,8 @@ void ScalarFrontend::execute_mem(PipelineEntry &entry) {
     entry.fault = entry.memory->status;
     entry.fault_address = entry.memory->fault_address;
     fetch_stopped_ = true;
-    id_ex_.reset();
-    if_id_.reset();
+    discard(id_ex_);
+    discard(if_id_);
   }
 }
 
@@ -161,6 +178,7 @@ ScalarFrontend::WbOutcome ScalarFrontend::execute_wb(const PipelineEntry &entry)
       }
 
       state_.scalar.pc = entry.pc + INSTR_BYTES;
+      if (const auto dest = scalar_write_dest(*npu)) writeback_.cancel(*dest);
       return {.retired = true};
     }
 
@@ -173,7 +191,6 @@ ScalarFrontend::WbOutcome ScalarFrontend::execute_wb(const PipelineEntry &entry)
     };
     if (!inst_buffer_.enqueue(command)) return {.stalled = true};
 
-    if (const auto dest = scalar_dest(*npu)) writeback_.mark_busy(*dest);
     state_.scalar.pc = entry.pc + INSTR_BYTES;
     return {.retired = true};
   }
@@ -225,11 +242,16 @@ ScalarFrontend::WbOutcome ScalarFrontend::execute_wb(const PipelineEntry &entry)
   return {.redirect = execution.redirect, .retired = true};
 }
 
+void ScalarFrontend::discard(std::optional<PipelineEntry> &entry) {
+  if (entry && entry->busy_dest) writeback_.cancel(*entry->busy_dest);
+  entry.reset();
+}
+
 void ScalarFrontend::clear_pipeline() {
-  if_id_.reset();
-  id_ex_.reset();
-  ex_mem_.reset();
-  mem_wb_.reset();
+  discard(if_id_);
+  discard(id_ex_);
+  discard(ex_mem_);
+  discard(mem_wb_);
 }
 
 std::size_t ScalarFrontend::process_cur_cycle() {

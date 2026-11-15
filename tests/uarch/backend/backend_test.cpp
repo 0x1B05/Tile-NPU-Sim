@@ -89,7 +89,8 @@ TEST_CASE(uarch_backend_issues_and_completes) {
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
   TestDispatcher dispatcher_fixture(clock, backend);
-  UarchDriver driver(clock, backend, stats, dispatcher_fixture.dispatcher());
+  UarchDriver driver(clock, backend, stats, dispatcher_fixture.frontend(),
+                     dispatcher_fixture.dispatcher());
 
   backend.dispatch(vec_write(1, 1));
   check_eq(executor.executed.size(), std::size_t{0}, "dispatch does not issue");
@@ -111,7 +112,8 @@ TEST_CASE(uarch_backend_waits_for_raw) {
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
   TestDispatcher dispatcher_fixture(clock, backend);
-  UarchDriver driver(clock, backend, stats, dispatcher_fixture.dispatcher());
+  UarchDriver driver(clock, backend, stats, dispatcher_fixture.frontend(),
+                     dispatcher_fixture.dispatcher());
 
   backend.dispatch(mma_write(1, 0));
   driver.single_cycle(); // process cycle 0
@@ -137,7 +139,8 @@ TEST_CASE(uarch_backend_memory_queue_stalls_behind_blocked_head) {
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
   TestDispatcher dispatcher_fixture(clock, backend);
-  UarchDriver driver(clock, backend, stats, dispatcher_fixture.dispatcher());
+  UarchDriver driver(clock, backend, stats, dispatcher_fixture.frontend(),
+                     dispatcher_fixture.dispatcher());
 
   backend.dispatch(mma_write(1, 0));
   driver.single_cycle();
@@ -166,7 +169,8 @@ TEST_CASE(uarch_backend_advance_keeps_ready_issue_opportunities) {
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
   TestDispatcher dispatcher_fixture(clock, backend);
-  UarchDriver driver(clock, backend, stats, dispatcher_fixture.dispatcher());
+  UarchDriver driver(clock, backend, stats, dispatcher_fixture.frontend(),
+                     dispatcher_fixture.dispatcher());
 
   backend.dispatch(mma_write(1, 0));
   backend.dispatch(mma_write(2, 1));
@@ -200,7 +204,8 @@ TEST_CASE(uarch_backend_does_not_issue_twice_in_one_cycle) {
   check_eq(executor.executed.size(), std::size_t{1}, "reprocessing the same cycle issues none");
 
   TestDispatcher dispatcher_fixture(clock, backend);
-  UarchDriver driver(clock, backend, stats, dispatcher_fixture.dispatcher());
+  UarchDriver driver(clock, backend, stats, dispatcher_fixture.frontend(),
+                     dispatcher_fixture.dispatcher());
   driver.advance();
   check_eq(executor.executed.size(), std::size_t{2}, "second MMA issues on the next cycle");
   check_eq(stats.retired, std::uint64_t{1}, "only the first MMA completes at cycle 11");
@@ -213,7 +218,8 @@ TEST_CASE(uarch_backend_cycle_then_drain_respects_issue_cycle) {
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
   TestDispatcher dispatcher_fixture(clock, backend);
-  UarchDriver driver(clock, backend, stats, dispatcher_fixture.dispatcher());
+  UarchDriver driver(clock, backend, stats, dispatcher_fixture.frontend(),
+                     dispatcher_fixture.dispatcher());
 
   backend.dispatch(mma_write(1, 0));
   backend.dispatch(mma_write(2, 1));
@@ -233,7 +239,8 @@ TEST_CASE(uarch_backend_advance_stops_at_completion_boundary) {
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
   TestDispatcher dispatcher_fixture(clock, backend);
-  UarchDriver driver(clock, backend, stats, dispatcher_fixture.dispatcher());
+  UarchDriver driver(clock, backend, stats, dispatcher_fixture.frontend(),
+                     dispatcher_fixture.dispatcher());
 
   for (std::uint64_t id = 1; id <= 4; ++id)
     backend.dispatch(vec_write(id, static_cast<RegisterIndex>(id)));
@@ -259,7 +266,8 @@ TEST_CASE(uarch_backend_advance_single_dispatch) {
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
   TestDispatcher dispatcher_fixture(clock, backend);
-  UarchDriver driver(clock, backend, stats, dispatcher_fixture.dispatcher());
+  UarchDriver driver(clock, backend, stats, dispatcher_fixture.frontend(),
+                     dispatcher_fixture.dispatcher());
 
   backend.dispatch(vec_write(1, 1));
   driver.advance();
@@ -275,7 +283,8 @@ TEST_CASE(uarch_backend_advance_stops_at_new_earlier_completion) {
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
   TestDispatcher dispatcher_fixture(clock, backend);
-  UarchDriver driver(clock, backend, stats, dispatcher_fixture.dispatcher());
+  UarchDriver driver(clock, backend, stats, dispatcher_fixture.frontend(),
+                     dispatcher_fixture.dispatcher());
 
   backend.dispatch(mma_write(1, 0));
   driver.single_cycle();
@@ -300,7 +309,8 @@ TEST_CASE(uarch_backend_new_dispatch_does_not_delay_older_entry) {
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
   TestDispatcher dispatcher_fixture(clock, backend);
-  UarchDriver driver(clock, backend, stats, dispatcher_fixture.dispatcher());
+  UarchDriver driver(clock, backend, stats, dispatcher_fixture.frontend(),
+                     dispatcher_fixture.dispatcher());
 
   backend.dispatch(mma_write(1, 0));
   driver.single_cycle(); // now = 1
@@ -325,7 +335,8 @@ TEST_CASE(uarch_backend_applies_queue_backpressure) {
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
   TestDispatcher dispatcher_fixture(clock, backend);
-  UarchDriver driver(clock, backend, stats, dispatcher_fixture.dispatcher());
+  UarchDriver driver(clock, backend, stats, dispatcher_fixture.frontend(),
+                     dispatcher_fixture.dispatcher());
 
   backend.dispatch(mma_write(1, 0));
   driver.single_cycle();
@@ -347,7 +358,8 @@ TEST_CASE(uarch_backend_drain_retires_pending_work) {
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
   TestDispatcher dispatcher_fixture(clock, backend);
-  UarchDriver driver(clock, backend, stats, dispatcher_fixture.dispatcher());
+  UarchDriver driver(clock, backend, stats, dispatcher_fixture.frontend(),
+                     dispatcher_fixture.dispatcher());
 
   backend.dispatch(vec_write(1, 1));
   check_eq(stats.retired, std::uint64_t{0}, "completion is still pending");
@@ -361,7 +373,8 @@ TEST_CASE(uarch_backend_stops_on_executor_failure) {
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
   TestDispatcher dispatcher_fixture(clock, backend);
-  UarchDriver driver(clock, backend, stats, dispatcher_fixture.dispatcher());
+  UarchDriver driver(clock, backend, stats, dispatcher_fixture.frontend(),
+                     dispatcher_fixture.dispatcher());
 
   backend.dispatch(vec_write(1, 1));
   backend.dispatch(mma_write(2, 0));
@@ -380,7 +393,8 @@ TEST_CASE(uarch_backend_stops_on_executor_failure) {
   check_eq(failure->status, StepStatus::invalid_configuration, "failure status");
 
   check(backend.dispatch(vec_write(4, 3)), "take_failure resets the backend");
-  UarchDriver recovered(clock, backend, stats, dispatcher_fixture.dispatcher());
+  UarchDriver recovered(clock, backend, stats, dispatcher_fixture.frontend(),
+                        dispatcher_fixture.dispatcher());
   recovered.drain();
   check_eq(stats.retired, std::uint64_t{1}, "recovered backend retires new work");
 }
@@ -391,7 +405,8 @@ TEST_CASE(uarch_backend_reset_clears_timing_state) {
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
   TestDispatcher dispatcher_fixture(clock, backend);
-  UarchDriver driver(clock, backend, stats, dispatcher_fixture.dispatcher());
+  UarchDriver driver(clock, backend, stats, dispatcher_fixture.frontend(),
+                     dispatcher_fixture.dispatcher());
 
   backend.dispatch(vec_write(1, 1));
   driver.single_cycle();
@@ -406,7 +421,8 @@ TEST_CASE(uarch_backend_allows_out_of_order_completion) {
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
   TestDispatcher dispatcher_fixture(clock, backend);
-  UarchDriver driver(clock, backend, stats, dispatcher_fixture.dispatcher());
+  UarchDriver driver(clock, backend, stats, dispatcher_fixture.frontend(),
+                     dispatcher_fixture.dispatcher());
 
   backend.dispatch(vec_write(1, 1));
   driver.single_cycle();
@@ -427,7 +443,8 @@ TEST_CASE(uarch_backend_reports_per_unit_outstanding_work) {
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
   TestDispatcher dispatcher_fixture(clock, backend);
-  UarchDriver driver(clock, backend, stats, dispatcher_fixture.dispatcher());
+  UarchDriver driver(clock, backend, stats, dispatcher_fixture.frontend(),
+                     dispatcher_fixture.dispatcher());
 
   check(backend.empty(), "new backend has no work");
   check(!backend.outstanding(Unit::vec32), "no vec32 work");

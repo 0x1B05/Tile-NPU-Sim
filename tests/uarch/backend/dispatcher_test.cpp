@@ -8,6 +8,7 @@
 #include "uarch/dataflow/npu_config.h"
 #include "uarch/dataflow/npu_operands.h"
 #include "uarch/engine/uarch_driver.h"
+#include "uarch/frontend/scalar_frontend.h"
 
 #include <cstdint>
 #include <vector>
@@ -57,8 +58,9 @@ TEST_CASE(uarch_dispatcher_dispatches_buffer_to_backend) {
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
   InstBuffer inst_buffer;
+  ScalarFrontend frontend(clock, state, memory, inst_buffer);
   UarchDispatcher dispatcher(clock, backend, state, executor, inst_buffer);
-  UarchDriver driver(clock, backend, stats, dispatcher);
+  UarchDriver driver(clock, backend, stats, frontend, dispatcher);
 
   scalar_scoreboard.mark_busy(1);
   check(inst_buffer.enqueue(lane_extract_entry(state)), "dispatcher accepts the entry");
@@ -87,8 +89,9 @@ TEST_CASE(uarch_dispatcher_uses_captured_config_for_timing) {
   UarchClock clock;
   UarchBackend backend(clock, stats, timing_executor);
   InstBuffer inst_buffer;
+  ScalarFrontend frontend(clock, state, memory, inst_buffer);
   UarchDispatcher dispatcher(clock, backend, state, npu_executor, inst_buffer);
-  UarchDriver driver(clock, backend, stats, dispatcher);
+  UarchDriver driver(clock, backend, stats, frontend, dispatcher);
 
   FillInstr fill;
   fill.dest = {.domain = NpuDomain::tile, .index = 0};
@@ -127,8 +130,9 @@ TEST_CASE(uarch_dispatcher_dispatches_one_entry_per_cycle) {
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
   InstBuffer inst_buffer;
+  ScalarFrontend frontend(clock, state, memory, inst_buffer);
   UarchDispatcher dispatcher(clock, backend, state, executor, inst_buffer);
-  UarchDriver driver(clock, backend, stats, dispatcher);
+  UarchDriver driver(clock, backend, stats, frontend, dispatcher);
 
   scalar_scoreboard.mark_busy(1);
   scalar_scoreboard.mark_busy(2);

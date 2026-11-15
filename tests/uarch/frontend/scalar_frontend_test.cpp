@@ -40,14 +40,11 @@ constexpr std::uint32_t cfg_reg(std::uint32_t sel2, std::uint32_t cm, std::uint3
 
 struct ScalarFixture {
   State state;
-  ScalarScoreboard scoreboard;
-  ScalarWritebackPort writeback;
   InstBuffer inst_buffer;
   ScalarFrontend frontend;
 
   ScalarFixture(UarchClock &clock, AddressSpace &memory, std::size_t depth = INST_BUFFER_DEPTH)
-      : writeback(state, scoreboard), inst_buffer(depth),
-        frontend(clock, state, memory, inst_buffer, writeback) {}
+      : inst_buffer(depth), frontend(clock, state, memory, inst_buffer) {}
 };
 
 } // namespace
@@ -257,8 +254,113 @@ TEST_CASE(scalar_frontend_marks_vextract_destination_busy) {
   check(result.has_value(), "vextract program stops");
   check_eq(result->status, StepStatus::breakpoint, "vextract program reaches ebreak");
   check_eq(fixture.inst_buffer.size(), std::size_t{1}, "vextract is buffered");
-  check(fixture.scoreboard.busy(1), "frontend marks the vextract destination busy");
+  check(fixture.frontend.writeback().busy(1), "frontend marks the vextract destination busy");
   check_eq(retired, std::size_t{1}, "vextract commits once");
+}
+
+TEST_CASE(scalar_frontend_stalls_on_busy_scalar_writeback) {
+  Ram memory(CODE_BASE, 12);
+  write_word(memory, CODE_BASE, make_lane_move(0, 0, 0, 0, 1)); // vextract x1, v0, 0
+  write_word(memory, CODE_BASE + 4, 0x00108133u);               // add x2, x1, x1
+  write_word(memory, CODE_BASE + 8, 0x00100073u);               // ebreak
+
+  UarchClock clock;
+  ScalarFixture fixture(clock, memory);
+  auto &state = fixture.state;
+  auto &frontend = fixture.frontend;
+  frontend.reset(CODE_BASE);
+
+  std::size_t retired = 0;
+  for (std::size_t cycle = 0; cycle < 12; ++cycle) {
+    retired += frontend.process_cur_cycle();
+    clock.tick();
+  }
+
+  check_eq(fixture.inst_buffer.size(), std::size_t{1}, "vextract is buffered");
+  check(frontend.writeback().busy(1), "vextract destination remains busy");
+  check_eq(state.scalar.read_x(2), std::uint64_t{0}, "dependent add stalls");
+  check_eq(retired, std::size_t{1}, "only vextract has committed");
+
+  frontend.writeback().write(1, 42);
+  const auto result = run_until_stop(frontend, clock, retired);
+
+  check(result.has_value(), "program resumes after the writeback");
+  check_eq(result->status, StepStatus::breakpoint, "program reaches ebreak");
+  check_eq(state.scalar.read_x(1), std::uint64_t{42}, "writeback updates x1");
+  check_eq(state.scalar.read_x(2), std::uint64_t{84}, "dependent add sees the writeback");
+  check_eq(retired, std::size_t{2}, "vextract and add retire");
+}
+
+TEST_CASE(scalar_frontend_stalls_on_busy_destination) {
+  Ram memory(CODE_BASE, 12);
+  write_word(memory, CODE_BASE, make_lane_move(0, 0, 0, 0, 1)); // vextract x1, v0, 0
+  write_word(memory, CODE_BASE + 4, 0x00108133u);               // add x2, x1, x1
+  write_word(memory, CODE_BASE + 8, 0x00100073u);               // ebreak
+
+  UarchClock clock;
+  ScalarFixture fixture(clock, memory);
+  auto &state = fixture.state;
+  auto &frontend = fixture.frontend;
+  frontend.reset(CODE_BASE);
+
+  std::size_t retired = 0;
+  for (std::size_t cycle = 0; cycle < 16; ++cycle) {
+    retired += frontend.process_cur_cycle();
+    clock.tick();
+  }
+
+  check_eq(retired, std::size_t{1}, "only vextract retires");
+  check_eq(state.scalar.read_x(2), std::uint64_t{0}, "dependent add waits for the writeback");
+  check(frontend.writeback().busy(1), "vextract destination stays busy");
+  check(!frontend.halted(), "frontend stalls instead of halting");
+  check(!frontend.take_stop().has_value(), "no stop is reported while stalled");
+  check_eq(hex(state.scalar.pc), hex(CODE_BASE + 4), "pc stops at the dependent add");
+}
+
+TEST_CASE(scalar_frontend_clears_busy_after_config_get) {
+  Ram memory(CODE_BASE, 16);
+  write_word(memory, CODE_BASE, cfg_i(0x5, 0, 1, 4, 0));        // cfg.seti tc0, rows, 4
+  write_word(memory, CODE_BASE + 4, cfg_reg(0, 0, 2, 1, 0, 1)); // cfg.get x1, tc0, rows
+  write_word(memory, CODE_BASE + 8, 0x00108113u);               // addi x2, x1, 1
+  write_word(memory, CODE_BASE + 12, 0x00100073u);              // ebreak
+
+  UarchClock clock;
+  ScalarFixture fixture(clock, memory);
+  auto &state = fixture.state;
+  auto &frontend = fixture.frontend;
+  frontend.reset(CODE_BASE);
+
+  std::size_t retired = 0;
+  const auto result = run_until_stop(frontend, clock, retired);
+
+  check(result.has_value(), "config get program stops");
+  check_eq(result->status, StepStatus::breakpoint, "config get program reaches ebreak");
+  check_eq(state.scalar.read_x(1), std::uint64_t{4}, "cfg.get writes x1");
+  check_eq(state.scalar.read_x(2), std::uint64_t{5}, "dependent addi reads the cfg.get result");
+  check(!frontend.writeback().busy(1), "cfg.get releases its destination");
+  check_eq(retired, std::size_t{3}, "cfg.seti, cfg.get and addi retire");
+}
+
+TEST_CASE(scalar_frontend_cancels_busy_on_flush) {
+  Ram memory(CODE_BASE, 12);
+  write_word(memory, CODE_BASE, 0x00002103u);                       // lw x2, 0(x0), faults in MEM
+  write_word(memory, CODE_BASE + 4, make_lane_move(0, 0, 0, 0, 1)); // vextract x1, v0, 0
+  write_word(memory, CODE_BASE + 8, 0x00100073u);                   // ebreak
+
+  UarchClock clock;
+  ScalarFixture fixture(clock, memory);
+  auto &state = fixture.state;
+  auto &frontend = fixture.frontend;
+  frontend.reset(CODE_BASE);
+
+  std::size_t retired = 0;
+  const auto result = run_until_stop(frontend, clock, retired);
+
+  check(result.has_value(), "faulting program stops");
+  check_eq(result->status, StepStatus::load_fault, "load faults");
+  check_eq(hex(result->pc), hex(CODE_BASE), "fault is reported at the load");
+  check(!frontend.writeback().busy(1), "flushed vextract releases its destination");
+  check_eq(state.scalar.read_x(1), std::uint64_t{0}, "flushed vextract does not write x1");
 }
 
 TEST_CASE(scalar_frontend_stalls_when_ibuffer_full) {

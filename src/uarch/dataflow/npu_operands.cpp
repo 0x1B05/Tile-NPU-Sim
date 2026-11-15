@@ -29,6 +29,23 @@ std::optional<RegisterIndex> scalar_dest(const DecodedNpuInstr &instr) {
   return extract->dest.index;
 }
 
+std::optional<RegisterIndex> scalar_write_dest(const DecodedNpuInstr &instr) {
+  return std::visit(Overloaded{
+                        [](const LaneExtractInstr &extract) -> std::optional<RegisterIndex> {
+                          return extract.dest.index == 0 ? std::nullopt
+                                                         : std::optional{extract.dest.index};
+                        },
+                        [](const CfgGetInstr &get) -> std::optional<RegisterIndex> {
+                          return get.dest == 0 ? std::nullopt : std::optional{get.dest};
+                        },
+                        [](const CfgGetwInstr &getw) -> std::optional<RegisterIndex> {
+                          return getw.dest == 0 ? std::nullopt : std::optional{getw.dest};
+                        },
+                        [](const auto &) -> std::optional<RegisterIndex> { return std::nullopt; },
+                    },
+                    instr);
+}
+
 ScalarReads scalar_reads(const DecodedNpuInstr &instr) {
   ScalarReads reads;
 

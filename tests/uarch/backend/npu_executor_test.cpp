@@ -8,6 +8,7 @@
 #include "uarch/dataflow/npu_config.h"
 #include "uarch/dataflow/npu_operands.h"
 #include "uarch/engine/uarch_driver.h"
+#include "uarch/frontend/scalar_frontend.h"
 
 #include <cstdint>
 
@@ -47,8 +48,9 @@ TEST_CASE(npu_executor_writes_back_scalar_at_completion) {
   UarchClock clock;
   UarchBackend backend(clock, stats, executor);
   InstBuffer inst_buffer;
+  ScalarFrontend frontend(clock, state, memory, inst_buffer);
   UarchDispatcher dispatcher(clock, backend, state, executor, inst_buffer);
-  UarchDriver driver(clock, backend, stats, dispatcher);
+  UarchDriver driver(clock, backend, stats, frontend, dispatcher);
 
   const auto entry = lane_extract_entry(state);
   const auto inst = make_npu_dyn_inst(1, entry.pc, entry.decoded, state);

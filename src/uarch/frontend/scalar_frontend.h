@@ -4,6 +4,7 @@
 #include "tile_npu/state.h"
 #include "tile_npu/step.h"
 #include "uarch/components/inst_buffer.h"
+#include "uarch/components/scalar_scoreboard.h"
 #include "uarch/components/scalar_writeback.h"
 #include "uarch/engine/clock.h"
 #include "uarch/frontend/pipeline_entry.h"
@@ -18,7 +19,9 @@ namespace tile_npu {
 class ScalarFrontend final {
 public:
   ScalarFrontend(const UarchClock &clock, State &state, AddressSpace &memory,
-                 InstBuffer &inst_buffer, ScalarWritebackPort &writeback);
+                 InstBuffer &inst_buffer);
+
+  ScalarWritebackPort &writeback() { return writeback_; }
 
   void reset(std::uint64_t entry_pc);
 
@@ -45,13 +48,15 @@ private:
   void execute_ex(PipelineEntry &entry);
   void execute_mem(PipelineEntry &entry);
   WbOutcome execute_wb(const PipelineEntry &entry);
+  void discard(std::optional<PipelineEntry> &entry);
   void clear_pipeline();
 
   const UarchClock &clock_;
   State &state_;
   AddressSpace &memory_;
+  ScalarScoreboard scoreboard_;
+  ScalarWritebackPort writeback_{state_, scoreboard_};
   InstBuffer &inst_buffer_;
-  ScalarWritebackPort &writeback_;
 
   std::optional<PipelineEntry> if_id_;
   std::optional<PipelineEntry> id_ex_;

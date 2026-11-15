@@ -25,6 +25,7 @@ struct PipelineEntry {
   std::optional<ScalarMemResult> memory;
   ScalarOperands scalar;
   ConfigOperands config;
+  std::optional<RegisterIndex> busy_dest;
 
   std::optional<StepStatus> fault;
   std::optional<std::uint64_t> fault_address;

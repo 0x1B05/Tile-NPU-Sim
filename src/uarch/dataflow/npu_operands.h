@@ -35,8 +35,13 @@ struct ScalarReads {
   std::uint8_t count = 0;
 };
 
-// Lane extract is currently the only NPU instruction with a scalar destination.
+// Lane extract is currently the only NPU instruction with a scalar destination
+// on the decoupled bus.
 std::optional<RegisterIndex> scalar_dest(const DecodedNpuInstr &instr);
+
+// Any scalar register written by an NPU-space instruction, including cfg.get
+// and cfg.getw in the scalar front end.
+std::optional<RegisterIndex> scalar_write_dest(const DecodedNpuInstr &instr);
 
 // Returns the scalar registers read by an NPU instruction.
 ScalarReads scalar_reads(const DecodedNpuInstr &instr);

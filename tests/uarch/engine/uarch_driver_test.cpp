@@ -2,6 +2,11 @@
 #include "uarch/backend/backend.h"
 #include "uarch/engine/uarch_driver.h"
 #include "uarch/test_dispatcher.h"
+#include "uarch/test_machine.h"
+
+#include "units/execute_helpers.h"
+#include "units/mma_helpers.h"
+#include "units/row_lane_helpers.h"
 
 #include <cstdint>
 #include <string_view>
@@ -93,7 +98,8 @@ RunResult run_sequence(RunMode mode) {
   TimedExecutor executor(clock);
   UarchBackend backend(clock, stats, executor);
   TestDispatcher dispatcher_fixture(clock, backend);
-  UarchDriver driver(clock, backend, stats, dispatcher_fixture.dispatcher());
+  UarchDriver driver(clock, backend, stats, dispatcher_fixture.frontend(),
+                     dispatcher_fixture.dispatcher());
 
   backend.dispatch(mma_write(1, 0));
   backend.dispatch(mma_accumulate(2, 0, 0));
@@ -121,7 +127,8 @@ TEST_CASE(uarch_driver_single_cycle_steps_time) {
   TimedExecutor executor(clock);
   UarchBackend backend(clock, stats, executor);
   TestDispatcher dispatcher_fixture(clock, backend);
-  UarchDriver driver(clock, backend, stats, dispatcher_fixture.dispatcher());
+  UarchDriver driver(clock, backend, stats, dispatcher_fixture.frontend(),
+                     dispatcher_fixture.dispatcher());
 
   backend.dispatch(vec_write(1, 1));
 
@@ -147,7 +154,8 @@ TEST_CASE(uarch_driver_advance_stops_at_completion) {
   TimedExecutor executor(clock);
   UarchBackend backend(clock, stats, executor);
   TestDispatcher dispatcher_fixture(clock, backend);
-  UarchDriver driver(clock, backend, stats, dispatcher_fixture.dispatcher());
+  UarchDriver driver(clock, backend, stats, dispatcher_fixture.frontend(),
+                     dispatcher_fixture.dispatcher());
 
   backend.dispatch(mma_write(1, 0));
   backend.dispatch(mma_write(2, 1));
@@ -168,7 +176,8 @@ TEST_CASE(uarch_driver_drain_empties_backend) {
   TimedExecutor executor(clock);
   UarchBackend backend(clock, stats, executor);
   TestDispatcher dispatcher_fixture(clock, backend);
-  UarchDriver driver(clock, backend, stats, dispatcher_fixture.dispatcher());
+  UarchDriver driver(clock, backend, stats, dispatcher_fixture.frontend(),
+                     dispatcher_fixture.dispatcher());
 
   backend.dispatch(vec_write(1, 1));
   driver.drain();
@@ -199,4 +208,88 @@ TEST_CASE(uarch_driver_run_modes_match_timeline) {
   const auto drain = run_sequence(RunMode::drain);
   check_timeline(drain.issued, expected_issued, "drain issue timeline");
   check_timeline(drain.completed, expected_completed, "drain completion timeline");
+}
+
+TEST_CASE(uarch_driver_runs_scalar_program) {
+  TestMachine machine;
+  write_word(machine.memory_, CODE_BASE, 0x00700093u);     // addi x1, x0, 7
+  write_word(machine.memory_, CODE_BASE + 4, 0x00108133u); // add x2, x1, x1
+  write_word(machine.memory_, CODE_BASE + 8, 0x00100073u); // ebreak
+  machine.reset(CODE_BASE);
+
+  const auto stop = machine.run();
+
+  check(stop.has_value(), "scalar program stops");
+  check_eq(stop->status, StepStatus::breakpoint, "scalar program reaches ebreak");
+  check_eq(hex(stop->pc), hex(CODE_BASE + 8), "stop pc");
+  check(machine.driver_.halted(), "frontend halts at ebreak");
+  check_eq(machine.state_.scalar.read_x(1), std::uint64_t{7}, "first addi retires");
+  check_eq(machine.state_.scalar.read_x(2), std::uint64_t{14}, "dependent add retires");
+  check_eq(machine.stats_.scalar_retired, std::uint64_t{2}, "two scalar instructions retire");
+  check_eq(machine.stats_.retired, std::uint64_t{2}, "total retired count");
+
+  machine.driver_.drain();
+  check(machine.backend_.empty(), "backend is empty after drain");
+}
+
+TEST_CASE(uarch_driver_runs_scalar_past_inflight_mma) {
+  TestMachine machine;
+  tile_cfg(machine.state_, 1, DType::i8, 2, 3);
+  tile_cfg(machine.state_, 2, DType::i8, 2, 3);
+  acc_cfg(machine.state_, 0, DType::i32, 2, 2);
+
+  const std::uint8_t lhs[6] = {1, 2, 3, 4, 0xfb, 6};
+  for (std::size_t k = 0; k < 6; ++k) {
+    machine.state_.t[1][(k / 3) * 32 + (k % 3)] = lhs[k];
+    machine.state_.t[2][(k / 3) * 32 + (k % 3)] = static_cast<std::uint8_t>(7 + k);
+  }
+
+  write_word(machine.memory_, CODE_BASE, make_mma(0, 0, 1, 2)); // mma.nt.zero a0, t1, t2
+  write_word(machine.memory_, CODE_BASE + 4, 0x00700093u);      // addi x1, x0, 7
+  write_word(machine.memory_, CODE_BASE + 8, 0x00100073u);      // ebreak
+  machine.reset(CODE_BASE);
+
+  const auto stop = machine.run();
+
+  check(stop.has_value(), "mixed program stops");
+  check_eq(stop->status, StepStatus::breakpoint, "mixed program reaches ebreak");
+  check_eq(machine.state_.scalar.read_x(1), std::uint64_t{7},
+           "scalar retires while MMA is in flight");
+  check(!machine.backend_.empty(), "MMA is still in flight at the stop");
+
+  machine.driver_.drain();
+
+  check(machine.backend_.empty(), "backend is empty after drain");
+  check_eq(machine.state_.a[0][0], std::uint32_t{50}, "MMA writes D[0,0]");
+  check_eq(machine.state_.a[0][1], std::uint32_t{68}, "MMA writes D[0,1]");
+  check_eq(machine.stats_.scalar_retired, std::uint64_t{2}, "two scalar instructions retire");
+  check_eq(machine.stats_.retired, std::uint64_t{3}, "MMA and scalar instructions retire");
+  check_eq(machine.stats_.unit_count[static_cast<std::size_t>(Unit::mma)], std::uint64_t{1},
+           "MMA unit counter");
+}
+
+TEST_CASE(uarch_driver_waits_for_decoupled_scalar_writeback) {
+  TestMachine machine;
+  vec_cfg(machine.state_, 0, DType::i32, 4);
+  machine.state_.v[0][0] = 42;
+
+  write_word(machine.memory_, CODE_BASE, make_lane_move(0, 0, 0, 0, 1)); // vextract x1, v0, 0
+  write_word(machine.memory_, CODE_BASE + 4, 0x00108133u);               // add x2, x1, x1
+  write_word(machine.memory_, CODE_BASE + 8, 0x00100073u);               // ebreak
+  machine.reset(CODE_BASE);
+
+  const auto stop = machine.run();
+
+  check(stop.has_value(), "vextract program stops");
+  check_eq(stop->status, StepStatus::breakpoint, "vextract program reaches ebreak");
+  machine.driver_.drain();
+
+  check_eq(machine.state_.scalar.read_x(1), std::uint64_t{42}, "vextract writes x1");
+  check_eq(machine.state_.scalar.read_x(2), std::uint64_t{84},
+           "add consumes the decoupled writeback");
+  check(!machine.frontend_.writeback().busy(1), "vextract releases its destination");
+  check_eq(machine.stats_.scalar_retired, std::uint64_t{2}, "vextract and add retire");
+  check_eq(machine.stats_.retired, std::uint64_t{3}, "backend vextract also retires");
+  check_eq(machine.stats_.unit_count[static_cast<std::size_t>(Unit::vec32)], std::uint64_t{1},
+           "vec32 unit counter");
 }
