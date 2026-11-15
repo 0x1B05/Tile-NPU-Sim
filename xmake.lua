@@ -114,7 +114,7 @@ end)
 target("uarch_tests", function()
 	set_kind("binary")
 	set_default(false)
-	add_deps("func_core", "uarch_core")
+	add_deps("uarch_core")
 	add_files("tests/units/main.cpp", "tests/uarch/dataflow/*.cpp",
 		"tests/uarch/backend/*.cpp", "tests/uarch/frontend/*.cpp", "tests/uarch/components/*.cpp",
 		"tests/uarch/engine/*.cpp")

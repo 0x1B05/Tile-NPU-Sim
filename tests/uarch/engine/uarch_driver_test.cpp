@@ -1,11 +1,13 @@
 #include "framework.h"
 #include "uarch/backend/backend.h"
+#include "uarch/builders/dyn_inst.h"
+#include "uarch/builders/rv64im.h"
 #include "uarch/engine/uarch_driver.h"
-#include "uarch/test_dispatcher.h"
-#include "uarch/test_machine.h"
+#include "uarch/fixtures/dispatch_path.h"
+#include "uarch/fixtures/machine.h"
 
-#include "units/execute_helpers.h"
 #include "units/mma_helpers.h"
+#include "units/program_helpers.h"
 #include "units/row_lane_helpers.h"
 
 #include <cstdint>
@@ -45,6 +47,15 @@ private:
   const UarchClock &clock_;
 };
 
+struct TimedBackend {
+  UarchClock clock;
+  UarchStats stats;
+  TimedExecutor executor{clock};
+  UarchBackend backend{clock, stats, executor};
+  TestDispatchPath path{clock, backend};
+  UarchDriver driver{clock, backend, stats, path.frontend(), path.dispatcher()};
+};
+
 struct RunResult {
   Timeline issued;
   Timeline completed;
@@ -58,48 +69,10 @@ void check_timeline(const Timeline &actual, const Timeline &expected, std::strin
   }
 }
 
-DynInst mma_write(std::uint64_t id, RegisterIndex dst) {
-  DynInst inst{};
-  inst.id = id;
-  inst.op = DynOp::mma;
-  inst.unit = Unit::mma;
-  inst.dst[0] = RegisterRef{.domain = NpuDomain::acc, .index = dst};
-  inst.dst_count = 1;
-  return inst;
-}
-
-DynInst mma_accumulate(std::uint64_t id, RegisterIndex src, RegisterIndex dst) {
-  DynInst inst{};
-  inst.id = id;
-  inst.op = DynOp::mma;
-  inst.unit = Unit::mma;
-  inst.src[0] = RegisterRef{.domain = NpuDomain::acc, .index = src};
-  inst.src_count = 1;
-  inst.dst[0] = RegisterRef{.domain = NpuDomain::acc, .index = dst};
-  inst.dst_count = 1;
-  return inst;
-}
-
-DynInst vec_write(std::uint64_t id, RegisterIndex dst) {
-  DynInst inst{};
-  inst.id = id;
-  inst.op = DynOp::elementwise;
-  inst.unit = Unit::vec32;
-  inst.dst[0] = RegisterRef{.domain = NpuDomain::vec32, .index = dst};
-  inst.dst_count = 1;
-  return inst;
-}
-
 enum class RunMode { single_cycle, advance, drain };
 
 RunResult run_sequence(RunMode mode) {
-  UarchClock clock;
-  UarchStats stats;
-  TimedExecutor executor(clock);
-  UarchBackend backend(clock, stats, executor);
-  TestDispatcher dispatcher_fixture(clock, backend);
-  UarchDriver driver(clock, backend, stats, dispatcher_fixture.frontend(),
-                     dispatcher_fixture.dispatcher());
+  [[maybe_unused]] auto [clock, stats, executor, backend, path, driver] = TimedBackend{};
 
   backend.dispatch(mma_write(1, 0));
   backend.dispatch(mma_accumulate(2, 0, 0));
@@ -122,13 +95,7 @@ RunResult run_sequence(RunMode mode) {
 } // namespace
 
 TEST_CASE(uarch_driver_single_cycle_steps_time) {
-  UarchClock clock;
-  UarchStats stats;
-  TimedExecutor executor(clock);
-  UarchBackend backend(clock, stats, executor);
-  TestDispatcher dispatcher_fixture(clock, backend);
-  UarchDriver driver(clock, backend, stats, dispatcher_fixture.frontend(),
-                     dispatcher_fixture.dispatcher());
+  [[maybe_unused]] auto [clock, stats, executor, backend, path, driver] = TimedBackend{};
 
   backend.dispatch(vec_write(1, 1));
 
@@ -149,13 +116,7 @@ TEST_CASE(uarch_driver_single_cycle_steps_time) {
 }
 
 TEST_CASE(uarch_driver_advance_stops_at_completion) {
-  UarchClock clock;
-  UarchStats stats;
-  TimedExecutor executor(clock);
-  UarchBackend backend(clock, stats, executor);
-  TestDispatcher dispatcher_fixture(clock, backend);
-  UarchDriver driver(clock, backend, stats, dispatcher_fixture.frontend(),
-                     dispatcher_fixture.dispatcher());
+  [[maybe_unused]] auto [clock, stats, executor, backend, path, driver] = TimedBackend{};
 
   backend.dispatch(mma_write(1, 0));
   backend.dispatch(mma_write(2, 1));
@@ -171,13 +132,7 @@ TEST_CASE(uarch_driver_advance_stops_at_completion) {
 }
 
 TEST_CASE(uarch_driver_drain_empties_backend) {
-  UarchClock clock;
-  UarchStats stats;
-  TimedExecutor executor(clock);
-  UarchBackend backend(clock, stats, executor);
-  TestDispatcher dispatcher_fixture(clock, backend);
-  UarchDriver driver(clock, backend, stats, dispatcher_fixture.frontend(),
-                     dispatcher_fixture.dispatcher());
+  [[maybe_unused]] auto [clock, stats, executor, backend, path, driver] = TimedBackend{};
 
   backend.dispatch(vec_write(1, 1));
   driver.drain();
@@ -212,9 +167,9 @@ TEST_CASE(uarch_driver_run_modes_match_timeline) {
 
 TEST_CASE(uarch_driver_runs_scalar_program) {
   TestMachine machine;
-  write_word(machine.memory_, CODE_BASE, 0x00700093u);     // addi x1, x0, 7
-  write_word(machine.memory_, CODE_BASE + 4, 0x00108133u); // add x2, x1, x1
-  write_word(machine.memory_, CODE_BASE + 8, 0x00100073u); // ebreak
+  write_word(machine.memory_, CODE_BASE, addi(1, 0, 7));    // addi x1, x0, 7
+  write_word(machine.memory_, CODE_BASE + 4, add(2, 1, 1)); // add x2, x1, x1
+  write_word(machine.memory_, CODE_BASE + 8, ebreak());     // ebreak
   machine.reset(CODE_BASE);
 
   const auto stop = machine.run();
@@ -245,8 +200,8 @@ TEST_CASE(uarch_driver_runs_scalar_past_inflight_mma) {
   }
 
   write_word(machine.memory_, CODE_BASE, make_mma(0, 0, 1, 2)); // mma.nt.zero a0, t1, t2
-  write_word(machine.memory_, CODE_BASE + 4, 0x00700093u);      // addi x1, x0, 7
-  write_word(machine.memory_, CODE_BASE + 8, 0x00100073u);      // ebreak
+  write_word(machine.memory_, CODE_BASE + 4, addi(1, 0, 7));    // addi x1, x0, 7
+  write_word(machine.memory_, CODE_BASE + 8, ebreak());         // ebreak
   machine.reset(CODE_BASE);
 
   const auto stop = machine.run();
@@ -274,8 +229,8 @@ TEST_CASE(uarch_driver_waits_for_decoupled_scalar_writeback) {
   machine.state_.v[0][0] = 42;
 
   write_word(machine.memory_, CODE_BASE, make_lane_move(0, 0, 0, 0, 1)); // vextract x1, v0, 0
-  write_word(machine.memory_, CODE_BASE + 4, 0x00108133u);               // add x2, x1, x1
-  write_word(machine.memory_, CODE_BASE + 8, 0x00100073u);               // ebreak
+  write_word(machine.memory_, CODE_BASE + 4, add(2, 1, 1));              // add x2, x1, x1
+  write_word(machine.memory_, CODE_BASE + 8, ebreak());                  // ebreak
   machine.reset(CODE_BASE);
 
   const auto stop = machine.run();
@@ -303,7 +258,7 @@ TEST_CASE(uarch_driver_reset_clears_shared_state) {
   machine.state_.t[2][0] = 3;
 
   write_word(machine.memory_, CODE_BASE, make_mma(0, 0, 1, 2)); // mma.nt.zero a0, t1, t2
-  write_word(machine.memory_, CODE_BASE + 4, 0x00100073u);      // ebreak
+  write_word(machine.memory_, CODE_BASE + 4, ebreak());         // ebreak
   machine.reset(CODE_BASE);
 
   for (std::size_t cycle = 0; cycle < 10; ++cycle)
@@ -316,9 +271,9 @@ TEST_CASE(uarch_driver_reset_clears_shared_state) {
   check(machine.backend_.empty(), "reset clears the backend");
   check(!machine.driver_.halted(), "reset restarts the scalar frontend");
 
-  write_word(machine.memory_, CODE_BASE + 0x80, 0x00700093u); // addi x1, x0, 7
-  write_word(machine.memory_, CODE_BASE + 0x84, 0x00108133u); // add x2, x1, x1
-  write_word(machine.memory_, CODE_BASE + 0x88, 0x00100073u); // ebreak
+  write_word(machine.memory_, CODE_BASE + 0x80, addi(1, 0, 7)); // addi x1, x0, 7
+  write_word(machine.memory_, CODE_BASE + 0x84, add(2, 1, 1));  // add x2, x1, x1
+  write_word(machine.memory_, CODE_BASE + 0x88, ebreak());      // ebreak
 
   const auto stop = machine.run();
 

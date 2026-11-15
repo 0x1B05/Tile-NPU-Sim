@@ -107,7 +107,7 @@ xmake project -k compile_commands        # 为 clangd 生成 compile_commands.js
 
 测试放置与运行约定：
 
-- `tests/include/framework.h` 提供 `TEST_CASE`、`check_eq` 与 `i8_bits`；`tests/units/main.cpp` 是 host 入口，`tests/guest/main.cpp` 是 guest 入口。`sim_tests --list` 列出 host 用例，`sim_guest_tests --list` 列出 guest 用例，二者都支持 `--filter SUBSTR`；只有 guest 入口接受 `--guest-dir`。host 执行 fixture 在 `tests/include/units/execute_helpers.h`，各指令族的编码构造器在 `tests/include/units/<族>_helpers.h`；guest 图片加载接口在 `tests/include/guest/guest_image.h`。
+- `tests/include/framework.h` 提供 `TEST_CASE`、`check_eq` 与 `i8_bits`；`tests/units/main.cpp` 是 host 入口，`tests/guest/main.cpp` 是 guest 入口。`sim_tests --list` 列出 host 用例，`sim_guest_tests --list` 列出 guest 用例，二者都支持 `--filter SUBSTR`；只有 guest 入口接受 `--guest-dir`。轻量程序和配置 fixture 在 `tests/include/units/program_helpers.h`，依赖 `FuncCore` 的执行 fixture 在 `tests/include/units/execute_helpers.h`；uarch fixture 在 `tests/include/uarch/fixtures/`，uarch 指令/命令构造器在 `tests/include/uarch/builders/`；各指令族的编码构造器在 `tests/include/units/<族>_helpers.h`；guest 图片加载接口在 `tests/include/guest/guest_image.h`。
 - host 译码测试使用内联机器码常量或 `tests/include/units/<族>_helpers.h` 的构造器，并标注对应汇编；指令字和地址的断言用 `hex()` 包装。
 - NPU 正例优先放在 `tests/guest/npu/*.S`，复用 `tests/guest/include/npu.inc` 的编码宏；`tests/guest/npu_guest_test.cpp` 负责装载、执行与断言，镜像目录通过 `--guest-dir` 传入。复用 `run_until_stop` 的步数上限和停机诊断，或 `check_guest_image` 的自校验流程；非法编码负例放在 `tests/units`。
 - guest C 程序链接共享 `crt0.S`，裸 `.S` 提供自己的 `_start`，生成到构建目录的 `guest/`。标量自校验程序放在 `tests/guest/rv64im/`，按 `ebreak/a0` 约定退出。

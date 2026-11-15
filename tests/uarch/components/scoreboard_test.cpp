@@ -1,54 +1,37 @@
 #include "framework.h"
+#include "uarch/builders/dyn_inst.h"
 #include "uarch/components/scoreboard.h"
 
 #include <cstdint>
 
 using namespace tile_npu;
+using namespace tile_npu::test;
 
 namespace {
 
-RegisterRef acc(RegisterIndex index) { return {.domain = NpuDomain::acc, .index = index}; }
-
 DynInst acc_write(std::uint64_t id, RegisterIndex dst) {
-  DynInst inst{};
-  inst.id = id;
-  inst.op = DynOp::mma;
-  inst.unit = Unit::mma;
-  inst.dst[0] = acc(dst);
-  inst.dst_count = 1;
+  auto inst = make_dyn_inst(id, DynOp::mma, Unit::mma);
+  add_dst(inst, NpuDomain::acc, dst);
   return inst;
 }
 
 DynInst acc_read(std::uint64_t id, RegisterIndex src) {
-  DynInst inst{};
-  inst.id = id;
-  inst.op = DynOp::vmma;
-  inst.unit = Unit::mma;
-  inst.src[0] = acc(src);
-  inst.src_count = 1;
+  auto inst = make_dyn_inst(id, DynOp::vmma, Unit::mma);
+  add_src(inst, NpuDomain::acc, src);
   return inst;
 }
 
 DynInst acc_read2(std::uint64_t id, RegisterIndex src1, RegisterIndex src2) {
-  DynInst inst{};
-  inst.id = id;
-  inst.op = DynOp::vmma;
-  inst.unit = Unit::mma;
-  inst.src[0] = acc(src1);
-  inst.src[1] = acc(src2);
-  inst.src_count = 2;
+  auto inst = make_dyn_inst(id, DynOp::vmma, Unit::mma);
+  add_src(inst, NpuDomain::acc, src1);
+  add_src(inst, NpuDomain::acc, src2);
   return inst;
 }
 
 DynInst acc_rmw(std::uint64_t id, RegisterIndex index) {
-  DynInst inst{};
-  inst.id = id;
-  inst.op = DynOp::vmma;
-  inst.unit = Unit::mma;
-  inst.src[0] = acc(index);
-  inst.src_count = 1;
-  inst.dst[0] = acc(index);
-  inst.dst_count = 1;
+  auto inst = make_dyn_inst(id, DynOp::vmma, Unit::mma);
+  add_src(inst, NpuDomain::acc, index);
+  add_dst(inst, NpuDomain::acc, index);
   return inst;
 }
 

@@ -3,8 +3,9 @@
 // Hand-rolled mini test framework: TEST_CASE auto-registers into a registry
 // that tests/units/main.cpp or tests/guest/main.cpp runs; check_eq reports
 // actual/expected values on failure. There is deliberately no third-party
-// framework. Fixtures that touch the simulator (write_word, load_one, config
-// helpers) live in tests/include/units/execute_helpers.h.
+// framework. Lightweight program/config fixtures live in
+// tests/include/units/program_helpers.h; FuncCore-dependent fixtures live in
+// tests/include/units/execute_helpers.h.
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
