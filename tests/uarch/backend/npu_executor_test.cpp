@@ -41,32 +41,30 @@ TEST_CASE(npu_executor_writes_back_scalar_at_completion) {
   state.v[0][0] = 42;
 
   Ram memory(0x1000, 0x100);
-  ScalarScoreboard scalar_scoreboard;
-  ScalarWritebackPort writeback(state, scalar_scoreboard);
-  NpuExecutor executor(state, memory, writeback);
   UarchStats stats;
   UarchClock clock;
-  UarchBackend backend(clock, stats, executor);
   InstBuffer inst_buffer;
   ScalarFrontend frontend(clock, state, memory, inst_buffer);
+  NpuExecutor executor(state, memory, frontend.writeback());
+  UarchBackend backend(clock, stats, executor);
   UarchDispatcher dispatcher(clock, backend, state, executor, inst_buffer);
   UarchDriver driver(clock, backend, stats, frontend, dispatcher);
 
   const auto entry = lane_extract_entry(state);
   const auto inst = make_npu_dyn_inst(1, entry.pc, entry.decoded, state);
-  scalar_scoreboard.mark_busy(1);
+  frontend.writeback().mark_busy(1);
   check(backend.dispatch(inst), "backend accepts the vextract");
   executor.track(inst, entry);
-  check(scalar_scoreboard.busy(1), "vextract destination is marked busy");
+  check(frontend.writeback().busy(1), "vextract destination is marked busy");
 
   driver.single_cycle();
   driver.single_cycle();
   check_eq(state.scalar.read_x(1), std::uint64_t{7}, "writeback is not visible at issue");
-  check(scalar_scoreboard.busy(1), "destination remains busy until completion");
+  check(frontend.writeback().busy(1), "destination remains busy until completion");
 
   driver.advance();
   check_eq(state.scalar.read_x(1), std::uint64_t{42}, "writeback is visible at completion");
-  check(!scalar_scoreboard.busy(1), "destination is released at completion");
+  check(!frontend.writeback().busy(1), "destination is released at completion");
   check_eq(stats.retired, std::uint64_t{1}, "vextract retires");
 }
 
@@ -155,5 +153,5 @@ TEST_CASE(npu_executor_reset_clears_in_flight) {
   executor.reset();
   // Re-tracking the same id succeeds only if reset cleared the in-flight entry.
   executor.track(inst, entry);
-  check(scalar_scoreboard.busy(1), "executor reset leaves scoreboard ownership to the dispatcher");
+  check(scalar_scoreboard.busy(1), "executor reset leaves the frontend scoreboard alone");
 }
