@@ -71,6 +71,24 @@ TEST_CASE(scalar_frontend_cfg_invalid_value_stops) {
   check_eq(fixture.retired(), std::size_t{0}, "invalid config does not retire");
 }
 
+TEST_CASE(scalar_frontend_config_reader_after_wb_does_not_stall) {
+  Ram memory(CODE_BASE, 0x100);
+  write_word(memory, CODE_BASE, cfg_i(0x5, 0, 1, 4, 0));        // cfg.seti tc0, rows, 4
+  write_word(memory, CODE_BASE + 4, cfg_reg(0, 0, 2, 1, 0, 1)); // cfg.get x1, tc0, rows
+  write_word(memory, CODE_BASE + 8, ebreak());                  // ebreak
+
+  UarchClock clock;
+  ScalarFrontendFixture fixture(clock, memory);
+  auto &state = fixture.state;
+  fixture.reset(CODE_BASE);
+  const auto result = fixture.run();
+
+  check(result.has_value(), "config reader program stops");
+  check_eq(result->status, StepStatus::breakpoint, "config reader program reaches ebreak");
+  check_eq(state.scalar.read_x(1), std::uint64_t{4}, "cfg.get reads the committed value");
+  check_eq(clock.now(), UarchClock::Time{9}, "config reader does not wait for the WB entry");
+}
+
 TEST_CASE(scalar_frontend_retires_straight_line_program) {
   Ram memory(CODE_BASE, 16);
   write_word(memory, CODE_BASE, addi(1, 0, 7));    // addi x1, x0, 7
@@ -194,6 +212,27 @@ TEST_CASE(scalar_frontend_marks_vextract_destination_busy) {
   check_eq(fixture.inst_buffer.size(), std::size_t{1}, "vextract is buffered");
   check(fixture.frontend.writeback().busy(1), "frontend marks the vextract destination busy");
   check_eq(fixture.retired(), std::size_t{1}, "vextract commits once");
+}
+
+TEST_CASE(scalar_frontend_vextract_scalar_index_after_load) {
+  Ram memory(0, 0x2000);
+  write_word(memory, CODE_BASE, lw(2, 0, 0));                       // lw x2, 0(x0)
+  write_word(memory, CODE_BASE + 4, make_lane_move(1, 0, 2, 0, 1)); // vextract x1, v0, x2
+  write_word(memory, CODE_BASE + 8, ebreak());                      // ebreak
+  write_word(memory, 0, 0u);
+
+  UarchClock clock;
+  ScalarFrontendFixture fixture(clock, memory);
+  auto &state = fixture.state;
+  fixture.reset(CODE_BASE);
+  const auto result = fixture.run();
+
+  check(result.has_value(), "scalar-index program stops");
+  check_eq(result->status, StepStatus::breakpoint, "scalar-index program reaches ebreak");
+  check_eq(state.scalar.read_x(2), std::uint64_t{0}, "load result supplies the index");
+  check_eq(fixture.inst_buffer.size(), std::size_t{1}, "vextract is buffered after the load");
+  check(fixture.frontend.writeback().busy(1), "vextract destination remains busy");
+  check_eq(fixture.retired(), std::size_t{2}, "load and vextract retire");
 }
 
 TEST_CASE(scalar_frontend_stalls_on_busy_scalar_writeback) {

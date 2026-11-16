@@ -35,15 +35,14 @@ bool has_stall_hazard(const std::optional<PipelineEntry> &id_ex,
 }
 
 bool has_config_stall(const std::optional<PipelineEntry> &id_ex,
-                      const std::optional<PipelineEntry> &ex_mem,
-                      const std::optional<PipelineEntry> &mem_wb) {
+                      const std::optional<PipelineEntry> &ex_mem) {
   const auto writes_config = [](const std::optional<PipelineEntry> &entry) {
     if (!entry || !entry->decoded) return false;
     const auto *npu = std::get_if<DecodedNpuInstr>(&*entry->decoded);
     return npu != nullptr && writes_config_at_wb(*npu);
   };
 
-  return writes_config(id_ex) || writes_config(ex_mem) || writes_config(mem_wb);
+  return writes_config(id_ex) || writes_config(ex_mem);
 }
 
 std::uint64_t read_scalar_value(RegisterIndex index, const std::optional<PipelineEntry> &id_ex,

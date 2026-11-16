@@ -73,7 +73,7 @@ bool ScalarFrontend::prepare_id(PipelineEntry &entry) {
   if (scalar == nullptr) {
     const auto *npu = std::get_if<DecodedNpuInstr>(&*entry.decoded);
     if (npu == nullptr) return false;
-    if (reads_config(*npu) && has_config_stall(id_ex_, ex_mem_, mem_wb_)) return true;
+    if (reads_config(*npu) && has_config_stall(id_ex_, ex_mem_)) return true;
 
     const auto reads = scalar_reads(*npu);
     for (std::size_t i = 0; i < reads.count; ++i) {
@@ -82,11 +82,14 @@ bool ScalarFrontend::prepare_id(PipelineEntry &entry) {
 
     const auto dest = scalar_write_dest(*npu);
     if (dest && busy(*dest)) return true;
-    if (dest) {
-      writeback_.mark_busy(*dest);
-      entry.busy_dest = dest;
+
+    if (is_scalar_npu(*npu)) {
+      if (dest) {
+        writeback_.mark_busy(*dest);
+        entry.busy_dest = dest;
+      }
+      return false;
     }
-    if (is_scalar_npu(*npu)) return false;
 
     if (has_stall_hazard(id_ex_, ex_mem_, reads)) return true;
 
@@ -99,6 +102,13 @@ bool ScalarFrontend::prepare_id(PipelineEntry &entry) {
     }
     entry.scalar.count = reads.count;
     entry.config = capture_config_operands(*npu, state_);
+
+    // Only reserve the destination after every stall check. Otherwise a
+    // retried instruction observes its own busy bit and stalls forever.
+    if (dest) {
+      writeback_.mark_busy(*dest);
+      entry.busy_dest = dest;
+    }
     return false;
   }
   if (busy(scalar->regs.src1) || busy(scalar->regs.src2) || busy(scalar->regs.dest)) return true;

@@ -18,10 +18,10 @@ bool has_stall_hazard(const std::optional<PipelineEntry> &id_ex,
                       const std::optional<PipelineEntry> &ex_mem, const DecodedScalarInstr &instr);
 
 // A configuration reader in ID waits while an older instruction will write
-// configuration state in WB.
+// configuration state in WB. WB executes before ID, so mem_wb is not part of
+// the check.
 bool has_config_stall(const std::optional<PipelineEntry> &id_ex,
-                      const std::optional<PipelineEntry> &ex_mem,
-                      const std::optional<PipelineEntry> &mem_wb);
+                      const std::optional<PipelineEntry> &ex_mem);
 
 // Reads a scalar operand, forwarding the newest available ALU result from
 // EX/MEM before falling back to the architectural register file.
