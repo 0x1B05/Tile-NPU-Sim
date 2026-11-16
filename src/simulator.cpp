@@ -43,15 +43,19 @@ StepResult Simulator::step() {
   ExecContext ctx{state_, memory_};
 #endif
   const auto decoded = decode(instr);
-  const auto execution = std::visit(
-      Overloaded{
-          [](DecodeError) { return ExecuteResult{.status = StepStatus::illegal_instruction}; },
-          [&ctx](const DecodedScalarInstr &decoded) { return exec_scalar_instr(decoded, ctx); },
-          [&ctx](const DecodedNpuInstr &decoded) { return exec_npu_instr(decoded, ctx); }},
-      decoded);
+  ExecuteResult execution;
+  if (decoded) {
+    execution = std::visit(
+        Overloaded{
+            [&ctx](const DecodedScalarInstr &decoded) { return exec_scalar_instr(decoded, ctx); },
+            [&ctx](const DecodedNpuInstr &decoded) { return exec_npu_instr(decoded, ctx); }},
+        *decoded);
+  } else {
+    execution = {.status = StepStatus::illegal_instruction};
+  }
 #ifdef CONFIG_MTRACE
-  if (execution.status == StepStatus::retired && mtrace_active) {
-    if (const auto *npu = std::get_if<DecodedNpuInstr>(&decoded)) {
+  if (execution.status == StepStatus::retired && mtrace_active && decoded) {
+    if (const auto *npu = std::get_if<DecodedNpuInstr>(&*decoded)) {
       trace_npu_dataflow(*npu, state_, mtrace_recorder_);
     }
   }

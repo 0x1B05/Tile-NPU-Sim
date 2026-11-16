@@ -120,6 +120,6 @@ constexpr DecodeEntry NPU_TABLE[] = {
 
 } // namespace
 
-DecodeResult decode_npu(std::uint32_t word) { return match(NPU_TABLE, word); }
+std::optional<DecodedInstr> decode_npu(std::uint32_t word) { return match(NPU_TABLE, word); }
 
 } // namespace tile_npu

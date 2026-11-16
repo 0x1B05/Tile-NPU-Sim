@@ -192,7 +192,8 @@ int run_images(const Options &options) {
 #ifdef CONFIG_ITRACE
   if (itrace_writer) {
     sim.set_itrace_callback(
-        [&itrace_writer](std::uint64_t pc, std::uint32_t instr, const DecodeResult &decoded,
+        [&itrace_writer](std::uint64_t pc, std::uint32_t instr,
+                         const std::optional<DecodedInstr> &decoded,
                          StepStatus status) { (*itrace_writer)(pc, instr, decoded, status); });
   }
 #endif

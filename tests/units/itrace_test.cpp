@@ -17,7 +17,8 @@ TEST_CASE(itrace_pc_window_filters_callback) {
 
   tile_npu::Simulator sim(memory);
   std::vector<std::uint64_t> pcs;
-  sim.set_itrace_callback([&pcs](std::uint64_t pc, std::uint32_t, const tile_npu::DecodeResult &,
+  sim.set_itrace_callback([&pcs](std::uint64_t pc, std::uint32_t,
+                                 const std::optional<tile_npu::DecodedInstr> &,
                                  tile_npu::StepStatus) { pcs.push_back(pc); });
   sim.reset(CODE_BASE);
   sim.set_itrace_pc_window(CODE_BASE + 4, CODE_BASE + 8);

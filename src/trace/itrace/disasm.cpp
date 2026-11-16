@@ -393,13 +393,13 @@ std::string npu_instr(const DecodedNpuInstr &instr) {
 
 } // namespace
 
-std::string disassemble(std::uint64_t pc, const DecodeResult &decoded) {
+std::string disassemble(std::uint64_t pc, const std::optional<DecodedInstr> &decoded) {
+  if (!decoded) return "illegal";
   return std::visit(Overloaded{
                         [&](const DecodedScalarInstr &instr) { return scalar_instr(instr, pc); },
                         [&](const DecodedNpuInstr &instr) { return npu_instr(instr); },
-                        [](DecodeError) { return std::string("illegal"); },
                     },
-                    decoded);
+                    *decoded);
 }
 
 } // namespace tile_npu::trace

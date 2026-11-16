@@ -79,8 +79,9 @@ inline std::string_view status_name(StepStatus status) {
 
 #ifdef CONFIG_ITRACE
 // Called after execution for each fetched instruction in the ITRACE PC window.
-using ItraceCallback = std::function<void(std::uint64_t pc, std::uint32_t instr,
-                                          const DecodeResult &decoded, StepStatus status)>;
+using ItraceCallback =
+    std::function<void(std::uint64_t pc, std::uint32_t instr,
+                       const std::optional<DecodedInstr> &decoded, StepStatus status)>;
 #endif
 
 class Simulator {

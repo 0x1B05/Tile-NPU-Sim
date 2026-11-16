@@ -13,8 +13,7 @@ namespace {
 // The BX bit selects the second source: BX = 0 a same-domain register, BX = 1
 // the Scalar register xS. The register form is reserved outside the domain's
 // register file.
-std::optional<NpuOperand> decode_bx_src2(std::uint8_t sel3, std::uint8_t src2,
-                                         NpuDomain domain) {
+std::optional<NpuOperand> decode_bx_src2(std::uint8_t sel3, std::uint8_t src2, NpuDomain domain) {
   if ((sel3 & 1) != 0) return NpuOperand{ScalarRegister{src2}};
   if (!domain_register_valid(domain, src2)) return std::nullopt;
   return NpuOperand{NpuRegister{domain, src2}};
@@ -28,16 +27,16 @@ std::optional<NpuOperand> decode_bx_src2(std::uint8_t sel3, std::uint8_t src2,
 // dom2: 01 Acc, 11 Vec32; 00/10 reserved.
 // BX: 0 = same-domain B5, 1 = Scalar xS in B5.
 // funct4 = {G, op3}, checked by EBIN_BY_FUNCT4; op3 = 011 is reserved.
-DecodeResult decode_ebin(std::uint32_t word) {
+std::optional<DecodedInstr> decode_ebin(std::uint32_t word) {
   const auto f = encoding::NpuR3::from(word);
   const auto domain = sel3_domain(f.sel3);
   const auto op = static_cast<EbinOp>(f.funct4);
   if (!is_ebin_op(op, domain) || !domain_register_valid(domain, f.dest) ||
       !domain_register_valid(domain, f.src1)) {
-    return DecodeError::illegal;
+    return std::nullopt;
   }
   const auto src2 = decode_bx_src2(f.sel3, f.src2, domain);
-  if (!src2) return DecodeError::illegal;
+  if (!src2) return std::nullopt;
   return DecodedNpuInstr{EbinInstr{
       .op = op,
       .dest = {.domain = domain, .index = f.dest},
@@ -52,13 +51,13 @@ DecodeResult decode_ebin(std::uint32_t word) {
 // dom2: 01 Acc, 11 Vec32; 00/10 reserved.
 // funct3: 000 not, 001 abs, 010 neg, 011 exp2.approx, 100 rcp.approx,
 //         101 rsqrt.approx; 110/111 reserved.
-DecodeResult decode_eun(std::uint32_t word) {
+std::optional<DecodedInstr> decode_eun(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = sel3_domain(f.sel3);
   const auto op = static_cast<EunOp>(f.funct3);
   if (!is_eun_op(op, domain) || !domain_register_valid(domain, f.dest) ||
       !domain_register_valid(domain, f.src2)) {
-    return DecodeError::illegal;
+    return std::nullopt;
   }
   return DecodedNpuInstr{EunInstr{
       .op = op,
@@ -73,16 +72,16 @@ DecodeResult decode_eun(std::uint32_t word) {
 // dom2: 11 Vec32; 00/01/10 reserved. M5 is the u32 mask destination.
 // BX: 0 = same-domain B5, 1 = Scalar xS in B5.
 // funct3: 000 eq, 001 ne, 010 lt, 011 ge, 100 le, 101 unord; 110/111 reserved.
-DecodeResult decode_ecmp(std::uint32_t word) {
+std::optional<DecodedInstr> decode_ecmp(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domain = sel3_domain(f.sel3);
   if (domain != NpuDomain::vec32 || !CMP_BY_FUNCT3[f.funct3] ||
       !domain_register_valid(domain, f.dest) || !domain_register_valid(domain, f.src1)) {
-    return DecodeError::illegal;
+    return std::nullopt;
   }
   const auto op = static_cast<CmpOp>(f.funct3);
   const auto src2 = decode_bx_src2(f.sel3, f.src2, domain);
-  if (!src2) return DecodeError::illegal;
+  if (!src2) return std::nullopt;
   return DecodedNpuInstr{CmpInstr{
       .op = op,
       .dest = {.domain = domain, .index = f.dest},
@@ -96,7 +95,7 @@ DecodeResult decode_ecmp(std::uint32_t word) {
 // [major4] [0] [0] [DIR] [funct4] [reserved4] [   S5   ] [   A5   ] [   D5   ] [ q ]
 // [27:26] reserved, must be 0; A5/D5 are Acc, S5 is Vec32.
 // DIR: 0 = byrow, 1 = bycol. funct4 = {G, op3}, shared with E_BIN.
-DecodeResult decode_ebcast(std::uint32_t word) {
+std::optional<DecodedInstr> decode_ebcast(std::uint32_t word) {
   const auto f = encoding::NpuR3::from(word);
   constexpr auto MATRIX_DOMAIN = NpuDomain::acc;
   constexpr auto VECTOR_DOMAIN = NpuDomain::vec32;
@@ -104,7 +103,7 @@ DecodeResult decode_ebcast(std::uint32_t word) {
   if (!is_ebin_op(op, MATRIX_DOMAIN) || !domain_register_valid(MATRIX_DOMAIN, f.dest) ||
       !domain_register_valid(MATRIX_DOMAIN, f.src1) ||
       !domain_register_valid(VECTOR_DOMAIN, f.src2)) {
-    return DecodeError::illegal;
+    return std::nullopt;
   }
   return DecodedNpuInstr{BcastInstr{
       .op = op,
@@ -121,14 +120,14 @@ DecodeResult decode_ebcast(std::uint32_t word) {
 // dom2: 01 Acc, 11 Vec32; 00/10 reserved.
 // funct3: 000 select (M5/C5 = mask M), 001 fmadd (M5/C5 = addend C);
 //         010..111 reserved. Both ops require Acc/Vec32; fmadd also requires f32.
-DecodeResult decode_er4(std::uint32_t word) {
+std::optional<DecodedInstr> decode_er4(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domain = sel3_domain(f.sel3);
   const auto op = static_cast<Er4Op>(f.funct3);
   if (!is_er4_op(op, domain) || !domain_register_valid(domain, f.dest) ||
       !domain_register_valid(domain, f.arg) || !domain_register_valid(domain, f.src1) ||
       !domain_register_valid(domain, f.src2)) {
-    return DecodeError::illegal;
+    return std::nullopt;
   }
   return DecodedNpuInstr{Er4Instr{
       .op = op,
@@ -147,14 +146,14 @@ DecodeResult decode_er4(std::uint32_t word) {
 // funct3: 000 tail, 001 tril, 010 triu; 011..111 reserved. tail is Acc/Vec32,
 // tril/triu are Acc-only.
 // xBound5 names Scalar xBounds/xLen for tail, or xDelta for Acc tril/triu.
-DecodeResult decode_emask(std::uint32_t word) {
+std::optional<DecodedInstr> decode_emask(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto domain = sel3_domain(f.sel3);
   const bool fill_is_scalar = (f.sel3 & 1) != 0;
   const auto op = static_cast<MaskOp>(f.funct3);
   if (!is_mask_op(op, domain) || !domain_register_valid(domain, f.dest) ||
       !domain_register_valid(domain, f.src1) || (!fill_is_scalar && f.src2 > FILL5_MAX)) {
-    return DecodeError::illegal;
+    return std::nullopt;
   }
   const auto fill =
       fill_is_scalar ? FillOperand{ScalarRegister{f.src2}} : FillOperand{Fill5Code{f.src2}};

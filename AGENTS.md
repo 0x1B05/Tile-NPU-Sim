@@ -48,7 +48,7 @@ xmake project -k compile_commands        # 为 clangd 生成 compile_commands.js
 | `include/tile_npu/state.h` | 寄存器堆、配置、描述符与物理尺寸常量 |
 | `include/tile_npu/instruction.h` | 按功能组织的标量/NPU 语义 IR 与操作数类型，语义类型不要求与 major 一一对应 |
 | `src/op_info.h` | 译码与结构检查共享的操作元数据：操作/数据域合法性与 funct 表 |
-| `include/tile_npu/decode.h` | `DecodeResult` 与译码接口 |
+| `include/tile_npu/decode.h` | `DecodedInstr` 与译码接口 |
 | `include/tile_npu/simulator.h`、`src/simulator.cpp` | `Simulator::reset` / `step`、`StepStatus`；启用 ITRACE/MTRACE 时提供对应 callback 与 PC 窗口 |
 | `src/config.h`、`src/config.cpp` | 配置字段编号映射、字段读写、值转换与写入校验 |
 | `src/execute/matrix_view.h` | 固定大小矩阵寄存器的非拥有视图，只负责物理坐标映射 |
@@ -85,7 +85,7 @@ xmake project -k compile_commands        # 为 clangd 生成 compile_commands.js
 - `AddressSpace::contains` 为多元素传输提供预检：已接受范围内的 read/write 必须成功；失败的 read/write 不改变缓冲区或地址空间。新设备必须遵守此契约。
 - `SystemBus` 优先将访问路由到接受该范围的设备，否则交给主存；设备按注册顺序匹配，设备窗口之间不得重叠。
 - `decode()` 保证输出 IR 的结构合法；`exec_npu_instr` 通过 `valid_structure` 统一复查手工构造的 IR。各族执行器只检查 dtype/shape/描述符等动态约束，不逐层重复寄存器号和操作数 variant 检查。
-- 译码失败使用 `DecodeError::illegal`；手工构造的非法 NPU IR 返回 `StepStatus::illegal_instruction`，非法配置返回 `invalid_configuration`。这些是模拟器诊断，尚未建模 ISA trap 投递；不变式被破坏属于实现错误，使用始终生效的 `unreachable()`。
+- 译码失败返回 `std::nullopt`；手工构造的非法 NPU IR 返回 `StepStatus::illegal_instruction`，非法配置返回 `invalid_configuration`。这些是模拟器诊断，尚未建模 ISA trap 投递；不变式被破坏属于实现错误，使用始终生效的 `unreachable()`。
 - 浮点规则同时由编译与执行保证：`-ffp-contract=off` 禁止隐式乘加融合，`std::fma` 实现显式单次舍入；`FpEnvGuard` 在 NPU 执行入口设置默认浮点环境 (RNE、默认 subnormal 处理)，结束后恢复宿主环境。
 - 规约按相邻两两二叉树执行，奇数节点直通下一层；`sum`/`sumsq` 的每个加法节点执行一次 f32 RNE，`sumsq` 先对乘积做 f32 舍入。`max`/`min`/`absmax`/`argmax` 的 NaN、带符号零与并列规则遵循手册，不使用单位元填充非空规约树。
 - 单 hart 同步模型中 RV64 `FENCE` 与 NPU `fence.*` 为 no-op。`ECALL`、`EBREAK`、`kernel.end` 停在当前 PC，交给调用方处理。

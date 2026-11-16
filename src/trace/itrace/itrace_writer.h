@@ -19,7 +19,7 @@ public:
 
   void flush() { out_.flush(); }
 
-  void operator()(std::uint64_t pc, std::uint32_t instr, const DecodeResult &decoded,
+  void operator()(std::uint64_t pc, std::uint32_t instr, const std::optional<DecodedInstr> &decoded,
                   StepStatus status);
 
 private:

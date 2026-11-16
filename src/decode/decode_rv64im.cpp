@@ -44,16 +44,16 @@ DecodedScalarInstr make_instr(ScalarOp op, const Shift<ShamtBits> &f) {
   return {op, {f.dest, f.src1, 0}, f.shamt};
 }
 
-template <typename Format, ScalarOp Op> DecodeResult as(std::uint32_t word) {
+template <typename Format, ScalarOp Op> std::optional<DecodedInstr> as(std::uint32_t word) {
   return make_instr(Op, Format::from(word));
 }
 
-template <ScalarOp Op> DecodeResult no_operands(std::uint32_t) {
+template <ScalarOp Op> std::optional<DecodedInstr> no_operands(std::uint32_t) {
   return DecodedScalarInstr{Op, {0, 0, 0}};
 }
 
 // Base implementations ignore FENCE's reserved rd, rs1, and fm settings.
-DecodeResult decode_fence(std::uint32_t word) {
+std::optional<DecodedInstr> decode_fence(std::uint32_t word) {
   return DecodedScalarInstr{
       ScalarOp::fence, {0, 0, 0}, static_cast<std::int32_t>(encoding::field<31, 20>(word))};
 }
@@ -158,6 +158,6 @@ constexpr DecodeEntry RV64IM_TABLE[] = {
 
 } // namespace
 
-DecodeResult decode_rv64im(std::uint32_t word) { return match(RV64IM_TABLE, word); }
+std::optional<DecodedInstr> decode_rv64im(std::uint32_t word) { return match(RV64IM_TABLE, word); }
 
 } // namespace tile_npu

@@ -3,6 +3,7 @@
 #include "tile_npu/instruction.h"
 
 #include <cstdint>
+#include <optional>
 #include <variant>
 
 namespace tile_npu {
@@ -28,9 +29,11 @@ using DecodedNpuInstr = std::variant<
     CfgSetiInstr, CfgSetxInstr, CfgCopyInstr, CfgGetInstr, CfgSetwInstr, CfgGetwInstr, SysInstr>;
 // clang-format on
 
-enum class DecodeError { illegal };
-using DecodeResult = std::variant<DecodedScalarInstr, DecodedNpuInstr, DecodeError>;
+// A successfully decoded instruction.
+using DecodedInstr = std::variant<DecodedScalarInstr, DecodedNpuInstr>;
 
-DecodeResult decode(std::uint32_t word);
+// Decoding either produces a valid instruction or fails. Illegal encodings are
+// the only current failure, so nullopt carries the complete result.
+std::optional<DecodedInstr> decode(std::uint32_t word);
 
 } // namespace tile_npu

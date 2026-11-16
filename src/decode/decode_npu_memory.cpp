@@ -13,33 +13,39 @@ namespace tile_npu {
 // [major4] [dom2] [0] [funct3] [    reserved10    ] [   S5   ] [   D5   ] [ q ]
 // dom2: 00 Tile, 01 Acc, 11 Vec32; 10 reserved. Acc gather is reserved.
 // funct3 = {FORM, LS}: 000 block load, 001 block store, 010 gather load.
-template <MblkOp Op> DecodeResult decode_mblk(std::uint32_t word) {
+template <MblkOp Op> std::optional<DecodedInstr> decode_mblk(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = sel3_domain(f.sel3);
   if ((Op == MblkOp::gather && domain == NpuDomain::acc) ||
       !domain_register_valid(domain, f.dest) ||
       (Op == MblkOp::gather && !domain_register_valid(NpuDomain::vec32, f.src2))) {
-    return DecodeError::illegal;
+    return std::nullopt;
   }
   const NpuRegister reg{domain, f.dest};
   return DecodedNpuInstr{MblkInstr{.op = Op, .reg = reg, .gather_src = f.src2}};
 }
 
-DecodeResult decode_mblk_load(std::uint32_t word) { return decode_mblk<MblkOp::load>(word); }
+std::optional<DecodedInstr> decode_mblk_load(std::uint32_t word) {
+  return decode_mblk<MblkOp::load>(word);
+}
 
-DecodeResult decode_mblk_store(std::uint32_t word) { return decode_mblk<MblkOp::store>(word); }
+std::optional<DecodedInstr> decode_mblk_store(std::uint32_t word) {
+  return decode_mblk<MblkOp::store>(word);
+}
 
-DecodeResult decode_mblk_gather(std::uint32_t word) { return decode_mblk<MblkOp::gather>(word); }
+std::optional<DecodedInstr> decode_mblk_gather(std::uint32_t word) {
+  return decode_mblk<MblkOp::gather>(word);
+}
 
 // FILL_IMM (I): major4 = 0001, q = 01.
 // 31    28 27  26 25    23 22                             7 6        2 1   0
 // [major4] [dom2] [funct3] [            imm16             ] [   D5   ] [ q ]
 // dom2: 00 Tile, 01 Acc, 11 Vec32; 10 reserved. funct3[25:23] = 000.
-DecodeResult decode_fill(std::uint32_t word) {
+std::optional<DecodedInstr> decode_fill(std::uint32_t word) {
   const auto f = encoding::NpuI::from(word);
   const auto domain = static_cast<NpuDomain>(f.sel2);
   if (!domain_register_valid(domain, f.dest)) {
-    return DecodeError::illegal;
+    return std::nullopt;
   }
   return DecodedNpuInstr{FillInstr{
       .dest = {.domain = domain, .index = f.dest},
@@ -52,11 +58,11 @@ DecodeResult decode_fill(std::uint32_t word) {
 // [major4] [dom2] [0] [funct3] [    reserved10    ] [   S5   ] [   D5   ] [ q ]
 // dom2: 00 Tile, 01 Acc, 11 Vec32; 10 reserved.
 // funct3[24:22]: 001 fillx (S5 = xS), 010 copy (S5 = same-domain source).
-DecodeResult decode_fillx(std::uint32_t word) {
+std::optional<DecodedInstr> decode_fillx(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = sel3_domain(f.sel3);
   if (!domain_register_valid(domain, f.dest)) {
-    return DecodeError::illegal;
+    return std::nullopt;
   }
   return DecodedNpuInstr{FillInstr{
       .dest = {.domain = domain, .index = f.dest},
@@ -64,11 +70,11 @@ DecodeResult decode_fillx(std::uint32_t word) {
   }};
 }
 
-DecodeResult decode_move_copy(std::uint32_t word) {
+std::optional<DecodedInstr> decode_move_copy(std::uint32_t word) {
   const auto f = encoding::NpuR2::from(word);
   const auto domain = sel3_domain(f.sel3);
   if (!domain_register_valid(domain, f.dest) || !domain_register_valid(domain, f.src2)) {
-    return DecodeError::illegal;
+    return std::nullopt;
   }
   return DecodedNpuInstr{MoveInstr{
       .dest = {.domain = domain, .index = f.dest},
@@ -86,7 +92,7 @@ DecodeResult decode_move_copy(std::uint32_t word) {
 //         010 vextract (vector S5 -> Scalar D5),
 //         011 vinsert (Scalar S5 -> vector D5),
 //         100 vbroadcast (vector S5 -> vector D5); 101..111 reserved.
-template <RowOp Op> DecodeResult decode_row_move(std::uint32_t word) {
+template <RowOp Op> std::optional<DecodedInstr> decode_row_move(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   constexpr auto MATRIX_DOMAIN = NpuDomain::acc;
   constexpr auto VECTOR_DOMAIN = NpuDomain::vec32;
@@ -94,7 +100,7 @@ template <RowOp Op> DecodeResult decode_row_move(std::uint32_t word) {
   const auto matrix_index = insert ? f.dest : f.src1;
   if (!domain_register_valid(MATRIX_DOMAIN, matrix_index) ||
       !domain_register_valid(VECTOR_DOMAIN, insert ? f.src1 : f.dest)) {
-    return DecodeError::illegal;
+    return std::nullopt;
   }
   return DecodedNpuInstr{RowInstr{
       .op = Op,
@@ -104,14 +110,16 @@ template <RowOp Op> DecodeResult decode_row_move(std::uint32_t word) {
   }};
 }
 
-DecodeResult decode_row_insert(std::uint32_t word) { return decode_row_move<RowOp::insert>(word); }
+std::optional<DecodedInstr> decode_row_insert(std::uint32_t word) {
+  return decode_row_move<RowOp::insert>(word);
+}
 
-DecodeResult decode_row_extract(std::uint32_t word) {
+std::optional<DecodedInstr> decode_row_extract(std::uint32_t word) {
   return decode_row_move<RowOp::extract>(word);
 }
 
 // Lane forms of ROW_LANE_MOVE share the same major4 and field layout.
-template <typename Instr> DecodeResult decode_lane_move(std::uint32_t word) {
+template <typename Instr> std::optional<DecodedInstr> decode_lane_move(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   constexpr auto VECTOR_DOMAIN = NpuDomain::vec32;
   const auto index = decode_index(f.src2, (f.sel3 & 1) != 0);
@@ -137,15 +145,15 @@ template <typename Instr> DecodeResult decode_lane_move(std::uint32_t word) {
   }
 }
 
-DecodeResult decode_lane_extract(std::uint32_t word) {
+std::optional<DecodedInstr> decode_lane_extract(std::uint32_t word) {
   return decode_lane_move<LaneExtractInstr>(word);
 }
 
-DecodeResult decode_lane_insert(std::uint32_t word) {
+std::optional<DecodedInstr> decode_lane_insert(std::uint32_t word) {
   return decode_lane_move<LaneInsertInstr>(word);
 }
 
-DecodeResult decode_lane_broadcast(std::uint32_t word) {
+std::optional<DecodedInstr> decode_lane_broadcast(std::uint32_t word) {
   return decode_lane_move<LaneBroadcastInstr>(word);
 }
 

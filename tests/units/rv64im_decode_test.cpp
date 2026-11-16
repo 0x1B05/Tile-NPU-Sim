@@ -12,7 +12,6 @@
 namespace {
 
 using tile_npu::DecodedScalarInstr;
-using tile_npu::DecodeError;
 using tile_npu::ScalarOp;
 
 struct Case {
@@ -61,7 +60,7 @@ constexpr std::uint32_t j(std::int32_t imm) {
 template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
   for (const auto &test : cases) {
     const auto result = tile_npu::decode(test.word);
-    const auto *decoded = std::get_if<DecodedScalarInstr>(&result);
+    const auto *decoded = result ? std::get_if<DecodedScalarInstr>(&*result) : nullptr;
     const std::string what = std::string("decode ") + test.name + " (" + to_hex(test.word) + ")";
     check(decoded != nullptr, what);
     check_eq(decoded->op, test.op, what + ": op");
@@ -75,10 +74,7 @@ template <std::size_t N> void check_cases(const std::array<Case, N> &cases) {
 template <std::size_t N> void check_illegal(const std::array<std::uint32_t, N> &words) {
   for (const auto word : words) {
     const auto result = tile_npu::decode(word);
-    const auto *error = std::get_if<DecodeError>(&result);
-    check(error != nullptr, "accepts reserved RV64IM encoding " + to_hex(word));
-    check_eq(*error, DecodeError::illegal,
-             "error kind for reserved RV64IM encoding " + to_hex(word));
+    check(!result.has_value(), "accepts reserved RV64IM encoding " + to_hex(word));
   }
 }
 

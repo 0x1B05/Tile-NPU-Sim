@@ -5,6 +5,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -14,9 +15,10 @@
 namespace tile_npu::test {
 
 template <typename T>
-const T &expect_npu(const tile_npu::DecodeResult &result, std::string_view what) {
+const T &expect_npu(const std::optional<tile_npu::DecodedInstr> &result, std::string_view what) {
   const std::string context(what);
-  const auto *npu = std::get_if<tile_npu::DecodedNpuInstr>(&result);
+  check(result.has_value(), context + ": expected a decoded instruction");
+  const auto *npu = std::get_if<tile_npu::DecodedNpuInstr>(&*result);
   check(npu != nullptr, context + ": expected NPU instruction");
   const auto *decoded = std::get_if<T>(npu);
   check(decoded != nullptr, context + ": unexpected NPU instruction kind");
@@ -30,10 +32,8 @@ struct DecodeCase {
 
 inline void expect_illegal(std::uint32_t word, std::string_view what) {
   const auto result = tile_npu::decode(word);
-  const auto *error = std::get_if<tile_npu::DecodeError>(&result);
   const std::string context = std::string(what) + " (" + to_hex(word) + ")";
-  check(error != nullptr, context + " decodes");
-  check_eq(*error, tile_npu::DecodeError::illegal, context + ": error kind");
+  check(!result.has_value(), context + " decodes");
 }
 
 template <std::size_t N> void expect_illegal(const std::array<DecodeCase, N> &cases) {

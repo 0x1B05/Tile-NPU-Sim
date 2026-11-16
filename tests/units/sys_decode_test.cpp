@@ -9,13 +9,12 @@
 namespace {
 
 using tile_npu::DecodedNpuInstr;
-using tile_npu::DecodeError;
 using tile_npu::SysInstr;
 using tile_npu::SysOp;
 
 void check_op(const char *name, std::uint32_t word, SysOp expected) {
   const auto result = tile_npu::decode(word);
-  const auto *npu = std::get_if<DecodedNpuInstr>(&result);
+  const auto *npu = result ? std::get_if<DecodedNpuInstr>(&*result) : nullptr;
   const std::string what = std::string("decode ") + name;
   check(npu != nullptr, what);
   const auto *decoded = std::get_if<SysInstr>(npu);
@@ -25,10 +24,8 @@ void check_op(const char *name, std::uint32_t word, SysOp expected) {
 
 void check_illegal(const char *name, std::uint32_t word) {
   const auto result = tile_npu::decode(word);
-  const auto *error = std::get_if<DecodeError>(&result);
   const std::string what = std::string(name) + " (" + to_hex(word) + ")";
-  check(error != nullptr, what + " decodes");
-  check_eq(*error, DecodeError::illegal, what + ": error kind");
+  check(!result.has_value(), what + " decodes");
 }
 
 } // namespace

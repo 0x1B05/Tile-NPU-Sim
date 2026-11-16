@@ -6,7 +6,7 @@
 
 namespace tile_npu {
 
-DecodeResult decode(std::uint32_t word) {
+std::optional<DecodedInstr> decode(std::uint32_t word) {
   if (encoding::field<1, 0>(word) == encoding::QUADRANT_RV64IM) {
     return decode_rv64im(word);
   }

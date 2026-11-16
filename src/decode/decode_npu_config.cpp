@@ -42,13 +42,13 @@ std::optional<ConfigRegType> cfg_reg_type(std::uint8_t sel3) {
 // 31    28 27  26 25    23 22                             7 6        2 1   0
 // [major4] [sel2] [field3] [            imm16             ] [   C5   ] [ q ]
 // sel2: 00 TC/TM, 01 AC/AM, 10 VC/VM; 11 reserved.
-DecodeResult decode_cfg_seti(std::uint32_t word) {
+std::optional<DecodedInstr> decode_cfg_seti(std::uint32_t word) {
   const auto f = encoding::NpuI::from(word);
   const auto reg_type = cfg_seti_type(f.major4, f.sel2);
-  if (!reg_type) return DecodeError::illegal;
+  if (!reg_type) return std::nullopt;
   const auto field = decode_config_field(*reg_type, f.field3);
   if (!field || f.dest >= config_register_count(*reg_type)) {
-    return DecodeError::illegal;
+    return std::nullopt;
   }
   return DecodedNpuInstr{
       CfgSetiInstr{.reg_type = *reg_type, .dest = f.dest, .field = *field, .imm = f.imm}};
@@ -62,43 +62,43 @@ DecodeResult decode_cfg_seti(std::uint32_t word) {
 // funct3: 000 setx (xS -> C), 001 copy (CS -> CD), 010 get (C -> xD).
 // N5 is the last destination offset for the writes (setx/copy target
 // D5..D5 + N5); get pins it to zero.
-DecodeResult decode_cfg_setx(std::uint32_t word) {
+std::optional<DecodedInstr> decode_cfg_setx(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto reg_type = cfg_reg_type(f.sel3);
-  if (!reg_type) return DecodeError::illegal;
+  if (!reg_type) return std::nullopt;
   const auto register_count = config_register_count(*reg_type);
   if (f.dest + f.src2 >= register_count) {
-    return DecodeError::illegal;
+    return std::nullopt;
   }
   const auto field =
       decode_config_field(*reg_type, static_cast<std::uint8_t>(encoding::field<2, 0>(f.arg)));
   if (!field) {
-    return DecodeError::illegal;
+    return std::nullopt;
   }
   return DecodedNpuInstr{CfgSetxInstr{
       .reg_type = *reg_type, .dest = f.dest, .field = *field, .src = f.src1, .n = f.src2}};
 }
 
-DecodeResult decode_cfg_copy(std::uint32_t word) {
+std::optional<DecodedInstr> decode_cfg_copy(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto reg_type = cfg_reg_type(f.sel3);
-  if (!reg_type) return DecodeError::illegal;
+  if (!reg_type) return std::nullopt;
   const auto register_count = config_register_count(*reg_type);
   if (f.dest + f.src2 >= register_count || f.src1 >= register_count) {
-    return DecodeError::illegal;
+    return std::nullopt;
   }
   return DecodedNpuInstr{
       CfgCopyInstr{.reg_type = *reg_type, .dest = f.dest, .src = f.src1, .n = f.src2}};
 }
 
-DecodeResult decode_cfg_get(std::uint32_t word) {
+std::optional<DecodedInstr> decode_cfg_get(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto reg_type = cfg_reg_type(f.sel3);
-  if (!reg_type) return DecodeError::illegal;
-  if (f.src2 != 0 || f.src1 >= config_register_count(*reg_type)) return DecodeError::illegal;
+  if (!reg_type) return std::nullopt;
+  if (f.src2 != 0 || f.src1 >= config_register_count(*reg_type)) return std::nullopt;
   const auto field =
       decode_config_field(*reg_type, static_cast<std::uint8_t>(encoding::field<2, 0>(f.arg)));
-  if (!field) return DecodeError::illegal;
+  if (!field) return std::nullopt;
   return DecodedNpuInstr{
       CfgGetInstr{.reg_type = *reg_type, .dest = f.dest, .src = f.src1, .field = *field}};
 }
@@ -107,21 +107,20 @@ DecodeResult decode_cfg_get(std::uint32_t word) {
 // to the compute configs (CM = 0, sel2 = 00/01/10). setw writes xS (S5) into
 // D5..D5 + N5, with N5 = [16:12] as the last destination offset; getw reads
 // config S5 into xD (D5). field5 is zero for both.
-DecodeResult decode_cfg_setw(std::uint32_t word) {
+std::optional<DecodedInstr> decode_cfg_setw(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto reg_type = cfg_reg_type(f.sel3);
-  if (!reg_type || !is_compute_config(*reg_type)) return DecodeError::illegal;
-  if (f.dest + f.src2 >= config_register_count(*reg_type)) return DecodeError::illegal;
+  if (!reg_type || !is_compute_config(*reg_type)) return std::nullopt;
+  if (f.dest + f.src2 >= config_register_count(*reg_type)) return std::nullopt;
   return DecodedNpuInstr{
       CfgSetwInstr{.reg_type = *reg_type, .dest = f.dest, .src = f.src1, .n = f.src2}};
 }
 
-DecodeResult decode_cfg_getw(std::uint32_t word) {
+std::optional<DecodedInstr> decode_cfg_getw(std::uint32_t word) {
   const auto f = encoding::NpuR4::from(word);
   const auto reg_type = cfg_reg_type(f.sel3);
-  if (!reg_type || !is_compute_config(*reg_type) ||
-      f.src1 >= config_register_count(*reg_type)) {
-    return DecodeError::illegal;
+  if (!reg_type || !is_compute_config(*reg_type) || f.src1 >= config_register_count(*reg_type)) {
+    return std::nullopt;
   }
   return DecodedNpuInstr{CfgGetwInstr{.reg_type = *reg_type, .dest = f.dest, .src = f.src1}};
 }
@@ -131,10 +130,10 @@ DecodeResult decode_cfg_getw(std::uint32_t word) {
 // [major4] [funct3] [                 reserved23                 ] [ q ]
 // funct3: 000 fence.mem, 001 fence.sa, 010 fence.all, 011 kernel.end;
 //         100..111 reserved.
-DecodeResult decode_sys(std::uint32_t word) {
+std::optional<DecodedInstr> decode_sys(std::uint32_t word) {
   const auto funct3 = encoding::field<27, 25>(word);
   if (funct3 > 0b011) {
-    return DecodeError::illegal;
+    return std::nullopt;
   }
   return DecodedNpuInstr{SysInstr{.op = static_cast<SysOp>(funct3)}};
 }

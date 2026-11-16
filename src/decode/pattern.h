@@ -36,7 +36,7 @@ struct Pattern {
   constexpr bool matches(std::uint32_t word) const { return (word & mask) == key; }
 };
 
-using DecodeHandler = DecodeResult (*)(std::uint32_t word);
+using DecodeHandler = std::optional<DecodedInstr> (*)(std::uint32_t word);
 
 // A decode table is scanned in order and the first matching entry wins, so
 // specific instruction patterns come before catch-alls.
@@ -45,15 +45,16 @@ struct DecodeEntry {
   DecodeHandler handler;
 };
 
-template <std::size_t N> DecodeResult match(const DecodeEntry (&table)[N], std::uint32_t word) {
+template <std::size_t N>
+std::optional<DecodedInstr> match(const DecodeEntry (&table)[N], std::uint32_t word) {
   for (const auto &entry : table) {
     if (entry.pattern.matches(word)) {
       return entry.handler(word);
     }
   }
-  return DecodeError::illegal;
+  return std::nullopt;
 }
 
-inline DecodeResult illegal(std::uint32_t) { return DecodeError::illegal; }
+inline std::optional<DecodedInstr> illegal(std::uint32_t) { return std::nullopt; }
 
 } // namespace tile_npu

@@ -9,6 +9,6 @@ namespace tile_npu::trace {
 
 // Human-readable assembly form of a decoded instruction. The pc is used only
 // for scalar branch/jump targets.
-std::string disassemble(std::uint64_t pc, const DecodeResult &decoded);
+std::string disassemble(std::uint64_t pc, const std::optional<DecodedInstr> &decoded);
 
 } // namespace tile_npu::trace
