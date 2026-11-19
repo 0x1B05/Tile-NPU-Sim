@@ -289,8 +289,6 @@ TEST_CASE(validate_rejects_bad_adequant) {
                 "adequant destination a16");
   check_illegal(AdequantInstr{.dest = A(0), .src = V(0), .col_scale = 0, .row_scale = 1},
                 "adequant source domain");
-  check_illegal(AdequantInstr{.dest = A(0), .src = A(0), .col_scale = 0, .row_scale = 1},
-                "adequant in-place source");
   check_illegal(AdequantInstr{.dest = A(0), .src = A(1), .col_scale = 32, .row_scale = 1},
                 "adequant vCol 32");
   check_illegal(AdequantInstr{.dest = A(0), .src = A(1), .col_scale = 0, .row_scale = 32},

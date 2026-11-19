@@ -227,8 +227,7 @@ bool valid_structure(const MmaInstr &instr) {
 bool valid_structure(const AdequantInstr &instr) {
   return instr.dest.domain == NpuDomain::acc && in_range(instr.dest) &&
          instr.src.domain == NpuDomain::acc && in_range(instr.src) &&
-         instr.col_scale < VECTOR_REGISTERS && instr.row_scale < VECTOR_REGISTERS &&
-         instr.dest.index != instr.src.index;
+         instr.col_scale < VECTOR_REGISTERS && instr.row_scale < VECTOR_REGISTERS;
 }
 
 bool valid_structure(const VmmaInstr &instr) {

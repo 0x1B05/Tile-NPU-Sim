@@ -172,6 +172,33 @@ TEST_CASE(adequant_basic) {
   check_eq(state.ac[1].dtype, DType::f32, "destination dtype stays f32");
 }
 
+TEST_CASE(adequant_inplace) {
+  Ram memory(CODE_BASE, 4);
+  Simulator sim(memory);
+  load_one(sim, memory, make_adequant(0, 0, 6, 7));
+  auto &state = sim.state();
+  acc_i32(state, 0, 2, 2);
+  vec32_f32(state, 6, 2);
+  vec32_f32(state, 7, 2);
+  state.a[0][0] = 50;
+  state.a[0][1] = 68;
+  state.a[0][32] = 42;
+  state.a[0][33] = 57;
+  state.v[6][0] = as_u32(2.0f);
+  state.v[6][1] = as_u32(3.0f);
+  state.v[7][0] = as_u32(0.5f);
+  state.v[7][1] = as_u32(0.25f);
+
+  check_eq(sim.step().status, StepStatus::retired, "in-place adequant retires");
+  check_eq(hex(state.a[0][0]), hex(as_u32(50.0f)), "in-place aD[0,0]");
+  check_eq(hex(state.a[0][1]), hex(as_u32(102.0f)), "in-place aD[0,1]");
+  check_eq(hex(state.a[0][32]), hex(as_u32(21.0f)), "in-place aD[1,0]");
+  check_eq(hex(state.a[0][33]), hex(as_u32(42.75f)), "in-place aD[1,1]");
+  check_eq(state.ac[0].dtype, DType::f32, "in-place register dtype becomes f32");
+  check_eq(state.ac[0].rows, std::uint8_t{2}, "in-place rows stay unchanged");
+  check_eq(state.ac[0].cols, std::uint8_t{2}, "in-place cols stay unchanged");
+}
+
 TEST_CASE(vdequant_basic) {
   Ram memory(CODE_BASE, 4);
   Simulator sim(memory);
