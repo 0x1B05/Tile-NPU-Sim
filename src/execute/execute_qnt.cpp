@@ -123,19 +123,21 @@ ExecuteResult adequant(const AdequantInstr &instr, State &state) {
   return {.status = StepStatus::retired};
 }
 
-// vdequant: vD(f32) = f32(vS(i32)) * vCol * vRow[0], with separate source and
-// destination Vec32 registers.
+// vdequant: vD(f32) = f32(vS(i32)) * vCol * vRow[0]. The source and
+// destination may be the same Vec32 register; the source is then read as i32,
+// the result is written back as f32, and the register dtype becomes f32.
 ExecuteResult vdequant(const VdequantInstr &instr, State &state) {
   const auto &dst_config = state.vc[instr.dest.index];
   const auto &src_config = state.vc[instr.src.index];
   const auto &col_config = state.vc[instr.col_scale];
   const auto &row_config = state.vc[instr.row_scale];
-  if (!valid_config_of(dst_config, DType::f32) || !valid_config_of(src_config, DType::i32) ||
-      !valid_config_of(col_config, DType::f32) || !valid_config_of(row_config, DType::f32)) {
+  const bool in_place = instr.dest.index == instr.src.index;
+  if (!valid_config_of(src_config, DType::i32) || !valid_config_of(col_config, DType::f32) ||
+      !valid_config_of(row_config, DType::f32) ||
+      (!in_place && !valid_config_of(dst_config, DType::f32))) {
     return config_error();
   }
-  if (dst_config.len != src_config.len || col_config.len != src_config.len || row_config.len != 1 ||
-      instr.dest.index == instr.src.index) {
+  if (dst_config.len != src_config.len || col_config.len != src_config.len || row_config.len != 1) {
     return config_error();
   }
 
@@ -148,6 +150,7 @@ ExecuteResult vdequant(const VdequantInstr &instr, State &state) {
     const float value = as_f32(i32_to_f32_bits(src[j]));
     dst[j] = as_u32((value * as_f32(col_scale[j])) * row);
   }
+  if (in_place) state.vc[instr.dest.index].dtype = DType::f32;
   return {.status = StepStatus::retired};
 }
 

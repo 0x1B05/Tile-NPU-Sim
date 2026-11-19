@@ -221,6 +221,27 @@ TEST_CASE(vdequant_basic) {
   check_eq(state.vc[1].dtype, DType::f32, "destination dtype stays f32");
 }
 
+TEST_CASE(vdequant_inplace) {
+  Ram memory(CODE_BASE, 4);
+  Simulator sim(memory);
+  load_one(sim, memory, make_vdequant(0, 0, 6, 7));
+  auto &state = sim.state();
+  vec32_i32(state, 0, 2);
+  vec32_f32(state, 6, 2);
+  vec32_f32(state, 7, 1);
+  state.v[0][0] = 42;
+  state.v[0][1] = 57;
+  state.v[6][0] = as_u32(2.0f);
+  state.v[6][1] = as_u32(3.0f);
+  state.v[7][0] = as_u32(0.5f);
+
+  check_eq(sim.step().status, StepStatus::retired, "in-place vdequant retires");
+  check_eq(hex(state.v[0][0]), hex(as_u32(42.0f)), "in-place vD[0]");
+  check_eq(hex(state.v[0][1]), hex(as_u32(85.5f)), "in-place vD[1]");
+  check_eq(state.vc[0].dtype, DType::f32, "in-place vector dtype becomes f32");
+  check_eq(state.vc[0].len, std::uint8_t{2}, "in-place vector length stays unchanged");
+}
+
 TEST_CASE(adequant_rejects_invalid) {
   {
     Ram memory(CODE_BASE, 4);

@@ -240,8 +240,7 @@ bool valid_structure(const VmmaInstr &instr) {
 bool valid_structure(const VdequantInstr &instr) {
   return instr.dest.domain == NpuDomain::vec32 && in_range(instr.dest) &&
          instr.src.domain == NpuDomain::vec32 && in_range(instr.src) &&
-         instr.col_scale < VECTOR_REGISTERS && instr.row_scale < VECTOR_REGISTERS &&
-         instr.dest.index != instr.src.index;
+         instr.col_scale < VECTOR_REGISTERS && instr.row_scale < VECTOR_REGISTERS;
 }
 
 bool valid_structure(const SysInstr &instr) { return instr.op <= SysOp::kernel_end; }

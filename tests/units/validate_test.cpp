@@ -302,8 +302,6 @@ TEST_CASE(validate_rejects_bad_vdequant) {
                 "vdequant destination v32");
   check_illegal(VdequantInstr{.dest = V(0), .src = A(0), .col_scale = 0, .row_scale = 1},
                 "vdequant source domain");
-  check_illegal(VdequantInstr{.dest = V(0), .src = V(0), .col_scale = 0, .row_scale = 1},
-                "vdequant in-place source");
   check_illegal(VdequantInstr{.dest = V(0), .src = V(1), .col_scale = 32, .row_scale = 1},
                 "vdequant vCol 32");
   check_illegal(VdequantInstr{.dest = V(0), .src = V(1), .col_scale = 0, .row_scale = 32},
