@@ -164,12 +164,32 @@ TEST_CASE(adequant_basic) {
   state.v[7][1] = as_u32(0.25f);
 
   check_eq(sim.step().status, StepStatus::retired, "adequant retires");
-  check_eq(hex(state.a[1][0]), hex(as_u32(50.0f)), "aD[0,0] = (50 * 2) * 0.5");
-  check_eq(hex(state.a[1][1]), hex(as_u32(102.0f)), "aD[0,1] = (68 * 3) * 0.5");
-  check_eq(hex(state.a[1][32]), hex(as_u32(21.0f)), "aD[1,0] = (42 * 2) * 0.25");
-  check_eq(hex(state.a[1][33]), hex(as_u32(42.75f)), "aD[1,1] = (57 * 3) * 0.25");
+  check_eq(hex(state.a[1][0]), hex(as_u32(50.0f)), "aD[0,0] = (50 * 0.5) * 2");
+  check_eq(hex(state.a[1][1]), hex(as_u32(102.0f)), "aD[0,1] = (68 * 0.5) * 3");
+  check_eq(hex(state.a[1][32]), hex(as_u32(21.0f)), "aD[1,0] = (42 * 0.25) * 2");
+  check_eq(hex(state.a[1][33]), hex(as_u32(42.75f)), "aD[1,1] = (57 * 0.25) * 3");
   check_eq(state.ac[0].dtype, DType::i32, "source dtype stays i32");
   check_eq(state.ac[1].dtype, DType::f32, "destination dtype stays f32");
+}
+
+TEST_CASE(adequant_row_scale_first) {
+  Ram memory(CODE_BASE, 4);
+  Simulator sim(memory);
+  load_one(sim, memory, make_adequant(1, 0, 6, 7));
+  auto &state = sim.state();
+  acc_i32(state, 0, 1, 1);
+  state.ac[1].dtype = DType::f32;
+  state.ac[1].rows = 1;
+  state.ac[1].cols = 1;
+  vec32_f32(state, 6, 1);
+  vec32_f32(state, 7, 1);
+  state.a[0][0] = 3;
+  state.v[6][0] = as_u32(0.7f);
+  state.v[7][0] = as_u32(0.1f);
+
+  check_eq(sim.step().status, StepStatus::retired, "adequant row-first retires");
+  // (3 * 0.1) * 0.7 differs from (3 * 0.7) * 0.1 in the last bit.
+  check_eq(hex(state.a[1][0]), hex(0x3e570a3eu), "row scale is applied first");
 }
 
 TEST_CASE(adequant_inplace) {
@@ -215,10 +235,27 @@ TEST_CASE(vdequant_basic) {
   state.v[7][0] = as_u32(0.5f);
 
   check_eq(sim.step().status, StepStatus::retired, "vdequant retires");
-  check_eq(hex(state.v[1][0]), hex(as_u32(42.0f)), "vD[0] = (42 * 2) * 0.5");
-  check_eq(hex(state.v[1][1]), hex(as_u32(85.5f)), "vD[1] = (57 * 3) * 0.5");
+  check_eq(hex(state.v[1][0]), hex(as_u32(42.0f)), "vD[0] = (42 * 0.5) * 2");
+  check_eq(hex(state.v[1][1]), hex(as_u32(85.5f)), "vD[1] = (57 * 0.5) * 3");
   check_eq(state.vc[0].dtype, DType::i32, "source dtype stays i32");
   check_eq(state.vc[1].dtype, DType::f32, "destination dtype stays f32");
+}
+
+TEST_CASE(vdequant_row_scale_first) {
+  Ram memory(CODE_BASE, 4);
+  Simulator sim(memory);
+  load_one(sim, memory, make_vdequant(1, 0, 6, 7));
+  auto &state = sim.state();
+  vec32_i32(state, 0, 1);
+  vec32_f32(state, 1, 1);
+  vec32_f32(state, 6, 1);
+  vec32_f32(state, 7, 1);
+  state.v[0][0] = 3;
+  state.v[6][0] = as_u32(0.7f);
+  state.v[7][0] = as_u32(0.1f);
+
+  check_eq(sim.step().status, StepStatus::retired, "vdequant row-first retires");
+  check_eq(hex(state.v[1][0]), hex(0x3e570a3eu), "row scale is applied first");
 }
 
 TEST_CASE(vdequant_inplace) {

@@ -135,7 +135,7 @@ _start:
     bne       x4, x5, fail
 
     # Stage 5 - mma.nt.zero a2 then adequant a3, a2, v6, v7:
-    # product {{50,68},{42,57}}, vCol {2,3}, vRow {0.5,0.25}
+    # product {{50,68},{42,57}}, vRow {0.5,0.25}, vCol {2,3}
     # -> {{50,102},{21,42.75}}.
     li        x5, 0x40000000     # 2.0
     VINSERT   6, 0, 5
@@ -165,7 +165,7 @@ _start:
     bnez      x6, 5b
 
     # Stage 6 - vmma.nt.zero v4 then vdequant v5, v4, v8, v9:
-    # product {42,57}, vCol {2,3}, vRow[0] = 0.5 -> {42.0, 85.5}.
+    # product {42,57}, vRow[0] = 0.5, vCol {2,3} -> {42.0, 85.5}.
     li        x5, 0x40000000     # 2.0
     VINSERT   8, 0, 5
     li        x5, 0x40400000     # 3.0

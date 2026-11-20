@@ -87,7 +87,7 @@ ExecuteResult tdequant(const TdequantInstr &instr, State &state) {
   return {.status = StepStatus::retired};
 }
 
-// adequant: aD(f32) = f32(aS(i32)) * vCol * vRow. The source and destination
+// adequant: aD(f32) = f32(aS(i32)) * vRow * vCol. The source and destination
 // may be the same Acc register; the source is then read as i32, the result is
 // written back as f32, and the register dtype becomes f32.
 ExecuteResult adequant(const AdequantInstr &instr, State &state) {
@@ -116,14 +116,14 @@ ExecuteResult adequant(const AdequantInstr &instr, State &state) {
     for (std::size_t j = 0; j < src_config.cols; ++j) {
       const auto idx = i * MATRIX_EXTENT + j;
       const float value = as_f32(i32_to_f32_bits(src[idx]));
-      dst[idx] = as_u32((value * as_f32(col_scale[j])) * row);
+      dst[idx] = as_u32((value * row) * as_f32(col_scale[j]));
     }
   }
   if (in_place) state.ac[instr.dest.index].dtype = DType::f32;
   return {.status = StepStatus::retired};
 }
 
-// vdequant: vD(f32) = f32(vS(i32)) * vCol * vRow[0]. The source and
+// vdequant: vD(f32) = f32(vS(i32)) * vRow[0] * vCol. The source and
 // destination may be the same Vec32 register; the source is then read as i32,
 // the result is written back as f32, and the register dtype becomes f32.
 ExecuteResult vdequant(const VdequantInstr &instr, State &state) {
@@ -148,7 +148,7 @@ ExecuteResult vdequant(const VdequantInstr &instr, State &state) {
   const FpEnvGuard fp_env;
   for (std::size_t j = 0; j < src_config.len; ++j) {
     const float value = as_f32(i32_to_f32_bits(src[j]));
-    dst[j] = as_u32((value * as_f32(col_scale[j])) * row);
+    dst[j] = as_u32((value * row) * as_f32(col_scale[j]));
   }
   if (in_place) state.vc[instr.dest.index].dtype = DType::f32;
   return {.status = StepStatus::retired};
