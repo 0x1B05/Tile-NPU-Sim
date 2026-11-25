@@ -54,6 +54,14 @@ xmake run sim -i path/to/program.bin
 
 The runner is always built as `sim`; the internal core library is only a dependency.
 
+## RTL DiffTest reference
+
+On Linux, `xmake build difftest_ref` builds `build/difftest/libtile_npu_difftest.so`
+from `sim_core`. Pass the library to `Tile-NPU-Core` with `--diff` to compare its
+scalar registers and next PC against the functional simulator at each ordinary
+instruction retirement. The reference exports `difftest_regcpy(gpr, pc, to_ref)`,
+where `gpr` points to 32 `uint64_t` registers and `pc` points to one `uint64_t`.
+
 ## Guest tests
 
 Guest programs under `tests/guest/` are C or assembly sources cross-compiled with a RISC-V toolchain (`riscv64-linux-gnu-` by default; override the prefix with `xmake f --riscv_cross=<prefix>`) and linked into flat binaries against a minimal `crt0.S`. `xmake build guest_images` only produces the images; it does not register tests. `python3 tests/run.py guest --build` builds the images and `sim_guest_tests`, then runs the in-process guest checks and the `rv64im` self-checking images. Use `--filter` to select a test or image by name.

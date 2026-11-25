@@ -41,6 +41,7 @@ local trace_flush_records = tonumber(get_config("trace_flush_records") or "4096"
 target("sim_core", function()
 	set_kind("static")
 	set_default(false)
+	add_cxflags("-fPIC", { tools = { "gcc", "gxx", "clang", "clangxx" } })
 	add_files("src/*.cpp|main.cpp", "src/decode/*.cpp|disasm.cpp", "src/execute/*.cpp", "src/platform/*.cpp")
 	if trace_mode ~= "none" then
 		add_defines("CONFIG_TRACE", { public = true })
@@ -55,6 +56,16 @@ target("sim_core", function()
 	end
 	add_includedirs("include", { public = true })
 	add_includedirs("src")
+end)
+
+target("difftest_ref", function()
+	set_kind("shared")
+	set_default(false)
+	set_basename("tile_npu_difftest")
+	set_targetdir("$(builddir)/difftest")
+	add_deps("sim_core")
+	add_includedirs("src")
+	add_files("src/difftest/npc_ref.cpp")
 end)
 
 add_requires("cli11 2.7.2")
