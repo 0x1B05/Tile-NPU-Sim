@@ -62,6 +62,13 @@ scalar registers and next PC against the functional simulator at each ordinary
 instruction retirement. The reference exports `difftest_regcpy(gpr, pc, to_ref)`,
 where `gpr` points to 32 `uint64_t` registers and `pc` points to one `uint64_t`.
 
+`difftest_configcpy(type, words, to_ref)` transfers one complete configuration
+register group. The type is the ISA CFG_REG selector (TC, TM, AC, AM, VC, VM
+in that order), not the ordinal of the C++ enum. Each register uses its ISA
+layout: 1, 4, 1, 4, 1 or 3 words respectively. The buffer contains consecutive
+registers starting at index zero, least-significant 32-bit word first. Normal
+comparison reads from the reference; debugger reattachment restores it.
+
 ## Guest tests
 
 Guest images use `-march=rv64im_zifencei -mabi=lp64`. The default cross-toolchain prefix is `riscv64-linux-gnu-`; override it with `xmake f --riscv_cross=<prefix>`. `xmake build guest_images` builds the C and assembly programs under `tests/guest/` into flat binaries. `python3 tests/run.py guest --build` also builds `sim_guest_tests` and runs the in-process guest checks and the self-checking images under `rv64im/`. Use `--filter` to select a test or image by name.
