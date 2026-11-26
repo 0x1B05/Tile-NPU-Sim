@@ -212,6 +212,7 @@ std::string scalar_instr(const DecodedScalarInstr &instr, std::uint64_t pc) {
   case ScalarOp::remw: out << "remw " << rd << ", " << rs1 << ", " << rs2; break;
   case ScalarOp::remuw: out << "remuw " << rd << ", " << rs1 << ", " << rs2; break;
   case ScalarOp::fence: out << "fence"; break;
+  case ScalarOp::fence_i: out << "fence.i"; break;
   case ScalarOp::ecall: out << "ecall"; break;
   case ScalarOp::ebreak: out << "ebreak"; break;
   }

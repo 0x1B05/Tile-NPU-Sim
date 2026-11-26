@@ -17,7 +17,7 @@ for source in sources:
     if source.endswith(".S"):
         args += ["-x", "assembler-with-cpp"]
     args += [
-        "-march=rv64im",
+        "-march=rv64im_zifencei",
         "-mabi=lp64",
         "-O2",
         "-ffreestanding",

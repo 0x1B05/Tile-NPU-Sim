@@ -1,7 +1,7 @@
 // Minimal riscv-tests environment for the Tile-NPU simulator: no privileged
 // state, no tohost/HTIF. Pass/fail ride the runner convention: ebreak with
 // a0 == 0 passes; a failing case reports (TESTNUM << 1) | 1.
-// Tests that require trap handling (ma_*) or Zifencei (fence_i) are excluded
+// Tests that require trap handling (ma_*) are excluded
 // by the list in xmake/riscv_tests.lua.
 
 #ifndef _TILE_NPU_RISCV_TEST_ENV_H

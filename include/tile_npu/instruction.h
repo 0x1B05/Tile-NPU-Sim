@@ -33,6 +33,7 @@ enum class ScalarOp {
   srl,   sra,    bit_or, bit_and,
   addw,  subw,   sllw,   srlw,  sraw,                     // op-32
   fence, ecall,  ebreak,                                  // misc-mem / system
+  fence_i,                                               // Zifencei
 
   // RV64M
   mul,   mulh,   mulhsu, mulhu, div,   divu,  rem,  remu, // M op

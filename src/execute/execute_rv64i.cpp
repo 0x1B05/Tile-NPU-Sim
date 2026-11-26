@@ -179,7 +179,9 @@ ExecuteResult execute_rv64i(const DecodedScalarInstr &instr, ExecContext &ctx) {
   case ScalarOp::srlw:    return write(sign_extend_word(lhs_word >> word_shamt));
   case ScalarOp::sraw:    return write(sign_extend_word(signed_lhs_word >> word_shamt));
 
-  case ScalarOp::fence:   return {.status = StepStatus::retired};
+  // Stores complete synchronously, and fetch reads the same memory on every step.
+  case ScalarOp::fence:
+  case ScalarOp::fence_i: return {.status = StepStatus::retired};
   case ScalarOp::ecall:   return {.status = StepStatus::environment_call};
   case ScalarOp::ebreak:  return {.status = StepStatus::breakpoint};
 

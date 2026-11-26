@@ -24,22 +24,22 @@ function output_paths(bindir, name)
 	return path.join(bindir, name .. ".elf"), path.join(bindir, name .. ".bin")
 end
 
--- Compile+link src (with optional extra sources/includes), objcopy to a bin.
-function build_guest_image(gcc, objcopy, linkscript, src, elf, bin, extra)
-	local args = {
-		"-march=rv64im",
+function compile_flags()
+	return {
+		"-march=rv64im_zifencei",
 		"-mabi=lp64",
 		"-O2",
 		"-ffreestanding",
 		"-nostdlib",
 		"-static",
 		"-no-pie",
-		"-T",
-		linkscript,
-		"-o",
-		elf,
 	}
-	table.insert(args, src)
+end
+
+-- Compile+link src (with optional extra sources/includes), objcopy to a bin.
+function build_guest_image(gcc, objcopy, linkscript, src, elf, bin, extra)
+	local args = compile_flags()
+	table.join2(args, { "-T", linkscript, "-o", elf, src })
 	table.join2(args, extra or {})
 	os.vrunv(gcc, args)
 	os.vrunv(objcopy, { "-O", "binary", elf, bin })

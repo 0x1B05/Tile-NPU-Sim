@@ -2,7 +2,7 @@
 
 ## 项目与职责
 
-本仓库为 C++20 功能模拟器：单 hart、按程序序同步执行 RV64IM 标量与 NPU 指令。核心为内部静态库 `sim_core`；默认 target `sim` 是用于程序运行和调试的二进制，命令行由 CLI11 解析。使用方法见 `README.md`；本文件维护开发约定和模块边界。
+本仓库为 C++20 功能模拟器：单 hart、按程序序同步执行 RV64IM、Zifencei 与 NPU 指令。核心为内部静态库 `sim_core`；默认 target `sim` 是用于程序运行和调试的二进制，命令行由 CLI11 解析。使用方法见 `README.md`；本文件维护开发约定和模块边界。
 
 ISA 手册位于相邻仓库 `../Tile-NPU-ISA/`，指令语义与编码位段以 `tile-npu-isa.typ` 和 `rivet/*.yaml` 为准。发现手册与实现不一致时默认修模拟器；需要调整 ISA 时先澄清手册，再同步实现与测试。只有编码或布局变化才更新编码设计说明和 Rivet 文件。
 
@@ -27,7 +27,7 @@ xmake project -k compile_commands        # 为 clangd 生成 compile_commands.js
 - 修改后至少运行 `xmake test`。`sim_tests/core` 只包含 host 用例；guest 测试在独立二进制 `sim_guest_tests` 中，由 `tests/run.py` 调用。
 - 构建选项在 `xmake.lua`，使用 `xmake f --xxx=...`；编译器缓存位于仓库内 `.cache/ccache`。`--trace=none|itrace|mtrace|all` 选择 trace 后端，`--trace_flush_records=N` 设置 batch flush 的记录间隔 (默认 4096)；运行时用 `--trace=...` 选择构建时启用的后端 (`all` 仅在两个后端都编译时可用)，日志默认写到首个镜像同目录的 `itrace.log` / `mtrace.mtrb`，可用 `--trace-dir DIR` 改目录，`--trace-start/--trace-end` 限定 PC 窗口。
 - 宿主构建启用 `set_warnings("all", "error")`，所有已启用的警告都按错误处理。
-- guest 镜像需要 RISC-V 交叉工具链，默认前缀 `riscv64-linux-gnu-`，可用 `xmake f --riscv_cross=<prefix>` 覆盖；构建 `sim` 和 `sim_tests` 本身不需要交叉工具链。
+- guest 镜像使用 `-march=rv64im_zifencei -mabi=lp64`，需要 RISC-V 交叉工具链；默认前缀 `riscv64-linux-gnu-`，可用 `xmake f --riscv_cross=<prefix>` 覆盖。构建 `sim` 和 `sim_tests` 本身不需要交叉工具链。
 - Qwen3 的 Q3B/Q3P 格式、prompt 分词与 `qwen3_run` 用法见 `README.md`。tiny 回归由 `tests/run.py qwen3` 驱动：`qwen3_snapshot_app`、模型、prompt 与 NumPy 参考均由脚本生成。
 - `tests/run.py` 负责 suite 选择、过滤、构建缺失 artifact 和结果汇总；xmake 只负责生成 `sim_tests`、`sim_guest_tests`、`guest_images` 及可选 app/image artifact。
 
@@ -77,7 +77,7 @@ xmake project -k compile_commands        # 为 clangd 生成 compile_commands.js
 
 ## 建模与执行契约
 
-- 指令定长 32-bit，按小端取指；`q[1:0] = 11` 走 RV64IM，其余走 NPU，不启用 RVC。
+- 指令定长 32-bit，按小端取指；`q[1:0] = 11` 走标量译码，其余走 NPU，不启用 RVC。
 - 寄存器元素保存位模式；配置字段使用 C++ 类型保存 (如 `DType` 枚举)，字段编号与值的转换由配置接口处理。
 - 标量运算使用 64-bit 回绕语义；load/store 要求自然对齐，非对齐访问报告状态并保持架构状态。
 - `MatrixView` 将逻辑坐标映射到固定尺寸、canonical 行主序存储，不携带有效 shape/layout；`matrix_view(reg)` 只接受 `MATRIX_ELEMENTS` 大小的寄存器。有效区域与 layout 由执行器按配置校验。
@@ -88,7 +88,7 @@ xmake project -k compile_commands        # 为 clangd 生成 compile_commands.js
 - 译码失败返回 `std::nullopt`；手工构造的非法 NPU IR 返回 `StepStatus::illegal_instruction`，非法配置返回 `invalid_configuration`。这些是模拟器诊断，尚未建模 ISA trap 投递；不变式被破坏属于实现错误，使用始终生效的 `unreachable()`。
 - 浮点规则同时由编译与执行保证：`-ffp-contract=off` 禁止隐式乘加融合，`std::fma` 实现显式单次舍入；`FpEnvGuard` 在 NPU 执行入口设置默认浮点环境 (RNE、默认 subnormal 处理)，结束后恢复宿主环境。
 - 规约按相邻两两二叉树执行，奇数节点直通下一层；`sum`/`sumsq` 的每个加法节点执行一次 f32 RNE，`sumsq` 先对乘积做 f32 舍入。`max`/`min`/`absmax`/`argmax` 的 NaN、带符号零与并列规则遵循手册，不使用单位元填充非空规约树。
-- 单 hart 同步模型中 RV64 `FENCE` 与 NPU `fence.*` 为 no-op。`ECALL`、`EBREAK`、`kernel.end` 停在当前 PC，交给调用方处理。
+- 单 hart 同步模型中 RV64 `FENCE`、`FENCE.I` 与 NPU `fence.*` 正常退休，无额外副作用。取指直接读取已完成写入的内存。`ECALL`、`EBREAK`、`kernel.end` 停在当前 PC，交给调用方处理。
 - `reset(entry_pc)` 将状态恢复为 `State{}` 并设置 PC，不清内存。runner 默认入口、RAM 容量、串口窗口以及 `ebreak/kernel.end` 以 `a0` 为退出码的约定见 README；这些平台约定与 ISA 指令语义分开维护。
 
 ## 配置访问契约
@@ -111,7 +111,7 @@ xmake project -k compile_commands        # 为 clangd 生成 compile_commands.js
 - host 译码测试使用内联机器码常量或 `tests/include/units/<族>_helpers.h` 的构造器，并标注对应汇编；指令字和地址的断言用 `hex()` 包装。
 - NPU 正例优先放在 `tests/guest/npu/*.S`，复用 `tests/guest/include/npu.inc` 的编码宏；`tests/guest/npu_guest_test.cpp` 负责装载、执行与断言，镜像目录通过 `--guest-dir` 传入。复用 `run_until_stop` 的步数上限和停机诊断，或 `check_guest_image` 的自校验流程；非法编码负例放在 `tests/units`。
 - guest C 程序链接共享 `crt0.S`，裸 `.S` 提供自己的 `_start`，生成到构建目录的 `guest/`。标量自校验程序放在 `tests/guest/rv64im/`，按 `ebreak/a0` 约定退出。
-- 官方套件的 env 在 `tests/guest/riscv-tests-env/`；排除项在 `xmake/riscv_tests.lua`，对应尚未建模的 Zifencei 与 trap 投递。镜像由 `xmake build riscv_tests` 生成，由 `tests/run.py riscv-tests` 执行。
+- 官方套件的 env 在 `tests/guest/riscv-tests-env/`；排除项在 `xmake/riscv_tests.lua`，对应尚未建模的 trap 投递。镜像由 `xmake build riscv_tests` 生成，由 `tests/run.py riscv-tests` 执行。
 - tiny Qwen3 回归以固定 seed 模型对照 NumPy 参考：整数探针与 token 精确匹配，f32 探针使用容差。
 - 仓库内 guest 源码生成的镜像属于构建依赖；用户提供的外部镜像和下载的模型不加入构建依赖或提交。
 

@@ -37,14 +37,8 @@ local function define_qwen3_app(name, base_name, snapshot)
 			table.join2(deps, sources)
 			-- lastmtime anchors on the outputs: a missing one forces a rebuild.
 			depend.on_changed(function()
-				local args = {
-					"-march=rv64im",
-					"-mabi=lp64",
-					"-O2",
-					"-ffreestanding",
-					"-nostdlib",
-					"-static",
-					"-no-pie",
+				local args = guestimg.compile_flags()
+				table.join2(args, {
 					"-I",
 					app_includedir,
 					"-I",
@@ -53,7 +47,7 @@ local function define_qwen3_app(name, base_name, snapshot)
 					linkscript,
 					"-o",
 					elf,
-				}
+				})
 				if snapshot then
 					table.insert(args, "-DQWEN3_SNAPSHOT=1")
 				end
@@ -66,7 +60,7 @@ local function define_qwen3_app(name, base_name, snapshot)
 				files = deps,
 				changed = target:is_rebuilt(),
 				lastmtime = math.min(os.mtime(elf), os.mtime(bin)),
-				values = { gcc, "-march=rv64im -mabi=lp64 -O2", snapshot, max_new_tokens },
+				values = { gcc, table.concat(guestimg.compile_flags(), " "), snapshot, max_new_tokens },
 			})
 		end)
 	end)

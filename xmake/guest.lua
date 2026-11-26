@@ -44,7 +44,7 @@ target("guest_images", function()
 				files = deps,
 				changed = target:is_rebuilt(),
 				lastmtime = math.min(os.mtime(elf), os.mtime(bin)),
-				values = { gcc, "-march=rv64im -mabi=lp64 -O2" },
+				values = { gcc, table.concat(guestimg.compile_flags(), " ") },
 			})
 		end
 		for _, src in ipairs(os.files(path.join(srcdir, "**.c"))) do

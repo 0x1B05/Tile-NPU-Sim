@@ -1,6 +1,6 @@
 # Tile-NPU functional simulator
 
-A functional simulator for the [Tile-NPU ISA](https://github.com/0x1B05/Tile-NPU-ISA): a single-hart, in-order model that executes 32-bit RV64IM scalar instructions together with the NPU instruction set.
+A functional simulator for the [Tile-NPU ISA](https://github.com/0x1B05/Tile-NPU-ISA): a single-hart, in-order model that executes 32-bit RV64IM and Zifencei scalar instructions together with the NPU instruction set. `fence.i` retires without additional work because stores complete synchronously and every fetch reads the same memory.
 
 ## Build and test
 
@@ -64,7 +64,7 @@ where `gpr` points to 32 `uint64_t` registers and `pc` points to one `uint64_t`.
 
 ## Guest tests
 
-Guest programs under `tests/guest/` are C or assembly sources cross-compiled with a RISC-V toolchain (`riscv64-linux-gnu-` by default; override the prefix with `xmake f --riscv_cross=<prefix>`) and linked into flat binaries against a minimal `crt0.S`. `xmake build guest_images` only produces the images; it does not register tests. `python3 tests/run.py guest --build` builds the images and `sim_guest_tests`, then runs the in-process guest checks and the `rv64im` self-checking images. Use `--filter` to select a test or image by name.
+Guest images use `-march=rv64im_zifencei -mabi=lp64`. The default cross-toolchain prefix is `riscv64-linux-gnu-`; override it with `xmake f --riscv_cross=<prefix>`. `xmake build guest_images` builds the C and assembly programs under `tests/guest/` into flat binaries. `python3 tests/run.py guest --build` also builds `sim_guest_tests` and runs the in-process guest checks and the self-checking images under `rv64im/`. Use `--filter` to select a test or image by name.
 
 ## riscv-tests conformance
 
@@ -75,11 +75,11 @@ scripts/fetch_riscv_tests.sh      # clone the pinned commit into external/
 python3 tests/run.py riscv-tests --build
 ```
 
-The suite is assembled against a minimal custom env (`tests/guest/riscv-tests-env/riscv_test.h`) that reports pass/fail through the runner's `ebreak`/`a0` convention; `fence_i` and `ma_data` are excluded (Zifencei and trap delivery are not modeled). The runner executes the generated images through `sim`; missing external sources or images are reported by the runner instead of affecting `xmake f`.
+The suite is assembled against a minimal custom env (`tests/guest/riscv-tests-env/riscv_test.h`) that reports pass/fail through the runner's `ebreak`/`a0` convention. `fence_i` is included; `ma_data` is excluded because trap delivery is not modeled. The runner executes the generated images through `sim`; missing external sources or images are reported by the runner instead of affecting `xmake f`.
 
 ## Qwen3 inference guest
 
-`apps/qwen3/` runs Qwen3-0.6B inference on the simulator (bare-metal rv64im, NPU kernels in `kernels.S`):
+`apps/qwen3/` runs Qwen3-0.6B inference on the simulator as a bare-metal guest with NPU kernels in `kernels.S`:
 
 ```sh
 xmake build qwen3_app        # build/apps/qwen3/qwen3.bin

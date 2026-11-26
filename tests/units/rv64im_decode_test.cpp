@@ -164,6 +164,9 @@ TEST_CASE(rv64im_decode) {
       Case{"jal max", j(1048574), ScalarOp::jal, 3, 0, 0, 1048574},
       Case{"fence", i(0x0f, 0, 0x0ff, 3, 5), ScalarOp::fence, 0, 0, 0, 0x0ff},
       Case{"fence reserved mode", i(0x0f, 0, 0x8ff), ScalarOp::fence, 0, 0, 0, 0x8ff},
+      Case{"fence.i", 0x0000100fu, ScalarOp::fence_i, 0, 0, 0, 0},
+      Case{"fence.i ignores unused fields", i(0x0f, 1, 0xfff, 31, 31), ScalarOp::fence_i, 0, 0, 0,
+           0},
       Case{"ecall", 0x00000073u, ScalarOp::ecall, 0, 0, 0, 0},
       Case{"ebreak", 0x00100073u, ScalarOp::ebreak, 0, 0, 0, 0},
   };
@@ -192,14 +195,14 @@ TEST_CASE(rv64im_decode) {
       s(4, 0),           // STORE funct3=100 is reserved.
       b(2, 0),           // BRANCH funct3=010 is reserved.
       i(0x67, 1, 0),     // JALR funct3 must be zero.
+      i(0x0f, 2, 0),     // MISC-MEM funct3=010 is not implemented.
       0xffffffffu,       // All-ones 32-bit instruction encoding is illegal.
   };
   check_illegal(illegal_cases);
 
-  // Encodings of extensions outside RV64IM (Zifencei, Zicsr, other SYSTEM)
+  // Encodings of unsupported extensions (Zicsr, other SYSTEM)
   // and reserved operand combinations are illegal on this hart.
   constexpr std::array extension_cases{
-      i(0x0f, 1, 0), // FENCE.I belongs to Zifencei.
       i(0x73, 1, 0), // CSR instructions belong to Zicsr.
       0x00200073u,   // SYSTEM encodings beyond ECALL/EBREAK.
       0x000000f3u,   // ECALL with nonzero rd is not ECALL.

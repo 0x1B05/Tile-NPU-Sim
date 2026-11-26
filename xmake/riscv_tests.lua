@@ -1,8 +1,7 @@
 -- Official riscv-tests image artifacts, fetched by
 -- scripts/fetch_riscv_tests.sh. Each rv64ui/rv64um test is assembled against
 -- our minimal env (tests/guest/riscv-tests-env); tests/run.py executes the resulting
--- images. Excluded: fence_i (Zifencei, not modeled) and ma_data (requires trap
--- delivery, which the simulator does not implement).
+-- images. Excluded: ma_data (requires trap delivery).
 --
 -- This is a build-only target. It is not attached to sim_tests, sim,
 -- or xmake test.
@@ -14,7 +13,7 @@ local rvtests_bindir = path.join(path.absolute(builddir, os.projectdir()), "gues
 
 local rvtests = {}
 if os.isdir(rvtests_srcdir) then
-	local excluded = { fence_i = true, ma_data = true }
+	local excluded = { ma_data = true }
 	for _, group in ipairs({ "rv64ui", "rv64um" }) do
 		for _, src in ipairs(os.files(path.join(rvtests_srcdir, "isa", group, "*.S"))) do
 			if not excluded[path.basename(src)] then
@@ -80,7 +79,7 @@ target("riscv_tests", function()
 				},
 				changed = target:is_rebuilt(),
 				lastmtime = math.min(os.mtime(elf), os.mtime(bin)),
-				values = { gcc, "-march=rv64im -mabi=lp64" },
+				values = { gcc, table.concat(guestimg.compile_flags(), " ") },
 			})
 		end
 	end)
